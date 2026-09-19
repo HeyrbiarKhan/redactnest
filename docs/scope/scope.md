@@ -11,7 +11,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 
 | # | Feature | Phase | Status |
 |---|---------|-------|--------|
-| 1 | Stack, scaffold & processing boundary | Foundation | planned |
+| 1 | Stack, scaffold & processing boundary | Foundation | in-progress |
 | 2 | Coding standards & tooling | Foundation | planned |
 | 3 | Document session & privacy guarantee | Foundation | planned |
 | 4 | Design system & UI foundation | Foundation | planned |
@@ -28,13 +28,18 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 15 | Marketing site | Release 6 | planned |
 | 16 | Security & how it works page | Release 6 | planned |
 | 17 | Data processing agreement | Release 6 | planned |
+| 18 | AGPL compliance & source publication | Release 1 | planned |
 
 ## Foundations
 
-### 1. Stack, scaffold & processing boundary · needs a decision
+### 1. Stack, scaffold & processing boundary · in-progress
 Decide where redaction actually runs (in the visitor's browser or on your server) and which engine does it, then scaffold a project that boots. This single answer drives the privacy story, the page cap, your hosting bill, and what every later feature is even able to do.
 **Done when:** the processing boundary and the engine are recorded in a spec, the scaffold boots locally, and the build passes with the PDF engine loaded and able to open a file.
-- [ ] Decide the stack (spec): `/architect stack, scaffold & processing boundary`
+spec [0001](../specs/0001-browser-only-redaction-stack/index.md)
+- [x] Decide the stack (spec): `/architect stack, scaffold & processing boundary`
+- [ ] Scaffold from the decision: `/develop stack, scaffold & processing boundary`
+- [ ] Verify it: `/check verify stack, scaffold & processing boundary`
+- [ ] Test it: `/test stack, scaffold & processing boundary`
 
 ### 2. Coding standards & tooling
 Capture conventions from the real scaffolded project, then install lint, format and pre commit enforcement so every later slice is written the same way.
@@ -76,6 +81,12 @@ Detect per page whether a text layer exists, and never let somebody leave with a
 The single page that is the product: drop a PDF, see what was found, tick what to remove, download the clean file, read the summary of what happened.
 **Done when:** an anonymous visitor can take a document up to the page cap from drop to download in one pass, the cap is a config value (3 to start), the scanned page warnings surface in the flow, the summary shows counts by detection type plus what was sanitized, and failure states say plainly what went wrong.
 - [ ] Design it (spec): `/architect redact flow`
+
+### 18. AGPL compliance & source publication · Alpha · from spec 0001
+Spec 0001 chose MuPDF, which is copyleft, so RedactNest's own source is licensed AGPL 3.0 and published. The obligation attaches the moment the tool is publicly available and shipping the engine to visitors' browsers, which is this release rather than a later one. Artifex enforce their licence, so this is a real deliverable and not a formality.
+**Done when:** the repository is public under AGPL 3.0, the licence file and third party notices are in place, every production deploy is tagged, and the source offer link in the footer and on the tool page resolves to the exact deployed commit rather than the repository root.
+- [ ] Build it: `/develop AGPL compliance & source publication`
+- [ ] Verify it: `/check verify AGPL compliance & source publication`
 
 ## Release 2: Take money
 
