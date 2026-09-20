@@ -44,8 +44,9 @@ spec [0001](../specs/0001-browser-only-redaction-stack/index.md) · code in `src
 ### 2. Coding standards & tooling · in-progress
 Capture conventions from the real scaffolded project, then install lint, format and pre commit enforcement so every later slice is written the same way.
 **Done when:** root `AGENTS.md` reflects the real stack, and lint, format and pre commit run clean.
+code in `eslint.config.mjs`, `prettier.config.mjs`, `lint-staged.config.mjs`, `.husky/pre-commit`, `.github/workflows/ci.yml`
 - [x] Capture conventions + tooling choices: `/audit`
-- [ ] Install the tooling: `/develop tooling`
+- [x] Install the tooling: `/develop tooling`
 - [ ] Check it runs clean: `/test`
 
 ### 3. Document session & privacy guarantee · needs a decision · GA
