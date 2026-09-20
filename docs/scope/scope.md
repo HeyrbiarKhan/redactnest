@@ -11,8 +11,8 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 
 | # | Feature | Phase | Status |
 |---|---------|-------|--------|
-| 1 | Stack, scaffold & processing boundary | Foundation | in-progress |
-| 2 | Coding standards & tooling | Foundation | planned |
+| 1 | Stack, scaffold & processing boundary | Foundation | done |
+| 2 | Coding standards & tooling | Foundation | in-progress |
 | 3 | Document session & privacy guarantee | Foundation | planned |
 | 4 | Design system & UI foundation | Foundation | planned |
 | 5 | Redaction engine | Release 1 | planned |
@@ -32,19 +32,19 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 
 ## Foundations
 
-### 1. Stack, scaffold & processing boundary · in-progress
+### 1. Stack, scaffold & processing boundary · done
 Decide where redaction actually runs (in the visitor's browser or on your server) and which engine does it, then scaffold a project that boots. This single answer drives the privacy story, the page cap, your hosting bill, and what every later feature is even able to do.
 **Done when:** the processing boundary and the engine are recorded in a spec, the scaffold boots locally, and the build passes with the PDF engine loaded and able to open a file.
-spec [0001](../specs/0001-browser-only-redaction-stack/index.md)
+spec [0001](../specs/0001-browser-only-redaction-stack/index.md) · code in `src/` (`src/engine`, `src/worker`, `src/config`, `src/app/tool`)
 - [x] Decide the stack (spec): `/architect stack, scaffold & processing boundary`
-- [ ] Scaffold from the decision: `/develop stack, scaffold & processing boundary`
-- [ ] Verify it: `/check verify stack, scaffold & processing boundary`
-- [ ] Test it: `/test stack, scaffold & processing boundary`
+- [x] Scaffold from the decision: `/develop stack, scaffold & processing boundary`
+- [x] Verify it: `/check verify stack, scaffold & processing boundary`
+- [x] Test it: `/test stack, scaffold & processing boundary`
 
-### 2. Coding standards & tooling
+### 2. Coding standards & tooling · in-progress
 Capture conventions from the real scaffolded project, then install lint, format and pre commit enforcement so every later slice is written the same way.
 **Done when:** root `AGENTS.md` reflects the real stack, and lint, format and pre commit run clean.
-- [ ] Capture conventions + tooling choices: `/audit`
+- [x] Capture conventions + tooling choices: `/audit`
 - [ ] Install the tooling: `/develop tooling`
 - [ ] Check it runs clean: `/test`
 
