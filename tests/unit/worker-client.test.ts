@@ -681,3 +681,108 @@ describe("releasing the session", () => {
     expect(FakeWorker.instances[1].terminated).toBe(false);
   });
 });
+
+/**
+ * AC-10 and INV-8, on the client side. The reducer half of this is covered in
+ * `session.test.ts`; what was missing is the half that makes the promise true
+ * in practice.
+ *
+ * "Back on the checklist with the document still open" is only worth anything
+ * if the session that survives a cancel can actually be used again. A cancel
+ * that left the session wedged, or that let the abandoned operation settle the
+ * next one, would satisfy every existing test here and still strand somebody.
+ */
+describe("a session that was cancelled and used again", () => {
+  /** covers: AC-10 */
+  it("redacts again after a cancel, on the same open document", async () => {
+    const client = await loadClient();
+    const { session, worker } = await openedSession(client);
+
+    await expect(cancelARedaction(session)).rejects.toMatchObject({
+      name: "OperationCancelled",
+    });
+
+    const second = session.redact([]);
+    const secondId = worker.requests.at(-1)?.id ?? "";
+    worker.reply({
+      id: secondId,
+      jobId: "job-1",
+      kind: "redacted",
+      output: new ArrayBuffer(8),
+      outcome: OUTCOME,
+    });
+
+    await expect(second).resolves.toMatchObject({ outcome: OUTCOME });
+  });
+
+  /** A fresh operation id, so the abandoned reply cannot settle the new one. */
+  it("gives the second attempt an id of its own", async () => {
+    const client = await loadClient();
+    const { session, worker } = await openedSession(client);
+
+    const redacting = session.redact([]);
+    const firstId = worker.requests.at(-1)?.id;
+    session.cancel();
+    await expect(redacting).rejects.toThrow();
+
+    void session.redact([]).catch(() => {});
+
+    expect(worker.requests.at(-1)?.id).not.toBe(firstId);
+  });
+
+  /**
+   * The cancelled operation's reply arrives late, as a worker that was already
+   * mid job will do. It names an id nobody is waiting for any more, so it has
+   * to be dropped rather than delivered to whoever holds the next one.
+   */
+  it("is not settled by the abandoned operation's late reply", async () => {
+    const client = await loadClient();
+    const { session, worker } = await openedSession(client);
+
+    const first = session.redact([]);
+    const firstId = worker.requests.at(-1)?.id ?? "";
+    session.cancel();
+    await expect(first).rejects.toThrow();
+
+    const second = session.redact([]);
+    const secondId = worker.requests.at(-1)?.id ?? "";
+
+    // The cancelled one answers first, and late.
+    worker.reply({
+      id: firstId,
+      jobId: "job-1",
+      kind: "redacted",
+      output: new ArrayBuffer(8),
+      outcome: OUTCOME,
+    });
+    worker.reply({
+      id: secondId,
+      jobId: "job-1",
+      kind: "error",
+      errorKind: "corrupt",
+    });
+
+    await expect(second).rejects.toMatchObject({ errorKind: "corrupt" });
+  });
+
+  it("keeps the same session, so nobody is sent back to the file picker", async () => {
+    const client = await loadClient();
+    const { session, worker } = await openedSession(client);
+
+    await expect(cancelARedaction(session)).rejects.toThrow();
+
+    expect(session.jobId).toBe("job-1");
+    expect(session.summary).toEqual(SUMMARY);
+    expect(FakeWorker.instances).toHaveLength(1);
+    expect(worker.terminated).toBe(false);
+  });
+});
+
+/** Start a redaction and cancel it. Returns the rejected promise to assert on. */
+function cancelARedaction(
+  session: Awaited<ReturnType<typeof openedSession>>["session"],
+): Promise<unknown> {
+  const redacting = session.redact([]);
+  session.cancel();
+  return redacting;
+}
