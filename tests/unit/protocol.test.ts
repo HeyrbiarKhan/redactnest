@@ -21,7 +21,7 @@ describe("the closed set of failures", () => {
    * Written out rather than derived from the export on purpose. Widening the set
    * is a contract change, and this is the line that makes it deliberate.
    */
-  it("is exactly the seven kinds the spec fixes", () => {
+  it("is exactly the eight kinds the specs fix", () => {
     expect([...ENGINE_ERROR_KINDS]).toEqual([
       "engine-unavailable",
       "encrypted",
@@ -30,6 +30,10 @@ describe("the closed set of failures", () => {
       "unsupported",
       "too-large",
       "too-many-pages",
+      // Added by spec 0002. Raised on the main thread when a retained `File`
+      // can no longer be read, and kept in this set so feature 8 writes copy
+      // for one list rather than two.
+      "file-unreadable",
     ]);
   });
 

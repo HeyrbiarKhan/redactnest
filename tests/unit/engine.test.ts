@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { EngineFailure, inspectDocument, loadEngine } from "@/engine";
+import { EngineFailure, loadEngine, openDocument } from "@/engine";
 
 /**
  * The walled engine module, tested only where MuPDF is not needed.
@@ -22,7 +22,7 @@ describe("the size cap", () => {
     const onPhase = vi.fn();
 
     await expect(
-      inspectDocument(new ArrayBuffer(2048), { maxBytes: 1024, maxPages: 50 }, onPhase),
+      openDocument(new ArrayBuffer(2048), { maxBytes: 1024, maxPages: 50 }, onPhase),
     ).rejects.toMatchObject({ errorKind: "too-large" });
 
     expect(onPhase).not.toHaveBeenCalled();
@@ -30,7 +30,7 @@ describe("the size cap", () => {
 
   it("describes the refusal in the protocol's terms", async () => {
     await expect(
-      inspectDocument(new ArrayBuffer(2048), { maxBytes: 1024, maxPages: 50 }),
+      openDocument(new ArrayBuffer(2048), { maxBytes: 1024, maxPages: 50 }),
     ).rejects.toBeInstanceOf(EngineFailure);
   });
 
@@ -42,15 +42,15 @@ describe("the size cap", () => {
     const onPhase = vi.fn();
 
     await expect(
-      inspectDocument(new ArrayBuffer(1024), { maxBytes: 1024, maxPages: 50 }, onPhase),
+      openDocument(new ArrayBuffer(1024), { maxBytes: 1024, maxPages: 50 }, onPhase),
     ).rejects.not.toMatchObject({ errorKind: "too-large" });
 
     expect(onPhase).toHaveBeenCalledWith("loading-engine");
   });
 
-  it("allows a document to be inspected with no phase reporter at all", async () => {
+  it("allows a document to be opened with no phase reporter at all", async () => {
     await expect(
-      inspectDocument(new ArrayBuffer(8), { maxBytes: 1024, maxPages: 50 }),
+      openDocument(new ArrayBuffer(8), { maxBytes: 1024, maxPages: 50 }),
     ).rejects.toBeInstanceOf(EngineFailure);
   });
 });

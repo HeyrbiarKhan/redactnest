@@ -17,7 +17,7 @@
  * and its source is published. See feature 18.
  */
 
-import type { DocumentSummary, EngineErrorKind } from "@/worker/protocol";
+import type { DocumentSummary, EngineErrorKind, MatchId } from "@/worker/protocol";
 
 /**
  * A failure the engine can describe in the protocol's terms.
@@ -83,16 +83,84 @@ export function loadEngine(): Promise<MuPdf> {
 }
 
 /**
+ * One quad, as MuPDF gives them: four corners, upper left first, then upper
+ * right, lower left, lower right.
+ *
+ * Spec 0002, INV-2: this type never reaches `@/worker/protocol`, because
+ * anything declared there can cross to the main thread. Geometry stays here and
+ * in the worker's private target map. Feature 5 owns what it does with these;
+ * feature 14 will need them on the main thread and must widen INV-2 with its own
+ * decision rather than by moving this type.
+ */
+export type Quad = readonly [
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+];
+
+/**
+ * Everything needed to remove one match, and nothing the main thread may see.
+ *
+ * Held in the worker's session, keyed by `MatchId`. A ticked id is resolved
+ * against this map at redaction time, so a stale or tampered quad from the page
+ * cannot cause a wrong removal.
+ */
+export interface RedactionTarget {
+  /** Zero based, as the engine counts. Converted for display in the worker. */
+  readonly page: number;
+  readonly quads: readonly Quad[];
+  /** Offsets into the page's extracted text, for matches broken across runs. */
+  readonly start: number;
+  readonly end: number;
+}
+
+/**
+ * The worker's private map from a ticked id to the geometry that removes it.
+ *
+ * Mutable because feature 6 fills it as it detects. It is the one structure in
+ * the codebase that must never be serialised into a message.
+ */
+export type TargetMap = Map<MatchId, RedactionTarget>;
+
+/**
+ * A document held open for the life of a session.
+ *
+ * Spec 0002 keeps the document open across steps rather than reopening it per
+ * call, so ticking a box and running again costs no reparse. That makes closing
+ * it an explicit act: `close()` is the only thing that hands MuPDF's native
+ * memory back, and the worker calls it when the session ends.
+ */
+export interface OpenDocument {
+  readonly summary: DocumentSummary;
+  /**
+   * Release the native memory MuPDF holds.
+   *
+   * Safe to call more than once. Terminating the worker would also reclaim it,
+   * and does so even when the worker is wedged, which is why spec 0002 makes
+   * termination the session's real ending (INV-6) and this the tidy one.
+   */
+  close(): void;
+}
+
+/**
  * Open a document and report what is safe to report.
  *
- * Takes ownership of `bytes`. Returns counts and per page flags only: no text,
- * no file name, nothing that could identify the document.
+ * Takes ownership of `bytes`. The summary is counts and per page flags only: no
+ * text, no file name, nothing that could identify the document.
+ *
+ * The caller owns the returned handle and must `close()` it. Every failure path
+ * in here closes the document before throwing, so a refused open leaks nothing.
  */
-export async function inspectDocument(
+export async function openDocument(
   bytes: ArrayBuffer,
   limits: { maxBytes: number; maxPages: number },
   onPhase?: (phase: "loading-engine" | "opening" | "inspecting") => void,
-): Promise<DocumentSummary> {
+): Promise<OpenDocument> {
   if (bytes.byteLength > limits.maxBytes) {
     throw new EngineFailure("too-large");
   }
@@ -131,11 +199,38 @@ export async function inspectDocument(
       pagesWithText.push(pageHasText(doc, index));
     }
 
-    return { pageCount, pagesWithText };
-  } finally {
-    // MuPDF holds native memory that garbage collection will not reclaim.
+    return holdOpen(doc, { pageCount, pagesWithText });
+  } catch (failure) {
+    // The document only survives a successful open. Anything else hands the
+    // native memory straight back rather than waiting for a session that will
+    // never exist.
     doc?.destroy();
+    throw failure;
   }
+}
+
+/**
+ * Wrap an open document in the handle the worker holds.
+ *
+ * The MuPDF document itself stays captured in here, so nothing outside this
+ * module can reach it or name its type. That is the engine wall at the value
+ * level rather than only at the import level.
+ */
+function holdOpen(
+  doc: InstanceType<MuPdf["Document"]>,
+  summary: DocumentSummary,
+): OpenDocument {
+  let closed = false;
+
+  return {
+    summary,
+    close() {
+      if (closed) return;
+      closed = true;
+      // MuPDF holds native memory that garbage collection will not reclaim.
+      doc.destroy();
+    },
+  };
 }
 
 /**

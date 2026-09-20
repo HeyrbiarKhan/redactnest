@@ -18,6 +18,7 @@ const RAW = {
   NEXT_PUBLIC_FREE_PAGE_CAP: process.env.NEXT_PUBLIC_FREE_PAGE_CAP,
   NEXT_PUBLIC_MAX_PAGES: process.env.NEXT_PUBLIC_MAX_PAGES,
   NEXT_PUBLIC_MAX_FILE_BYTES: process.env.NEXT_PUBLIC_MAX_FILE_BYTES,
+  NEXT_PUBLIC_MATCH_CONTEXT_CHARS: process.env.NEXT_PUBLIC_MATCH_CONTEXT_CHARS,
   NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   NEXT_PUBLIC_SOURCE_URL: process.env.NEXT_PUBLIC_SOURCE_URL,
 } as const;
@@ -102,9 +103,22 @@ function readUrl(
 const PAGE_CEILING = 10_000;
 const BYTE_CEILING = 2_147_483_647; // what one ArrayBuffer can sensibly hold
 
+/**
+ * Spec 0002, INV-9. The upper bound is a privacy limit rather than a display
+ * one: the context window is document text crossing to the main thread, so a
+ * typo in an environment variable must not be able to widen it to a page.
+ */
+const CONTEXT_CHAR_CEILING = 200;
+
 const freePageCap = readInt("NEXT_PUBLIC_FREE_PAGE_CAP", 3, 1, PAGE_CEILING);
 const maxPages = readInt("NEXT_PUBLIC_MAX_PAGES", 50, 1, PAGE_CEILING);
 const maxFileBytes = readInt("NEXT_PUBLIC_MAX_FILE_BYTES", 26_214_400, 1, BYTE_CEILING);
+const matchContextChars = readInt(
+  "NEXT_PUBLIC_MATCH_CONTEXT_CHARS",
+  40,
+  0,
+  CONTEXT_CHAR_CEILING,
+);
 
 if (freePageCap > maxPages) {
   throw new ConfigError(
@@ -119,6 +133,15 @@ export const config = Object.freeze({
   maxPages,
   /** The paid size ceiling, in bytes. */
   maxFileBytes,
+  /**
+   * Characters of surrounding text shown either side of a match in the review
+   * checklist, so somebody can judge it without opening the document again.
+   *
+   * Spec 0002, INV-1 and INV-9: this text crosses the worker boundary, which is
+   * a deliberate loosening of spec 0001. It is never stored and never sent, and
+   * the window size is read here rather than written anywhere else.
+   */
+  matchContextChars,
   /** Canonical origin, for metadata and the sitemap. */
   siteUrl: readUrl("NEXT_PUBLIC_SITE_URL", "http://localhost:3000", true),
   /**
