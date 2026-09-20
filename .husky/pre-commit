@@ -1,0 +1,11 @@
+# Lint, format, typecheck. The three checks AGENTS.md asks every commit to pass.
+#
+# `lint-staged` runs ESLint and Prettier over the staged files only and restages
+# what it fixes, so this stays quick as the codebase grows. The typecheck is
+# whole project on purpose: a change in one file breaks types in another, and
+# `tsc` has no meaningful staged files mode.
+#
+# Genuinely need to get past this? `git commit --no-verify`. CI runs the same
+# checks plus the tests, so it will be waiting for you there.
+pnpm lint-staged
+pnpm typecheck
