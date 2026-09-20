@@ -1,7 +1,7 @@
 # 0002. Document session and privacy guarantee
 
 **Date**: 2026-09-20
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 
