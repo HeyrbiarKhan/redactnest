@@ -77,7 +77,9 @@ test("the worker fetches the engine from our own origin, not a CDN", async ({ pa
   }
 });
 
-test("document bytes leave the main thread rather than being copied", async ({ page }) => {
+test("document bytes leave the main thread rather than being copied", async ({
+  page,
+}) => {
   await page.goto("/tool");
 
   // The transfer neuters the sender's view of the buffer. A byteLength of 0 on

@@ -1,0 +1,25 @@
+# Build output.
+.next/
+out/
+playwright-report/
+test-results/
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# Vendored by scripts/sync-engine.mjs from the pinned mupdf dependency.
+# Not our code, and not ours to format. Same reasoning as eslint.config.mjs.
+public/engine/
+
+# Managed by pnpm, and large.
+pnpm-lock.yaml
+
+# Installed agent skills, vendored per skills-lock.json. Somebody else's files.
+.claude/
+
+# Markdown. Prose and workflow state, not code.
+#
+# `docs/scope` and `docs/specs` are written and then edited a line at a time by
+# the workflow skills, and AGENTS.md the same way. Reformatting them on every
+# commit fights those edits and buries a real diff under table padding, for no
+# gain: nothing here is code that a formatter makes safer.
+*.md

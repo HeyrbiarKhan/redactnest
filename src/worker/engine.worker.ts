@@ -58,13 +58,9 @@ async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
   const { id, bytes, maxBytes, maxPages } = request;
 
   try {
-    const summary = await inspectDocument(
-      bytes,
-      { maxBytes, maxPages },
-      (phase) => {
-        if (!cancelled.has(id)) postProgress(id, phase);
-      },
-    );
+    const summary = await inspectDocument(bytes, { maxBytes, maxPages }, (phase) => {
+      if (!cancelled.has(id)) postProgress(id, phase);
+    });
 
     // A cancelled job reports nothing at all. The document is already gone.
     if (cancelled.has(id)) return;

@@ -1,0 +1,64 @@
+# The same checks the pre commit hook runs, plus the tests it is too slow to.
+#
+# Split in two so a slow browser run never delays the fast answer: `checks`
+# finishes in about a minute, `browser` has to produce a production build and
+# fetch a browser first. They run at the same time.
+name: CI
+
+on: push
+
+# The repository goes public under AGPL in feature 18. Read only by default, so
+# a workflow can never be talked into writing to the repository it checks.
+permissions:
+  contents: read
+
+# A second push to the same branch makes the first run pointless. Stop it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, format, types, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version comes from packageManager in package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  browser:
+    name: Browser tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Chromium only, matching the single project in playwright.config.ts.
+      - run: pnpm exec playwright install --with-deps chromium
+
+      # This builds the app itself: the config's webServer runs `pnpm build &&
+      # pnpm start`, which also syncs the engine into public/engine first, and
+      # passes its own NEXT_PUBLIC_* values so no repository secret is needed.
+      - run: pnpm test:e2e
+
+      # Traces for a failed run. `retain-on-failure` means there is nothing to
+      # upload when the run is green.
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7

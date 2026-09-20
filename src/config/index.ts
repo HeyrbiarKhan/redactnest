@@ -39,12 +39,7 @@ const IS_PRODUCTION = process.env.NODE_ENV === "production";
  * must not be: empty strings, floats, hex, exponents, whitespace, `NaN`,
  * `Infinity`. A present but malformed value fails exactly as a missing one does.
  */
-function readInt(
-  name: RawName,
-  fallback: number,
-  min: number,
-  max: number,
-): number {
+function readInt(name: RawName, fallback: number, min: number, max: number): number {
   const raw = RAW[name];
 
   if (raw === undefined || raw === "") return fallback;

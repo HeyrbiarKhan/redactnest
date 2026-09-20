@@ -62,6 +62,7 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md`.
 - The tool page is prerendered static, so its CSP needs `'unsafe-inline'` for scripts. Never add a nonce or hash there: a nonce disables `'unsafe-inline'` and breaks hydration.
 - The `.wasm` file must be served as `application/wasm`.
 - The tool route gets entitlement only from same-origin `GET /api/entitlement`, which fails closed to the free tier.
+- `typecheck` runs `next typegen` before `tsc`. `LayoutProps` and `PageProps` are globals Next.js writes into `.next/types`, and `next-env.d.ts` is generated too; both are gitignored, so a clean checkout has neither and bare `tsc --noEmit` fails with `TS2304: Cannot find name 'LayoutProps'`. It passes on a machine that has run `dev` or `build`, which is why only CI sees it. Do not drop the `typegen` step.
 
 ## Tooling
 

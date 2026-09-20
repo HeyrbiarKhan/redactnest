@@ -10,8 +10,8 @@ export default function HomePage() {
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-6 px-4 py-16">
       <h1 className="text-3xl font-semibold tracking-tight">RedactNest</h1>
       <p className="opacity-80">
-        Truly redact a PDF. The text is removed from the file itself rather than
-        covered with a black box, and your document never leaves your machine.
+        Truly redact a PDF. The text is removed from the file itself rather than covered
+        with a black box, and your document never leaves your machine.
       </p>
       <Link
         href="/tool"
