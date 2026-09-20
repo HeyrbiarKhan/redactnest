@@ -69,8 +69,8 @@ The rules that carry the privacy claim:
   `error` message carrying one of a closed set of kinds, and nothing derived
   from the document: no file name, no stack trace, no extracted text.
 - **One PDF parser only.** Nothing else in the codebase parses or renders a PDF.
-- **Only the worker may import `src/engine`.** Discipline for now; feature 2
-  installs the lint rule.
+- **Only the worker may import `src/engine`.** Enforced by the engine wall zones
+  in `eslint.config.mjs`, which fail the lint run, the pre commit hook and CI.
 - **Every cap comes from `src/config`.** No page or size limit is written as a
   literal anywhere else.
 

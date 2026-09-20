@@ -8,9 +8,10 @@
  *   - Only the worker may import the engine module.
  *   - Document bytes live only inside the Web Worker.
  *
- * Until feature 2 installs the lint rule, that boundary rests on discipline. If
- * you are reading this from anywhere on the main thread, you are on the wrong
- * side of the wall: talk to the worker through `src/worker/client.ts` instead.
+ * The engine wall zones in `eslint.config.mjs` enforce that boundary, so a stray
+ * import fails the lint run rather than quietly shipping. If you are reading
+ * this from anywhere on the main thread, you are on the wrong side of the wall:
+ * talk to the worker through `src/worker/client.ts` instead.
  *
  * Licence note: MuPDF is AGPL 3.0, which is why RedactNest itself is AGPL 3.0
  * and its source is published. See feature 18.
