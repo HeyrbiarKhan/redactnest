@@ -7,13 +7,16 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "sync-engine": "node scripts/sync-engine.mjs",
     "predev": "node scripts/sync-engine.mjs",
-    "prebuild": "node scripts/sync-engine.mjs"
+    "prebuild": "node scripts/sync-engine.mjs",
+    "prepare": "husky"
   },
   "dependencies": {
     "mupdf": "^1.28.1",
@@ -29,6 +32,9 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.5.1",
+    "prettier": "^3.9.8",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^5.0.1"

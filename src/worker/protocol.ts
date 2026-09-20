@@ -27,8 +27,7 @@ export type EngineErrorKind = (typeof ENGINE_ERROR_KINDS)[number];
 
 export function isEngineErrorKind(value: unknown): value is EngineErrorKind {
   return (
-    typeof value === "string" &&
-    (ENGINE_ERROR_KINDS as readonly string[]).includes(value)
+    typeof value === "string" && (ENGINE_ERROR_KINDS as readonly string[]).includes(value)
   );
 }
 

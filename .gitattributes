@@ -1,0 +1,16 @@
+# Line endings are LF in the repository and in the working tree, on every OS.
+#
+# Without this, `core.autocrlf=true` (the Windows default) checks every file out
+# with CRLF, Prettier expects LF, and so `pnpm format:check` fails on a clean
+# clone before anybody has changed a thing. That would take the pre commit hook
+# and CI down with it.
+* text=auto eol=lf
+
+# Binary. Never converted, never diffed as text.
+*.pdf binary
+*.ico binary
+*.wasm binary
+*.png binary
+*.jpg binary
+*.woff binary
+*.woff2 binary

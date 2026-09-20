@@ -27,8 +27,8 @@ export default function ToolPage() {
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Redact a PDF</h1>
         <p className="text-sm opacity-80">
-          Your document is opened in your own browser and never uploaded. Nothing
-          on this page can send it anywhere.
+          Your document is opened in your own browser and never uploaded. Nothing on this
+          page can send it anywhere.
         </p>
       </header>
 
