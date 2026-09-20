@@ -49,7 +49,10 @@ const noEngineImport = {
  * which is a plain string rather than an import specifier.
  */
 const noMupdfAnywhere = [
-  { selector: "TSImportType[argument.value=/mupdf/]", message: MUPDF_MESSAGE },
+  // `source`, not the older `argument`, which holds the specifier one node
+  // deeper and is deprecated. A selector reading `argument.value` matches
+  // nothing at all, and a rule that matches nothing fails silently.
+  { selector: "TSImportType[source.value=/mupdf/]", message: MUPDF_MESSAGE },
   // Any string naming it at all, which also covers `await import("mupdf")` and
   // the `/engine/mupdf.js` path the engine is served from. Case sensitive, so
   // prose saying "MuPDF" (the AGPL notice in feature 18) is left alone.
@@ -61,10 +64,14 @@ const noMupdfAnywhere = [
  *
  * The `.` stands in for the slash on purpose: esquery's selector parser ends a
  * regex at the first `/` and offers no escape for one.
+ *
+ * Unlike MuPDF above, nothing broader backstops these two, so a selector that
+ * quietly matches nothing leaves the form wide open. `tests/unit/engine-wall.test.ts`
+ * feeds both spellings through this config and checks they are caught.
  */
 const noEngineAnywhere = [
   { selector: "ImportExpression > Literal[value=/^@.engine/]", message: ENGINE_MESSAGE },
-  { selector: "TSImportType[argument.value=/^@.engine/]", message: ENGINE_MESSAGE },
+  { selector: "TSImportType[source.value=/^@.engine/]", message: ENGINE_MESSAGE },
 ];
 
 const noNewWorker = [
