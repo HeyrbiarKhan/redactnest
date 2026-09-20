@@ -1,7 +1,7 @@
 # 0001. Browser only redaction stack
 
 **Date**: 2026-09-19
-**Status**: Proposed
+**Status**: Accepted
 
 ## Summary
 
