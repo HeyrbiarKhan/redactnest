@@ -59,10 +59,10 @@ spec [0002](../specs/0002-document-session-privacy-guarantee/index.md) · code i
   - [x] The no storage guarantee, enforced and proved: the ESLint zone plus the instrumented browser test · AC-2, AC-3
   - [x] The session reducer and the tool client: state machine, frozen entitlement snapshot, `File` handle, leave and restore handling, and the once per job silent retry inside the engine load window · AC-1, AC-9, AC-11, AC-11a, AC-12, AC-13, AC-14
   - [x] The exit path: download, revoke, release, and exhaustive reducer tests · AC-4, AC-8, AC-10, AC-14
-- [ ] Verify it: `/check verify document session & privacy guarantee`
+- [x] Verify it: `/check verify document session & privacy guarantee`
 - [x] Test it: `/test document session & privacy guarantee`
 - [x] Review it (fresh model): `/check review document session & privacy guarantee`
-- [ ] Document it: `/document document session & privacy guarantee`
+- [x] Document it: `/document document session & privacy guarantee`
 
 ### 4. Design system & UI foundation · needs a decision
 The small set of primitives the core flow needs: layout, type, colour, buttons, the file drop surface, checklist rows, warning banners, the summary panel. Kept deliberately thin so it does not eat the first week.
