@@ -221,6 +221,30 @@ describe("a second document in the same worker", () => {
     expect(second.close).not.toHaveBeenCalled();
   });
 
+  /**
+   * The previous document goes when the next one arrives, not when it parses.
+   *
+   * This is what a replacement gives up by not terminating the worker, so it is
+   * the thing that has to be asserted: choosing a second file gets rid of the
+   * first document even when the second one turns out to be unopenable, rather
+   * than leaving it held open for as long as somebody keeps picking bad files.
+   */
+  it("closes the first even when the second never opens", async () => {
+    const first = fakeDocument();
+    openDocument
+      .mockResolvedValueOnce(first)
+      .mockRejectedValueOnce(new Error("unreadable"));
+    await startWorker();
+
+    scope.send(openRequest({ id: "op-1", jobId: "job-1" }));
+    await settle();
+    scope.send(openRequest({ id: "op-2", jobId: "job-2" }));
+    await settle();
+
+    expect(first.close).toHaveBeenCalledTimes(1);
+    expect(scope.of("error")).toHaveLength(1);
+  });
+
   it("leaves the newer session usable", async () => {
     await startWorker();
 

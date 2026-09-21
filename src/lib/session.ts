@@ -220,6 +220,10 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
     }
 
     case "redact-started":
+      // `outcome` is already null on every path that reaches `reviewing`, and is
+      // cleared here anyway. Counts from the previous run surviving into the
+      // next one would be a summary that describes a file nobody downloaded, so
+      // this one stays belt and braces rather than relying on the paths above.
       if (session.state !== "reviewing") return session;
       return freeze({ ...session, state: "redacting", phase: null, outcome: null });
 

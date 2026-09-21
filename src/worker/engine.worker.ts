@@ -94,8 +94,9 @@ function postError(
  *
  * Terminating the worker does this too, and does it even when the worker is
  * wedged, which is why spec 0002 (INV-6) makes termination the session's real
- * ending. This is the tidy path, for the case where one session is replaced by
- * another inside a worker that is still healthy.
+ * ending. This is the tidy path, and it is the one a replacement takes: opening
+ * a second document inside a healthy worker ends the first one here rather than
+ * throwing away an engine that is loaded and working.
  */
 function endSession(jobId: string): void {
   const session = sessions.get(jobId);
@@ -109,6 +110,14 @@ function endSession(jobId: string): void {
 async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
   const { id, jobId, bytes, limits, contextChars } = request;
 
+  // AC-1, first half: a document arriving means the one before it is over, so
+  // it goes now rather than once this one has parsed. Waiting would leave the
+  // previous document open for as long as this one takes, and would leave it
+  // open for good if this one turns out to be unopenable.
+  for (const existing of sessions.keys()) {
+    if (existing !== jobId) endSession(existing);
+  }
+
   try {
     const doc = await openDocument(bytes, limits, (phase) => {
       if (!cancelled.has(id)) postProgress(id, jobId, phase);
@@ -120,9 +129,10 @@ async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
       return;
     }
 
-    // AC-1: one tab holds at most one session. Evicted here rather than when
-    // the request arrived, so two opens that overlap cannot both end up in the
-    // registry whichever order they happen to finish in.
+    // AC-1, second half: evicted again on the way out, so two opens that
+    // overlap cannot both end up in the registry whichever order they happen to
+    // finish in. The eviction above cannot cover that, because a session
+    // registered while this one was parsing arrived after it looked.
     for (const existing of sessions.keys()) endSession(existing);
 
     sessions.set(jobId, {

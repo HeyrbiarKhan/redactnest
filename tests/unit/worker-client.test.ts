@@ -232,7 +232,9 @@ describe("handing a document over", () => {
       .openSession({ jobId: "b", bytes: new ArrayBuffer(8), limits: LIMITS })
       .catch(() => {});
 
-    const [first, second] = currentWorker().requests;
+    const [first, second] = currentWorker().requests.filter(
+      (request) => request.kind === "open",
+    );
     expect(first.id).not.toBe(second.id);
   });
 
@@ -496,23 +498,54 @@ describe("redacting through a session", () => {
 });
 
 describe("when the worker dies", () => {
-  it("fails every operation in flight with engine-unavailable", async () => {
+  it("fails what is in flight with engine-unavailable", async () => {
     const client = await loadClient();
-    const first = client.openSession({
-      jobId: "a",
+    const { session, worker } = await openedSession(client);
+    const redacting = session.redact([]);
+
+    worker.fail();
+
+    await expect(redacting).rejects.toMatchObject({
+      errorKind: "engine-unavailable",
+    });
+  });
+
+  /**
+   * `terminate()` stops the worker, but an error event it queued before that
+   * was queued on this thread and still arrives. Announced, it would tell
+   * somebody their engine had stopped while a fresh worker was opening their
+   * document perfectly happily, which is the cold start failure that showed up
+   * in verification and would not reproduce.
+   */
+  it("says nothing for a worker that was already released", async () => {
+    const client = await loadClient();
+    const heard = vi.fn();
+    client.onEngineLost(heard);
+
+    client.warmEngine();
+    const retired = currentWorker();
+    client.releaseEngine();
+    client.warmEngine();
+
+    retired.fail();
+
+    expect(heard).not.toHaveBeenCalled();
+  });
+
+  it("drops a reply from a worker that was already released", async () => {
+    const client = await loadClient();
+    const pending = client.openSession({
+      jobId: "job-1",
       bytes: new ArrayBuffer(8),
       limits: LIMITS,
     });
-    const second = client.openSession({
-      jobId: "b",
-      bytes: new ArrayBuffer(8),
-      limits: LIMITS,
-    });
+    const retired = currentWorker();
+    const { id } = retired.lastOpen;
 
-    currentWorker().fail();
+    client.releaseEngine();
+    retired.reply({ id, jobId: "job-1", kind: "result", summary: SUMMARY, matches: [] });
 
-    await expect(first).rejects.toMatchObject({ errorKind: "engine-unavailable" });
-    await expect(second).rejects.toMatchObject({ errorKind: "engine-unavailable" });
+    await expect(pending).rejects.toMatchObject({ name: "OperationCancelled" });
   });
 
   /**
@@ -631,6 +664,115 @@ describe("cancelling an operation", () => {
     session.cancel();
 
     expect(worker.requests).toHaveLength(before);
+  });
+});
+
+/**
+ * AC-1, and the pre-warm the whole engine load hangs on.
+ *
+ * A second document replaces the first inside the worker that is already
+ * running. Terminating instead would be correct and would also throw away a
+ * multi megabyte engine that `warmEngine` fetched precisely so the common path
+ * pays nothing for it, on the one action this product exists for.
+ */
+describe("a second document in the same tab", () => {
+  it("keeps the warm worker rather than starting another", async () => {
+    const client = await loadClient();
+    const { worker } = await openedSession(client);
+
+    void client
+      .openSession({ jobId: "job-2", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .catch(() => {});
+
+    expect(FakeWorker.instances).toHaveLength(1);
+    expect(worker.terminated).toBe(false);
+  });
+
+  it("tells the worker to stop what the previous job had in flight", async () => {
+    const client = await loadClient();
+    void client
+      .openSession({ jobId: "job-1", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .catch(() => {});
+    const worker = currentWorker();
+    const abandoned = worker.lastOpen.id;
+
+    void client
+      .openSession({ jobId: "job-2", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .catch(() => {});
+
+    expect(worker.requests).toContainEqual({
+      id: abandoned,
+      jobId: "job-1",
+      kind: "cancel",
+    });
+  });
+
+  /** Abandoned, not failed. Nobody is shown an error about a file they left. */
+  it("reports the previous job as cancelled rather than broken", async () => {
+    const client = await loadClient();
+    const abandoned = client.openSession({
+      jobId: "job-1",
+      bytes: new ArrayBuffer(8),
+      limits: LIMITS,
+    });
+
+    void client
+      .openSession({ jobId: "job-2", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .catch(() => {});
+
+    await expect(abandoned).rejects.toMatchObject({ name: "OperationCancelled" });
+  });
+
+  /**
+   * The reason the retirement above exists. A late `result` from the document
+   * somebody walked away from would otherwise resolve, and the interface would
+   * render the abandoned document's counts over the one now opening.
+   */
+  it("cannot be settled by a late reply from the job it replaced", async () => {
+    const client = await loadClient();
+    const abandoned = client.openSession({
+      jobId: "job-1",
+      bytes: new ArrayBuffer(8),
+      limits: LIMITS,
+    });
+    const worker = currentWorker();
+    const staleId = worker.lastOpen.id;
+
+    void client
+      .openSession({ jobId: "job-2", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .catch(() => {});
+    worker.reply({
+      id: staleId,
+      jobId: "job-1",
+      kind: "result",
+      summary: SUMMARY,
+      matches: [],
+    });
+
+    await expect(abandoned).rejects.toMatchObject({ name: "OperationCancelled" });
+  });
+
+  it("leaves the arriving job's own operation alone", async () => {
+    const client = await loadClient();
+    void client
+      .openSession({ jobId: "job-1", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .catch(() => {});
+
+    const pending = client.openSession({
+      jobId: "job-2",
+      bytes: new ArrayBuffer(8),
+      limits: LIMITS,
+    });
+    const worker = currentWorker();
+    worker.reply({
+      id: worker.lastOpen.id,
+      jobId: "job-2",
+      kind: "result",
+      summary: SUMMARY,
+      matches: [],
+    });
+
+    await expect(pending).resolves.toMatchObject({ jobId: "job-2" });
   });
 });
 

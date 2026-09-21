@@ -61,12 +61,14 @@ describe("what may reach a log", () => {
     expectTypeOf<Verdict<LoggablePayload>>().toEqualTypeOf<"kinds and numbers only">();
   });
 
-  it.each([
-    "the document summary",
-    "the redaction outcome",
-    "a failure kind",
-    "a progress phase",
-  ])("holds for %s on its own", () => {
+  /**
+   * The same verdict for each member on its own, so a union that passed only
+   * because one member swallowed the others still fails here. Written out
+   * rather than parameterised: the assertions are type level, so a runtime
+   * label could not select between them and would only imply an isolation the
+   * cases were not getting.
+   */
+  it("holds for the summary, the outcome, a failure, a phase and a detector", () => {
     expectTypeOf<Verdict<DocumentSummary>>().toEqualTypeOf<"kinds and numbers only">();
     expectTypeOf<Verdict<RedactionOutcome>>().toEqualTypeOf<"kinds and numbers only">();
     expectTypeOf<Verdict<EngineErrorKind>>().toEqualTypeOf<"kinds and numbers only">();

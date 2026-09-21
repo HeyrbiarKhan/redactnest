@@ -17,6 +17,12 @@
  *  - `cancel` aborts one operation. The session stays open, the document stays
  *    parsed, and the visitor lands back where they were.
  *  - `release` ends the session and frees everything.
+ *
+ * Replacing a session is neither. A second document ends the first one in place,
+ * inside the worker that is already loaded, because the engine is a multi
+ * megabyte download and the warm one is the whole point of `warmEngine`. The
+ * three release triggers stay what spec 0002 named them: start over, leaving the
+ * page, and a worker that died.
  */
 
 import { config } from "@/config";
@@ -97,12 +103,26 @@ function getWorker(): Worker {
   // This exact form is what bundlers recognise as a worker entry point. Do not
   // hoist the `new URL(...)` into a variable: the analysis is syntactic, and it
   // stops working the moment the URL is not written out here.
-  worker = new Worker(new URL("./engine.worker.ts", import.meta.url), {
+  const instance = new Worker(new URL("./engine.worker.ts", import.meta.url), {
     type: "module",
     name: "redactnest-engine",
   });
+  worker = instance;
 
-  worker.addEventListener("message", (event: MessageEvent<ResponseMessage>) => {
+  /**
+   * Is this still the worker we are talking to?
+   *
+   * `terminate()` stops the worker, but the events it already queued were
+   * queued on this thread's event loop and still arrive. Without this check a
+   * worker released a moment ago can announce its own death over a session
+   * running happily on its replacement, which shows somebody "the PDF engine
+   * stopped unexpectedly" about a worker nobody is using any more.
+   */
+  const isCurrent = () => worker === instance;
+
+  instance.addEventListener("message", (event: MessageEvent<ResponseMessage>) => {
+    if (!isCurrent()) return;
+
     const message = event.data;
     const operation = pending.get(message.id);
     if (!operation) return;
@@ -135,19 +155,47 @@ function getWorker(): Worker {
   // missing chunk, an out of memory kill). Spec 0002, AC-11: this is the one
   // recoverable failure, because the page still holds the `File` handle and can
   // read it again without asking for the file a second time.
-  worker.addEventListener("error", (event) => {
+  instance.addEventListener("error", (event) => {
+    // Prevented whether or not this worker is still ours. The browser's default
+    // handling prints the error, and what a dying engine says about a document
+    // is exactly what must never reach a console or a reporter.
     event.preventDefault();
+    if (!isCurrent()) return;
+
     failAll(new EngineError("engine-unavailable"));
     announceLost();
   });
 
-  return worker;
+  return instance;
 }
 
 function failAll(error: Error): void {
   for (const [id, operation] of pending) {
     pending.delete(id);
     operation.reject(error);
+  }
+}
+
+/**
+ * Retire whatever an earlier job still had in flight, without touching this one.
+ *
+ * AC-1: one tab holds at most one session, so a document arriving means every
+ * older job is over. The worker is told to stop work on each abandoned
+ * operation, and each is settled as cancelled rather than failed: somebody who
+ * chose a different file walked away from the first one, they did not hit an
+ * error.
+ *
+ * This is what a replacement costs instead of `releaseEngine()`. Terminating
+ * would also clear these, and would throw away the loaded engine with them.
+ */
+function retireOtherJobs(jobId: string, engine: Worker): void {
+  for (const [id, operation] of pending) {
+    if (operation.jobId === jobId) continue;
+
+    pending.delete(id);
+    const message: RequestMessage = { id, jobId: operation.jobId, kind: "cancel" };
+    engine.postMessage(message);
+    operation.reject(new OperationCancelled());
   }
 }
 
@@ -188,6 +236,12 @@ export function openSession(options: {
 }): Promise<OpenedSession> {
   const { jobId, bytes, limits, onProgress } = options;
   const engine = getWorker();
+
+  // AC-1, and the reason a new document does not need a new worker. The session
+  // this one replaces ends here on the main thread and, when the request lands,
+  // inside the worker too. A late reply from it can no longer resolve anything.
+  retireOtherJobs(jobId, engine);
+
   const id = crypto.randomUUID();
 
   // Tracks whatever this session has in flight, so `cancel()` knows what to

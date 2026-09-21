@@ -70,6 +70,23 @@ function formatBytes(bytes: number): string {
   return `${Math.round(bytes / (1024 * 1024))} MB`;
 }
 
+/**
+ * Did this session lose its worker before the engine had finished loading?
+ *
+ * `loading-engine` is the engine's own download and compile, and a null phase is
+ * the moment before even that has been reported. A worker lost in that window
+ * never opened anything, so reading the file again costs a visitor a slower open
+ * rather than an error they can do nothing with. Anything later is a session
+ * that was really running, and that is the failure AC-11 asks us to report and
+ * offer a retry on.
+ */
+function loadNeverFinished(session: ToolSession): session is LiveSession {
+  return (
+    session.state === "opening" &&
+    (session.phase === null || session.phase === "loading-engine")
+  );
+}
+
 /** Browser support cannot change while the page is open, so there is nothing to
  * subscribe to and nothing to detect on the server. */
 const NEVER_CHANGES = () => () => {};
@@ -119,6 +136,20 @@ export function ToolClient() {
   }, []);
 
   /**
+   * Which open attempt the interface belongs to.
+   *
+   * An attempt outlives nothing: choosing a second file, starting over or
+   * retrying supersedes the one before it, and a reply from a superseded
+   * attempt must not land on the session that replaced it. The worker drops
+   * replies for a job it no longer holds, but an attempt on the *same* job (a
+   * retry) has no such marker, so the counter is kept here too.
+   */
+  const attemptRef = useRef(0);
+
+  /** The one job an engine load failure has already been retried for. */
+  const retriedJobRef = useRef<string | null>(null);
+
+  /**
    * Open a document, from a fresh choice or from a retry after a lost worker.
    *
    * The `File` is a handle to a file already on the visitor's disk, not a copy
@@ -126,6 +157,9 @@ export function ToolClient() {
    */
   const runOpen = useCallback(
     async (job: { jobId: string; file: File; entitlement: EntitlementSnapshot }) => {
+      const attempt = (attemptRef.current += 1);
+      const current = () => attemptRef.current === attempt;
+
       let bytes: ArrayBuffer;
       try {
         bytes = await job.file.arrayBuffer();
@@ -133,9 +167,14 @@ export function ToolClient() {
         // The file moved, was deleted, or had its permission revoked between
         // being chosen and being read. Its own kind, so feature 8 can say
         // something useful rather than falling through to `unsupported`.
-        dispatch({ type: "failed", failure: "file-unreadable" });
+        if (current()) dispatch({ type: "failed", failure: "file-unreadable" });
         return;
       }
+
+      // Superseded while the file was being read. The bytes are dropped here
+      // rather than handed over: transferring them would open a document for a
+      // session that no longer exists, and the worker would hold it.
+      if (!current()) return;
 
       try {
         const opened = await openSession({
@@ -147,15 +186,19 @@ export function ToolClient() {
             maxBytes: job.entitlement.maxFileBytes,
             maxPages: job.entitlement.pageCap,
           },
-          onProgress: (phase) => dispatch({ type: "progress", phase }),
+          onProgress: (phase) => {
+            if (current()) dispatch({ type: "progress", phase });
+          },
         });
 
+        if (!current()) return;
         dispatch({
           type: "opened",
           summary: opened.summary,
           matches: opened.matches,
         });
       } catch (error) {
+        if (!current()) return;
         if (!(error instanceof EngineError)) {
           // A cancel or a release, not a failure. The reducer already moved on.
           return;
@@ -173,9 +216,12 @@ export function ToolClient() {
         return;
       }
 
-      // Choosing a file is a release trigger. The previous worker, and
-      // everything it held, goes before the next document arrives.
-      releaseEngine();
+      // Deliberately no `releaseEngine()` here. The worker `warm()` started is
+      // most likely mid download of the engine, and terminating it would throw
+      // that away and pay for it again on the one action the product exists
+      // for. Replacing a session does not need a new worker: `openSession`
+      // retires the previous job on this side, and the worker ends it on the
+      // other, which is what AC-1 actually asks for.
 
       setCheckingEntitlement(false);
       const entitlement = await getEntitlement({
@@ -205,6 +251,10 @@ export function ToolClient() {
   }, [runOpen]);
 
   const handleStartOver = useCallback(() => {
+    // A genuine release trigger, so the worker goes. The attempt is superseded
+    // with it, because a reply for the document just abandoned must not land on
+    // whatever is opened next.
+    attemptRef.current += 1;
     releaseEngine();
     dispatch({ type: "released" });
   }, []);
@@ -214,13 +264,37 @@ export function ToolClient() {
    *
    * The dead worker is dropped here so the retry starts a fresh one, and the
    * session moves to `lost` rather than to a dead end.
+   *
+   * One exception, and only one: a worker that died before the engine had
+   * finished loading never got as far as the document. That is a cold start
+   * failing on the way up rather than a session dying, and it is worth one
+   * silent second attempt before telling somebody their engine stopped. A
+   * second failure for the same job is reported, so a real fault still surfaces
+   * and the retry cannot loop.
    */
   useEffect(() => {
     return onEngineLost(() => {
       releaseEngine();
+
+      const live = sessionRef.current;
+      if (loadNeverFinished(live) && retriedJobRef.current !== live.jobId) {
+        retriedJobRef.current = live.jobId;
+
+        // Both land in one render, so nobody sees the lost message flash past.
+        dispatch({ type: "worker-lost" });
+        dispatch({ type: "retry" });
+        void runOpen({
+          jobId: live.jobId,
+          file: live.file,
+          // INV-5: the same job, so the same frozen snapshot it started on.
+          entitlement: live.entitlement,
+        });
+        return;
+      }
+
       dispatch({ type: "worker-lost" });
     });
-  }, []);
+  }, [runOpen]);
 
   /**
    * AC-13. The browser's own warning, and only when there is something to lose.
