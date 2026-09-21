@@ -20,7 +20,7 @@ The consequence of not deciding is the worst of the options: each later feature 
 
 ### Option 1: Stateful worker session, main thread review model
 
-The worker holds the bytes and the open MuPDF document for the session's life, keyed by job id, plus a private map from match id to the geometry needed to redact. The main thread holds a reducer with the checklist, the tick set, a frozen entitlement snapshot and a `File` handle. Ending a session terminates the worker.
+The worker holds the bytes and the open MuPDF document for the session's life, keyed by job id, plus a private map from match id to the geometry needed to redact. The main thread holds a reducer with the checklist, the tick set, a frozen entitlement snapshot and a `File` handle. A session ends either by terminating the worker (a release) or, when a second document arrives, in place inside the live worker so the loaded engine survives.
 
 **Pros**:
 - Document content stays in one place, and the one place is the thread with no access to the page.

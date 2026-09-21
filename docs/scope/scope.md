@@ -55,9 +55,9 @@ The shape of a redaction job while it is alive in memory (the file, the per page
 spec [0002](../specs/0002-document-session-privacy-guarantee/index.md) · code in `src/worker`, `src/lib` (`session.ts`, `entitlement.ts`, `download.ts`), `src/app/tool`, `src/app/api/entitlement`, `eslint.config.mjs`
 - [x] Design it (spec): `/architect document session & privacy guarantee`
 - [x] Build it: `/develop document session & privacy guarantee`
-  - [x] Protocol, config and the worker session registry: the full message envelope, `NEXT_PUBLIC_MATCH_CONTEXT_CHARS`, and a worker that holds a document across steps · AC-1, AC-5, AC-6, AC-7, AC-8, AC-10, AC-11, AC-15
+  - [x] Protocol, config and the worker session registry: the full message envelope, `NEXT_PUBLIC_MATCH_CONTEXT_CHARS`, and a worker that holds a document across steps, evicting the previous one in place · AC-1, AC-5a, AC-5b, AC-6, AC-7, AC-8, AC-10, AC-11, AC-15
   - [x] The no storage guarantee, enforced and proved: the ESLint zone plus the instrumented browser test · AC-2, AC-3
-  - [x] The session reducer and the tool client: state machine, frozen entitlement snapshot, `File` handle, leave and restore handling · AC-1, AC-9, AC-11, AC-12, AC-13, AC-14
+  - [x] The session reducer and the tool client: state machine, frozen entitlement snapshot, `File` handle, leave and restore handling, and the once per job silent retry inside the engine load window · AC-1, AC-9, AC-11, AC-11a, AC-12, AC-13, AC-14
   - [x] The exit path: download, revoke, release, and exhaustive reducer tests · AC-4, AC-8, AC-10, AC-14
 - [ ] Verify it: `/check verify document session & privacy guarantee`
 - [x] Test it: `/test document session & privacy guarantee`

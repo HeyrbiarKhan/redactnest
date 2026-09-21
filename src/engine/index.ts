@@ -140,9 +140,10 @@ export interface OpenDocument {
   /**
    * Release the native memory MuPDF holds.
    *
-   * Safe to call more than once. Terminating the worker would also reclaim it,
-   * and does so even when the worker is wedged, which is why spec 0002 makes
-   * termination the session's real ending (INV-6) and this the tidy one.
+   * Safe to call more than once. This is the tidy ending, taken when a second
+   * document replaces this session. Terminating the worker is the other one
+   * (spec 0002, INV-6): it reclaims the same memory without calling this, and
+   * does so even when the worker is wedged.
    */
   close(): void;
 }
@@ -150,11 +151,26 @@ export interface OpenDocument {
 /**
  * Open a document and report what is safe to report.
  *
- * Takes ownership of `bytes`. The summary is counts and per page flags only: no
- * text, no file name, nothing that could identify the document.
+ * The summary is counts and per page flags only: no text, no file name, nothing
+ * that could identify the document.
  *
  * The caller owns the returned handle and must `close()` it. Every failure path
  * in here closes the document before throwing, so a refused open leaks nothing.
+ *
+ * **What happens to `bytes`, because spec 0002 AC-5a rests on it.** This module
+ * keeps no reference to the caller's `ArrayBuffer`. MuPDF copies it into the
+ * WebAssembly heap (`new Buffer(arg)` does a `HEAPU8.set`), opens the document
+ * from that copy, and frees the wrapper straight away; the `Document` object it
+ * returns holds a numeric pointer and nothing else. `holdOpen` then closes over
+ * that document and the summary, never over `bytes`, and it is a top level
+ * function, so there is no scope chain from the returned handle back to this
+ * one's parameter. The caller's buffer is therefore the caller's alone to drop.
+ *
+ * Note the consequence: while a session is open the document exists twice inside
+ * the worker, once as the caller's `ArrayBuffer` and once as MuPDF's copy in the
+ * WebAssembly heap. Both are inside the worker, so nothing about the privacy
+ * guarantee changes, but `close()` frees only the second. Whoever holds the
+ * first has to drop it themselves.
  */
 export async function openDocument(
   bytes: ArrayBuffer,

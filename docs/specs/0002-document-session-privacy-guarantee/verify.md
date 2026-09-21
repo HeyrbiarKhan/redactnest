@@ -11,7 +11,7 @@ Feature 5 has not been built, so nothing can actually be redacted yet. Every ste
 - [x] Drop a PDF on the drop area → counts appear, one session, no console error → AC-1
 - [ ] With devtools Network open and the cache disabled, open one PDF, then open a second → the second opens without fetching `/engine/mupdf-wasm.wasm` again, and Sources still lists a single `redactnest-engine` worker → AC-1
 - [ ] Open a PDF, then choose a file that is not a PDF → the error appears, and the first document is gone: the worker holds nothing, so pressing **Start over** and reopening behaves like a fresh document → AC-1
-- [ ] Open a PDF, press **Start over**, open one again → a new `redactnest-engine` worker appears in Sources, because starting over is still a real release → AC-5
+- [ ] Open a PDF, press **Start over**, open one again → a new `redactnest-engine` worker appears in Sources, because starting over is still a real release → AC-5b
 - [ ] With a tick changed, choose a second file → a confirm appears; accepting replaces the session, declining leaves the first one untouched → AC-1
 - [x] Open a 4 page PDF as an anonymous visitor → refused with the "more than the 3 page limit" message, not the 50 page one → AC-9
 - [x] In devtools, make `GET /api/entitlement` fail, then open a 4 page PDF → still refused at 3 pages, never allowed through → AC-9
@@ -35,7 +35,7 @@ Feature 5 has not been built, so nothing can actually be redacted yet. Every ste
 
 - [x] `pnpm test:e2e privacy.spec.ts` → 6 pass, including the canary proving the recording proxies are really installed → AC-2, AC-3
 - [x] `pnpm test:e2e` → the whole browser suite passes under the enforced policy → AC-2, AC-3, AC-12
-- [x] `pnpm test:e2e engine.spec.ts` → 8 pass, including the two that count `Worker` constructions: one tab reuses its worker across documents, and starting over builds a new one → AC-1, AC-5
+- [x] `pnpm test:e2e engine.spec.ts` → 8 pass, including the two that count `Worker` constructions: one tab reuses its worker across documents, and starting over builds a new one → AC-1, AC-5a, AC-5b
 - [x] `pnpm test` → the reducer's every edge, including the ones that must not exist → AC-1, AC-10, AC-11, AC-13, AC-14
 - [x] Add a `string` field to any member of `LoggablePayload`, run `pnpm typecheck` → it fails → AC-8
 - [x] Add `localStorage.setItem("x", "1")` anywhere under `src/`, run `pnpm lint` → it fails in every zone, the engine and the worker included → AC-2
@@ -43,15 +43,17 @@ Feature 5 has not been built, so nothing can actually be redacted yet. Every ste
 - [x] `NEXT_PUBLIC_MATCH_CONTEXT_CHARS=201 pnpm build` → fails; the ceiling is a privacy limit, not a display one → AC-15
 - [x] `NEXT_PUBLIC_MATCH_CONTEXT_CHARS=17 pnpm build`, then open a document → the worker is handed `contextChars: 17` → AC-15, value sourcing: `matches[].before`/`.after`
 - [x] `curl -i localhost:3000/api/entitlement` → `{"tier":"free","pageCap":3,...}` with `Cache-Control: private, no-store` → AC-9
-- [x] Post a message to the worker after a release → no reply; the worker is gone, not merely idle → AC-5
+- [x] Post a message to the worker after a release → no reply; the worker is gone, not merely idle → AC-5b
 
 ## Acceptance-criteria coverage
 
 - AC-1 one session per tab · confirm on replace, reducer edges, worker registry eviction on arrival and on completion, client side retirement of the previous job, worker count held at one across documents
+- AC-11a silent retry once per job inside the engine load window · manual kill during `loading-engine`, twice on the same job
 - AC-2 nothing written, no FileList · `privacy.spec.ts` recording proxies + end state, lint zone
 - AC-3 no request carries document data · `privacy.spec.ts` request capture
 - AC-4 output released on download · download helper revoke ordering (after feature 5 for the real bytes)
-- AC-5 release terminates the worker · client release test, manual post after release
+- AC-5a a session that ended leaves nothing reachable · worker registry eviction on arrival and on completion, client side retirement of the previous job
+- AC-5b release terminates the worker · client release test, manual post after release, worker count rising after a start over
 - AC-6 bytes never on the main thread · transfer list test, `engine.spec.ts` detachment
 - AC-7 no geometry crosses · `ReviewMatch` carries none, redact sends ids only
 - AC-8 typed payloads only · `loggable.test.ts` type gate at `pnpm typecheck`

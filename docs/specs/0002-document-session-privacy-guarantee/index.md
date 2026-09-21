@@ -1,11 +1,12 @@
 # 0002. Document session and privacy guarantee
 
 **Date**: 2026-09-20
+**Updated**: 2026-09-21, reconciling the session ending rules with the warm engine (AC-1, AC-5a, AC-5b, INV-6, INV-6a)
 **Status**: In Progress
 
 ## Summary
 
-A redaction job lives as one session inside a single browser tab, and this spec fixes its exact shape and the rules that keep it there. The document's bytes sit in the Web Worker (a background thread with no access to the page) and nowhere else; the main thread holds only the review checklist, a handle to the file the visitor already has on disk, and counts. Nothing is written to any browser store, nothing document derived may reach a log, and ending a session terminates the worker outright, which is the only thing that actually hands the memory back. The rules are enforced by lint and proved by one browser test rather than promised in prose.
+A redaction job lives as one session inside a single browser tab, and this spec fixes its exact shape and the rules that keep it there. The document's bytes sit in the Web Worker (a background thread with no access to the page) and nowhere else; the main thread holds only the review checklist, a handle to the file the visitor already has on disk, and counts. Nothing is written to any browser store, nothing document derived may reach a log, and a session that ends leaves nothing any code can still read. It ends one of two ways: releasing terminates the worker outright, which additionally hands the memory straight back, and opening a second document ends the first one in place so the loaded engine survives. The rules are enforced by lint and proved by one browser test rather than promised in prose.
 
 ## Amends spec 0001
 
@@ -28,17 +29,19 @@ The guarantee was never carried by which thread a string sits on. It is carried 
 
 **Acceptance criteria** (the contract):
 
-- **AC-1**: One tab holds at most one session. Choosing a second file while `hasUnsavedWork` (defined in the data model below) is true asks before replacing it, and replaces it on confirmation.
+- **AC-1**: One tab holds at most one session. Choosing a second file while `hasUnsavedWork` (defined in the data model below) is true asks before replacing it, and replaces it on confirmation. A replacement ends the previous session **in place**, inside the worker that is already loaded, rather than terminating it: the first document's open handle and target map go before the second one is parsed, and the engine stays warm.
 - **AC-2**: After a complete run, `localStorage`, `sessionStorage`, IndexedDB and the Cache API are all empty for the origin, no service worker is registered, and the file input holds no `FileList`.
 - **AC-3**: No network request made from the tool route carries document bytes, extracted text, match text or the file name. The only request that route makes is `GET /api/entitlement`.
 - **AC-4**: The output buffer is released as soon as the download is handed to the browser. The object URL is revoked and no reference to the output survives in the session.
-- **AC-5**: Ending a session terminates the worker. Afterwards no document bytes, no open MuPDF document and no target map remain anywhere.
+- **AC-5a** (both endings): once a session has ended, by release or by replacement, no code in the tab can reach its document bytes, its open MuPDF document or its target map. The two get there by different mechanisms and that is fine: a **replacement** closes the MuPDF document, clears the target map and drops the bytes, one call at a time inside the live worker; a **release** tears the whole worker down from outside and takes all three with it without asking it to do anything.
+- **AC-5b** (release only): a release ends the session by terminating the worker, which additionally returns its whole heap to the browser at once and works even when the worker is wedged and would never read a message.
 - **AC-6**: Document bytes never exist on the main thread. After the handover the main thread's `ArrayBuffer` reports `byteLength` of 0. The main thread holds document **content** only as `matches[].text`, `matches[].before`, `matches[].after` and `outputName`. Everything else it holds about the document is **counts and flags** (`summary`, `outcome`), which carry no content and are the shape feature 11 is allowed to log.
 - **AC-7**: Coordinate quads, page geometry and extraction offsets never cross the worker boundary. The main thread names a match only by its opaque id.
 - **AC-8**: Every log, analytics and error payload this feature can emit is typed with enumerated kinds and numbers only. No free string field exists in any of those types.
 - **AC-9**: A session freezes its entitlement at open, and every cap check for that job reads the frozen snapshot rather than the live value. An anonymous visitor is capped at `config.freePageCap`, not `config.maxPages`.
 - **AC-10**: `cancel` aborts the operation in flight and returns the session to the previous step with the document still open. `release` ends the session and frees everything.
 - **AC-11**: A worker that dies mid job puts the session into a recoverable `lost` state, retryable from the retained `File` handle without asking for the file again. The retry re-enters at `opening` and the review starts over, because the old `MatchId`s were minted by the dead worker and mean nothing to its replacement. A `File` that can no longer be read fails with `file-unreadable`.
+- **AC-11a**: A worker that dies **before the engine has finished loading** is a cold start failing on the way up, not a session dying, so it is retried once silently: the file is read again on a fresh worker and no `lost` message is shown. The window is `opening` with the phase still `null` or `loading-engine`, and nothing later. The allowance is **once per `jobId`**, so a second death in the same window for the same job is reported like any other, and a genuinely broken engine surfaces instead of looping. Every death outside that window goes straight to `lost` per AC-11.
 - **AC-12**: A page restored from the back forward cache shows the idle drop area, never a checklist pointing at a released session.
 - **AC-13**: Leaving the page while `hasUnsavedWork` is true triggers the browser's warning. Leaving from `idle`, or after a successful download with no further change, does not.
 - **AC-14**: A completed job can have a tick changed and be run again without choosing the file a second time.
@@ -48,7 +51,7 @@ The guarantee was never carried by which thread a string sits on. It is carried 
 
 **Chosen option**: Option 1: Stateful worker session with a main thread review model.
 
-The worker keeps the document's bytes and its open MuPDF handle for the session's life, keyed by job id, and keeps the geometry needed to redact in a private map that never crosses the boundary. The main thread keeps a reducer holding the review checklist, the tick set, a frozen entitlement snapshot and a `File` handle (a pointer to a file already on the visitor's disk, not a copy of it). A session ends by terminating the worker.
+The worker keeps the document's bytes and its open MuPDF handle for the session's life, keyed by job id, and keeps the geometry needed to redact in a private map that never crosses the boundary. The main thread keeps a reducer holding the review checklist, the tick set, a frozen entitlement snapshot and a `File` handle (a pointer to a file already on the visitor's disk, not a copy of it). A session ends one of two ways: a release terminates the worker, and a second document ends the first session in place inside the worker that is already loaded, so the warm engine survives the documents it opens.
 
 ## Feature design
 
@@ -93,7 +96,7 @@ Worker, `EngineSession`, one entry in a `Map<string, EngineSession>` keyed by `j
 | Field | Type | Note |
 |---|---|---|
 | `bytes` | `ArrayBuffer` | transferred in at open. Never leaves |
-| `doc` | MuPDF `Document` | open for the session's life, `destroy()` only on release |
+| `doc` | MuPDF `Document` | open for the session's life, closed on release or when a second document replaces this one |
 | `targets` | `Map<MatchId, RedactionTarget>` | page, quads, extraction offsets. **Never crosses the boundary** |
 | `limits` | `{ maxBytes: number; maxPages: number }` | handed in at open, from the entitlement snapshot |
 | `cancelled` | `Set<string>` | operation ids the main thread asked to abort |
@@ -109,13 +112,18 @@ idle ──file chosen──▶ opening ──▶ reviewing ──▶ redacting 
                          ▼                          │
                       failed ◀─────────────────────-┘
 
-any state ──release (new file · start over · pagehide)──▶ idle
+any state ──release (start over · pagehide)──▶ idle
+any state ──new file (replace in place, worker survives)──▶ opening
 any state ──worker error event──▶ lost ──retry, re-read the File──▶ opening
 ```
 
 - `reviewing → reviewing` on a tick is main thread only. Nothing crosses the boundary until redaction starts.
 - `complete → reviewing` is what "keep the source, release the output" buys: change a tick, run again, no second trip to the file picker.
-- **A successful download is deliberately not a release trigger.** It frees the output buffer and sets `downloaded`, and the session stays alive at `complete`. Releasing here would terminate the worker and make the edge above impossible. The three release triggers are the three on the diagram and no others.
+- **A successful download is deliberately not a release trigger.** It frees the output buffer and sets `downloaded`, and the session stays alive at `complete`. Releasing here would terminate the worker and make the edge above impossible.
+- **Choosing a new file ends a session without releasing it, and that distinction is load bearing.** The engine is a multi megabyte WebAssembly download and compile, warmed the moment somebody hovers the drop area, and a second document usually arrives while that warming is still paying off. Terminating there would throw the engine away and buy it again on the one action the product exists for. A replacement takes the tidy path instead: the main thread retires every operation still in flight for the old job, and the worker closes the old document and clears its target map on the way in, before the new bytes are parsed. It ends on arrival rather than on success, so a second file that turns out to be unopenable still leaves the first one gone.
+- **Ending a session and dropping a worker are two different things, and the word "release" is doing both jobs.** Say which one you mean:
+  - **Ending a session** has three triggers and two mechanisms. The triggers are start over, `pagehide` and a second document. The mechanisms are **release** (the first two) and **replacement** (the third), which is the pair INV-6 names.
+  - **Dropping the worker** (the `releaseEngine()` call) happens on those same two release triggers **and** on a worker that died, where it throws away a corpse so the retry builds a fresh one. That third call is not a session ending: the session survives in `lost`, keeping its `jobId`, its `File` handle and its frozen entitlement, which is exactly what makes the retry in AC-11 possible.
 - `lost` is reachable from any non idle state and is the only recoverable failure. `failed` is terminal for that document. The retry re-enters at `opening`, not at `reviewing`, because the replacement worker has never seen the old `MatchId`s.
 
 **API surface**
@@ -136,7 +144,7 @@ This feature's surface is the worker message protocol, not HTTP. Spec 0001 fixed
 
 Notes that matter when building this:
 
-- **`release` is not a message.** It terminates the worker. Terminating is strictly stronger than anything the worker could be asked to do, and it still works when the worker is wedged and would never read a message. This is what makes AC-5 checkable rather than hopeful.
+- **`release` is not a message.** It terminates the worker. Terminating is strictly stronger than anything the worker could be asked to do, and it still works when the worker is wedged and would never read a message. This is what makes AC-5b checkable rather than hopeful. A replacement, by contrast, is carried by messages a healthy worker does read, which is why it buys AC-5a and not AC-5b.
 - **`result` keeps its name.** Opening reports `result`, redaction reports a new `redacted`. Slightly asymmetric, deliberately so: renaming a kind 0001 fixed is the redesign 0001 asked us not to do, and a flat kind keeps TypeScript narrowing on one field.
 - **`ProgressPhase` gains `checking-entitlement`, `detecting`, `redacting` and `writing`** beside the existing `loading-engine`, `opening` and `inspecting`. Features 5 and 6 report the middle three; feature 8 decides how all of them are shown.
 - **`EngineErrorKind` gains `file-unreadable`.** Reading a `File` can reject on its own terms, with the file moved, deleted or permission revoked between choosing it and reading it. That happens on the main thread, before any message is sent, so it is outside the worker protocol, but it belongs in the same closed set so feature 8 writes copy for one list rather than two. It covers the first read as well as the retry after a lost worker, which today would fall through to `unsupported` and tell somebody nothing useful.
@@ -179,9 +187,11 @@ Notes that matter when building this:
 - **INV-3**: Nothing is written to `localStorage`, `sessionStorage`, IndexedDB, the Cache API, OPFS or the file system, and no service worker is registered. Not document content, not metadata, not a draft of the tick set.
 - **INV-4**: Every log, analytics and error payload is typed with enumerated kinds and numbers only. No free string field exists in those types, so there is nowhere for a file name or a snippet to be put by accident.
 - **INV-5**: A job runs to completion on the entitlement snapshot frozen at open.
-- **INV-6**: A session ends by terminating the worker. There is no path that ends a session while leaving the worker alive.
+- **INV-6**: A session ends one of exactly two ways, and both leave nothing reachable. **Release** (start over, `pagehide`) terminates the worker, which is the only thing that hands the memory back at once. **Replacement** (a second document) closes the document, clears the target map and drops the bytes inside the live worker. There is no third way, and no path that ends a session while leaving its document open.
+- **INV-6a**: Dropping the worker is not the same act as ending a session, and a third call site of `releaseEngine()` proves it: a worker that **died** is dropped so the retry can build a fresh one, while its session stays alive in `lost`. So releasing a worker is neither necessary for a session to have ended (a replacement ends one and releases nothing) nor sufficient (a dead worker is released and its session lives on). Code that treats the two as one thing is wrong in both directions.
+- **INV-6b**: A replacement never calls the release path, because that throws away the warm engine. A release never takes the replacement's tidy path, because a wedged worker would ignore the message. The two are never spelled the same way in code.
 - **INV-7**: The output buffer is released as soon as the download is handed over, the object URL is revoked in the next macrotask, and neither is retained.
-- **INV-8**: `cancel` aborts one operation. `release` ends the session. Neither word ever means the other.
+- **INV-8**: `cancel` aborts one operation and keeps the session. `release` ends the session and the worker. A **replacement** ends the session and keeps the worker. No two of the three ever mean the same thing, and no one of them is ever spelled as another.
 - **INV-9**: The match context window comes from `src/config`, like every other cap.
 
 **Security model**
@@ -191,6 +201,7 @@ Notes that matter when building this:
 - **Compliance scope is GDPR**, inherited from spec 0001. Under this design RedactNest is not a processor of document content: the content never reaches our infrastructure, so there is no processing to describe on that path. Features 9, 16 and 17 should describe that reality rather than standard processor language.
 - **Audit logging, stated plainly.** There is deliberately no audit trail of document content or of what anyone redacted, because such a trail would recreate the exact exposure the product exists to remove. This is a conscious position, not an omission. Audit logging does apply to the billing and authentication surfaces, and feature 10 owns it.
 - **What this design does not control, stated honestly** so feature 16 does not overclaim: operating system swap and page files, browser process memory and crash dumps, the visitor's own disk where the source file already lives and where the redacted output is saved, and any extension with access to the page. In memory means we write nothing; it does not mean the operating system never pages that memory out.
+- **The two endings are not equally strong, and the difference is worth naming.** A release terminates the worker, so its heap goes back to the browser as one act. A replacement closes the document and drops the bytes, so nothing can read them any more, but the freed WebAssembly allocation returns to the engine's own free list rather than to the operating system, and the dropped `ArrayBuffer` waits for garbage collection. Reachability is identical on both paths, and that is the property the guarantee rests on. Promptness is not, so feature 16 should say **unreachable** rather than **erased** when it describes what happens between two documents.
 - **The `File` handle is worth naming.** Retaining it lets the page re-read that one file until the session ends. It stores nothing new, since the file is already on the visitor's disk and they chose it, but the capability exists and the security page should say so rather than leave it to be discovered.
 
 **Configuration required**
@@ -203,8 +214,12 @@ Notes that matter when building this:
 - **Retick and rerun**: from `complete`, change one tick, run again, and download a second time without ever touching the file picker. Verifies **AC-14**.
 - **The guarantee proof, instrumented rather than sampled**: before the page loads, replace `localStorage`, `sessionStorage`, `indexedDB`, `caches` and `navigator.storage` with recording proxies through Playwright's `addInitScript`. Run a full redaction, then assert nothing was ever called, no service worker was registered, the file input holds no `FileList`, and no captured request carried document bytes, extracted text, match text or the file name. Recording every call beats checking the end state, which a write that is cleared before the run finishes would pass straight through. Verifies **AC-2**, **AC-3**.
 - **Containment**: after the handover the main thread's `ArrayBuffer` reports `byteLength` of 0, and no `ReviewMatch` carries a quad or an offset. Verifies **AC-6**, **AC-7**.
-- **Release**: ending a session terminates the worker, and a message posted afterwards gets no reply. Verifies **AC-5**.
+- **Release**: starting over terminates the worker, and a message posted afterwards gets no reply. Counting `Worker` constructions across the run shows a second worker built after a start over. Verifies **AC-5b**.
+- **Replacement keeps the engine, in a real browser**: open one document, then open a second without starting over. The engine is fetched once and exactly one `redactnest-engine` worker is constructed for the whole run. This is what the browser can see from outside; it proves the engine survived, not what the registry holds. Verifies **AC-1**.
+- **Replacement empties the registry, at the unit boundary**: the worker's session map is private and unexported by design, so this is asserted where the boundary is mocked rather than through the page. Opening a second job closes the first document and leaves one entry, and it does so **on arrival** as well as on completion, so a second file the engine refuses still leaves the first one gone. Verifies **AC-1**, **AC-5a**.
+- **The gap worth naming**: AC-5a says nothing in the tab can reach the ended session. That is proved by the eviction assertions above plus the worker count, not by reading memory, which a browser gives no way to do. Anybody strengthening this later should add a debug only registry size probe rather than assume the browser suite already covers it.
 - **Failure case**: the worker is terminated mid job; the session enters `lost`, retries successfully from the retained `File` handle, and lands back at `opening` with the review starting over. Verifies **AC-11**.
+- **Silent retry, and its one allowance**: kill the worker while the phase is still `loading-engine`. The document opens anyway, on a second worker, with no `lost` message. Kill it at the same moment on the same job a second time and the `lost` message appears, because the allowance is once per `jobId`. Kill it any time after that window and `lost` appears the first time. Verifies **AC-11a**.
 - **Unreadable file**: the chosen `File` cannot be read, at first open and again on a retry after a lost worker. Both report `file-unreadable`, not `unsupported`. Verifies **AC-11**.
 - **Restore**: navigate away and back so a persisted `pageshow` fires; the page shows the idle drop area. Verifies **AC-12**.
 - **Cancel**: cancel a redaction in flight and land back on the checklist with the document still open. Verifies **AC-10**.
@@ -221,8 +236,8 @@ Ordered by Skateboard: the first slice is a session that exists, holds a documen
 
 1. Extend `src/worker/protocol.ts` with the full envelope: `jobId` on every message, the `redact` and `redacted` kinds, the four new `ProgressPhase` values, `file-unreadable` in `ENGINE_ERROR_KINDS`, and the `MatchId`, `ReviewMatch`, `EntitlementSnapshot`, `RedactionOutcome` and `DetectorKind` types. Types only, no behaviour. Satisfies **AC-6**, **AC-7**, **AC-8**, **AC-11**.
 2. Add `NEXT_PUBLIC_MATCH_CONTEXT_CHARS` to `src/config`, parsed and range checked like the existing caps. Satisfies **AC-15**.
-3. Turn `src/worker/engine.worker.ts` into a session registry: a `Map` keyed by `jobId` holding the bytes, the open document and the private `targets` map. Move `doc.destroy()` out of the per call `finally` and onto release. Satisfies **AC-1**, **AC-5**.
-4. Rework `src/worker/client.ts` around a session: `open` returns a handle, `cancel` aborts one operation, `release` terminates the worker. Satisfies **AC-5**, **AC-10**.
+3. Turn `src/worker/engine.worker.ts` into a session registry: a `Map` keyed by `jobId` holding the bytes, the open document and the private `targets` map. Move `doc.destroy()` out of the per call `finally` into one `endSession` helper, called on a replacement both when the `open` request arrives and again once it has parsed, so two overlapping opens cannot both stay registered whichever order they finish in. Satisfies **AC-1**, **AC-5a**.
+4. Rework `src/worker/client.ts` around a session: `open` returns a handle and first retires every operation still pending for an older job, settling each as cancelled rather than failed; `cancel` aborts one operation; `release` terminates the worker. Guard the message and error listeners on the worker still being the current one, so a terminated worker's already queued events cannot announce a death over the session that replaced it. Satisfies **AC-1**, **AC-5a**, **AC-5b**, **AC-10**.
 5. Add the storage zone to `eslint.config.mjs` beside the engine wall, banning `localStorage`, `sessionStorage`, `indexedDB`, `caches`, `navigator.storage`, `showSaveFilePicker` and OPFS across `src/**`. Satisfies **AC-2**.
 6. Write the Playwright proof: install recording proxies over every storage accessor with `addInitScript` before the page loads, run a redaction end to end, then assert nothing was ever called, no service worker is registered, and no captured request carried document data. Satisfies **AC-2**, **AC-3**.
 
@@ -230,7 +245,7 @@ Ordered by Skateboard: the first slice is a session that exists, holds a documen
 
 7. Write the session reducer as a pure function over a frozen `ToolSession`, covering every transition in the state machine including `lost`, the retry edge and the `downloaded` flag, plus the `hasUnsavedWork` predicate. Satisfies **AC-1**, **AC-9**, **AC-11**, **AC-13**, **AC-14**.
 8. Prefetch the entitlement on the engine warm trigger, freeze it into the session at open, and send the snapshot's `pageCap` to the worker in place of today's `config.maxPages`. Wait behind the `checking-entitlement` phase when it has not resolved, and fail closed to the free tier on error or timeout. Satisfies **AC-9**.
-9. Wire `src/app/tool/tool-client.tsx` to the reducer: retain the `File` handle, map a failed read to `file-unreadable`, clear `input.value` after selection, add the `beforeunload` guard driven by `hasUnsavedWork`, and release on `pagehide` with a reset on a persisted `pageshow`. Satisfies **AC-2**, **AC-11**, **AC-12**, **AC-13**.
+9. Wire `src/app/tool/tool-client.tsx` to the reducer: retain the `File` handle, map a failed read to `file-unreadable`, clear `input.value` after selection, add the `beforeunload` guard driven by `hasUnsavedWork`, and release on `pagehide` with a reset on a persisted `pageshow`. Track the open attempt in a ref so a reply from a superseded attempt cannot land on the session that replaced it, and gate the once per job silent retry on the phase still being `null` or `loading-engine`. Satisfies **AC-2**, **AC-11**, **AC-11a**, **AC-12**, **AC-13**.
 
 **Slice 3: the session ends cleanly**
 
@@ -243,7 +258,8 @@ Ordered by Skateboard: the first slice is a session that exists, holds a documen
 
 - The product's central claim becomes something a test asserts rather than something a policy promises, which is exactly what feature 16 needs to sell to HR, legal and healthcare buyers.
 - Features 5, 6, 13 and 14 inherit a decided session shape and a fixed protocol, so none of them has to invent one and then discover the others disagree.
-- Terminating the worker at session end is the only mechanism that actually returns the MuPDF WebAssembly heap, so memory does not creep across several documents in one sitting.
+- Terminating the worker on a release is the only mechanism that actually returns the MuPDF WebAssembly heap, so a visitor who starts over gets the memory back outright rather than trusting a garbage collector.
+- Replacing in place means somebody redacting a folder of documents pays for the engine once. The warm engine that `warmEngine` buys on hover survives every document after the first, which is the common case for the people this product is for.
 - Keeping quads inside the worker is stricter than spec 0001 assumed, and it removes a whole class of bug where a stale or wrong quad on the main thread causes a wrong removal.
 - The retained `File` handle turns a crashed worker from "find your file again" into a retry button, for almost no memory.
 - The closed payload types make feature 11's scrubbing requirement structural. There is nothing to scrub because there is nowhere to put anything.
@@ -251,13 +267,16 @@ Ordered by Skateboard: the first slice is a session that exists, holds a documen
 **Negative and tradeoffs**:
 
 - **Peak memory is genuinely high.** During redaction the tab holds the source bytes, the parsed MuPDF document and the output at once, so a 25 MB source can mean several times that in practice. This is the ceiling spec 0001 already flagged, and this design does not lower it.
-- **Terminating the worker costs a restart.** The next document pays WebAssembly instantiation again, though not a re-download, since the engine comes from the HTTP cache. Someone redacting several documents in a row feels it each time.
+- **Two endings means two code paths where a mistake is a privacy bug.** Release terminates; replacement tidies up inside a live worker. Calling the wrong one is either a document left open (the tidy path taken on a wedged worker) or a wasted engine (release taken on a replacement). INV-6a exists because this is the likeliest place to get it wrong, and the worker count assertions in the browser suite exist to catch it.
+- **The replacement path's guarantee is weaker than the release path's, honestly.** Closing the document and dropping the bytes makes them unreachable, which is what the claim rests on, but the freed WebAssembly allocation goes back to the engine's free list rather than to the operating system, and it may physically hold the old bytes until something else overwrites them. A release has no such gap. This is the price of the warm engine, and it is why AC-5 is split in two rather than written as one absolute sentence.
+- **Starting over still costs a restart, and so does a dead worker.** Both pay WebAssembly instantiation again, though not a re-download, since the engine comes from the HTTP cache. So "the warm engine survives" holds for replacement and for nothing else: a crash mid review throws the engine away along with the review, on top of the `MatchId` loss named below.
+- **A terminated worker's events still arrive.** They were queued on the main thread's event loop before `terminate()` ran, so without an explicit check a released worker can announce its own death over the session that replaced it. The guard is small, and the failure it prevents is somebody being told the engine stopped when it is working fine.
 - **Holding the document open across user think time** is the whole point and also the cost: an abandoned tab holds a document indefinitely, because you chose no expiry timer.
 - **The main thread now holds document derived strings.** That is a deliberate loosening of 0001's wording and it is the right call, but it means feature 11's error reporting has to stay disciplined on a route that now has content to leak.
 - **A lint rule only bans the spellings we thought of.** A future storage API, or an indirect access through a library, slips past it. The recording proxies in the Playwright proof are the backstop and they catch a write the lint missed, including one cleared before the run ends, but they too only watch the accessors they were told to wrap. Neither mechanism can see a storage API nobody has thought of yet.
 - **A crash costs the review, not just the reopen.** The retained `File` handle saves the trip to the file picker, and nothing more: the old `MatchId`s were minted by the dead worker, so a retry starts the review from scratch. On a document with sixty matches that is a real loss, and calling the `lost` state "recoverable" without saying this would be exactly the unstated fine print this spec exists to avoid.
 - **The `File` handle is a retained capability**, not just a memory saving. The page can re-read that file until the session ends, and the security page has to say so.
-- **Two ways to end a job, `cancel` and `release`,** means two code paths where a mistake is a privacy bug rather than a glitch. The naming rule in INV-8 exists because this is the likely place to get it wrong.
+- **Three words for ending something, `cancel`, `release` and replace,** and only one of them keeps the document open. `cancel` aborts one operation and keeps the session; `release` ends the session and the worker; a replacement ends the session and keeps the worker. INV-8 and INV-6a exist because these are easy to blur and expensive to blur.
 
 **Neutral**:
 
@@ -273,9 +292,12 @@ Ordered by Skateboard: the first slice is a session that exists, holds a documen
 - [ ] Close the cap gap found while writing this: `src/worker/client.ts` sends `config.maxPages` (50) while `src/app/tool/tool-client.tsx` tells the visitor `config.freePageCap` (3), so the free cap is currently not enforced at all. Build plan task 8 fixes it; until then the tool route is more permissive than it says.
 - [ ] Feature 14 will need coordinate geometry on the main thread to draw and place boxes. It must extend INV-2 deliberately, with its own decision about what crosses and why, rather than quietly widening the payload.
 - [ ] Feature 11 inherits INV-4 as a hard constraint. Any analytics or error reporting product it picks must accept a payload of enumerated kinds and numbers, or be wrapped so it only ever receives one.
-- [ ] Feature 16's security page should describe the retained `File` handle and the honest limits in the Security model above, rather than claiming more than this design delivers.
+- [ ] Feature 16's security page should describe the retained `File` handle and the honest limits in the Security model above, rather than claiming more than this design delivers. That now includes the two endings: between two documents the previous one becomes **unreachable**, which is not the same word as **erased**, and only a release hands the memory back outright.
 - [ ] Spec 0001 left open what a visitor sees during the entitlement fetch. This spec closes it for the tool route: prefetch on the engine warm trigger, wait behind `checking-entitlement` if needed, fail closed to free. Feature 10 should adopt the same rule anywhere else it needs the tier, rather than inventing a second one.
 - [ ] Record `NEXT_PUBLIC_MATCH_CONTEXT_CHARS` in root `AGENTS.md` alongside the other caps when this ships, so the "every cap comes from `src/config`" rule keeps its full list.
+- [x] The header comment in `src/worker/client.ts` counted release **call sites** where the spec counts session **endings**. Reworded against INV-6, INV-6a and INV-6b, naming all three words that end something and stating that `releaseEngine()` is neither necessary nor sufficient for a session to have ended. The same stale "termination is the session's real ending" framing was fixed in `endSession` in `src/worker/engine.worker.ts` and on `OpenDocument.close()` in `src/engine/index.ts`, which both cited INV-6 the old way.
+- [x] Confirmed: `src/engine` keeps **no** reference to the caller's `ArrayBuffer`, so AC-5a's reachability claim holds. `openDocument` reads `byteLength`, hands the buffer to MuPDF and never stores it; `holdOpen` closes over the document and the summary only, and is a top level function, so the returned handle has no scope chain back to the parameter. MuPDF copies the bytes into the WebAssembly heap (`new Buffer(arg)` does a `HEAPU8.set`) and its `Document` holds a numeric pointer, so nothing in `mupdf.js` retains our buffer either. Recorded on `openDocument` so the next reader does not have to re-derive it.
+- [ ] Two things that check turned up, both needing a decision rather than a fix here. **INV-1 says the bytes exist "in exactly one place, `EngineSession.bytes`"**, and that is not literally true: while a session is open the document exists twice inside the worker, once as that `ArrayBuffer` and once as MuPDF's copy in the WebAssembly heap. Both are inside the worker so no guarantee moves, but the wording overclaims in a spec whose whole job is to not overclaim. **And `EngineSession.bytes` is written at open and never read again** (`engine.worker.ts` uses it at the declaration, the destructure, the `openDocument` call and the store, and nowhere else), so a 25 MB document carries 25 MB of retained bytes that nothing consumes and that AC-5a then has to account for. Dropping the field would make the guarantee easier to hold and halve peak memory, but it is a data model change and feature 5 may want the original bytes, so `/architect` owns it.
 
 ## Rationale
 

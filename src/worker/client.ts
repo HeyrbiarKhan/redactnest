@@ -6,23 +6,33 @@
  * it, so the main thread never holds document content."
  *
  * Spec 0002 shaped this around a session rather than a single call. One tab
- * holds at most one, the document stays open inside the worker across steps, and
- * the session ends by terminating the worker. Terminating is strictly stronger
- * than anything the worker could be asked to do, and it still works when the
- * worker is wedged and would never read a message. That is what makes the
- * release guarantee checkable rather than hopeful (INV-6).
+ * holds at most one, and the document stays open inside the worker across steps.
  *
- * The two words are never interchangeable here (INV-8):
+ * Three words end something here, and no two of them mean the same thing
+ * (INV-8):
  *
  *  - `cancel` aborts one operation. The session stays open, the document stays
  *    parsed, and the visitor lands back where they were.
- *  - `release` ends the session and frees everything.
+ *  - `release` ends the session by terminating the worker. Terminating is
+ *    strictly stronger than anything the worker could be asked to do, and it
+ *    still works when the worker is wedged and would never read a message. That
+ *    is what makes AC-5b checkable rather than hopeful.
+ *  - a **replacement** ends the session without terminating anything. A second
+ *    document ends the first one in place, inside the worker that is already
+ *    loaded, because the engine is a multi megabyte download and the warm one is
+ *    the whole point of `warmEngine`.
  *
- * Replacing a session is neither. A second document ends the first one in place,
- * inside the worker that is already loaded, because the engine is a multi
- * megabyte download and the warm one is the whole point of `warmEngine`. The
- * three release triggers stay what spec 0002 named them: start over, leaving the
- * page, and a worker that died.
+ * So a session ends exactly two ways, by release or by replacement (INV-6), and
+ * the two never borrow each other's path (INV-6b): a replacement must not
+ * terminate, or the warm engine is gone, and a release must not send a tidy up
+ * message, or a wedged worker ignores it.
+ *
+ * Do not read `releaseEngine()` as "a session ended" (INV-6a). It has three call
+ * sites and only two of them end one: start over and leaving the page do, while
+ * a worker that **died** is dropped so the retry can build a fresh one, and its
+ * session lives on in `lost` holding its `jobId`, its `File` and its frozen
+ * entitlement. Releasing a worker is neither necessary for a session to have
+ * ended (a replacement ends one and releases nothing) nor sufficient.
  */
 
 import { config } from "@/config";

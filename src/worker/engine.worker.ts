@@ -92,11 +92,15 @@ function postError(
 /**
  * End a session and hand its memory back.
  *
- * Terminating the worker does this too, and does it even when the worker is
- * wedged, which is why spec 0002 (INV-6) makes termination the session's real
- * ending. This is the tidy path, and it is the one a replacement takes: opening
- * a second document inside a healthy worker ends the first one here rather than
- * throwing away an engine that is loaded and working.
+ * This is one of the two endings spec 0002 allows (INV-6), and it is the one a
+ * replacement takes: opening a second document inside a healthy worker ends the
+ * first one here rather than throwing away an engine that is loaded and working.
+ *
+ * The other ending is a release, which terminates the worker from outside and
+ * never reaches this function. It gets to the same place by a stronger route,
+ * since it works even when the worker is wedged and would never read a message.
+ * That is the difference AC-5a and AC-5b split apart: both leave nothing
+ * reachable, and only termination hands the memory back at once.
  */
 function endSession(jobId: string): void {
   const session = sessions.get(jobId);
