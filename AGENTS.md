@@ -23,7 +23,7 @@ Decided in [spec 0001](docs/specs/0001-browser-only-redaction-stack/index.md), t
 pnpm install
 pnpm dev          # syncs the engine into public/engine first
 pnpm build
-pnpm test         # Vitest, unit
+pnpm test         # Vitest: the unit project (node) and the component project (jsdom)
 pnpm test:e2e     # Playwright, in a real browser
 pnpm lint
 pnpm typecheck
@@ -42,6 +42,7 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md`.
 - Expected failures are a closed set of kinds, never free text. The worker never throws across the boundary, and an error payload carries a kind and nothing derived from the document: no file name, no stack trace, no extracted text.
 - The engine wall: only `src/worker/engine.worker.ts` may import `@/engine`, and only `src/engine` may touch `mupdf`. One PDF parser, ever. Document bytes live only inside the worker, so transfer the `ArrayBuffer` rather than copying it.
 - Every cap and every public URL comes from `src/config`, validated at module load. No page or size limit written as a literal anywhere else.
+- `NEXT_PUBLIC_MATCH_CONTEXT_CHARS` (default 40, ceiling 200) sets how many characters of surrounding text travel with a match. That ceiling is a privacy limit rather than a display one: the text crosses the worker boundary, so a typo must not be able to widen it to a whole page. Spec 0002, INV-9.
 - Comments explain why, and name the spec invariant they uphold. Match the density already in `src/`.
 - Accessibility: WCAG 2.2 AA on the core path. Keyboard reachable, visible focus, sufficient contrast.
 
@@ -52,6 +53,7 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md`.
 - Redaction is real removal through MuPDF, never a drawn box or overlay. Never produce a file that looks redacted but is not.
 - Logs, analytics and error reports carry counts and kinds only, never document content.
 - Documents are never stored. No database of our own; account and subscription data lives in Clerk and Polar.
+- Nothing is written to browser storage: no `localStorage`, `sessionStorage`, IndexedDB, Cache Storage, OPFS or service worker. ESLint `no-restricted-syntax` bans those spellings in every zone, and `tests/e2e/privacy.spec.ts` proves it in a real browser. Spec 0002, INV-3.
 - The repository will be public under AGPL. Never commit secrets; `.env*` stays ignored.
 - The plan lives in `docs/scope/scope.md` and decisions in `docs/specs/`. Specs override general guidance from installed skills.
 
@@ -63,6 +65,7 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md`.
 - The `.wasm` file must be served as `application/wasm`.
 - The tool route gets entitlement only from same-origin `GET /api/entitlement`, which fails closed to the free tier.
 - `typecheck` runs `next typegen` before `tsc`. `LayoutProps` and `PageProps` are globals Next.js writes into `.next/types`, and `next-env.d.ts` is generated too; both are gitignored, so a clean checkout has neither and bare `tsc --noEmit` fails with `TS2304: Cannot find name 'LayoutProps'`. It passes on a machine that has run `dev` or `build`, which is why only CI sees it. Do not drop the `typegen` step.
+- MuPDF prints parser diagnostics to the console from inside the worker. Those lines can carry document detail, so error reporting (feature 11) must never capture console output from the worker. `src/worker/client.ts` already calls `preventDefault()` on worker errors for the same reason.
 
 ## Tooling
 
@@ -72,6 +75,8 @@ Chosen here, installed by `/develop tooling` (scope feature 2):
 - The engine wall enforced by ESLint `no-restricted-imports` zones, replacing `tests/unit/boundaries.test.ts` as the guard
 - Pre commit hook: lint, format, typecheck
 - CI on push: lint, typecheck, Vitest, Playwright
+- Testing Library (`@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event`) on jsdom for component tests, which live in `tests/component/`
+- Two Vitest projects in `vitest.config.mts`: `unit` runs `tests/unit/**` in `node`, `component` runs `tests/component/**` in `jsdom` with `tests/setup/component.ts`. Keeping them apart stops a unit test quietly leaning on a `window` it should never have had
 - Tests written after the build via `/test`. Vitest for logic, Playwright for anything that must happen in a real browser
 
 ## Git
@@ -92,7 +97,7 @@ Installed for the tools this project uses. Each one loads only when its subject 
 - [next-best-practices](.claude/skills/next-best-practices/): `vercel-labs/openreview`, Next.js file conventions, RSC boundaries, async APIs and metadata
 - [vercel-react-best-practices](.claude/skills/vercel-react-best-practices/): `vercel-labs/agent-skills`, React and Next.js performance patterns
 
-Nothing is recorded as declined, so later runs may offer more.
+Declined: Testing Library, jsdom. Nothing else is recorded as declined, so later runs may offer more.
 
 MCP servers: `@playwright/mcp` (connected, configured in `.mcp.json`, drives a real browser for `/check verify` and Playwright work)
 
