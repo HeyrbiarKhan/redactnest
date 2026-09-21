@@ -54,6 +54,7 @@ async function wallErrors(path: string, code: string): Promise<string[]> {
 const MUPDF = /Only src\/engine may touch mupdf/;
 const ENGINE = /may import @\/engine/;
 const SECOND_WORKER = /A second Worker means/;
+const STORAGE = /Nothing is written to browser storage/;
 
 /** Ordinary main thread code: a route and a shared library, fully walled. */
 const ROUTE = "src/app/probe.ts";
@@ -186,6 +187,55 @@ describe("constructing a Worker", () => {
   it("is allowed in the worker client, the main thread's single door", async () => {
     expect(await wallErrors(CLIENT, CONSTRUCTS_WORKER)).toEqual([]);
   });
+});
+
+/**
+ * Spec 0002, INV-3. Nothing is written down, anywhere, ever.
+ *
+ * The rule the product rests on, so the same argument as above applies twice
+ * over: a selector that quietly matches nothing would leave every one of these
+ * forms wide open, and `pnpm lint` would stay green either way.
+ *
+ * No zone may relax this one, which is why every case below is checked in the
+ * engine and the worker too, not only on the main thread.
+ */
+describe("writing to browser storage", () => {
+  it.each([
+    ["localStorage", 'export const go = () => localStorage.setItem("k", "v");\n'],
+    ["sessionStorage", 'export const go = () => sessionStorage.setItem("k", "v");\n'],
+    [
+      "localStorage reached through window",
+      "export const go = () => window.localStorage.clear();\n",
+    ],
+    ["IndexedDB", 'export const go = () => indexedDB.open("jobs");\n'],
+    ["the Cache API", 'export const go = () => caches.open("documents");\n'],
+    [
+      "the origin private file system",
+      "export const go = () => navigator.storage.getDirectory();\n",
+    ],
+    [
+      "the file system access API",
+      'export const go = () => showSaveFilePicker({ suggestedName: "out.pdf" });\n',
+    ],
+    [
+      "registering a service worker",
+      'export const go = () => navigator.serviceWorker.register("/sw.js");\n',
+    ],
+  ])("is rejected as %s", async (_form, code) => {
+    expect(await wallErrors(ROUTE, code)).toContainEqual(expect.stringMatching(STORAGE));
+  });
+
+  it.each([ROUTE, LIBRARY, ENGINE_MODULE, WORKER, CLIENT])(
+    "is rejected in %s, because no zone gets to relax this one",
+    async (path) => {
+      expect(
+        await wallErrors(
+          path,
+          'export const go = () => localStorage.setItem("k", "v");\n',
+        ),
+      ).toContainEqual(expect.stringMatching(STORAGE));
+    },
+  );
 });
 
 /** The carve-outs, asserted so tightening the wall cannot remove them by accident. */

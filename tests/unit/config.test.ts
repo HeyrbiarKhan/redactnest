@@ -13,6 +13,7 @@ const CONFIG_KEYS = [
   "NEXT_PUBLIC_FREE_PAGE_CAP",
   "NEXT_PUBLIC_MAX_PAGES",
   "NEXT_PUBLIC_MAX_FILE_BYTES",
+  "NEXT_PUBLIC_MATCH_CONTEXT_CHARS",
   "NEXT_PUBLIC_SITE_URL",
   "NEXT_PUBLIC_SOURCE_URL",
 ] as const;
@@ -44,6 +45,7 @@ describe("defaults", () => {
     expect(config.freePageCap).toBe(3);
     expect(config.maxPages).toBe(50);
     expect(config.maxFileBytes).toBe(26_214_400);
+    expect(config.matchContextChars).toBe(40);
     expect(config.siteUrl).toBe("http://localhost:3000");
   });
 
@@ -52,10 +54,12 @@ describe("defaults", () => {
       NEXT_PUBLIC_FREE_PAGE_CAP: "5",
       NEXT_PUBLIC_MAX_PAGES: "120",
       NEXT_PUBLIC_MAX_FILE_BYTES: "1048576",
+      NEXT_PUBLIC_MATCH_CONTEXT_CHARS: "80",
     });
     expect(config.freePageCap).toBe(5);
     expect(config.maxPages).toBe(120);
     expect(config.maxFileBytes).toBe(1_048_576);
+    expect(config.matchContextChars).toBe(80);
   });
 });
 
@@ -78,6 +82,28 @@ describe("a malformed value fails as loudly as a missing one", () => {
     await expect(loadConfig({ NEXT_PUBLIC_FREE_PAGE_CAP: "0" })).rejects.toThrow(
       /between 1 and/,
     );
+  });
+
+  /**
+   * Spec 0002, AC-15 and INV-9. The context window is document text crossing to
+   * the main thread, so its ceiling is a privacy limit rather than a display
+   * one, and a malformed value has to fail the build like any other cap.
+   */
+  it.each([
+    ["not a number", "wide"],
+    ["a float", "40.5"],
+    ["a negative", "-1"],
+    ["past the ceiling", "201"],
+  ])("rejects a match context window that is %s", async (_label, value) => {
+    await expect(loadConfig({ NEXT_PUBLIC_MATCH_CONTEXT_CHARS: value })).rejects.toThrow(
+      /NEXT_PUBLIC_MATCH_CONTEXT_CHARS/,
+    );
+  });
+
+  /** Zero is a real answer here: show the match and no surrounding text. */
+  it("allows a match context window of zero", async () => {
+    const config = await loadConfig({ NEXT_PUBLIC_MATCH_CONTEXT_CHARS: "0" });
+    expect(config.matchContextChars).toBe(0);
   });
 
   it("rejects a site url that is not a url", async () => {

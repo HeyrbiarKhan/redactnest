@@ -77,6 +77,83 @@ test("the worker fetches the engine from our own origin, not a CDN", async ({ pa
   }
 });
 
+declare global {
+  interface Window {
+    __redactnestWorkers?: number;
+  }
+}
+
+/**
+ * Spec 0002, AC-1, and the pre-warm spec 0001 designed the engine load around.
+ *
+ * One tab, one worker, however many documents pass through it. Counting the
+ * `Worker` constructions is the honest measure: a request count could be
+ * satisfied by the browser's own cache, while a second construction means the
+ * engine was genuinely thrown away and compiled again on the one action this
+ * product exists for.
+ */
+test("a second document reuses the worker the first one loaded", async ({ page }) => {
+  await page.addInitScript(() => {
+    const Real = window.Worker;
+    window.__redactnestWorkers = 0;
+    window.Worker = class extends Real {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options);
+        window.__redactnestWorkers = (window.__redactnestWorkers ?? 0) + 1;
+      }
+    };
+  });
+
+  await page.goto("/tool");
+  const input = page.getByTestId("file-input");
+
+  await input.setInputFiles(FIXTURE);
+  await expect(page.getByTestId("page-count")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+
+  // A second document, and a third, each replacing the one before it. The
+  // middle one fails on purpose: a refused open must still retire the document
+  // it replaced, and must still leave the engine loaded for the next try.
+  await input.setInputFiles({
+    name: "not-really.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("this is not a PDF at all"),
+  });
+  await expect(page.getByTestId("error")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+
+  await input.setInputFiles(FIXTURE);
+  await expect(page.getByTestId("page-count")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+
+  expect(await page.evaluate(() => window.__redactnestWorkers)).toBe(1);
+});
+
+/** The release triggers still do what spec 0002 says: the worker goes. */
+test("starting over gives the next document a worker of its own", async ({ page }) => {
+  await page.addInitScript(() => {
+    const Real = window.Worker;
+    window.__redactnestWorkers = 0;
+    window.Worker = class extends Real {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options);
+        window.__redactnestWorkers = (window.__redactnestWorkers ?? 0) + 1;
+      }
+    };
+  });
+
+  await page.goto("/tool");
+  const input = page.getByTestId("file-input");
+
+  await input.setInputFiles(FIXTURE);
+  await expect(page.getByTestId("page-count")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+
+  await page.getByTestId("start-over").click();
+  await expect(page.getByTestId("start-over")).toBeHidden();
+
+  await input.setInputFiles(FIXTURE);
+  await expect(page.getByTestId("page-count")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+
+  expect(await page.evaluate(() => window.__redactnestWorkers)).toBe(2);
+});
+
 test("document bytes leave the main thread rather than being copied", async ({
   page,
 }) => {

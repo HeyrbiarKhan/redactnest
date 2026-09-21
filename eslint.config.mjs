@@ -34,6 +34,12 @@ const WORKER_MESSAGE =
   "src/worker/client.ts is the main thread's only route to the engine. A second " +
   "Worker means a second place document bytes can live (spec 0001, INV-6).";
 
+const STORAGE_MESSAGE =
+  "Nothing is written to browser storage (spec 0002, INV-3): not document " +
+  "content, not metadata, not a draft of the tick set. A session lives in " +
+  "memory for one tab and dies with it. If you need something to survive a " +
+  "reload, it does not belong in this product.";
+
 /** Static `import`/`export ... from` of the engine package. */
 const noMupdfImport = { group: ["mupdf", "mupdf/*"], message: MUPDF_MESSAGE };
 
@@ -78,10 +84,61 @@ const noNewWorker = [
   { selector: 'NewExpression[callee.name="Worker"]', message: WORKER_MESSAGE },
 ];
 
-/** A zone's rules, from the restrictions it does not get to relax. */
+/**
+ * Every way of writing something down that a browser offers us.
+ *
+ * Matched as bare identifiers, which catches `localStorage.setItem(...)` and
+ * `window.localStorage` alike, since the property is an `Identifier` node too.
+ * `no-restricted-globals` would only catch the first spelling.
+ *
+ * Honest about its limits, because spec 0002 is: this bans the spellings we
+ * thought of. A storage API nobody has invented yet, or an indirect access
+ * through a library, walks straight past it. The recording proxies in
+ * `tests/e2e/privacy.spec.ts` are the backstop, and they catch a write this
+ * misses, including one cleared before the run ends. Neither mechanism can see
+ * what neither was told about.
+ */
+const STORAGE_GLOBALS = [
+  "localStorage",
+  "sessionStorage",
+  "indexedDB",
+  "caches",
+  // The file system access API, and the origin private file system behind it.
+  "showSaveFilePicker",
+  "showOpenFilePicker",
+  "showDirectoryPicker",
+  "getDirectory",
+  "requestFileSystem",
+  "webkitRequestFileSystem",
+];
+
+const noStorageAnywhere = [
+  ...STORAGE_GLOBALS.map((name) => ({
+    selector: `Identifier[name="${name}"]`,
+    message: STORAGE_MESSAGE,
+  })),
+  // `navigator.storage`, which is where OPFS and the quota API both start.
+  {
+    selector: 'MemberExpression[object.name="navigator"][property.name="storage"]',
+    message: STORAGE_MESSAGE,
+  },
+  // AC-2: no service worker is registered. One would be a cache we do not
+  // control sitting between the visitor and every request the page makes.
+  {
+    selector: 'MemberExpression[property.name="serviceWorker"]',
+    message: STORAGE_MESSAGE,
+  },
+];
+
+/**
+ * A zone's rules, from the restrictions it does not get to relax.
+ *
+ * The storage ban is applied to every zone here rather than passed in, so a zone
+ * can only ever relax what it explicitly names, and no zone can name this.
+ */
 const zone = (imports, syntax) => ({
   "no-restricted-imports": ["error", { patterns: imports }],
-  "no-restricted-syntax": ["error", ...syntax],
+  "no-restricted-syntax": ["error", ...syntax, ...noStorageAnywhere],
 });
 
 const eslintConfig = defineConfig([
@@ -97,6 +154,12 @@ const eslintConfig = defineConfig([
     // Vendored by scripts/sync-engine.mjs from the pinned mupdf dependency.
     // Not our code, and not ours to lint.
     "public/engine/**",
+    // What Playwright leaves behind. The HTML report carries its own bundled
+    // JavaScript, so a lint run after a failed browser test otherwise reports
+    // thousands of problems in somebody else's viewer. `.prettierignore`
+    // already skips both for the same reason.
+    "playwright-report/**",
+    "test-results/**",
   ]),
 
   {
