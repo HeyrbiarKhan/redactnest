@@ -154,6 +154,12 @@ const eslintConfig = defineConfig([
     // Vendored by scripts/sync-engine.mjs from the pinned mupdf dependency.
     // Not our code, and not ours to lint.
     "public/engine/**",
+    // What Playwright leaves behind. The HTML report carries its own bundled
+    // JavaScript, so a lint run after a failed browser test otherwise reports
+    // thousands of problems in somebody else's viewer. `.prettierignore`
+    // already skips both for the same reason.
+    "playwright-report/**",
+    "test-results/**",
   ]),
 
   {
