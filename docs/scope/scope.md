@@ -13,7 +13,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 |---|---------|-------|--------|
 | 1 | Stack, scaffold & processing boundary | Foundation | done |
 | 2 | Coding standards & tooling | Foundation | done |
-| 3 | Document session & privacy guarantee | Foundation | in-progress |
+| 3 | Document session & privacy guarantee | Foundation | done |
 | 4 | Design system & UI foundation | Foundation | planned |
 | 5 | Redaction engine | Release 1 | planned |
 | 6 | Pattern detection | Release 1 | planned |
@@ -49,7 +49,7 @@ code in `eslint.config.mjs`, `prettier.config.mjs`, `lint-staged.config.mjs`, `v
 - [x] Install the tooling: `/develop tooling`
 - [x] Check it runs clean: `/test`
 
-### 3. Document session & privacy guarantee · in-progress · GA
+### 3. Document session & privacy guarantee · done · GA
 The shape of a redaction job while it is alive in memory (the file, the per page text layer flags, the detected items and their confirm state, the output) and the rules that stop it ever touching disk, a store, or a log. This is the promise the whole product rests on, so it gets decided once, here, rather than rediscovered in every feature.
 **Done when:** a job exists only in memory for the life of one request or one tab, nothing is written to disk or to any store, buffers are released once the download is handed over, and logs carry counts only with no file name, no text and no document content.
 spec [0002](../specs/0002-document-session-privacy-guarantee/index.md) · code in `src/worker`, `src/lib` (`session.ts`, `entitlement.ts`, `download.ts`), `src/app/tool`, `src/app/api/entitlement`, `eslint.config.mjs`

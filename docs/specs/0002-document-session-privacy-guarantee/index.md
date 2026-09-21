@@ -2,7 +2,7 @@
 
 **Date**: 2026-09-20
 **Updated**: 2026-09-21, reconciling the session ending rules with the warm engine (AC-1, AC-5a, AC-5b, INV-6, INV-6a)
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 
