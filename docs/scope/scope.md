@@ -14,7 +14,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 1 | Stack, scaffold & processing boundary | Foundation | done |
 | 2 | Coding standards & tooling | Foundation | done |
 | 3 | Document session & privacy guarantee | Foundation | done |
-| 4 | Design system & UI foundation | Foundation | in-progress |
+| 4 | Design system & UI foundation | Foundation | done |
 | 5 | Redaction engine | Release 1 | planned |
 | 6 | Pattern detection | Release 1 | planned |
 | 7 | Scanned page detection & warnings | Release 1 | planned |
@@ -64,7 +64,7 @@ spec [0002](../specs/0002-document-session-privacy-guarantee/index.md) · code i
 - [x] Review it (fresh model): `/check review document session & privacy guarantee`
 - [x] Document it: `/document document session & privacy guarantee`
 
-### 4. Design system & UI foundation · in-progress
+### 4. Design system & UI foundation · done
 The small set of primitives the core flow needs: layout, type, colour, buttons, the file drop surface, checklist rows, warning banners. Kept deliberately thin so it does not eat the first week. The summary panel moved to feature 8, which owns what it reports (spec 0003).
 **Done when:** the primitives the redact flow needs exist, they are keyboard reachable with visible focus and sufficient contrast, and a page composed from them holds WCAG 2.2 AA on the core path.
 spec [0003](../specs/0003-design-system-ui-foundation/index.md) · code in `src/ui`, `src/lib/cx.ts`, `src/lib/routes.ts`, `src/lib/document-load.ts`, `src/app/globals.css`, `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/tool`, `next.config.ts`, `eslint.config.mjs`
@@ -77,8 +77,8 @@ spec [0003](../specs/0003-design-system-ui-foundation/index.md) · code in `src/
   - [x] The restyled home page · AC-13, AC-14, AC-15
   - [x] Every way into the tool is a real page load: `Button`'s `reload` prop on both home page links, and the load guard in `ToolClient` · AC-21
   - [x] The load guard cannot loop: it reloads only when the address bar reads `/tool`, otherwise shows the wrong URL callout, and lint lets only the tool page import `tool-client` · AC-21, INV-11
-- [ ] Verify it: `/check verify design system & UI foundation`
-- [ ] Test it: `/test design system & UI foundation`
+- [x] Verify it: `/check verify design system & UI foundation`
+- [x] Test it: `/test design system & UI foundation`
 
 ## Release 1: A real redaction
 

@@ -2,7 +2,7 @@
 
 **Date**: 2026-09-21
 **Updated**: 2026-09-22, making every way into `/tool` a real page load (AC-21, INV-10), then making the load guard unable to loop (AC-21, INV-11)
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 
