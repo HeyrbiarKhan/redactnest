@@ -44,6 +44,8 @@ const mocks = vi.hoisted(() => ({
   getEntitlement: vi.fn(),
   prefetchEntitlement: vi.fn(),
   getSupport: vi.fn(),
+  loadedAt: vi.fn(),
+  reloadDocument: vi.fn(),
 }));
 
 vi.mock("@/worker/client", () => ({
@@ -65,6 +67,13 @@ vi.mock("@/lib/entitlement", () => ({
 vi.mock("@/lib/support", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/support")>()),
   getSupport: mocks.getSupport,
+}));
+
+// The navigation entry and the reload are the browser's; stubbed at the module
+// boundary, because jsdom cannot redefine `location.reload`.
+vi.mock("@/lib/document-load", () => ({
+  loadedAt: mocks.loadedAt,
+  reloadDocument: mocks.reloadDocument,
 }));
 
 /** Stable across calls, because `useSyncExternalStore` caches on identity. */
@@ -173,6 +182,7 @@ beforeEach(() => {
   mocks.lostListeners.clear();
   vi.clearAllMocks();
   mocks.getSupport.mockReturnValue(SUPPORTED);
+  mocks.loadedAt.mockReturnValue("/tool");
   mocks.getEntitlement.mockResolvedValue(FREE);
   mocks.openSession.mockResolvedValue(openedSession());
 });
@@ -590,5 +600,68 @@ describe("browsers that cannot run it", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent("Web Workers are unavailable.");
     expect(screen.queryByTestId("drop-area")).not.toBeInTheDocument();
+  });
+});
+
+describe("a document not loaded at /tool (spec 0003, AC-21)", () => {
+  /** What a client side navigation from the landing page would leave behind. */
+  function arrivedFromHome() {
+    mocks.loadedAt.mockReturnValue("/");
+  }
+
+  it("takes no file, says it is loading, and reloads", async () => {
+    arrivedFromHome();
+    render(<ToolClient />);
+
+    expect(screen.queryByTestId("file-input")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /choose a pdf/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("progress").closest("[aria-live]")).toHaveAttribute(
+      "aria-live",
+      "polite",
+    );
+    expect(screen.getByTestId("progress")).toHaveTextContent("Loading the tool");
+    expect(mocks.reloadDocument).toHaveBeenCalledOnce();
+  });
+
+  it("warms nothing, because no file can arrive in this document", async () => {
+    arrivedFromHome();
+    const user = userEvent.setup();
+    render(<ToolClient />);
+
+    // Everything a visitor could do to warm the drop zone, with none there.
+    await user.tab();
+    await user.hover(screen.getByTestId("progress"));
+
+    expect(mocks.warmEngine).not.toHaveBeenCalled();
+    expect(mocks.prefetchEntitlement).not.toHaveBeenCalled();
+  });
+
+  it("runs before the support check, so nothing here is trusted first", () => {
+    arrivedFromHome();
+    mocks.getSupport.mockReturnValue(
+      Object.freeze({ supported: false, missing: ["webassembly"] }),
+    );
+    render(<ToolClient />);
+
+    expect(screen.queryByTestId("unsupported")).not.toBeInTheDocument();
+    expect(screen.getByTestId("progress")).toHaveTextContent("Loading the tool");
+    expect(mocks.reloadDocument).toHaveBeenCalledOnce();
+  });
+
+  it("offers the drop zone as usual in a document loaded at /tool", () => {
+    render(<ToolClient />);
+
+    expect(screen.getByTestId("file-input")).toBeInTheDocument();
+    expect(mocks.reloadDocument).not.toHaveBeenCalled();
+  });
+
+  it("works as it always has when the browser does not say", () => {
+    mocks.loadedAt.mockReturnValue(null);
+    render(<ToolClient />);
+
+    expect(screen.getByTestId("file-input")).toBeInTheDocument();
+    expect(mocks.reloadDocument).not.toHaveBeenCalled();
   });
 });

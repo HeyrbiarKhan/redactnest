@@ -9,9 +9,31 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Upload } from "lucide-react";
-import { describe, expect, it, vi } from "vitest";
+import { createElement, type ComponentProps } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Button } from "@/ui/button";
+
+/**
+ * The real `next/link`, counted. With no app router mounted, jsdom's `next/link`
+ * leaves a click alone just as a plain `a` does, so the click alone cannot tell
+ * the two apart. Whether `Button` went through `next/link` at all can.
+ */
+const linkRenders = vi.hoisted(() => ({ count: 0 }));
+
+vi.mock("next/link", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/link")>();
+  const RealLink = actual.default;
+  function CountedLink(props: ComponentProps<typeof RealLink>) {
+    linkRenders.count += 1;
+    return createElement(RealLink, props);
+  }
+  return { ...actual, default: CountedLink };
+});
+
+beforeEach(() => {
+  linkRenders.count = 0;
+});
 
 import { expectNoAxeViolations } from "../../setup/component";
 
@@ -59,6 +81,82 @@ describe("Button", () => {
     const link = screen.getByRole("link", { name: "Redact a PDF" });
     expect(link).toHaveAttribute("href", "/tool");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  describe("with reload (AC-21)", () => {
+    /**
+     * Was the click left to the browser?
+     *
+     * In a browser, `next/link` takes over a navigation by calling
+     * `preventDefault` on the click, so an untouched click is what a real page
+     * load looks like. The link count above is what separates the two in jsdom.
+     * Read on `window`, after React's own root listener has run, and then
+     * cancelled, because jsdom cannot navigate.
+     */
+    async function clickIsLeftToTheBrowser(link: HTMLElement): Promise<boolean> {
+      let untouched = false;
+      const observe = (event: MouseEvent) => {
+        untouched = !event.defaultPrevented;
+        event.preventDefault();
+      };
+      window.addEventListener("click", observe);
+      try {
+        await userEvent.setup().click(link);
+      } finally {
+        window.removeEventListener("click", observe);
+      }
+      return untouched;
+    }
+
+    it("renders a plain link whose click is a real page load", async () => {
+      render(
+        <Button href="/tool" reload>
+          Redact a PDF
+        </Button>,
+      );
+
+      const link = screen.getByRole("link", { name: "Redact a PDF" });
+      expect(link).toHaveAttribute("href", "/tool");
+      expect(link).not.toHaveAttribute("reload");
+      expect(linkRenders.count).toBe(0);
+      expect(await clickIsLeftToTheBrowser(link)).toBe(true);
+    });
+
+    it("still goes through next/link without it", () => {
+      render(<Button href="/tool">Redact a PDF</Button>);
+
+      // The contrast that makes the count above mean something.
+      expect(linkRenders.count).toBeGreaterThan(0);
+    });
+
+    it("looks exactly like the same button without it", () => {
+      render(
+        <>
+          <Button href="/tool" size="lg">
+            Client
+          </Button>
+          <Button href="/tool" size="lg" reload>
+            Page load
+          </Button>
+        </>,
+      );
+
+      expect(screen.getByRole("link", { name: "Page load" }).className).toBe(
+        screen.getByRole("link", { name: "Client" }).className,
+      );
+    });
+
+    it("refuses the props only next/link understands", () => {
+      const element = (
+        // @ts-expect-error `prefetch` is `next/link`'s, and a page load has no prefetch
+        <Button href="/tool" reload prefetch={false}>
+          Redact a PDF
+        </Button>
+      );
+
+      // The proof is the compile time error above; this only keeps it in use.
+      expect(element).toBeDefined();
+    });
   });
 
   it("underlines the link variant, so it is never told apart by colour alone", () => {

@@ -10,7 +10,9 @@ import {
 } from "react";
 
 import { config } from "@/config";
+import { loadedAt, reloadDocument } from "@/lib/document-load";
 import { getEntitlement, prefetchEntitlement } from "@/lib/entitlement";
+import { TOOL_PATH } from "@/lib/routes";
 import {
   hasUnsavedWork,
   IDLE,
@@ -97,10 +99,39 @@ function loadNeverFinished(session: ToolSession): session is LiveSession {
 const NEVER_CHANGES = () => () => {};
 const SERVER_SNAPSHOT = () => null;
 
+/**
+ * The prerendered HTML is only ever used by a document the browser loaded at
+ * `/tool`, so that is the honest server answer, and hydration agrees with it.
+ */
+const LOADED_AT_SERVER_SNAPSHOT = () => TOOL_PATH;
+
 const REPLACE_WARNING =
   "You have unsaved work on the document that is open. Opening a different file will discard it. Continue?";
 
 export function ToolClient() {
+  /**
+   * Spec 0003, AC-21 and INV-10. Was this document loaded at `/tool`?
+   *
+   * A content security policy belongs to the document it arrived with. If a
+   * stray `next/link`, a `router.push` or a sign in library's redirect moved
+   * this page here on the client, it is still running under the policy, and
+   * with the scripts, of wherever it came from. So it takes no file at all and
+   * reloads, which gives the tool its own document. `null` means the browser
+   * did not say, and the page works as it always has.
+   *
+   * Only `src/app/tool/page.tsx` may render this component: on a page at any
+   * other URL the reload would come back to the same answer, and loop.
+   */
+  const loadPath = useSyncExternalStore<string | null>(
+    NEVER_CHANGES,
+    loadedAt,
+    LOADED_AT_SERVER_SNAPSHOT,
+  );
+  const misloaded = loadPath !== null && loadPath !== TOOL_PATH;
+  useEffect(() => {
+    if (misloaded) reloadDocument();
+  }, [misloaded]);
+
   // The server snapshot is null, so the prerendered HTML shows the drop area for
   // everyone and hydration has nothing to disagree about. The real answer
   // arrives on the client, right after.
@@ -338,6 +369,17 @@ export function ToolClient() {
       window.removeEventListener("pageshow", restore);
     };
   }, []);
+
+  // Ahead of the support check, so nothing about this document is trusted
+  // before it is known to be the tool's own. No drop zone also means nothing
+  // warms the engine or asks for the entitlement.
+  if (misloaded) {
+    return (
+      <div aria-live="polite" className="flex flex-col gap-6">
+        <StatusLine text="Loading the tool" />
+      </div>
+    );
+  }
 
   if (support && !support.supported) {
     return (

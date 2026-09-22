@@ -37,6 +37,69 @@ test.describe("getting to the tool", () => {
   });
 });
 
+/**
+ * Spec 0003, AC-21 and INV-10. A content security policy belongs to the
+ * document it arrived with, so the tool page only keeps its own policy if the
+ * browser loaded that document at `/tool`. A client side navigation would pass
+ * every header test and still open the file under the policy of `/`.
+ */
+test.describe("every way into the tool is a real page load", () => {
+  const BUTTONS = [
+    ["the header's", "banner"],
+    ["the page's", "main"],
+  ] as const;
+
+  for (const [which, landmark] of BUTTONS) {
+    test(`${which} Redact a PDF button loads /tool as a document`, async ({ page }) => {
+      await page.goto("/");
+
+      const documentLoads: string[] = [];
+      page.on("request", (request) => {
+        if (request.resourceType() === "document") {
+          documentLoads.push(new URL(request.url()).pathname);
+        }
+      });
+
+      await page
+        .getByRole(landmark)
+        .getByRole("link", { name: /redact a pdf/i })
+        .click();
+      await expect(page).toHaveURL(/\/tool$/);
+
+      expect(documentLoads).toContain("/tool");
+      // The document this page is running in was loaded at `/tool`, which a
+      // client side navigation never changes.
+      const loadedAt = await page.evaluate(
+        () => performance.getEntriesByType("navigation")[0]?.name ?? "",
+      );
+      expect(new URL(loadedAt).pathname).toBe("/tool");
+    });
+  }
+
+  test("the landing page never prefetches the tool", async ({ page }) => {
+    const toolRequests: string[] = [];
+    page.on("request", (request) => {
+      const { pathname } = new URL(request.url());
+      if (pathname.startsWith("/tool")) toolRequests.push(pathname);
+    });
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // `next/link` prefetches on sight and again on hover, so both are given
+    // their chance before the count is read.
+    for (const landmark of ["banner", "main"] as const) {
+      await page
+        .getByRole(landmark)
+        .getByRole("link", { name: /redact a pdf/i })
+        .hover();
+    }
+    await page.waitForLoadState("networkidle");
+
+    expect(toolRequests).toEqual([]);
+  });
+});
+
 test.describe("the AGPL source offer", () => {
   /**
    * INV-7 in the shape the layout uses it. The address comes from the config

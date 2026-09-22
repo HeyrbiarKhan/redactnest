@@ -87,6 +87,8 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // `TOOL_PATH` in `src/lib/routes.ts`. Kept literal here because the
+        // `source` below is a regular expression built around it.
         source: "/tool",
         headers: [{ key: "Content-Security-Policy", value: TOOL_POLICY }],
       },

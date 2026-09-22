@@ -20,6 +20,7 @@ interface ButtonOwnProps {
 
 type AsButton = Omit<ComponentPropsWithoutRef<"button">, keyof ButtonOwnProps> & {
   readonly href?: undefined;
+  readonly reload?: undefined;
 };
 
 type AsLink = Omit<
@@ -27,9 +28,20 @@ type AsLink = Omit<
   keyof ButtonOwnProps | "href"
 > & {
   readonly href: string;
+  readonly reload?: undefined;
 };
 
-export type ButtonProps = ButtonOwnProps & (AsButton | AsLink);
+/**
+ * A plain `a`, so following it is a real page load (spec 0003, AC-21). Typed
+ * as plain anchor props, so `next/link`'s `prefetch`, `replace` and `scroll`
+ * are refused here rather than silently ignored.
+ */
+type AsPageLoad = Omit<ComponentPropsWithoutRef<"a">, keyof ButtonOwnProps | "href"> & {
+  readonly href: string;
+  readonly reload: true;
+};
+
+export type ButtonProps = ButtonOwnProps & (AsButton | AsLink | AsPageLoad);
 
 /**
  * The filled and outlined shapes share a box. The edge on `primary` is
@@ -107,6 +119,18 @@ export function Button({
       {children}
     </>
   );
+
+  if (native.reload) {
+    // `reload` changes only the navigation, never the look, and it is not an
+    // attribute, so it stops here rather than reaching the element.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- pulled off so it is not spread
+    const { reload: _reload, ...anchor } = native;
+    return (
+      <a {...anchor} className={classes}>
+        {content}
+      </a>
+    );
+  }
 
   if (native.href !== undefined) {
     return (
