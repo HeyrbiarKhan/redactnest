@@ -166,6 +166,19 @@ describe("the type floor (AC-4)", () => {
   it("removes the one size below 14px", () => {
     expect(CSS).toMatch(/--text-xs:\s*initial;/);
   });
+
+  /**
+   * Built now and first placed by feature 15, so nothing on a page proves it
+   * yet. It sits at the 14px floor, in the muted ink the contract checks, and
+   * never takes its colour from opacity (INV-3).
+   */
+  it("builds the eyebrow at 14px, in the muted ink", () => {
+    const eyebrow = CSS.match(/@utility eyebrow\s*\{([^}]*)\}/)?.[1] ?? "";
+
+    expect(eyebrow).toMatch(/font-size:\s*var\(--text-small\);/);
+    expect(eyebrow).toMatch(/color:\s*var\(--color-ink-muted\);/);
+    expect(eyebrow).not.toMatch(/opacity/);
+  });
 });
 
 describe("the contrast contract (AC-2)", () => {
