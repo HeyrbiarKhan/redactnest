@@ -498,6 +498,88 @@ describe("the silent retry inside the engine load window (AC-11a)", () => {
   });
 });
 
+/**
+ * Spec 0003, AC-12. The polite region holds what is worth hearing as it
+ * changes, and a failure is an alert of its own beside it. An alert inside a
+ * polite region is announced twice, once for each, which is the bug this pins.
+ */
+describe("the live regions (spec 0003, AC-12)", () => {
+  const POLITE = '[aria-live="polite"]';
+
+  function politeRegions(container: HTMLElement): NodeListOf<Element> {
+    return container.querySelectorAll(POLITE);
+  }
+
+  function alertsInsidePolite(container: HTMLElement): NodeListOf<Element> {
+    return container.querySelectorAll(
+      `${POLITE} [role="alert"], ${POLITE}[role="alert"]`,
+    );
+  }
+
+  it("keeps a failure beside the polite region, not inside it", async () => {
+    mocks.openSession.mockRejectedValue(new EngineError("corrupt"));
+    const { container } = render(<ToolClient />);
+
+    await chooseFile(pdfFile());
+    await screen.findByTestId("error");
+
+    expect(politeRegions(container)).toHaveLength(1);
+    expect(alertsInsidePolite(container)).toHaveLength(0);
+  });
+
+  it("keeps the lost worker message beside it too", async () => {
+    mocks.openSession.mockImplementation(hangsAt("opening"));
+    const { container } = render(<ToolClient />);
+    await chooseFile(pdfFile());
+    await screen.findByTestId("progress");
+
+    await fireEngineLost();
+    await screen.findByTestId("lost");
+
+    expect(politeRegions(container)).toHaveLength(1);
+    expect(alertsInsidePolite(container)).toHaveLength(0);
+  });
+
+  /**
+   * No polite region here at all, because there is nothing to report progress
+   * on in a browser that cannot open a document. What matters is that the one
+   * alert is never nested inside one.
+   */
+  it("announces the unsupported explanation once, as an alert", () => {
+    mocks.getSupport.mockReturnValue(
+      Object.freeze({ supported: false, missing: ["webassembly"] }) as SupportReport,
+    );
+    const { container } = render(<ToolClient />);
+
+    expect(politeRegions(container).length).toBeLessThanOrEqual(1);
+    expect(alertsInsidePolite(container)).toHaveLength(0);
+    expect(screen.getByRole("alert")).toHaveTextContent(/cannot run in this browser/i);
+  });
+
+  it("holds the phase text while a document opens", async () => {
+    mocks.openSession.mockImplementation(hangsAt("inspecting"));
+    const { container } = render(<ToolClient />);
+
+    await chooseFile(pdfFile());
+    const progress = await screen.findByTestId("progress");
+
+    expect(container.querySelector(POLITE)).toContainElement(progress);
+    expect(progress).toHaveTextContent("Checking each page…");
+  });
+
+  it("holds the opened document card", async () => {
+    const { container } = render(<ToolClient />);
+
+    await chooseFile(pdfFile());
+    const pageCount = await screen.findByTestId("page-count");
+
+    expect(container.querySelector(POLITE)).toContainElement(pageCount);
+    expect(screen.getByRole("region", { name: "Document opened" })).toContainElement(
+      pageCount,
+    );
+  });
+});
+
 describe("browsers that cannot run it", () => {
   it("explains the gap instead of showing a drop area it cannot honour", () => {
     mocks.getSupport.mockReturnValue(

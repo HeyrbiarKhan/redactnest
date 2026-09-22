@@ -20,6 +20,10 @@ import { beforeAll, describe, expect, it } from "vitest";
  *
  * So each case here feeds the real config code it must reject, and code it must
  * allow, and checks the answer.
+ *
+ * Spec 0003 added two more restrictions built from the same two rules, so they
+ * are proved here the same way: the colour patterns every zone carries (AC-3),
+ * and the `src/ui` zone that keeps the primitives presentation only (AC-19).
  */
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -55,10 +59,18 @@ const MUPDF = /Only src\/engine may touch mupdf/;
 const ENGINE = /may import @\/engine/;
 const SECOND_WORKER = /A second Worker means/;
 const STORAGE = /Nothing is written to browser storage/;
+const OPACITY = /No alpha modifier on a colour utility/;
+const ARBITRARY_COLOUR = /No arbitrary colour value/;
+const UI_IMPORT = /src\/ui is presentation only/;
+const INNER_HTML = /Document derived text is untrusted input/;
 
 /** Ordinary main thread code: a route and a shared library, fully walled. */
 const ROUTE = "src/app/probe.ts";
 const LIBRARY = "src/lib/probe.ts";
+
+/** A design system primitive, and a page that renders JSX. */
+const PRIMITIVE = "src/ui/probe.tsx";
+const PAGE = "src/app/probe.tsx";
 
 /** The three files the config names by hand, so these paths must be exact. */
 const ENGINE_MODULE = "src/engine/index.ts";
@@ -84,7 +96,7 @@ beforeAll(async () => {
  * make every "allows" case below pass for entirely the wrong reason.
  */
 describe("the harness itself", () => {
-  it.each([ROUTE, LIBRARY, ENGINE_MODULE, WORKER, CLIENT, UNIT_TEST])(
+  it.each([ROUTE, LIBRARY, ENGINE_MODULE, WORKER, CLIENT, UNIT_TEST, PRIMITIVE])(
     "says nothing about ordinary code in %s",
     async (path) => {
       expect(await wallErrors(path, "export const pageCount = 2;\n")).toEqual([]);
@@ -225,7 +237,7 @@ describe("writing to browser storage", () => {
     expect(await wallErrors(ROUTE, code)).toContainEqual(expect.stringMatching(STORAGE));
   });
 
-  it.each([ROUTE, LIBRARY, ENGINE_MODULE, WORKER, CLIENT])(
+  it.each([ROUTE, LIBRARY, ENGINE_MODULE, WORKER, CLIENT, PRIMITIVE])(
     "is rejected in %s, because no zone gets to relax this one",
     async (path) => {
       expect(
@@ -236,6 +248,116 @@ describe("writing to browser storage", () => {
       ).toContainEqual(expect.stringMatching(STORAGE));
     },
   );
+});
+
+/**
+ * Spec 0003, AC-3. Every colour on screen is a token whose contrast a test
+ * checked, so the two ways Tailwind offers round that are closed: an arbitrary
+ * value, and an alpha modifier that turns a checked colour into an unchecked one.
+ */
+describe("a colour the contrast test never checked", () => {
+  it.each([
+    ["a hex value", 'export const c = "rounded-lg bg-[#fff] p-4";\n'],
+    ["an rgb function", 'export const c = "text-[rgb(10,20,30)]";\n'],
+    ["an oklch function", 'export const c = "border-[oklch(0.5_0.1_200)]";\n'],
+    ["a hex value behind a variant", 'export const c = "hover:bg-[#1a2b3c]";\n'],
+  ])("is rejected as %s", async (_form, code) => {
+    expect(await wallErrors(ROUTE, code)).toContainEqual(
+      expect.stringMatching(ARBITRARY_COLOUR),
+    );
+  });
+
+  it.each([
+    ["an alpha modifier", 'export const c = "text-ink/70";\n'],
+    ["an arbitrary alpha", 'export const c = "bg-accent/[0.4]";\n'],
+    ["an alpha modifier behind a variant", 'export const c = "focus:ring-accent/50";\n'],
+    ["an alpha modifier on a side border", 'export const c = "border-t-border/40";\n'],
+    ["the size and leading shorthand", 'export const c = "text-sm/6";\n'],
+    [
+      "an alpha modifier inside a template literal",
+      "export const c = (on: boolean) => `p-2 ${on ? 'x' : 'y'} border-current/40`;\n",
+    ],
+  ])("is rejected as %s", async (_form, code) => {
+    expect(await wallErrors(ROUTE, code)).toContainEqual(expect.stringMatching(OPACITY));
+  });
+
+  it("is rejected in a JSX class name, which is a string literal too", async () => {
+    expect(
+      await wallErrors(
+        PAGE,
+        'export const P = () => <p className="text-ink/70">x</p>;\n',
+      ),
+    ).toContainEqual(expect.stringMatching(OPACITY));
+  });
+
+  it.each([ROUTE, LIBRARY, CLIENT, PRIMITIVE])("is rejected in %s", async (path) => {
+    expect(await wallErrors(path, 'export const c = "bg-[#fff]";\n')).toContainEqual(
+      expect.stringMatching(ARBITRARY_COLOUR),
+    );
+  });
+
+  /** The other uses of `/` and `[` Tailwind has, none of them a colour. */
+  it.each([
+    ["a fraction", 'export const c = "w-1/2 -translate-x-1/2";\n'],
+    ["a named group", 'export const c = "group/row group-hover/row:underline";\n'],
+    ["an arbitrary ratio", 'export const c = "aspect-[16/9]";\n'],
+    ["a token", 'export const c = "bg-accent-soft text-accent-strong border-border";\n'],
+    ["a token followed by a breakpoint", 'export const c = "bg-accent 2xl:px-4";\n'],
+    ["a media type", 'export const accept = "application/pdf";\n'],
+    ["an arbitrary length", 'export const c = "max-w-[44rem] border-[3px]";\n'],
+  ])("allows %s", async (_form, code) => {
+    expect(await wallErrors(PAGE, code)).toEqual([]);
+  });
+});
+
+/**
+ * Spec 0003, AC-19. The primitives render what they are given and reach for
+ * nothing, which is what keeps document state out of a presentation folder.
+ */
+describe("the design system's primitives", () => {
+  it.each([
+    ["the worker client", 'import { openSession } from "@/worker/client";'],
+    ["the protocol", 'import { EngineError } from "@/worker/protocol";'],
+    ["the config", 'import { config } from "@/config";'],
+    ["the session", 'import { IDLE } from "@/lib/session";'],
+    ["the entitlement", 'import { getEntitlement } from "@/lib/entitlement";'],
+    ["the worker, by a relative path", 'import { openSession } from "../worker/client";'],
+    ["the config, by a relative path", 'import { config } from "../config";'],
+  ])("may not import %s", async (_what, code) => {
+    expect(await wallErrors(PRIMITIVE, `${code}\nexport const x = 1;\n`)).toContainEqual(
+      expect.stringMatching(UI_IMPORT),
+    );
+  });
+
+  it("still sits inside the engine wall", async () => {
+    expect(await wallErrors(PRIMITIVE, IMPORTS_ENGINE)).toContainEqual(
+      expect.stringMatching(ENGINE),
+    );
+  });
+
+  it.each([
+    [
+      "an attribute",
+      "export const P = ({ t }: { t: string }) => <p dangerouslySetInnerHTML={{ __html: t }} />;\n",
+    ],
+    [
+      "a spread object",
+      "export const P = ({ t }: { t: string }) => <p {...{ dangerouslySetInnerHTML: { __html: t } }} />;\n",
+    ],
+  ])("may not write raw HTML through %s", async (_form, code) => {
+    expect(await wallErrors(PRIMITIVE, code)).toContainEqual(
+      expect.stringMatching(INNER_HTML),
+    );
+  });
+
+  it("may import the class joiner and the icon set", async () => {
+    expect(
+      await wallErrors(
+        PRIMITIVE,
+        'import { cx } from "@/lib/cx";\nimport { Info } from "lucide-react";\nexport const x = [cx, Info];\n',
+      ),
+    ).toEqual([]);
+  });
 });
 
 /** The carve-outs, asserted so tightening the wall cannot remove them by accident. */

@@ -27,25 +27,24 @@ test.describe("choosing a file", () => {
   });
 
   /**
-   * The file input is visually hidden with `sr-only`, which keeps it in the tab
-   * order and exposed to assistive technology on purpose. So a keyboard visitor
-   * lands on it, and it needs a name to be usable when they do.
-   *
-   * Today that name is the browser's own default for a native file input
-   * (Chromium announces it as `button "Choose File"`), not one this code chose.
-   * The assertion is still worth keeping: feature 8 rebuilds this control, and a
-   * custom element in its place would carry no default at all.
+   * Spec 0003, AC-8. One tab stop, the visible button. The native input used to
+   * sit in the tab order right after it, announced by Chromium as a second,
+   * unnamed "Choose File" control. It is now out of the order and hidden from
+   * assistive technology, and still receives files from the button.
    */
-  test("the file input a keyboard visitor lands on is announced", async ({ page }) => {
+  test("the hidden file input is not a tab stop", async ({ page }) => {
     const input = page.getByTestId("file-input");
 
-    await input.focus();
-    await expect(input, "an sr-only input stays in the tab order").toBeFocused();
+    await expect(input).toHaveAttribute("tabindex", "-1");
+    await expect(input).toHaveAttribute("aria-hidden", "true");
+
+    await page.getByTestId("choose-file").focus();
+    await page.keyboard.press("Tab");
 
     await expect(
       input,
-      "a focusable control with no accessible name is announced as nothing",
-    ).toHaveAccessibleName(/\S/);
+      "Tab from the button must not land on the input",
+    ).not.toBeFocused();
   });
 });
 

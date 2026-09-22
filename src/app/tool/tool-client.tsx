@@ -26,6 +26,11 @@ import {
   type ProgressPhase,
 } from "@/worker/protocol";
 import { onEngineLost, openSession, releaseEngine, warmEngine } from "@/worker/client";
+import { Button } from "@/ui/button";
+import { Callout } from "@/ui/callout";
+import { Card } from "@/ui/card";
+import { DropZone } from "@/ui/drop-zone";
+import { Spinner } from "@/ui/spinner";
 
 /**
  * Plain wording for each failure kind. Feature 8 owns the real treatment.
@@ -106,7 +111,6 @@ export function ToolClient() {
   );
 
   const [session, dispatch] = useReducer(sessionReducer, IDLE as ToolSession);
-  const [dragging, setDragging] = useState(false);
 
   /**
    * The one window the session cannot describe: after a file is chosen and
@@ -115,8 +119,6 @@ export function ToolClient() {
    * hang a phase on until it resolves.
    */
   const [checkingEntitlement, setCheckingEntitlement] = useState(false);
-
-  const inputRef = useRef<HTMLInputElement>(null);
 
   /**
    * Read the whole session without re-subscribing every render.
@@ -339,150 +341,139 @@ export function ToolClient() {
 
   if (support && !support.supported) {
     return (
-      <section
-        data-testid="unsupported"
+      <Callout
+        tone="danger"
         role="alert"
-        className="flex flex-col gap-3 rounded-lg border border-current/20 p-6"
+        data-testid="unsupported"
+        title="RedactNest cannot run in this browser"
+        headingLevel={2}
       >
-        <h2 className="font-medium">RedactNest cannot run in this browser</h2>
         {support.missing.map((gap) => (
-          <p key={gap} className="text-sm opacity-80">
-            {SUPPORT_GAP_TEXT[gap]}
-          </p>
+          <p key={gap}>{SUPPORT_GAP_TEXT[gap]}</p>
         ))}
-      </section>
+      </Callout>
     );
   }
 
   return (
-    <section className="flex flex-col gap-6">
-      <div
-        data-testid="drop-area"
-        onDragOver={(event) => {
-          event.preventDefault();
-          setDragging(true);
-          warm();
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(event) => {
-          event.preventDefault();
-          setDragging(false);
-          const file = event.dataTransfer.files[0];
-          if (file) void handleFile(file);
-        }}
-        onPointerEnter={warm}
-        className={`rounded-lg border-2 border-dashed p-10 text-center transition-colors ${
-          dragging ? "border-current" : "border-current/30"
-        }`}
-      >
-        <p className="text-sm opacity-80">
-          Drop a PDF here, or choose one. Up to {config.freePageCap} pages for now.
-        </p>
+    <div className="flex flex-col">
+      <DropZone
+        title="Drop a PDF here, or choose one"
+        helper={`Up to ${config.freePageCap} pages for now.`}
+        buttonLabel="Choose a PDF"
+        accept="application/pdf"
+        onFile={(file) => void handleFile(file)}
+        onWarm={warm}
+      />
 
-        <input
-          ref={inputRef}
-          data-testid="file-input"
-          type="file"
-          accept="application/pdf"
-          className="sr-only"
-          onFocus={warm}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            // AC-2: the input keeps no `FileList` once the file is in hand.
-            // Clearing it also makes choosing the same file twice in a row fire
-            // a change event, which it otherwise would not.
-            event.target.value = "";
-            if (file) void handleFile(file);
-          }}
-        />
-
-        <button
-          type="button"
-          data-testid="choose-file"
-          onFocus={warm}
-          onClick={() => inputRef.current?.click()}
-          className="mt-4 rounded-md border border-current/40 px-4 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2"
-        >
-          Choose a PDF
-        </button>
-      </div>
-
-      <div aria-live="polite" className="min-h-6 text-sm">
-        {checkingEntitlement && (
-          <p data-testid="progress">{PHASE_TEXT["checking-entitlement"]}…</p>
-        )}
-
-        {!checkingEntitlement && (
-          <SessionStatus session={session} onRetry={handleRetry} />
+      {/*
+        Spec 0003, AC-12. The polite region holds only what is worth hearing
+        as it changes: the phase text and the opened document. A failure is an
+        alert of its own and renders beside this, never inside it, or a screen
+        reader would announce it twice. The margin appears only once there is
+        something in here, because the region itself has to stay in the page
+        from the start for its first announcement to be heard.
+      */}
+      <div aria-live="polite" className="flex flex-col gap-6 not-empty:mt-6">
+        {checkingEntitlement ? (
+          <StatusLine text={PHASE_TEXT["checking-entitlement"]} />
+        ) : (
+          <SessionStatus session={session} />
         )}
       </div>
+
+      <SessionAlert session={session} onRetry={handleRetry} />
 
       {session.state !== "idle" && (
-        <div>
-          <button
-            type="button"
-            data-testid="start-over"
-            onClick={handleStartOver}
-            className="rounded-md border border-current/40 px-4 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2"
-          >
-            Start over
-          </button>
-        </div>
+        <Button
+          variant="secondary"
+          data-testid="start-over"
+          onClick={handleStartOver}
+          className="mt-6 self-start"
+        >
+          Start over
+        </Button>
       )}
-    </section>
+    </div>
   );
 }
 
 /**
- * What the current step looks like.
+ * What the current step looks like, for the polite live region.
  *
  * The checklist itself belongs to features 6 and 8. This reports the session
  * honestly in the meantime, which is what the browser tests read.
  */
-function SessionStatus({
+function SessionStatus({ session }: { session: ToolSession }) {
+  switch (session.state) {
+    case "opening":
+    case "redacting":
+      return session.phase ? <StatusLine text={PHASE_TEXT[session.phase]} /> : null;
+
+    case "reviewing":
+    case "complete":
+      return <OpenedDocument session={session} />;
+
+    case "idle":
+    case "failed":
+    case "lost":
+      return null;
+  }
+}
+
+/** The phase text, with a spinner that carries no meaning of its own. */
+function StatusLine({ text }: { text: string }) {
+  return (
+    <p data-testid="progress" className="flex items-center gap-3 text-ink">
+      <Spinner />
+      <span>{text}…</span>
+    </p>
+  );
+}
+
+/** A failure, announced once as an alert and kept out of the live region. */
+function SessionAlert({
   session,
   onRetry,
 }: {
   session: ToolSession;
   onRetry: () => void;
 }) {
-  if (session.state === "idle") return null;
-
   switch (session.state) {
-    case "opening":
-    case "redacting":
-      return session.phase ? (
-        <p data-testid="progress">{PHASE_TEXT[session.phase]}…</p>
-      ) : null;
-
     case "failed":
       return (
-        <p data-testid="error" role="alert">
-          {errorText(session.failure ?? "unsupported", session.entitlement)}
-        </p>
+        <div className="mt-6">
+          <Callout tone="danger" role="alert" data-testid="error">
+            {errorText(session.failure ?? "unsupported", session.entitlement)}
+          </Callout>
+        </div>
       );
 
     case "lost":
       return (
-        <div role="alert" className="flex flex-col items-start gap-2">
-          <p data-testid="lost">
+        <div className="mt-6">
+          <Callout
+            tone="danger"
+            role="alert"
+            data-testid="lost"
+            action={
+              <Button variant="secondary" data-testid="retry" onClick={onRetry}>
+                Try again
+              </Button>
+            }
+          >
             The PDF engine stopped unexpectedly. Your file is still on your machine, so
             you can try again without choosing it a second time.
-          </p>
-          <button
-            type="button"
-            data-testid="retry"
-            onClick={onRetry}
-            className="rounded-md border border-current/40 px-4 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2"
-          >
-            Try again
-          </button>
+          </Callout>
         </div>
       );
 
+    case "idle":
+    case "opening":
     case "reviewing":
+    case "redacting":
     case "complete":
-      return <OpenedDocument session={session} />;
+      return null;
   }
 }
 
@@ -493,13 +484,16 @@ function OpenedDocument({ session }: { session: LiveSession }) {
   const withText = summary.pagesWithText.filter(Boolean).length;
 
   return (
-    <div className="flex flex-col gap-1">
-      <p data-testid="page-count">
-        Opened. {summary.pageCount} {summary.pageCount === 1 ? "page" : "pages"}.
-      </p>
-      <p data-testid="text-layer-count" className="opacity-80">
-        {withText} of {summary.pageCount} have a text layer.
-      </p>
-    </div>
+    <Card title="Document opened">
+      <div className="flex flex-col gap-1">
+        <p data-testid="page-count" className="text-ink">
+          This document has {summary.pageCount}{" "}
+          {summary.pageCount === 1 ? "page" : "pages"}.
+        </p>
+        <p data-testid="text-layer-count" className="text-small text-ink-muted">
+          {withText} of {summary.pageCount} have a text layer.
+        </p>
+      </div>
+    </Card>
   );
 }
