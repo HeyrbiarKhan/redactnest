@@ -76,6 +76,62 @@ test.describe("every way into the tool is a real page load", () => {
     });
   }
 
+  /**
+   * INV-11, in a real browser. The links above are real page loads, but a stray
+   * `router.push` is not, and it lands the tool in a document loaded at `/`. The
+   * guard answers with one reload, which is a load at `/tool` and so passes.
+   * A second reload would mean the guard can loop, which is the one thing it
+   * must never do.
+   */
+  test("a router.push into the tool reloads it exactly once, then stops", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    const documentLoads: string[] = [];
+    page.on("request", (request) => {
+      if (request.resourceType() === "document") {
+        documentLoads.push(new URL(request.url()).pathname);
+      }
+    });
+
+    // A client side navigation fires no `load`, so this resolves on the reload.
+    const reloaded = page.waitForEvent("load");
+    await page.evaluate((path) => {
+      // Next sets its App Router here "for debugging purposes", in production
+      // too. It is the instance `useRouter()` returns, so this is a real push.
+      const next: unknown = Reflect.get(window, "next");
+      const router: unknown =
+        typeof next === "object" && next !== null ? Reflect.get(next, "router") : null;
+      const push: unknown =
+        typeof router === "object" && router !== null
+          ? Reflect.get(router, "push")
+          : null;
+      if (typeof push !== "function") throw new Error("window.next.router.push is gone");
+      Reflect.apply(push, router, [path]);
+    }, "/tool");
+    await reloaded;
+
+    await expect(page).toHaveURL(/\/tool$/);
+    await expect(page.getByTestId("choose-file")).toBeVisible();
+
+    // A loop would reload on every hydration and never let the network settle,
+    // so the count is read only once it has.
+    await page.waitForLoadState("networkidle");
+    expect(documentLoads).toEqual(["/tool"]);
+
+    // `reload` rather than `navigate`: the guard asked for this load, which also
+    // proves the push really was client side and not Next falling back to a
+    // hard navigation that would have passed this test for the wrong reason.
+    const navigation = await page.evaluate(() => {
+      const [entry] = performance.getEntriesByType("navigation");
+      return entry instanceof PerformanceNavigationTiming
+        ? { path: new URL(entry.name).pathname, type: entry.type }
+        : null;
+    });
+    expect(navigation).toEqual({ path: "/tool", type: "reload" });
+  });
+
   test("the landing page never prefetches the tool", async ({ page }) => {
     const toolRequests: string[] = [];
     page.on("request", (request) => {

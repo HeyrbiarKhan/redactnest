@@ -58,7 +58,13 @@ test("the page hydrates and runs with no policy violation", async ({ page }) => 
   expect(violations, `policy violations:\n${violations.join("\n")}`).toHaveLength(0);
 });
 
-test("the worker fetches the engine from our own origin, not a CDN", async ({ page }) => {
+test("the worker fetches the engine from our own origin, not a CDN", async ({
+  page,
+  baseURL,
+}) => {
+  // Read from the config rather than written out, so a suite pointed at another
+  // host or port still asserts our own origin instead of failing on the address.
+  const ownEngine = new URL("/engine/", baseURL).href;
   const engineRequests: string[] = [];
 
   page.on("request", (request) => {
@@ -71,9 +77,12 @@ test("the worker fetches the engine from our own origin, not a CDN", async ({ pa
 
   expect(engineRequests.length).toBeGreaterThan(0);
   for (const url of engineRequests) {
-    expect(url, "the engine must never come from a third party").toContain(
-      "localhost:3000/engine/",
-    );
+    // A prefix, not a substring: `https://cdn.example/?from=localhost:3000/engine/`
+    // contains our address and is still a third party.
+    expect(
+      url.startsWith(ownEngine),
+      `the engine must never come from a third party: ${url}`,
+    ).toBe(true);
   }
 });
 
