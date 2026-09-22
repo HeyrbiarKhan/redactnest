@@ -222,6 +222,37 @@ test("no request carries the document, its text or its name", async ({ page }) =
   }
 });
 
+/**
+ * Spec 0003, AC-4 and AC-20. The design system added a font and an icon set,
+ * and neither may bring a third party with it. `next/font` self hosts Inter at
+ * build time and the icons compile into our bundle, so every request either
+ * page makes, the font files included, goes to our own origin.
+ *
+ * The font requests are counted too, so this cannot pass on a page that simply
+ * never asked for a font: a regression to a CDN stylesheet would show up as a
+ * font request to someone else, not as no font request at all.
+ */
+for (const path of ["/", "/tool"]) {
+  test(`every request on ${path}, fonts included, stays on our own origin`, async ({
+    page,
+  }) => {
+    const requests = recordRequests(page);
+
+    await page.goto(path);
+    await page.waitForLoadState("networkidle");
+
+    const origin = new URL(page.url()).origin;
+    const fonts = requests.filter((request) => request.resourceType() === "font");
+
+    expect(fonts.length, "the page asked for no font file at all").toBeGreaterThan(0);
+    for (const request of requests) {
+      expect(new URL(request.url()).origin, `${request.url()} is a third party`).toBe(
+        origin,
+      );
+    }
+  });
+}
+
 test("the only thing the tool route asks its own server for is the entitlement", async ({
   page,
 }) => {
