@@ -155,6 +155,28 @@ async function expectFocusRing(target: Locator): Promise<void> {
   expect(ring.offset).toBe("2px");
 }
 
+/**
+ * AC-6: the ring is its own colour the moment focus lands, never faded in from
+ * the text colour, which on a filled button is white against a white page.
+ * Focus lands by script and the colour is read in the same task, so not one
+ * frame of a transition runs first to hide it. `:focus-visible` is checked too,
+ * or a control that drew no ring at all would pass.
+ */
+async function expectRingAtOnce(target: Locator): Promise<void> {
+  const ring = await target.evaluate(async (element) => {
+    element.focus();
+    const landed = getComputedStyle(element).outlineColor;
+    await Promise.all(element.getAnimations().map((animation) => animation.finished));
+    return {
+      ringed: element.matches(":focus-visible"),
+      landed,
+      settled: getComputedStyle(element).outlineColor,
+    };
+  });
+  expect(ring.ringed).toBe(true);
+  expect(ring.landed).toBe(ring.settled);
+}
+
 test.describe("axe on the tool page (AC-18)", () => {
   for (const [state, reach] of TOOL_STATES) {
     test(`reports nothing in the ${state} state`, async ({ page }) => {
@@ -209,6 +231,14 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
 
     await expect(page.getByTestId("start-over")).toBeFocused();
     await expectFocusRing(page.getByTestId("start-over"));
+  });
+
+  test("draws the ring at full colour the moment focus lands", async ({ page }) => {
+    await page.goto("/tool");
+    await openDocument(page);
+
+    await expectRingAtOnce(page.getByTestId("choose-file"));
+    await expectRingAtOnce(page.getByTestId("start-over"));
   });
 });
 

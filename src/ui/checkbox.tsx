@@ -46,7 +46,7 @@ export function Checkbox({
         type="checkbox"
         checked={checked}
         onChange={(event) => onCheckedChange(event.target.checked)}
-        className="peer size-6 cursor-pointer appearance-none rounded-md border border-border-strong bg-surface transition-colors duration-150 checked:border-accent checked:bg-accent indeterminate:border-accent indeterminate:bg-accent motion-reduce:transition-none forced-colors:appearance-auto"
+        className="peer size-6 cursor-pointer appearance-none rounded-md border border-border-strong bg-surface transition-[background-color,border-color] duration-150 checked:border-accent checked:bg-accent indeterminate:border-accent indeterminate:bg-accent motion-reduce:transition-none forced-colors:appearance-auto"
       />
       <Check
         aria-hidden="true"

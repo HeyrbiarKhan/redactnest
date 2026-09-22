@@ -109,7 +109,9 @@ export function Button({
   const classes = cx(
     VARIANT[variant],
     SIZE[variant][size],
-    "transition-colors duration-150 motion-reduce:transition-none",
+    // Fill and edge only. `transition-colors` fades `outline-color` too, so the
+    // focus ring would arrive in the text colour, white on a filled button (AC-6).
+    "transition-[background-color,border-color] duration-150 motion-reduce:transition-none",
     "disabled:cursor-not-allowed",
     fullWidth && "w-full",
     className,
