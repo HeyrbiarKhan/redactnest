@@ -38,9 +38,16 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md`.
 - Functional by default: pure functions and plain data, composition over inheritance, immutable values (`const`, `readonly`, `Object.freeze`) never mutated in place. Classes only where the platform needs one, as `Error` subclasses do. Module level mutable state only for a deliberate singleton or cache, never for shared application state.
 - Named exports only. Default exports only where Next.js requires them (`page.tsx`, `layout.tsx`) and in config files.
 - Strict types, no `any`. Narrow from `unknown` at every boundary.
-- Folders by capability under `src/` (`engine`, `worker`, `config`, `lib`, `app`), not by layer and not by feature.
+- Folders by capability under `src/` (`engine`, `worker`, `config`, `lib`, `ui`, `app`), not by layer and not by feature.
 - Expected failures are a closed set of kinds, never free text. The worker never throws across the boundary, and an error payload carries a kind and nothing derived from the document: no file name, no stack trace, no extracted text.
 - The engine wall: only `src/worker/engine.worker.ts` may import `@/engine`, and only `src/engine` may touch `mupdf`. One PDF parser, ever. Document bytes live only inside the worker, so transfer the `ArrayBuffer` rather than copying it.
+- `src/ui` holds the design system primitives and is presentation only. Its ESLint zone (`redactnest/ui`) bans imports from `@/worker`, `@/engine`, `@/config`, `@/lib/session` and `@/lib/entitlement`, and bans `dangerouslySetInnerHTML`. The caller reads state and passes what a primitive shows as props. Spec 0003, INV-7.
+- Only `src/app/tool/page.tsx` may import `tool-client`. The load guard in `ToolClient` trusts that it runs at `/tool`, and anywhere else it can only show a dead end. Lint enforces this in every zone, `import()` and `typeof import` included. Spec 0003, INV-11.
+- Every link into `/tool` uses `Button`'s `reload` prop (or a plain `a`) with `TOOL_PATH` from `src/lib/routes.ts`, never `next/link` or `router.push`. A content security policy belongs to the document it arrived with, so a client side navigation would open the visitor's document under the previous page's looser policy, with its scripts still running. Spec 0003, INV-10.
+- Colours are tokens only, defined once in `@theme` in `src/app/globals.css`. Lint rejects an arbitrary colour (`bg-[#1a2b3c]`, `text-[rgb(...)]`) and an alpha modifier on a colour utility (`text-ink/70`) in every zone. A quieter text colour is `ink-muted`, never opacity. A new foreground and background pairing goes into spec 0003's contrast contract and `tests/unit/contrast.test.ts` in the same change. Spec 0003, INV-1 to INV-3.
+- Inter is the only font, and nothing renders below 14px: `text-xs` is removed from the theme, and no text size uses viewport units. Spec 0003, INV-6.
+- Icons come from `lucide-react`, imported by name only (`import { Mail } from "lucide-react"`). A namespace import pulls in the whole set.
+- Design system: build all UI to [`docs/design/design.md`](docs/design/design.md) (art direction and the product bar); token values live in CSS.
 - Every cap and every public URL comes from `src/config`, validated at module load. No page or size limit written as a literal anywhere else.
 - `NEXT_PUBLIC_MATCH_CONTEXT_CHARS` (default 40, ceiling 200) sets how many characters of surrounding text travel with a match. That ceiling is a privacy limit rather than a display one: the text crosses the worker boundary, so a typo must not be able to widen it to a whole page. Spec 0002, INV-9.
 - Comments explain why, and name the spec invariant they uphold. Match the density already in `src/`.
@@ -66,6 +73,9 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md`.
 - The tool route gets entitlement only from same-origin `GET /api/entitlement`, which fails closed to the free tier.
 - `typecheck` runs `next typegen` before `tsc`. `LayoutProps` and `PageProps` are globals Next.js writes into `.next/types`, and `next-env.d.ts` is generated too; both are gitignored, so a clean checkout has neither and bare `tsc --noEmit` fails with `TS2304: Cannot find name 'LayoutProps'`. It passes on a machine that has run `dev` or `build`, which is why only CI sees it. Do not drop the `typegen` step.
 - MuPDF prints parser diagnostics to the console from inside the worker. Those lines can carry document detail, so error reporting (feature 11) must never capture console output from the worker. `src/worker/client.ts` already calls `preventDefault()` on worker errors for the same reason.
+- Tailwind's default palette is wiped (`--color-*: initial`), so a pasted class such as `text-gray-500` fails silently: it generates no CSS and renders no colour. The alpha modifier lint also rejects the `text-<size>/<leading>` shorthand on purpose, because the type scale sets line height.
+- Colour tokens are written `--color-<role>: #RRGGBB;`, hex only. `tests/unit/contrast.test.ts` parses that exact form, so `oklch()` or any other notation breaks it.
+- In ESLint flat config, a later block that sets `no-restricted-imports` or `no-restricted-syntax` replaces the rule rather than merging it. So each zone in `eslint.config.mjs` restates every restriction for its files, and `redactnest/tool-page` comes last so it drops only the tool client ban. Build a new zone with `zone()`, which always adds the storage ban and the colour patterns.
 
 ## Tooling
 
@@ -77,6 +87,7 @@ Chosen here, installed by `/develop tooling` (scope feature 2):
 - CI on push: lint, typecheck, Vitest, Playwright
 - Testing Library (`@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event`) on jsdom for component tests, which live in `tests/component/`
 - Two Vitest projects in `vitest.config.mts`: `unit` runs `tests/unit/**` in `node`, `component` runs `tests/component/**` in `jsdom` with `tests/setup/component.ts`. Keeping them apart stops a unit test quietly leaning on a `window` it should never have had
+- axe for accessibility: `@axe-core/playwright` in `tests/e2e/design-system.spec.ts`, and `expectNoAxeViolations(container)` from `tests/setup/component.ts` in component tests, with `color-contrast` and `target-size` off there because jsdom computes no colour and no layout
 - Tests written after the build via `/test`. Vitest for logic, Playwright for anything that must happen in a real browser
 
 ## Git
@@ -97,13 +108,14 @@ Installed for the tools this project uses. Each one loads only when its subject 
 - [next-best-practices](.claude/skills/next-best-practices/): `vercel-labs/openreview`, Next.js file conventions, RSC boundaries, async APIs and metadata
 - [vercel-react-best-practices](.claude/skills/vercel-react-best-practices/): `vercel-labs/agent-skills`, React and Next.js performance patterns
 
-Declined: Testing Library, jsdom. Nothing else is recorded as declined, so later runs may offer more.
+Declined: Testing Library, jsdom, `lucide-react`, `axe-core`, `@axe-core/playwright` (spec 0003). Nothing else is recorded as declined, so later runs may offer more.
 
 MCP servers: `@playwright/mcp` (connected, configured in `.mcp.json`, drives a real browser for `/check verify` and Playwright work)
 
 ## Context files
 
 <!-- Nested AGENTS.md files are listed here as they are created -->
+- [src/ui/AGENTS.md](src/ui/AGENTS.md): the design system primitives, how to build and test one
 
 <!-- BEGIN:nextjs-agent-rules -->
 
