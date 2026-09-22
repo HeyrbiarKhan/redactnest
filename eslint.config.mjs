@@ -80,6 +80,31 @@ const noEngineAnywhere = [
   { selector: "TSImportType[source.value=/^@.engine/]", message: ENGINE_MESSAGE },
 ];
 
+const TOOL_CLIENT_MESSAGE =
+  "Only src/app/tool/page.tsx may render ToolClient (spec 0003, INV-11). Its " +
+  "load guard trusts that it runs at /tool: on a page at any other address it " +
+  "can only show a dead end, because reloading there would loop. Link to the " +
+  "tool with Button's reload prop instead.";
+
+/** Static `import`/`export ... from` of the tool page's client, by any spelling. */
+const noToolClientImport = { regex: "(^|/)tool-client$", message: TOOL_CLIENT_MESSAGE };
+
+/**
+ * `await import("./tool/tool-client")` and `typeof import(...)`, the forms
+ * `no-restricted-imports` cannot see, as `noEngineAnywhere` backs up the engine.
+ * `.` for the slash again, because esquery ends a regex at the first `/`.
+ */
+const noToolClientAnywhere = [
+  {
+    selector: "ImportExpression > Literal[value=/(^|.)tool-client$/]",
+    message: TOOL_CLIENT_MESSAGE,
+  },
+  {
+    selector: "TSImportType[source.value=/(^|.)tool-client$/]",
+    message: TOOL_CLIENT_MESSAGE,
+  },
+];
+
 const noNewWorker = [
   { selector: 'NewExpression[callee.name="Worker"]', message: WORKER_MESSAGE },
 ];
@@ -253,29 +278,35 @@ const eslintConfig = defineConfig([
     name: "redactnest/engine-wall",
     files: [WALL],
     rules: zone(
-      [noMupdfImport, noEngineImport],
-      [...noMupdfAnywhere, ...noEngineAnywhere, ...noNewWorker],
+      [noMupdfImport, noEngineImport, noToolClientImport],
+      [...noMupdfAnywhere, ...noEngineAnywhere, ...noNewWorker, ...noToolClientAnywhere],
     ),
   },
   {
     // The walled module itself. The one place MuPDF is named at all.
     name: "redactnest/engine-wall-engine",
     files: ["src/engine/**/*.{ts,mts}"],
-    rules: zone([noEngineImport], [...noEngineAnywhere, ...noNewWorker]),
+    rules: zone(
+      [noEngineImport, noToolClientImport],
+      [...noEngineAnywhere, ...noNewWorker, ...noToolClientAnywhere],
+    ),
   },
   {
     // The only importer of the walled module.
     name: "redactnest/engine-wall-worker",
     files: ["src/worker/engine.worker.ts"],
-    rules: zone([noMupdfImport], [...noMupdfAnywhere, ...noNewWorker]),
+    rules: zone(
+      [noMupdfImport, noToolClientImport],
+      [...noMupdfAnywhere, ...noNewWorker, ...noToolClientAnywhere],
+    ),
   },
   {
     // The main thread's single door to the worker, so the only `new Worker`.
     name: "redactnest/engine-wall-client",
     files: ["src/worker/client.ts"],
     rules: zone(
-      [noMupdfImport, noEngineImport],
-      [...noMupdfAnywhere, ...noEngineAnywhere],
+      [noMupdfImport, noEngineImport, noToolClientImport],
+      [...noMupdfAnywhere, ...noEngineAnywhere, ...noToolClientAnywhere],
     ),
   },
   {
@@ -284,8 +315,25 @@ const eslintConfig = defineConfig([
     name: "redactnest/ui",
     files: ["src/ui/**/*.{ts,tsx}"],
     rules: zone(
-      [noMupdfImport, noEngineImport, noUiDependencies],
-      [...noMupdfAnywhere, ...noEngineAnywhere, ...noNewWorker, ...noInnerHtml],
+      [noMupdfImport, noEngineImport, noUiDependencies, noToolClientImport],
+      [
+        ...noMupdfAnywhere,
+        ...noEngineAnywhere,
+        ...noNewWorker,
+        ...noInnerHtml,
+        ...noToolClientAnywhere,
+      ],
+    ),
+  },
+  {
+    // The one page allowed to render ToolClient (spec 0003, INV-11). Last, so
+    // it replaces the tool client ban above rather than being replaced by it,
+    // and it restates the rest of the engine wall, which still applies here.
+    name: "redactnest/tool-page",
+    files: ["src/app/tool/page.tsx"],
+    rules: zone(
+      [noMupdfImport, noEngineImport],
+      [...noMupdfAnywhere, ...noEngineAnywhere, ...noNewWorker],
     ),
   },
 ]);

@@ -84,6 +84,49 @@ describe("loadedAt", () => {
   });
 });
 
+describe("currentPath", () => {
+  it("is the address bar's path", async () => {
+    vi.stubGlobal("location", { pathname: "/tool" });
+    const { currentPath } = await loadModule();
+
+    expect(currentPath()).toBe("/tool");
+  });
+
+  it("is read fresh each time, because a client side navigation changes it", async () => {
+    const address = { pathname: "/" };
+    vi.stubGlobal("location", address);
+    const { currentPath } = await loadModule();
+
+    currentPath();
+    address.pathname = "/tool";
+
+    expect(currentPath()).toBe("/tool");
+  });
+});
+
+/**
+ * Spec 0003, INV-11. The one thing that must hold: `"reload"` only ever comes
+ * back when the address bar reads `/tool`, so the load it asks for passes.
+ */
+describe("loadGuard", () => {
+  it.each([
+    [null, "/", "ok"],
+    ["/tool", "/", "ok"],
+    ["/tool", "/tool", "ok"],
+    ["/", "/tool", "reload"],
+    ["/", "/", "wrong-url"],
+    ["/", "/tool/", "wrong-url"],
+    ["/elsewhere", "/elsewhere", "wrong-url"],
+  ] as const)(
+    "loaded at %s with the address at %s is %s",
+    async (loaded, address, expected) => {
+      const { loadGuard } = await loadModule();
+
+      expect(loadGuard(loaded, address)).toBe(expected);
+    },
+  );
+});
+
 describe("reloadDocument", () => {
   it("asks the browser for a real page load", async () => {
     const reload = vi.fn();

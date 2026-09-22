@@ -10,7 +10,7 @@ import {
 } from "react";
 
 import { config } from "@/config";
-import { loadedAt, reloadDocument } from "@/lib/document-load";
+import { currentPath, loadedAt, loadGuard, reloadDocument } from "@/lib/document-load";
 import { getEntitlement, prefetchEntitlement } from "@/lib/entitlement";
 import { TOOL_PATH } from "@/lib/routes";
 import {
@@ -101,9 +101,10 @@ const SERVER_SNAPSHOT = () => null;
 
 /**
  * The prerendered HTML is only ever used by a document the browser loaded at
- * `/tool`, so that is the honest server answer, and hydration agrees with it.
+ * `/tool`, so that is the honest server answer for both the load and the
+ * address bar, and hydration agrees with it.
  */
-const LOADED_AT_SERVER_SNAPSHOT = () => TOOL_PATH;
+const TOOL_PATH_SERVER_SNAPSHOT = () => TOOL_PATH;
 
 const REPLACE_WARNING =
   "You have unsaved work on the document that is open. Opening a different file will discard it. Continue?";
@@ -119,18 +120,24 @@ export function ToolClient() {
    * reloads, which gives the tool its own document. `null` means the browser
    * did not say, and the page works as it always has.
    *
-   * Only `src/app/tool/page.tsx` may render this component: on a page at any
-   * other URL the reload would come back to the same answer, and loop.
+   * INV-11: it reloads only when the address bar reads `/tool`, so the load it
+   * asks for is one that passes. Anywhere else it waits for a click, and lint
+   * keeps every page but `src/app/tool/page.tsx` from rendering it at all.
    */
   const loadPath = useSyncExternalStore<string | null>(
     NEVER_CHANGES,
     loadedAt,
-    LOADED_AT_SERVER_SNAPSHOT,
+    TOOL_PATH_SERVER_SNAPSHOT,
   );
-  const misloaded = loadPath !== null && loadPath !== TOOL_PATH;
+  const addressPath = useSyncExternalStore<string>(
+    NEVER_CHANGES,
+    currentPath,
+    TOOL_PATH_SERVER_SNAPSHOT,
+  );
+  const guard = loadGuard(loadPath, addressPath);
   useEffect(() => {
-    if (misloaded) reloadDocument();
-  }, [misloaded]);
+    if (guard === "reload") reloadDocument();
+  }, [guard]);
 
   // The server snapshot is null, so the prerendered HTML shows the drop area for
   // everyone and hydration has nothing to disagree about. The real answer
@@ -373,11 +380,31 @@ export function ToolClient() {
   // Ahead of the support check, so nothing about this document is trusted
   // before it is known to be the tool's own. No drop zone also means nothing
   // warms the engine or asks for the entitlement.
-  if (misloaded) {
+  if (guard === "reload") {
     return (
       <div aria-live="polite" className="flex flex-col gap-6">
         <StatusLine text="Loading the tool" />
       </div>
+    );
+  }
+
+  // No `role`: nothing the visitor did caused this, and nothing moves them on
+  // automatically, because a reload here would load this same wrong URL again.
+  if (guard === "wrong-url") {
+    return (
+      <Callout
+        tone="danger"
+        data-testid="wrong-url"
+        title="This page cannot open a document"
+        headingLevel={2}
+        action={
+          <Button variant="secondary" href={TOOL_PATH} reload>
+            Open the tool
+          </Button>
+        }
+      >
+        <p>The tool only works at its own address.</p>
+      </Callout>
     );
   }
 

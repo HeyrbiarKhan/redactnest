@@ -1,3 +1,5 @@
+import { TOOL_PATH } from "@/lib/routes";
+
 /**
  * Which URL did the browser load the current document at?
  *
@@ -41,6 +43,36 @@ function readLoadedAt(): string | null {
 export function loadedAt(): string | null {
   if (cached === undefined) cached = readLoadedAt();
   return cached;
+}
+
+/**
+ * The address bar's path, right now.
+ *
+ * Never cached, unlike `loadedAt()`: a client side navigation changes this and
+ * nothing else, and that difference is what the guard reads.
+ */
+export function currentPath(): string {
+  return location.pathname;
+}
+
+export type LoadGuard = "ok" | "reload" | "wrong-url";
+
+/**
+ * What the tool page does about where its document came from. Spec 0003, AC-21
+ * and INV-11.
+ *
+ * A document the browser loaded at `/tool` is under the tool's own policy,
+ * whatever the address bar says later, so it passes; so does one the browser
+ * says nothing about. Otherwise a reload fixes it only when the address bar
+ * already reads `TOOL_PATH`, because a reload loads the address bar's URL and
+ * only a load at `/tool` can pass. Anywhere else a reload would come back to
+ * the same answer forever, so the page waits for a click instead. That is what
+ * makes a loop impossible rather than merely unlikely. Exact matches, so
+ * `/tool/` is a wrong URL too.
+ */
+export function loadGuard(loadedAtPath: string | null, address: string): LoadGuard {
+  if (loadedAtPath === null || loadedAtPath === TOOL_PATH) return "ok";
+  return address === TOOL_PATH ? "reload" : "wrong-url";
 }
 
 /**

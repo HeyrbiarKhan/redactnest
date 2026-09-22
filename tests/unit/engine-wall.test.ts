@@ -63,6 +63,7 @@ const OPACITY = /No alpha modifier on a colour utility/;
 const ARBITRARY_COLOUR = /No arbitrary colour value/;
 const UI_IMPORT = /src\/ui is presentation only/;
 const INNER_HTML = /Document derived text is untrusted input/;
+const TOOL_CLIENT = /Only src\/app\/tool\/page\.tsx may render ToolClient/;
 
 /** Ordinary main thread code: a route and a shared library, fully walled. */
 const ROUTE = "src/app/probe.ts";
@@ -357,6 +358,65 @@ describe("the design system's primitives", () => {
         'import { cx } from "@/lib/cx";\nimport { Info } from "lucide-react";\nexport const x = [cx, Info];\n',
       ),
     ).toEqual([]);
+  });
+});
+
+/**
+ * Spec 0003, INV-11. The tool page's load guard trusts that it runs at `/tool`,
+ * so only the tool page may render `ToolClient`. Anywhere else the guard could
+ * only show a dead end, and this is what keeps that a lint error rather than
+ * something a visitor finds.
+ */
+describe("rendering the tool page's client anywhere but the tool page", () => {
+  const HOME = "src/app/page.tsx";
+  const TOOL_PAGE = "src/app/tool/page.tsx";
+
+  it("is rejected on another page", async () => {
+    expect(
+      await wallErrors(
+        HOME,
+        'import { ToolClient } from "./tool/tool-client";\nexport const x = ToolClient;\n',
+      ),
+    ).toContainEqual(expect.stringMatching(TOOL_CLIENT));
+  });
+
+  it("is rejected in a primitive, by its alias", async () => {
+    expect(
+      await wallErrors(
+        PRIMITIVE,
+        'import { ToolClient } from "@/app/tool/tool-client";\nexport const x = ToolClient;\n',
+      ),
+    ).toContainEqual(expect.stringMatching(TOOL_CLIENT));
+  });
+
+  it("is rejected as a dynamic import, which no-restricted-imports cannot see", async () => {
+    expect(
+      await wallErrors(HOME, 'export const load = () => import("./tool/tool-client");\n'),
+    ).toContainEqual(expect.stringMatching(TOOL_CLIENT));
+  });
+
+  it("is rejected as a type only import", async () => {
+    expect(
+      await wallErrors(
+        ROUTE,
+        'export type T = typeof import("@/app/tool/tool-client");\n',
+      ),
+    ).toContainEqual(expect.stringMatching(TOOL_CLIENT));
+  });
+
+  it("is allowed on the tool page", async () => {
+    expect(
+      await wallErrors(
+        TOOL_PAGE,
+        'import { ToolClient } from "./tool-client";\nexport const x = ToolClient;\n',
+      ),
+    ).toEqual([]);
+  });
+
+  it("leaves the tool page inside the engine wall", async () => {
+    expect(await wallErrors(TOOL_PAGE, IMPORTS_MUPDF)).toContainEqual(
+      expect.stringMatching(MUPDF),
+    );
   });
 });
 

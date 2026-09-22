@@ -69,14 +69,14 @@ The small set of primitives the core flow needs: layout, type, colour, buttons, 
 **Done when:** the primitives the redact flow needs exist, they are keyboard reachable with visible focus and sufficient contrast, and a page composed from them holds WCAG 2.2 AA on the core path.
 spec [0003](../specs/0003-design-system-ui-foundation/index.md) · code in `src/ui`, `src/lib/cx.ts`, `src/lib/routes.ts`, `src/lib/document-load.ts`, `src/app/globals.css`, `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/tool`, `next.config.ts`, `eslint.config.mjs`
 - [x] Design it (spec): `/architect design system & UI foundation`
-- [ ] Build it: `/develop design system & UI foundation`
+- [x] Build it: `/develop design system & UI foundation`
   - [x] Tokens, type and guards: the wiped palette and colour roles, Inter, the contrast test, the lint patterns and the `src/ui` zone · AC-1, AC-2, AC-3, AC-4, AC-19
   - [x] The tool page primitives and a restyled `/tool`: button, card, callout, drop zone with one tab stop, layout pieces, callouts outside the live region · AC-5, AC-6, AC-7, AC-8, AC-11, AC-12, AC-14, AC-16
   - [x] Proved in a real browser: axe, keyboard walk, 320px reflow, 200% text, reduced motion, forced colours, same origin requests only · AC-15, AC-16, AC-17, AC-18, AC-20
   - [x] The review vocabulary: checkbox, count badge, checklist group and row, empty state, with component and axe tests for every primitive · AC-5, AC-9, AC-10, AC-18
   - [x] The restyled home page · AC-13, AC-14, AC-15
   - [x] Every way into the tool is a real page load: `Button`'s `reload` prop on both home page links, and the load guard in `ToolClient` · AC-21
-  - [ ] The load guard cannot loop: it reloads only when the address bar reads `/tool`, otherwise shows the wrong URL callout, and lint lets only the tool page import `tool-client` · AC-21, INV-11
+  - [x] The load guard cannot loop: it reloads only when the address bar reads `/tool`, otherwise shows the wrong URL callout, and lint lets only the tool page import `tool-client` · AC-21, INV-11
 - [ ] Verify it: `/check verify design system & UI foundation`
 - [ ] Test it: `/test design system & UI foundation`
 

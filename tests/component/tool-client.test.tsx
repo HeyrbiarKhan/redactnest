@@ -45,6 +45,7 @@ const mocks = vi.hoisted(() => ({
   prefetchEntitlement: vi.fn(),
   getSupport: vi.fn(),
   loadedAt: vi.fn(),
+  currentPath: vi.fn(),
   reloadDocument: vi.fn(),
 }));
 
@@ -69,10 +70,13 @@ vi.mock("@/lib/support", async (importOriginal) => ({
   getSupport: mocks.getSupport,
 }));
 
-// The navigation entry and the reload are the browser's; stubbed at the module
-// boundary, because jsdom cannot redefine `location.reload`.
-vi.mock("@/lib/document-load", () => ({
+// The navigation entry, the address bar and the reload are the browser's;
+// stubbed at the module boundary, because jsdom cannot redefine
+// `location.reload`. The decision between them stays real.
+vi.mock("@/lib/document-load", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/document-load")>()),
   loadedAt: mocks.loadedAt,
+  currentPath: mocks.currentPath,
   reloadDocument: mocks.reloadDocument,
 }));
 
@@ -183,6 +187,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.getSupport.mockReturnValue(SUPPORTED);
   mocks.loadedAt.mockReturnValue("/tool");
+  mocks.currentPath.mockReturnValue("/tool");
   mocks.getEntitlement.mockResolvedValue(FREE);
   mocks.openSession.mockResolvedValue(openedSession());
 });
@@ -662,6 +667,86 @@ describe("a document not loaded at /tool (spec 0003, AC-21)", () => {
     render(<ToolClient />);
 
     expect(screen.getByTestId("file-input")).toBeInTheDocument();
+    expect(mocks.reloadDocument).not.toHaveBeenCalled();
+  });
+});
+
+describe("the tool rendered at the wrong address (spec 0003, INV-11)", () => {
+  /** A document loaded at `/` that still reads `/`: a reload would load it again. */
+  function renderedAtHome() {
+    mocks.loadedAt.mockReturnValue("/");
+    mocks.currentPath.mockReturnValue("/");
+  }
+
+  it("never reloads, because the reload would come back here forever", () => {
+    renderedAtHome();
+    render(<ToolClient />);
+
+    expect(mocks.reloadDocument).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("file-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("progress")).not.toBeInTheDocument();
+  });
+
+  it("warms nothing and asks for no entitlement", async () => {
+    renderedAtHome();
+    const user = userEvent.setup();
+    render(<ToolClient />);
+
+    await user.tab();
+    await user.hover(screen.getByTestId("wrong-url"));
+
+    expect(mocks.warmEngine).not.toHaveBeenCalled();
+    expect(mocks.prefetchEntitlement).not.toHaveBeenCalled();
+  });
+
+  it("says so, and offers a real page load into the tool", async () => {
+    renderedAtHome();
+    render(<ToolClient />);
+
+    expect(
+      screen.getByRole("heading", { level: 2, name: "This page cannot open a document" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("wrong-url")).toHaveTextContent(
+      "The tool only works at its own address.",
+    );
+
+    const link = screen.getByRole("link", { name: "Open the tool" });
+    expect(link).toHaveAttribute("href", "/tool");
+
+    // `next/link` takes a navigation over by preventing the click's default, so
+    // a click nothing prevented by the time it reaches `window` is a real page
+    // load. Prevented there, after reading, because jsdom cannot navigate.
+    let untouched = false;
+    const observe = (event: MouseEvent) => {
+      untouched = !event.defaultPrevented;
+      event.preventDefault();
+    };
+    window.addEventListener("click", observe);
+    try {
+      await userEvent.setup().click(link);
+    } finally {
+      window.removeEventListener("click", observe);
+    }
+    expect(untouched).toBe(true);
+  });
+
+  it("is not announced, because nothing the visitor did caused it", () => {
+    renderedAtHome();
+    render(<ToolClient />);
+
+    expect(screen.getByTestId("wrong-url")).not.toHaveAttribute("role");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("runs before the support check too", () => {
+    renderedAtHome();
+    mocks.getSupport.mockReturnValue(
+      Object.freeze({ supported: false, missing: ["webassembly"] }),
+    );
+    render(<ToolClient />);
+
+    expect(screen.queryByTestId("unsupported")).not.toBeInTheDocument();
+    expect(screen.getByTestId("wrong-url")).toBeInTheDocument();
     expect(mocks.reloadDocument).not.toHaveBeenCalled();
   });
 });
