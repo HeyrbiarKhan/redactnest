@@ -17,14 +17,19 @@ test.describe("getting to the tool", () => {
   test("the landing page offers a route to it", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.getByRole("link", { name: /redact a pdf/i })).toBeVisible();
+    await expect(
+      page.getByRole("main").getByRole("link", { name: /redact a pdf/i }),
+    ).toBeVisible();
   });
 
   /** A real link, reachable and operable without a mouse. */
   test("a keyboard reaches it and Enter follows it", async ({ page }) => {
     await page.goto("/");
 
-    await page.getByRole("link", { name: /redact a pdf/i }).focus();
+    await page
+      .getByRole("main")
+      .getByRole("link", { name: /redact a pdf/i })
+      .focus();
     await page.keyboard.press("Enter");
 
     await expect(page).toHaveURL(/\/tool$/);

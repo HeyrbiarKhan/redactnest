@@ -116,16 +116,20 @@ async function targetBoxes(page: Page): Promise<TargetBox[]> {
 /**
  * AC-7. At least 24 by 24 for every target, and 40px tall for every button.
  *
- * Two elements are visually hidden on purpose and so have no box to measure:
- * the skip link until it is focused, and the file input, which is not a tab
- * stop at all. Anything else hidden that way is a control nobody can see.
+ * Some elements are visually hidden on purpose and so have no box to measure:
+ * the skip link until it is focused, and on the tool page the file input, which
+ * is not a tab stop at all. Anything else hidden that way is a control nobody
+ * can see.
  */
-async function expectTargetSizes(page: Page): Promise<void> {
+async function expectTargetSizes(
+  page: Page,
+  hiddenOnPurpose: readonly string[] = ["#main", "file-input"],
+): Promise<void> {
   const boxes = await targetBoxes(page);
   const hidden = boxes.filter((box) => box.width <= 1 || box.height <= 1);
   const shown = boxes.filter((box) => box.width > 1 && box.height > 1);
 
-  expect(hidden.map((box) => box.name).sort()).toEqual(["#main", "file-input"]);
+  expect(hidden.map((box) => box.name).sort()).toEqual([...hiddenOnPurpose].sort());
 
   for (const box of shown) {
     expect(box.width, `${box.name} is narrower than 24px`).toBeGreaterThanOrEqual(24);
@@ -350,19 +354,21 @@ test.describe("forced colours (AC-17, AC-18)", () => {
 });
 
 test.describe("the fonts the page uses (AC-4)", () => {
-  test("renders every piece of text in Inter", async ({ page }) => {
-    await page.goto("/tool");
+  for (const path of ["/", "/tool"]) {
+    test(`renders every piece of text on ${path} in Inter`, async ({ page }) => {
+      await page.goto(path);
 
-    const families = await page.evaluate(() => [
-      ...new Set(
-        [...document.querySelectorAll("body *")].map((element) =>
-          getComputedStyle(element).fontFamily.split(",")[0]?.trim(),
+      const families = await page.evaluate(() => [
+        ...new Set(
+          [...document.querySelectorAll("body *")].map((element) =>
+            getComputedStyle(element).fontFamily.split(",")[0]?.trim(),
+          ),
         ),
-      ),
-    ]);
-    // `next/font` names the self hosted face after the family it wraps.
-    expect(families.every((family) => family?.includes("Inter"))).toBe(true);
-  });
+      ]);
+      // `next/font` names the self hosted face after the family it wraps.
+      expect(families.every((family) => family?.includes("Inter"))).toBe(true);
+    });
+  }
 
   test("renders nothing smaller than 14px", async ({ page }) => {
     await page.goto("/tool");
@@ -377,5 +383,148 @@ test.describe("the fonts the page uses (AC-4)", () => {
       ),
     );
     expect(smallest).toBeGreaterThanOrEqual(14);
+  });
+});
+
+/** Both pages share one skeleton (AC-14). */
+test.describe("the page skeleton (AC-14)", () => {
+  for (const path of ["/", "/tool"]) {
+    test(`${path} has one h1 and the header, main and footer landmarks`, async ({
+      page,
+    }) => {
+      await page.goto(path);
+
+      await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+      await expect(page.getByRole("banner")).toHaveCount(1);
+      await expect(page.getByRole("main")).toHaveCount(1);
+      await expect(page.getByRole("contentinfo")).toHaveCount(1);
+      await expect(page.locator("main")).toHaveAttribute("id", "main");
+      await expect(page.locator("main")).toHaveAttribute("tabindex", "-1");
+    });
+
+    test(`${path} keeps the header static, so it scrolls away`, async ({ page }) => {
+      await page.goto(path);
+
+      const position = await page
+        .getByRole("banner")
+        .evaluate((element) => getComputedStyle(element).position);
+      expect(position).toBe("static");
+    });
+  }
+});
+
+test.describe("the home page (AC-13, AC-15, AC-17, AC-18)", () => {
+  test("says what the spec says, with a button to the tool in the header and below", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    await expect(page).toHaveTitle("RedactNest");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Truly redact a PDF.",
+    );
+    await expect(page.getByRole("main")).toContainText(
+      "The text is removed from the file itself rather than covered with a black box, and your document never leaves your machine.",
+    );
+    for (const region of [page.getByRole("banner"), page.getByRole("main")]) {
+      await expect(region.getByRole("link", { name: "Redact a PDF" })).toHaveAttribute(
+        "href",
+        "/tool",
+      );
+    }
+  });
+
+  test("steps the display headline up from 40px to 56px at md", async ({ page }) => {
+    const size = () =>
+      page
+        .getByRole("heading", { level: 1 })
+        .evaluate((element) => getComputedStyle(element).fontSize);
+
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.goto("/");
+    expect(await size()).toBe("40px");
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    expect(await size()).toBe("56px");
+  });
+
+  test("walks from the skip link to the wordmark and both buttons", async ({ page }) => {
+    await page.goto("/");
+
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Skip to main content" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "RedactNest" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("banner").getByRole("link", { name: "Redact a PDF" }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    const main = page.getByRole("main").getByRole("link", { name: "Redact a PDF" });
+    await expect(main).toBeFocused();
+    await expectFocusRing(main);
+  });
+
+  test("the skip link lands on main, so the next Tab is the main button", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("main")).toBeFocused();
+
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("main").getByRole("link", { name: "Redact a PDF" }),
+    ).toBeFocused();
+  });
+
+  test("its button links are button sized: 40px in the header, 48px below", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    const header = await page
+      .getByRole("banner")
+      .getByRole("link", { name: "Redact a PDF" })
+      .boundingBox();
+    const main = await page
+      .getByRole("main")
+      .getByRole("link", { name: "Redact a PDF" })
+      .boundingBox();
+    expect(header?.height ?? 0).toBeGreaterThanOrEqual(40);
+    expect(main?.height ?? 0).toBeGreaterThanOrEqual(48);
+
+    await expectTargetSizes(page, ["#main"]);
+  });
+
+  test("axe reports nothing", async ({ page }) => {
+    await page.goto("/");
+
+    await expectNoAxeViolations(page);
+  });
+
+  test("axe reports nothing in forced colours", async ({ page }) => {
+    await page.emulateMedia({ forcedColors: "active" });
+    await page.goto("/");
+
+    await expectNoAxeViolations(page);
+  });
+
+  test("needs no sideways scroll at 320 CSS pixels", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto("/");
+
+    await expectNoHorizontalScroll(page);
+  });
+
+  test("clips nothing with the root font size doubled", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+
+    await expectNoHorizontalScroll(page);
+    await expectContained(page.getByRole("main"));
   });
 });
