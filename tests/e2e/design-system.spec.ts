@@ -221,6 +221,15 @@ test.describe("target sizes on the tool page (AC-7)", () => {
       await expectTargetSizes(page);
     });
   }
+
+  // An `lg` button with an icon, the other half of what the home page proves
+  // for links. Exact, because a minimum let 50px through.
+  test("the Choose a PDF button is exactly 48px tall", async ({ page }) => {
+    await page.goto("/tool");
+
+    const box = await page.getByTestId("choose-file").boundingBox();
+    expect(box?.height).toBe(48);
+  });
 });
 
 test.describe("reflow and zoom on the tool page (AC-15)", () => {
@@ -493,8 +502,9 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18)", () => {
       .getByRole("main")
       .getByRole("link", { name: "Redact a PDF" })
       .boundingBox();
-    expect(header?.height ?? 0).toBeGreaterThanOrEqual(40);
-    expect(main?.height ?? 0).toBeGreaterThanOrEqual(48);
+    // Exact, not a floor: a minimum passed while `lg` padding pushed it to 50px.
+    expect(header?.height).toBe(40);
+    expect(main?.height).toBe(48);
 
     await expectTargetSizes(page, ["#main"]);
   });

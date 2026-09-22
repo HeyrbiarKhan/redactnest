@@ -73,17 +73,19 @@ const VARIANT: Readonly<Record<ButtonVariant, string>> = Object.freeze({
 /**
  * Heights are minimums, never fixed, so a visitor's text spacing override grows
  * the button rather than clipping its label (WCAG 1.4.12). 40px and 48px clear
- * the 24px target floor with room to spare (AC-7).
+ * the 24px target floor with room to spare (AC-7). The padding keeps the
+ * natural height under each minimum (38px at `md`, 46px at `lg`, counting the
+ * border), so the minimum is the height, not a floor it outgrows.
  */
 const SIZE: Readonly<Record<ButtonVariant, Readonly<Record<ButtonSize, string>>>> =
   Object.freeze({
     primary: Object.freeze({
       md: "min-h-10 px-4 py-2 text-small font-medium",
-      lg: "min-h-12 px-6 py-3 text-body font-semibold",
+      lg: "min-h-12 px-6 py-2.5 text-body font-semibold",
     }),
     secondary: Object.freeze({
       md: "min-h-10 px-4 py-2 text-small font-medium",
-      lg: "min-h-12 px-6 py-3 text-body font-semibold",
+      lg: "min-h-12 px-6 py-2.5 text-body font-semibold",
     }),
     link: Object.freeze({
       md: "text-small font-medium",
