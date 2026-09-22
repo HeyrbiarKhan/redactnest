@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
@@ -30,11 +30,13 @@ describe("the component test harness", () => {
   it("renders a real app component through the @ alias", () => {
     render(<HomePage />);
 
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("RedactNest");
-    expect(screen.getByRole("link", { name: "Redact a PDF" })).toHaveAttribute(
-      "href",
-      "/tool",
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Truly redact a PDF.",
     );
+    // Scoped to `main`, because the header carries the same link (spec 0003, AC-13).
+    expect(
+      within(screen.getByRole("main")).getByRole("link", { name: "Redact a PDF" }),
+    ).toHaveAttribute("href", "/tool");
   });
 
   it("handles a real user interaction", async () => {

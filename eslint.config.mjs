@@ -80,6 +80,31 @@ const noEngineAnywhere = [
   { selector: "TSImportType[source.value=/^@.engine/]", message: ENGINE_MESSAGE },
 ];
 
+const TOOL_CLIENT_MESSAGE =
+  "Only src/app/tool/page.tsx may render ToolClient (spec 0003, INV-11). Its " +
+  "load guard trusts that it runs at /tool: on a page at any other address it " +
+  "can only show a dead end, because reloading there would loop. Link to the " +
+  "tool with Button's reload prop instead.";
+
+/** Static `import`/`export ... from` of the tool page's client, by any spelling. */
+const noToolClientImport = { regex: "(^|/)tool-client$", message: TOOL_CLIENT_MESSAGE };
+
+/**
+ * `await import("./tool/tool-client")` and `typeof import(...)`, the forms
+ * `no-restricted-imports` cannot see, as `noEngineAnywhere` backs up the engine.
+ * `.` for the slash again, because esquery ends a regex at the first `/`.
+ */
+const noToolClientAnywhere = [
+  {
+    selector: "ImportExpression > Literal[value=/(^|.)tool-client$/]",
+    message: TOOL_CLIENT_MESSAGE,
+  },
+  {
+    selector: "TSImportType[source.value=/(^|.)tool-client$/]",
+    message: TOOL_CLIENT_MESSAGE,
+  },
+];
+
 const noNewWorker = [
   { selector: 'NewExpression[callee.name="Worker"]', message: WORKER_MESSAGE },
 ];
@@ -130,15 +155,99 @@ const noStorageAnywhere = [
   },
 ];
 
+const OPACITY_MESSAGE =
+  "No alpha modifier on a colour utility (spec 0003, INV-3). A quieter text " +
+  "colour is `ink-muted`, never `ink` at 70%, because a colour made from " +
+  "opacity is one the contrast test never checked. This also rejects the " +
+  "`text-<size>/<leading>` shorthand on purpose: the type scale sets line height.";
+
+const ARBITRARY_COLOUR_MESSAGE =
+  "No arbitrary colour value (spec 0003, INV-1). Every colour on screen is a " +
+  "token from `src/app/globals.css`, and every pairing of them is checked by " +
+  "`tests/unit/contrast.test.ts`. A new shade needs a token, a contract row " +
+  "and a test pair.";
+
+/**
+ * The colour utility prefixes, from spec 0003's *Lint patterns*.
+ *
+ * `\x2F` stands in for the slash in the alpha pattern, for the same reason `.`
+ * does in `noEngineAnywhere`: esquery ends a regex at the first `/` it sees.
+ * The escape keeps the pattern exact, so `bg-accent 2xl:px-4` is left alone
+ * where a `.` would have matched the space.
+ */
+const COLOUR_PREFIX = String.raw`(bg|text|border(-[xytrblse])?|ring(-offset)?|outline|decoration|divide|fill|stroke|accent|caret|from|via|to|shadow|inset-shadow|placeholder)`;
+const ALPHA_MODIFIER = String.raw`(^|[\s:!])${COLOUR_PREFIX}-[a-z0-9-]+\x2F(\d{1,3}|\[)`;
+const ARBITRARY_COLOUR = String.raw`(^|[\s:!])${COLOUR_PREFIX}-\[(#|(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\()`;
+
+/**
+ * Class names in plain strings and in template literals alike. A JSX attribute
+ * written as a string is a `Literal` too, so `className="text-ink/70"` is caught
+ * by the first form. Spec 0003, AC-3.
+ */
+const noUncheckedColour = [ALPHA_MODIFIER, ARBITRARY_COLOUR].flatMap((pattern) => {
+  const message = pattern === ALPHA_MODIFIER ? OPACITY_MESSAGE : ARBITRARY_COLOUR_MESSAGE;
+  return [
+    { selector: `Literal[value=/${pattern}/]`, message },
+    { selector: `TemplateElement[value.raw=/${pattern}/]`, message },
+  ];
+});
+
+const UI_IMPORT_MESSAGE =
+  "src/ui is presentation only (spec 0003, INV-7). It never reaches the worker, " +
+  "the config, the session or the entitlement. The caller reads those and " +
+  "passes what the primitive shows as props.";
+
+const INNER_HTML_MESSAGE =
+  "Document derived text is untrusted input (spec 0003, INV-7). A match can hold " +
+  "anything a PDF author typed, markup included, so it is rendered only as React " +
+  "text, which escapes it.";
+
+/** What `src/ui` may not import, by alias and by relative path. */
+const noUiDependencies = {
+  group: [
+    "@/worker",
+    "@/worker/*",
+    "@/config",
+    "@/config/*",
+    "@/lib/session",
+    "@/lib/entitlement",
+    "../worker",
+    "../worker/*",
+    "../config",
+    "../config/*",
+    "../lib/session",
+    "../lib/entitlement",
+  ],
+  message: UI_IMPORT_MESSAGE,
+};
+
+/** As a JSX attribute, and as a key in an object spread onto an element. */
+const noInnerHtml = [
+  {
+    selector: 'JSXAttribute[name.name="dangerouslySetInnerHTML"]',
+    message: INNER_HTML_MESSAGE,
+  },
+  {
+    selector: 'Property[key.name="dangerouslySetInnerHTML"]',
+    message: INNER_HTML_MESSAGE,
+  },
+];
+
 /**
  * A zone's rules, from the restrictions it does not get to relax.
  *
- * The storage ban is applied to every zone here rather than passed in, so a zone
- * can only ever relax what it explicitly names, and no zone can name this.
+ * The storage ban and the colour patterns are applied to every zone here rather
+ * than passed in, so a zone can only ever relax what it explicitly names, and no
+ * zone can name these.
  */
 const zone = (imports, syntax) => ({
   "no-restricted-imports": ["error", { patterns: imports }],
-  "no-restricted-syntax": ["error", ...syntax, ...noStorageAnywhere],
+  "no-restricted-syntax": [
+    "error",
+    ...syntax,
+    ...noStorageAnywhere,
+    ...noUncheckedColour,
+  ],
 });
 
 const eslintConfig = defineConfig([
@@ -169,29 +278,62 @@ const eslintConfig = defineConfig([
     name: "redactnest/engine-wall",
     files: [WALL],
     rules: zone(
-      [noMupdfImport, noEngineImport],
-      [...noMupdfAnywhere, ...noEngineAnywhere, ...noNewWorker],
+      [noMupdfImport, noEngineImport, noToolClientImport],
+      [...noMupdfAnywhere, ...noEngineAnywhere, ...noNewWorker, ...noToolClientAnywhere],
     ),
   },
   {
     // The walled module itself. The one place MuPDF is named at all.
     name: "redactnest/engine-wall-engine",
     files: ["src/engine/**/*.{ts,mts}"],
-    rules: zone([noEngineImport], [...noEngineAnywhere, ...noNewWorker]),
+    rules: zone(
+      [noEngineImport, noToolClientImport],
+      [...noEngineAnywhere, ...noNewWorker, ...noToolClientAnywhere],
+    ),
   },
   {
     // The only importer of the walled module.
     name: "redactnest/engine-wall-worker",
     files: ["src/worker/engine.worker.ts"],
-    rules: zone([noMupdfImport], [...noMupdfAnywhere, ...noNewWorker]),
+    rules: zone(
+      [noMupdfImport, noToolClientImport],
+      [...noMupdfAnywhere, ...noNewWorker, ...noToolClientAnywhere],
+    ),
   },
   {
     // The main thread's single door to the worker, so the only `new Worker`.
     name: "redactnest/engine-wall-client",
     files: ["src/worker/client.ts"],
     rules: zone(
+      [noMupdfImport, noEngineImport, noToolClientImport],
+      [...noMupdfAnywhere, ...noEngineAnywhere, ...noToolClientAnywhere],
+    ),
+  },
+  {
+    // The design system's primitives. Everything the wall forbids, plus the
+    // modules that hold document state, plus raw HTML. Spec 0003, AC-19.
+    name: "redactnest/ui",
+    files: ["src/ui/**/*.{ts,tsx}"],
+    rules: zone(
+      [noMupdfImport, noEngineImport, noUiDependencies, noToolClientImport],
+      [
+        ...noMupdfAnywhere,
+        ...noEngineAnywhere,
+        ...noNewWorker,
+        ...noInnerHtml,
+        ...noToolClientAnywhere,
+      ],
+    ),
+  },
+  {
+    // The one page allowed to render ToolClient (spec 0003, INV-11). Last, so
+    // it replaces the tool client ban above rather than being replaced by it,
+    // and it restates the rest of the engine wall, which still applies here.
+    name: "redactnest/tool-page",
+    files: ["src/app/tool/page.tsx"],
+    rules: zone(
       [noMupdfImport, noEngineImport],
-      [...noMupdfAnywhere, ...noEngineAnywhere],
+      [...noMupdfAnywhere, ...noEngineAnywhere, ...noNewWorker],
     ),
   },
 ]);

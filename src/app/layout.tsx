@@ -1,15 +1,21 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 
 // Imported here, at the root of every route, on purpose. The config module
 // validates at module load, so a missing or malformed environment variable fails
 // `next build` rather than shipping a cap that is quietly `undefined`.
 import { config } from "@/config";
+import { SiteFooter } from "@/ui/site-footer";
+import { SkipLink } from "@/ui/skip-link";
 
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+/**
+ * The one family (spec 0003, AC-4). `next/font` downloads it at build time and
+ * serves it from our own origin, so no visitor's browser ever asks Google for
+ * it (AC-20), and the tool route's `font-src 'self'` needs no change.
+ */
+const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   metadataBase: new URL(config.siteUrl),
@@ -23,13 +29,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="flex min-h-full flex-col">
+    <html lang="en" className={`${inter.variable} h-full antialiased`}>
+      <body className="flex min-h-full flex-col bg-canvas font-sans text-body text-ink">
+        <SkipLink />
         {children}
-        <footer className="mx-auto w-full max-w-2xl px-4 py-8 text-xs opacity-70">
+        <SiteFooter>
           {/*
             The AGPL source offer. Feature 18 owns the full obligation (licence
             file, third party notices, a tag per deploy). This link is here
@@ -37,13 +41,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             resolve to the exact deployed commit rather than the repository root.
           */}
           {config.sourceUrl ? (
-            <a href={config.sourceUrl} className="underline underline-offset-2">
+            <a
+              href={config.sourceUrl}
+              className="inline-flex min-h-6 items-center rounded-sm underline underline-offset-4 hover:text-ink"
+            >
               Source code (AGPL 3.0)
             </a>
           ) : (
             <span>Source code (AGPL 3.0) · link set per deploy</span>
           )}
-        </footer>
+        </SiteFooter>
       </body>
     </html>
   );

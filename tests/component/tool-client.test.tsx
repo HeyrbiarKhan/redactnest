@@ -44,6 +44,9 @@ const mocks = vi.hoisted(() => ({
   getEntitlement: vi.fn(),
   prefetchEntitlement: vi.fn(),
   getSupport: vi.fn(),
+  loadedAt: vi.fn(),
+  currentPath: vi.fn(),
+  reloadDocument: vi.fn(),
 }));
 
 vi.mock("@/worker/client", () => ({
@@ -65,6 +68,16 @@ vi.mock("@/lib/entitlement", () => ({
 vi.mock("@/lib/support", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/support")>()),
   getSupport: mocks.getSupport,
+}));
+
+// The navigation entry, the address bar and the reload are the browser's;
+// stubbed at the module boundary, because jsdom cannot redefine
+// `location.reload`. The decision between them stays real.
+vi.mock("@/lib/document-load", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/document-load")>()),
+  loadedAt: mocks.loadedAt,
+  currentPath: mocks.currentPath,
+  reloadDocument: mocks.reloadDocument,
 }));
 
 /** Stable across calls, because `useSyncExternalStore` caches on identity. */
@@ -173,6 +186,8 @@ beforeEach(() => {
   mocks.lostListeners.clear();
   vi.clearAllMocks();
   mocks.getSupport.mockReturnValue(SUPPORTED);
+  mocks.loadedAt.mockReturnValue("/tool");
+  mocks.currentPath.mockReturnValue("/tool");
   mocks.getEntitlement.mockResolvedValue(FREE);
   mocks.openSession.mockResolvedValue(openedSession());
 });
@@ -498,6 +513,88 @@ describe("the silent retry inside the engine load window (AC-11a)", () => {
   });
 });
 
+/**
+ * Spec 0003, AC-12. The polite region holds what is worth hearing as it
+ * changes, and a failure is an alert of its own beside it. An alert inside a
+ * polite region is announced twice, once for each, which is the bug this pins.
+ */
+describe("the live regions (spec 0003, AC-12)", () => {
+  const POLITE = '[aria-live="polite"]';
+
+  function politeRegions(container: HTMLElement): NodeListOf<Element> {
+    return container.querySelectorAll(POLITE);
+  }
+
+  function alertsInsidePolite(container: HTMLElement): NodeListOf<Element> {
+    return container.querySelectorAll(
+      `${POLITE} [role="alert"], ${POLITE}[role="alert"]`,
+    );
+  }
+
+  it("keeps a failure beside the polite region, not inside it", async () => {
+    mocks.openSession.mockRejectedValue(new EngineError("corrupt"));
+    const { container } = render(<ToolClient />);
+
+    await chooseFile(pdfFile());
+    await screen.findByTestId("error");
+
+    expect(politeRegions(container)).toHaveLength(1);
+    expect(alertsInsidePolite(container)).toHaveLength(0);
+  });
+
+  it("keeps the lost worker message beside it too", async () => {
+    mocks.openSession.mockImplementation(hangsAt("opening"));
+    const { container } = render(<ToolClient />);
+    await chooseFile(pdfFile());
+    await screen.findByTestId("progress");
+
+    await fireEngineLost();
+    await screen.findByTestId("lost");
+
+    expect(politeRegions(container)).toHaveLength(1);
+    expect(alertsInsidePolite(container)).toHaveLength(0);
+  });
+
+  /**
+   * No polite region here at all, because there is nothing to report progress
+   * on in a browser that cannot open a document. What matters is that the one
+   * alert is never nested inside one.
+   */
+  it("announces the unsupported explanation once, as an alert", () => {
+    mocks.getSupport.mockReturnValue(
+      Object.freeze({ supported: false, missing: ["webassembly"] }) as SupportReport,
+    );
+    const { container } = render(<ToolClient />);
+
+    expect(politeRegions(container).length).toBeLessThanOrEqual(1);
+    expect(alertsInsidePolite(container)).toHaveLength(0);
+    expect(screen.getByRole("alert")).toHaveTextContent(/cannot run in this browser/i);
+  });
+
+  it("holds the phase text while a document opens", async () => {
+    mocks.openSession.mockImplementation(hangsAt("inspecting"));
+    const { container } = render(<ToolClient />);
+
+    await chooseFile(pdfFile());
+    const progress = await screen.findByTestId("progress");
+
+    expect(container.querySelector(POLITE)).toContainElement(progress);
+    expect(progress).toHaveTextContent("Checking each page…");
+  });
+
+  it("holds the opened document card", async () => {
+    const { container } = render(<ToolClient />);
+
+    await chooseFile(pdfFile());
+    const pageCount = await screen.findByTestId("page-count");
+
+    expect(container.querySelector(POLITE)).toContainElement(pageCount);
+    expect(screen.getByRole("region", { name: "Document opened" })).toContainElement(
+      pageCount,
+    );
+  });
+});
+
 describe("browsers that cannot run it", () => {
   it("explains the gap instead of showing a drop area it cannot honour", () => {
     mocks.getSupport.mockReturnValue(
@@ -508,5 +605,148 @@ describe("browsers that cannot run it", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent("Web Workers are unavailable.");
     expect(screen.queryByTestId("drop-area")).not.toBeInTheDocument();
+  });
+});
+
+describe("a document not loaded at /tool (spec 0003, AC-21)", () => {
+  /** What a client side navigation from the landing page would leave behind. */
+  function arrivedFromHome() {
+    mocks.loadedAt.mockReturnValue("/");
+  }
+
+  it("takes no file, says it is loading, and reloads", async () => {
+    arrivedFromHome();
+    render(<ToolClient />);
+
+    expect(screen.queryByTestId("file-input")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /choose a pdf/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("progress").closest("[aria-live]")).toHaveAttribute(
+      "aria-live",
+      "polite",
+    );
+    expect(screen.getByTestId("progress")).toHaveTextContent("Loading the tool");
+    expect(mocks.reloadDocument).toHaveBeenCalledOnce();
+  });
+
+  it("warms nothing, because no file can arrive in this document", async () => {
+    arrivedFromHome();
+    const user = userEvent.setup();
+    render(<ToolClient />);
+
+    // Everything a visitor could do to warm the drop zone, with none there.
+    await user.tab();
+    await user.hover(screen.getByTestId("progress"));
+
+    expect(mocks.warmEngine).not.toHaveBeenCalled();
+    expect(mocks.prefetchEntitlement).not.toHaveBeenCalled();
+  });
+
+  it("runs before the support check, so nothing here is trusted first", () => {
+    arrivedFromHome();
+    mocks.getSupport.mockReturnValue(
+      Object.freeze({ supported: false, missing: ["webassembly"] }),
+    );
+    render(<ToolClient />);
+
+    expect(screen.queryByTestId("unsupported")).not.toBeInTheDocument();
+    expect(screen.getByTestId("progress")).toHaveTextContent("Loading the tool");
+    expect(mocks.reloadDocument).toHaveBeenCalledOnce();
+  });
+
+  it("offers the drop zone as usual in a document loaded at /tool", () => {
+    render(<ToolClient />);
+
+    expect(screen.getByTestId("file-input")).toBeInTheDocument();
+    expect(mocks.reloadDocument).not.toHaveBeenCalled();
+  });
+
+  it("works as it always has when the browser does not say", () => {
+    mocks.loadedAt.mockReturnValue(null);
+    render(<ToolClient />);
+
+    expect(screen.getByTestId("file-input")).toBeInTheDocument();
+    expect(mocks.reloadDocument).not.toHaveBeenCalled();
+  });
+});
+
+describe("the tool rendered at the wrong address (spec 0003, INV-11)", () => {
+  /** A document loaded at `/` that still reads `/`: a reload would load it again. */
+  function renderedAtHome() {
+    mocks.loadedAt.mockReturnValue("/");
+    mocks.currentPath.mockReturnValue("/");
+  }
+
+  it("never reloads, because the reload would come back here forever", () => {
+    renderedAtHome();
+    render(<ToolClient />);
+
+    expect(mocks.reloadDocument).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("file-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("progress")).not.toBeInTheDocument();
+  });
+
+  it("warms nothing and asks for no entitlement", async () => {
+    renderedAtHome();
+    const user = userEvent.setup();
+    render(<ToolClient />);
+
+    await user.tab();
+    await user.hover(screen.getByTestId("wrong-url"));
+
+    expect(mocks.warmEngine).not.toHaveBeenCalled();
+    expect(mocks.prefetchEntitlement).not.toHaveBeenCalled();
+  });
+
+  it("says so, and offers a real page load into the tool", async () => {
+    renderedAtHome();
+    render(<ToolClient />);
+
+    expect(
+      screen.getByRole("heading", { level: 2, name: "This page cannot open a document" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("wrong-url")).toHaveTextContent(
+      "The tool only works at its own address.",
+    );
+
+    const link = screen.getByRole("link", { name: "Open the tool" });
+    expect(link).toHaveAttribute("href", "/tool");
+
+    // `next/link` takes a navigation over by preventing the click's default, so
+    // a click nothing prevented by the time it reaches `window` is a real page
+    // load. Prevented there, after reading, because jsdom cannot navigate.
+    let untouched = false;
+    const observe = (event: MouseEvent) => {
+      untouched = !event.defaultPrevented;
+      event.preventDefault();
+    };
+    window.addEventListener("click", observe);
+    try {
+      await userEvent.setup().click(link);
+    } finally {
+      window.removeEventListener("click", observe);
+    }
+    expect(untouched).toBe(true);
+  });
+
+  it("is not announced, because nothing the visitor did caused it", () => {
+    renderedAtHome();
+    render(<ToolClient />);
+
+    expect(screen.getByTestId("wrong-url")).not.toHaveAttribute("role");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("runs before the support check too", () => {
+    renderedAtHome();
+    mocks.getSupport.mockReturnValue(
+      Object.freeze({ supported: false, missing: ["webassembly"] }),
+    );
+    render(<ToolClient />);
+
+    expect(screen.queryByTestId("unsupported")).not.toBeInTheDocument();
+    expect(screen.getByTestId("wrong-url")).toBeInTheDocument();
+    expect(mocks.reloadDocument).not.toHaveBeenCalled();
   });
 });

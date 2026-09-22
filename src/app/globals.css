@@ -1,29 +1,139 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * The design system's tokens. Spec 0003.
+ *
+ * Every colour on screen is one of the roles below (INV-1). Tailwind's default
+ * palette is wiped first, so `bg-gray-500` pasted from anywhere generates
+ * nothing rather than a colour nobody checked, and the lint patterns in
+ * `eslint.config.mjs` reject the arbitrary value that would get round it.
+ *
+ * Each role is written as `--color-<role>: #rrggbb;` and nothing else, because
+ * `tests/unit/contrast.test.ts` reads this file and checks every pairing in the
+ * contrast contract against these exact values (AC-2). Another notation breaks
+ * that test loudly until its parser is extended.
+ */
+@theme {
+  --color-*: initial;
+
+  --color-canvas: #f8f7f4;
+  --color-surface: #ffffff;
+  --color-subtle: #f1efea;
+  --color-border: #e3e0d8;
+  --color-border-strong: #7d848b;
+
+  --color-ink: #16232b;
+  --color-ink-muted: #56616b;
+
+  --color-accent: #1f7a7a;
+  --color-accent-strong: #176465;
+  --color-accent-soft: #d5eeea;
+  --color-on-accent: #ffffff;
+  --color-focus: #135556;
+
+  --color-warning-bg: #fdf3e2;
+  --color-warning-border: #efcf95;
+  --color-warning-icon: #a8520a;
+
+  --color-info-bg: #eaf3fb;
+  --color-info-border: #c5dbef;
+  --color-info-icon: #1c5e9e;
+
+  --color-danger-bg: #fceeec;
+  --color-danger-border: #f0c3bd;
+  --color-danger-icon: #b3261e;
+  --color-danger-ink: #a8231c;
+
+  /*
+   * Nothing renders below 14px (INV-6), so the one size under it goes. Sizes
+   * are rem only, so the visitor's own font size setting scales every one.
+   */
+  --text-xs: initial;
+  --text-xs--line-height: initial;
+
+  --text-title: 1.875rem;
+  --text-title--line-height: 2.25rem;
+  --text-title--font-weight: 600;
+
+  --text-heading: 1.25rem;
+  --text-heading--line-height: 1.75rem;
+  --text-heading--font-weight: 600;
+
+  --text-lead: 1.125rem;
+  --text-lead--line-height: 1.75rem;
+
+  --text-body: 1rem;
+  --text-body--line-height: 1.5rem;
+
+  --text-small: 0.875rem;
+  --text-small--line-height: 1.25rem;
+
+  --container-narrow: 44rem;
+  --container-wide: 72rem;
 }
 
+/*
+ * One family (INV-6). `next/font` self hosts Inter and names it `--font-inter`
+ * on `<html>`, so the browser never asks another origin for it (AC-4, AC-20).
+ * Inline, so utilities resolve the variable where it is actually defined.
+ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/*
+ * The home headline. A utility rather than a theme size because it steps up at
+ * `md`, and a size in viewport units would stop the visitor's own zoom from
+ * scaling it (WCAG 1.4.4).
+ */
+@utility text-display {
+  font-size: 2.5rem;
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+
+  @variant md {
+    font-size: 3.5rem;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  /* The token, not a hardcoded stack: the layout loads Geist into it.
-     Feature 4 owns the real design system; this is the minimum that is
-     not actively wrong. */
-  font-family: var(--font-sans), system-ui, sans-serif;
+/* Built and tested now, first placed by feature 15. */
+@utility eyebrow {
+  font-size: var(--text-small);
+  line-height: var(--text-small--line-height);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+@layer base {
+  /* Light only. There is no dark theme to switch to (AC-1). */
+  :root {
+    color-scheme: light;
+  }
+
+  /*
+   * Focus is always visible (INV-5, AC-6). An outline rather than a box shadow,
+   * so it survives forced colours mode, and offset by 2px so the ring sits on
+   * the page background: `focus` against `accent` is only 1.68:1, but against
+   * every background it can land on it clears 7:1.
+   */
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  @media (forced-colors: active) {
+    /*
+     * A tinted background is dropped in forced colours, which would leave the
+     * highlighted match as bold text alone. The system's own highlight pair is
+     * the one colour the visitor chose, so it is the one used here (AC-17).
+     */
+    mark {
+      forced-color-adjust: none;
+      background-color: Highlight;
+      color: HighlightText;
+    }
+  }
 }

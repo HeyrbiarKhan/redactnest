@@ -1,4 +1,8 @@
+import { Lock } from "lucide-react";
 import type { Metadata } from "next";
+
+import { PageContainer } from "@/ui/page-container";
+import { SiteHeader } from "@/ui/site-header";
 
 import { ToolClient } from "./tool-client";
 
@@ -23,16 +27,33 @@ export const metadata: Metadata = {
 
 export default function ToolPage() {
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-4 py-16">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Redact a PDF</h1>
-        <p className="text-sm opacity-80">
-          Your document is opened in your own browser and never uploaded. Nothing on this
-          page can send it anywhere.
-        </p>
-      </header>
+    <>
+      <SiteHeader />
+      {/*
+        The skip link's target (spec 0003, AC-14). Focusable so the link can
+        move focus here, and the one element allowed to drop its outline,
+        because it is a place focus lands rather than a control.
+      */}
+      <main id="main" tabIndex={-1} className="flex-1 py-10 focus:outline-none sm:py-14">
+        <PageContainer width="narrow" className="flex flex-col gap-8">
+          <div className="flex flex-col gap-3">
+            <h1 className="text-title text-ink">Redact a PDF</h1>
+            <p className="flex items-start gap-2 text-ink-muted">
+              <Lock
+                aria-hidden="true"
+                className="mt-0.5 size-5 shrink-0 text-accent"
+                strokeWidth={1.75}
+              />
+              <span>
+                Your document is opened in your own browser and never uploaded. Nothing on
+                this page can send it anywhere.
+              </span>
+            </p>
+          </div>
 
-      <ToolClient />
-    </main>
+          <ToolClient />
+        </PageContainer>
+      </main>
+    </>
   );
 }
