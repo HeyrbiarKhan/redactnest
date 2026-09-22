@@ -87,6 +87,26 @@ Light only is the thin choice the scope row asks for, and it loses less than it 
 - **Each page renders its own header. The layout renders the skip link and the footer.** The two pages need different header actions. Runner up: route groups with two layouts, which is more structure than two pages justify.
 - **A callout takes its live region role from the caller.** Runner up: `role="alert"` built into the `danger` tone, which would announce a static error on page load and nest a second live region inside the existing polite status region, so some screen readers announce it twice.
 
+## Links into the tool (added 2026-09-22)
+
+The question was whether links into `/tool` should be full page loads. The wordmark on the way out already was (spec 0002, INV-6), but both buttons on `/` used `next/link`. That matters because a content security policy is a response header, and the browser applies it to the document it arrived with. A client side navigation fetches the next route's data and swaps the view inside the same document, so the tool page would run under the policy of `/`, with every script `/` started still alive. Today the two policies are the same, so nothing leaks yet. Features 10 and 11 are about to make them differ, and at that point the hole would be invisible to every test that only checks the `/tool` header.
+
+Options weighed:
+
+- **Keep `next/link`.** Instant navigation and a prefetched tool page. Rejected: it quietly defeats the tool route's policy the day a third party origin joins the standard one.
+- **Plain links only.** Closes the hole for the links we ship. Rejected as the whole answer, because the next `next/link`, a `router.push`, or a sign in library's client redirect would reopen it with nothing to notice.
+- **Plain links plus a load guard on the tool page (chosen).** The links are the first defence; the guard makes the rule hold for any way in, including ones written later by code we do not own.
+- **All of that plus a lint rule.** Rejected for now: it can only catch a literal `"/tool"` string, so it adds a rule without adding much certainty over the guard.
+
+**Calls made while writing, each with its runner up**:
+
+- **`reload` is an explicit prop on `Button`.** The choice is visible at the call site and serves any future link that crosses between the two policies. Runner up: `Button` spotting the tool path by itself, which nobody can forget but hides behaviour inside a generic primitive (and would need `src/ui` to know a route).
+- **The guard reads the Navigation Timing entry.** It records the URL that loaded the document and no client side navigation changes it. Runner up: reading `location.pathname` when the module first runs, which is unreliable because the router may update the URL before or after the chunk evaluates.
+- **The guard reloads rather than showing a message, when the address bar reads `/tool`.** That is the case it exists for (a client side navigation into the tool), the fix is always the same, and it needs nothing from the visitor. `location.reload()` adds no history entry. Runner up: `location.replace(TOOL_PATH)`, equivalent there but one more place spelling the path.
+- **At any other address, the guard fails closed instead of reloading (INV-11).** The first draft said the reload "cannot loop" because the reloaded document is at `/tool`, but that holds only when the address bar already reads `/tool`: a reload loads the address bar's URL, so a `ToolClient` rendered anywhere else (a second route, a locale prefix, a `basePath`) would reload forever, and only a code comment stood in the way. Options weighed: reload only at `/tool` and show a callout with a link otherwise (chosen: no loop is possible by construction, because an automatic load only ever targets `/tool` and a document loaded there passes); navigate with `location.replace(TOOL_PATH)` (no click needed, but it still loops if `/tool` ever redirects or a `basePath` arrives, and it hides the bug of the tool rendering on the wrong route); reload at most once, stopping when the navigation entry's type is already `reload` (wastes a load, and "was this a reload" is a harder rule to read than "is this `/tool`"). Browser storage as a loop counter was never an option (spec 0002, INV-3).
+- **Lint makes `src/app/tool/page.tsx` the only importer of `tool-client`.** It turns the comment into a rule, so the wrong URL state is caught at lint time. Unlike the literal `"/tool"` lint rejected above, an import is something lint sees exactly. Runner up: a unit test that searches the source tree for imports, which works but duplicates what the zones already do.
+- **A missing entry passes.** Runner up: failing closed as unsupported, which would turn away browsers that are not actually at risk, since the plain links still hold.
+
 ## Contrast measurements
 
 Measured with the WCAG 2.x relative luminance formula, the same one `tests/unit/contrast.test.ts` uses. The contract pairs are in [index.md](index.md). These are the extra measurements that shaped a rule rather than a value:
