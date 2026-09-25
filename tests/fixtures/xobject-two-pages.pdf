@@ -1,0 +1,69 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [7 0 R 9 0 R 11 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 400 40] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Length 58 >>
+stream
+BT /F1 12 Tf 4 20 Td (Case ref SECRET-77 in a form) Tj ET
+
+endstream
+endobj
+6 0 obj
+<<  /Length 30 >>
+stream
+q 1 0 0 1 72 600 cm /Fm1 Do Q
+
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /XObject << /Fm1 5 0 R >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<<  /Length 46 >>
+stream
+BT /F1 12 Tf 72 700 Td (A page between) Tj ET
+
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R >>  >> /Contents 8 0 R >>
+endobj
+10 0 obj
+<<  /Length 30 >>
+stream
+q 1 0 0 1 72 600 cm /Fm1 Do Q
+
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /XObject << /Fm1 5 0 R >> >> /Contents 10 0 R >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000128 00000 n 
+0000000225 00000 n 
+0000000320 00000 n 
+0000000526 00000 n 
+0000000607 00000 n 
+0000000770 00000 n 
+0000000867 00000 n 
+0000001005 00000 n 
+0000001087 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R >>
+startxref
+1252
+%%EOF

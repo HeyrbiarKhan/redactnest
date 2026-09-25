@@ -960,6 +960,29 @@ describe("the redaction path (spec 0004)", () => {
     expect(screen.queryByTestId("outcome")).not.toBeInTheDocument();
   });
 
+  /** Spec 0004, AC-25, with the lines *Settled here* fixes until feature 8. */
+  it.each([
+    [
+      "redaction-overreach",
+      "Removing what you ticked would also remove words you did not tick, so no file was made.",
+    ],
+    [
+      "replacement-text",
+      "A ticked item sits inside hidden replacement text that cannot be removed safely, so no file was made.",
+    ],
+  ] as const)(
+    "says what %s means after a run, and offers no file",
+    async (kind, words) => {
+      const run = sessionWithRun();
+      await openAndRedact(run);
+      await run.fail(new EngineError(kind));
+
+      expect(screen.getByRole("alert")).toHaveTextContent(words);
+      expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("outcome")).not.toBeInTheDocument();
+    },
+  );
+
   it("drops a reply that arrives after starting over", async () => {
     const run = sessionWithRun();
     await openAndRedact(run);

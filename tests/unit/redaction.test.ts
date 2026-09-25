@@ -5,6 +5,7 @@ import {
   CARRIER_KEYS,
   CATALOG_KEYS,
   EngineFailure,
+  lineBox,
   openDocumentWith,
   PAGE_KEYS,
   PIPELINE,
@@ -12,12 +13,14 @@ import {
   redactDocumentWith,
   RunCancelled,
   silenceEngineLog,
+  type Quad,
   type RedactionTarget,
 } from "@/engine";
 import { SANITIZED_KINDS } from "@/worker/protocol";
 
 import { bytesOf, fixture, onePixelPng } from "../support/bytes";
 import {
+  containsInAnyEncoding,
   decompressedBytes,
   documentText,
   everyKey,
@@ -28,8 +31,11 @@ import {
   mupdf,
   numbers,
   pageText,
+  pixelsInside,
   rawBytes,
+  render,
 } from "../support/mupdf";
+import { findTarget } from "../support/targets";
 
 /**
  * The redaction engine, driven with the real MuPDF in Node. Spec 0004.
@@ -474,38 +480,141 @@ describe("the structural self check", () => {
 });
 
 /**
- * Slice 1 of spec 0004 cleans but removes nothing, so a run asked to remove
- * something refuses rather than hand back a file that still holds it.
+ * Spec 0004, AC-4, AC-6 and AC-15. The happy path: an email address and a
+ * phone number ticked on an ordinary letter.
  */
-describe("a run asked to remove something, before removal exists", () => {
-  it("refuses with unsupported", async () => {
-    const target: RedactionTarget = {
-      page: 0,
-      quads: [[72, 80, 200, 80, 72, 95, 200, 95]],
-      start: 0,
-      end: 5,
-      kind: "email",
-    };
+describe("a run with two ticks", () => {
+  const EMAIL = "jane.doe@example.com";
+  const PHONE = "020 7946 0958";
+  let targets: RedactionTarget[];
+  let result: Awaited<ReturnType<typeof redact>>;
 
-    await expect(redact("two-pages.pdf", [target])).rejects.toMatchObject({
-      errorKind: "unsupported",
-    });
+  beforeAll(async () => {
+    const bytes = fixture("text-page.pdf");
+    targets = [
+      findTarget(bytes, 0, EMAIL, "email"),
+      findTarget(bytes, 0, PHONE, "phone"),
+    ];
+    result = await redact("text-page.pdf", targets);
+  });
+
+  it("removes both from the text, in both extraction modes", () => {
+    for (const options of ["", "ignore-actualtext"]) {
+      const text = inspect(result.output, (doc) => pageText(doc, 0, options));
+      expect(text).not.toContain(EMAIL);
+      expect(text).not.toContain("7946");
+    }
+  });
+
+  it("removes both from the file itself, in either string encoding", () => {
+    const bytes = decompressedBytes(result.output);
+
+    expect(containsInAnyEncoding(bytes, EMAIL)).toBe(false);
+    expect(containsInAnyEncoding(bytes, PHONE)).toBe(false);
+  });
+
+  it("keeps every word nobody ticked", () => {
+    const text = documentText(result.output);
+
+    expect(text).toContain("Staff record");
+    expect(text).toContain("Contact:");
+    expect(text).toContain(" or ");
+    expect(text).toContain("Keep this sentence exactly as it is");
+    expect(text).toContain("Page two has other words");
+  });
+
+  /** AC-6. The box is black on the match's own line box. */
+  it("draws a black box over each match's line box", () => {
+    const image = render(result.output, 0);
+
+    for (const quad of targets.flatMap((target) => target.quads)) {
+      // A pixel in from each edge, where anti aliasing cannot soften it.
+      const inner = pixelsInside(image, shrink(lineBox(quad), 0.5));
+      expect(inner.length).toBeGreaterThan(0);
+      expect(inner.every(({ column, row }) => image.isBlack(column, row))).toBe(true);
+    }
+  });
+
+  /** AC-15. Counted per kind, once the check has passed. */
+  it("counts one of each kind", () => {
+    expect(result.removedByType).toEqual({ email: 1, phone: 1 });
+    expect(result.sanitized).toEqual([]);
+  });
+});
+
+/** A level quad pulled in by `by` points on every side. */
+function shrink(quad: Quad, by: number): Quad {
+  const [x0, y0, x1, y1] = [
+    Math.min(quad[0], quad[4]),
+    Math.min(quad[1], quad[3]),
+    Math.max(quad[2], quad[6]),
+    Math.max(quad[5], quad[7]),
+  ];
+  return [x0 + by, y0 + by, x1 - by, y0 + by, x0 + by, y1 - by, x1 - by, y1 - by];
+}
+
+/**
+ * Spec 0004, AC-11 and INV-1. Two runs on one original with different ticks
+ * each reflect only their own: what the first run removed and the second did
+ * not tick is back in the second output.
+ */
+describe("two runs from one original", () => {
+  it("gives each run exactly its own ticks, and leaves the original alone", async () => {
+    const bytes = fixture("text-page.pdf");
+    const before = new Uint8Array(bytes).slice();
+    const email = findTarget(bytes, 0, "jane.doe@example.com", "email");
+    const phone = findTarget(bytes, 0, "020 7946 0958", "phone");
+
+    const first = await redactDocumentWith(mupdf, bytes, [email, phone]);
+    const second = await redactDocumentWith(mupdf, bytes, [email]);
+
+    expect(documentText(first.output)).not.toContain("020 7946 0958");
+    expect(documentText(second.output)).toContain("020 7946 0958");
+    expect(documentText(second.output)).not.toContain("jane.doe@example.com");
+    expect(second.removedByType).toEqual({ email: 1 });
+    expect(new Uint8Array(bytes)).toEqual(before);
   });
 });
 
 /**
+ * Spec 0004, AC-22 and AC-5. Detection and redaction read the same prepared
+ * page: a form value whose appearance MuPDF regenerates, and a visible typed
+ * note, are removed where the review found them.
+ */
+describe("a flattened form value and typed note", () => {
+  it.each(["Form field value", "Visible typed note"])(
+    "removes %s where the review found it, and keeps the other",
+    async (needle) => {
+      const bytes = fixture("metadata.pdf");
+
+      const { output } = await redactDocumentWith(mupdf, bytes, [
+        findTarget(bytes, 0, needle),
+      ]);
+
+      const text = documentText(output);
+      expect(text).not.toContain(needle);
+      expect(text).toContain(
+        needle === "Form field value" ? "Visible typed note" : "Form field value",
+      );
+      expect(containsInAnyEncoding(decompressedBytes(output), needle)).toBe(false);
+    },
+  );
+});
+
+/**
  * Spec 0004, AC-17. A run looks at `isCancelled` after opening its working
- * copy, after preparing it, after every page and after the rebuild, and stops
- * with `RunCancelled`, which is not a failure and carries no kind.
+ * copy, after preparing it, after every page of the recording loop and of the
+ * redaction loop, and after the rebuild, and stops with `RunCancelled`, which
+ * is not a failure and carries no kind.
  */
 describe("cancelling a run", () => {
-  it("checks after opening, preparing, every page and the rebuild", async () => {
+  it("checks after opening, preparing, every page of both loops and the rebuild", async () => {
     const isCancelled = vi.fn(() => false);
 
     await redact("metadata.pdf", [], { isCancelled });
 
-    // Two pages: open, prepare, page 1, page 2, rebuild.
-    expect(isCancelled).toHaveBeenCalledTimes(5);
+    // Two pages: open, prepare, record 1 and 2, redact 1 and 2, rebuild.
+    expect(isCancelled).toHaveBeenCalledTimes(7);
   });
 
   it("stops within a page, before anything is written", async () => {
@@ -580,8 +689,11 @@ describe("a document with an owner password", () => {
       }
     });
 
-    it("comes out unencrypted, unrestricted and readable", async () => {
-      const { output } = await redact(name);
+    it("comes out unencrypted, unrestricted, readable and redacted", async () => {
+      const bytes = fixture(name);
+      const { output } = await redactDocumentWith(mupdf, bytes, [
+        findTarget(bytes, 0, "jane.doe@example.com"),
+      ]);
 
       const cleaned = mupdf.Document.openDocument(output, "application/pdf");
       try {
@@ -597,7 +709,13 @@ describe("a document with an owner password", () => {
       inspect(output, (doc) => {
         expect(keysOf(doc.getTrailer())).not.toContain("Encrypt");
       });
-      expect(documentText(output)).toContain("Contact: jane.doe@example.com");
+      const text = documentText(output);
+      expect(text).toContain("Contact:");
+      expect(text).toContain("Owner password fixture");
+      expect(text).not.toContain("jane.doe@example.com");
+      expect(
+        containsInAnyEncoding(decompressedBytes(output), "jane.doe@example.com"),
+      ).toBe(false);
     });
   });
 });

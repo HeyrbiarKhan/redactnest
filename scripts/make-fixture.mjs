@@ -14,6 +14,30 @@ import { join } from "node:path";
 
 import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
+import {
+  actualText,
+  angledText,
+  carlito,
+  combining,
+  formXObjectPage,
+  imagesUnder,
+  kerning,
+  loneGlyphs,
+  ocrAligned,
+  ocrBare,
+  ocrMisaligned,
+  offsetCropBox,
+  outlined,
+  rotatedPage,
+  sharedXObject,
+  singleSpacing,
+  superscript,
+  textPage,
+  twoLines,
+  watermark,
+  xObjectTwice,
+  xObjectTwoPages,
+} from "./lib/redaction-fixtures.mjs";
 
 /**
  * Two pages on purpose:
@@ -306,6 +330,29 @@ const FIXTURES = [
   ["owner-rc4.pdf", ownerPassword("rc4"), "owner password, 128 bit RC4"],
   ["owner-aes128.pdf", ownerPassword("aes-128"), "owner password, AES-128"],
   ["owner-aes256.pdf", ownerPassword("aes-256"), "owner password, AES-256"],
+  // Spec 0004, slice 2: the fixture matrix for real removal.
+  ["text-page.pdf", textPage(), "an email and a phone number to tick"],
+  ["single-spacing.pdf", singleSpacing(), "12pt and 14pt leading, Helvetica and Courier"],
+  ["carlito.pdf", carlito(), "Carlito: single spacing and kerning"],
+  ["kerning.pdf", kerning(), "neighbours kerned 80 to 300 thousandths into a match"],
+  ["two-lines.pdf", twoLines(), "a match split across two lines"],
+  ["rotated-page.pdf", rotatedPage(), "a page rotated 90 degrees"],
+  ["angled-text.pdf", angledText(), "text drawn at 30 degrees"],
+  ["offset-cropbox.pdf", offsetCropBox(), "a crop box away from the origin"],
+  ["form-xobject.pdf", formXObjectPage(), "a match inside a form XObject"],
+  ["shared-xobject.pdf", sharedXObject(), "a form XObject in shared resources"],
+  ["xobject-two-pages.pdf", xObjectTwoPages(), "a form XObject drawn on pages 1 and 3"],
+  ["xobject-twice.pdf", xObjectTwice(), "a form XObject drawn twice on one page"],
+  ["ocr-aligned.pdf", ocrAligned(), "a scan with a Tesseract style text layer"],
+  ["ocr-misaligned.pdf", ocrMisaligned(), "the same, text layer shifted"],
+  ["ocr-bare.pdf", ocrBare(), "the same scan without the match's ink"],
+  ["images-under.pdf", imagesUnder(), "an inline image and an image mask under matches"],
+  ["outlined.pdf", outlined(), "a match drawn as outlines over invisible text"],
+  ["lone-glyphs.pdf", loneGlyphs(), "a lone . and a lone i"],
+  ["watermark.pdf", watermark(), "a diagonal watermark crossing a match"],
+  ["superscript.pdf", superscript(), "a superscript inside a match's line box"],
+  ["combining.pdf", combining(), "a match holding a combining mark"],
+  ["actual-text.pdf", actualText(), "replacement text spans, exact, wider and differing"],
 ];
 
 const outDir = join(process.cwd(), "tests", "fixtures");

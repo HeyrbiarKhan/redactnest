@@ -9,9 +9,9 @@ import { EngineFailure } from "./failure";
  *
  * A named engine constant, deliberately not a config value. It is a rule about
  * the file format rather than a cap on the visitor, and an environment variable
- * would let a typo set it to 0 and switch the check off. It is one of two
- * deliberate exceptions to "every size limit comes from `src/config`"; the other
- * is `TARGET_PADDING_RATIO`.
+ * would let a typo set it to 0 and switch the check off. It is a deliberate
+ * exception to "every size limit comes from `src/config`", with the target
+ * geometry constants in `geometry.ts` and the self check's in `characters.ts`.
  */
 export const PDF_HEADER_WINDOW = 1024;
 

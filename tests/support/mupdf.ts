@@ -65,6 +65,31 @@ export function decompressedBytes(bytes: ArrayBuffer): string {
   });
 }
 
+/**
+ * One page's drawing instructions, decompressed, one byte per character: every
+ * content stream the page lists, joined. For a byte search that must not see
+ * what other pages still say.
+ */
+export function pageContent(bytes: ArrayBuffer, index: number): string {
+  return inspect(bytes, (doc) => {
+    const contents = doc.findPage(index).get("Contents");
+    const streams: PDFObject[] = [];
+    if (contents.isArray()) contents.forEach((part) => streams.push(part));
+    else streams.push(contents);
+
+    return streams
+      .map((part) => {
+        const buffer = part.readStream();
+        try {
+          return Buffer.from(buffer.asUint8Array()).toString("latin1");
+        } finally {
+          buffer.destroy();
+        }
+      })
+      .join("\n");
+  });
+}
+
 /** The raw file, one byte per character, without MuPDF touching it. */
 export function rawBytes(bytes: ArrayBuffer): string {
   return Buffer.from(bytes).toString("latin1");
@@ -141,4 +166,237 @@ export function numbers(obj: PDFObject): number[] {
   const values: number[] = [];
   obj.forEach((value) => values.push(value.asNumber()));
   return values;
+}
+
+/** Eight numbers, upper left, upper right, lower left, lower right. */
+export type Corners = readonly number[];
+
+/**
+ * Is `(x, y)` inside a convex quad, edges included? Written here rather than
+ * borrowed from the engine, for the reason at the top of this file.
+ */
+export function inside(quad: Corners, x: number, y: number): boolean {
+  const ring = [0, 2, 6, 4].map((at) => [quad[at], quad[at + 1]]);
+  let sign = 0;
+  for (let index = 0; index < 4; index += 1) {
+    const [ax, ay] = ring[index];
+    const [bx, by] = ring[(index + 1) % 4];
+    const side = (bx - ax) * (y - ay) - (by - ay) * (x - ax);
+    if (side === 0) continue;
+    if (sign === 0) sign = Math.sign(side);
+    else if (Math.sign(side) !== sign) return false;
+  }
+  return true;
+}
+
+/** A page rendered in RGB, and where each pixel's centre sits on the page. */
+export interface Render {
+  readonly pixels: Uint8ClampedArray;
+  readonly width: number;
+  readonly height: number;
+  /** Pixel centres as page points, in the same space `page.search()` uses. */
+  point(column: number, row: number): readonly [number, number];
+  /** The column and row whose pixel holds a page point, unclamped. */
+  pixelAt(x: number, y: number): readonly [number, number];
+  /** Is this pixel ink: any channel below 128 (spec 0004, *How the pixel and ink tests measure*)? */
+  isInk(column: number, row: number): boolean;
+  /** Is this pixel black: every channel below 64? */
+  isBlack(column: number, row: number): boolean;
+}
+
+/** Render a page at `scale` times its size, 4 by default, as the spec measures. */
+export function render(bytes: ArrayBuffer, index: number, scale = 4): Render {
+  return inspect(bytes, (doc) => {
+    const page = doc.loadPage(index);
+    try {
+      const pixmap = page.toPixmap(
+        [scale, 0, 0, scale, 0, 0],
+        mupdf.ColorSpace.DeviceRGB,
+        false,
+        true,
+      );
+      try {
+        const pixels = pixmap.getPixels().slice();
+        const [x, y, stride, n] = [
+          pixmap.getX(),
+          pixmap.getY(),
+          pixmap.getStride(),
+          pixmap.getNumberOfComponents(),
+        ];
+        const channel = (column: number, row: number, c: number) =>
+          pixels[row * stride + column * n + c];
+        const anyChannel = (
+          column: number,
+          row: number,
+          test: (value: number) => boolean,
+        ) => [0, 1, 2].some((c) => test(channel(column, row, c)));
+        return {
+          pixels,
+          width: pixmap.getWidth(),
+          height: pixmap.getHeight(),
+          point: (column, row) => [(x + column + 0.5) / scale, (y + row + 0.5) / scale],
+          pixelAt: (px, py) => [Math.floor(px * scale - x), Math.floor(py * scale - y)],
+          isInk: (column, row) => anyChannel(column, row, (value) => value < 128),
+          isBlack: (column, row) => !anyChannel(column, row, (value) => value >= 64),
+        };
+      } finally {
+        pixmap.destroy();
+      }
+    } finally {
+      page.destroy();
+    }
+  });
+}
+
+/**
+ * Every pixel of a render whose centre lies inside `quad`. Only the pixels
+ * under the quad's bounds are tested, so a 4 times page stays quick.
+ */
+export function pixelsInside(
+  image: Render,
+  quad: Corners,
+): { column: number; row: number }[] {
+  const xs = [quad[0], quad[2], quad[4], quad[6]];
+  const ys = [quad[1], quad[3], quad[5], quad[7]];
+  const [fromColumn, fromRow] = image.pixelAt(Math.min(...xs), Math.min(...ys));
+  const [toColumn, toRow] = image.pixelAt(Math.max(...xs), Math.max(...ys));
+
+  const found: { column: number; row: number }[] = [];
+  for (
+    let row = Math.max(0, fromRow);
+    row <= Math.min(image.height - 1, toRow);
+    row += 1
+  ) {
+    for (
+      let column = Math.max(0, fromColumn);
+      column <= Math.min(image.width - 1, toColumn);
+      column += 1
+    ) {
+      const [x, y] = image.point(column, row);
+      if (inside(quad, x, y)) found.push({ column, row });
+    }
+  }
+  return found;
+}
+
+/**
+ * Visit every pixel of every image drawn on a page, with its centre on the page
+ * and its colour in RGB (an image mask reports black where it paints and white
+ * where it does not). Decoded straight from the images, not rendered, so a box
+ * drawn over an image cannot hide what the image itself still holds.
+ */
+export function forEachImagePixel(
+  bytes: ArrayBuffer,
+  index: number,
+  visit: (x: number, y: number, rgb: readonly [number, number, number]) => void,
+): void {
+  inspect(bytes, (doc) => {
+    const page = doc.loadPage(index);
+    const stext = page.toStructuredText("preserve-images");
+    try {
+      stext.walk({
+        onImageBlock(_bbox, [a, b, c, d, e, f], image) {
+          const decoded = image.toPixmap();
+          const mask = image.getImageMask();
+          const pixmap = mask
+            ? decoded
+            : decoded.convertToColorSpace(mupdf.ColorSpace.DeviceRGB, false);
+          const [width, height, stride, n] = [
+            pixmap.getWidth(),
+            pixmap.getHeight(),
+            pixmap.getStride(),
+            pixmap.getNumberOfComponents(),
+          ];
+          const pixels = pixmap.getPixels();
+          for (let row = 0; row < height; row += 1) {
+            for (let column = 0; column < width; column += 1) {
+              const u = (column + 0.5) / width;
+              const v = (row + 0.5) / height;
+              const at = row * stride + column * n;
+              const rgb: [number, number, number] = mask
+                ? pixels[at] === 0
+                  ? [255, 255, 255]
+                  : [0, 0, 0]
+                : [pixels[at], pixels[at + 1], pixels[at + 2]];
+              visit(a * u + c * v + e, b * u + d * v + f, rgb);
+            }
+          }
+          if (pixmap !== decoded) pixmap.destroy();
+          decoded.destroy();
+          image.destroy();
+        },
+      });
+    } finally {
+      stext.destroy();
+      page.destroy();
+    }
+  });
+}
+
+/** A filled vector path: its colour and its bounds on the page. */
+export interface FilledPath {
+  readonly color: readonly number[];
+  readonly bounds: readonly [number, number, number, number];
+}
+
+/** Every filled vector path a page draws, found by running it through a device. */
+export function filledPaths(bytes: ArrayBuffer, index: number): FilledPath[] {
+  const found: FilledPath[] = [];
+  inspect(bytes, (doc) => {
+    const page = doc.loadPage(index);
+    const device = new mupdf.Device({
+      fillPath(path, _evenOdd, [a, b, c, d, e, f], _colorspace, color) {
+        const xs: number[] = [];
+        const ys: number[] = [];
+        const add = (x: number, y: number) => {
+          xs.push(a * x + c * y + e);
+          ys.push(b * x + d * y + f);
+        };
+        path.walk({
+          moveTo: add,
+          lineTo: add,
+          curveTo: (_1, _2, _3, _4, x, y) => add(x, y),
+        });
+        found.push({
+          color: [...color],
+          bounds: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)],
+        });
+      },
+    });
+    try {
+      page.run(device, [1, 0, 0, 1, 0, 0]);
+    } finally {
+      device.close();
+      device.destroy();
+      page.destroy();
+    }
+  });
+  return found;
+}
+
+/**
+ * Every character of a page that is not whitespace, with its origin, in the
+ * given extraction mode.
+ */
+export function pageCharacters(
+  bytes: ArrayBuffer,
+  index: number,
+  options = "",
+): { char: string; x: number; y: number }[] {
+  return inspect(bytes, (doc) => {
+    const page = doc.loadPage(index);
+    const stext = page.toStructuredText(options);
+    const found: { char: string; x: number; y: number }[] = [];
+    try {
+      stext.walk({
+        onChar(char, [x, y]) {
+          if (!/\s/u.test(char)) found.push({ char, x, y });
+        },
+      });
+    } finally {
+      stext.destroy();
+      page.destroy();
+    }
+    return found;
+  });
 }

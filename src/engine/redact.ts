@@ -1,29 +1,47 @@
-import type { Buffer as MuBuffer, Document, PDFDocument } from "mupdf";
+import type { Buffer as MuBuffer, Document, PDFDocument, PDFPage } from "mupdf";
 
 import type { DetectorKind } from "@/worker/protocol";
 
+import { recordPage, targetArea, type PageRecord } from "./characters";
 import { EngineFailure, RunCancelled } from "./failure";
+import { lineBox, paddedArea, removalBand } from "./geometry";
 import { takeInventory } from "./inventory";
 import { loadEngine, type MuPdf } from "./load";
+import { boxPass, paddedPass, textPass, type Pass } from "./passes";
 import { prepareDocument } from "./prepare";
 import { graftPages, stripToAllowlist, sweepCarriers, WRITE_OPTIONS } from "./rebuild";
-import { structureIsClean } from "./self-check";
-import type { RedactionResult, RedactionTarget, RunHooks } from "./types";
+import { checkOutput } from "./self-check";
+import { targetsByPage, validateTargets } from "./targets";
+import type { Quad, RedactionResult, RedactionTarget, RunHooks } from "./types";
 
 /**
- * The steps a run takes that a test needs to be able to leave out.
+ * The steps a run takes that a test needs to be able to change.
  *
- * Spec 0004 proves the self check fires by running the pipeline with a step
- * skipped and watching the run fail. A parameter with a frozen default, rather
- * than a setter, so the walled module holds no mutable hook and the worker can
- * only ever run the real thing.
+ * Spec 0004 proves each part of the self check fires by running the pipeline
+ * with a step left out or changed and watching the run fail: the text pass
+ * skipped leaves a glyph, the padded pass skipped leaves scan ink, removal on
+ * the exact quads takes the lines around a target, the sweep skipped leaves a
+ * carrier. A parameter with a frozen default, rather than a setter, so the
+ * walled module holds no mutable hook and the worker can only ever run the
+ * real thing.
  */
 export interface Pipeline {
   /** The carrier sweep over the rebuilt document (`rebuild.ts`). */
   readonly sweepCarriers: (out: PDFDocument) => void;
+  /** The pass that removes text (`passes.ts`). */
+  readonly textPass: Pass;
+  /** The pass that blanks pixels and removes covered line art (`passes.ts`). */
+  readonly paddedPass: Pass;
+  /** The area text is removed on, from a target quad (`geometry.ts`). */
+  readonly removalArea: (quad: Quad) => Quad;
 }
 
-export const PIPELINE: Pipeline = Object.freeze({ sweepCarriers });
+export const PIPELINE: Pipeline = Object.freeze({
+  sweepCarriers,
+  textPass,
+  paddedPass,
+  removalArea: removalBand,
+});
 
 /**
  * Redact a document and hand back a file the engine has proved clean.
@@ -49,7 +67,10 @@ export async function redactDocument(
  * The pipeline order is fixed (spec 0004, *State transitions*). The inventory
  * comes before preparing, or flattened annotations would no longer be found.
  * Preparing comes before any Redact annotation is added, or the flatten would
- * bake the markers into the page.
+ * bake the markers into the page. Targets are checked on the prepared copy,
+ * the page detection read. Every page is recorded before any page is
+ * redacted, or a pass that changes a resource shared with a later page would
+ * change that page's record too.
  *
  * All or nothing (AC-14). Every native object this opens is destroyed on every
  * path out, and nothing is returned unless the self check passed on the exact
@@ -63,14 +84,7 @@ export async function redactDocumentWith(
   pipeline: Pipeline = PIPELINE,
 ): Promise<RedactionResult> {
   const { onPhase, isCancelled } = hooks;
-
-  // Slice 1 of spec 0004 cleans a file but removes nothing. Until the exact
-  // pass and the target half of the self check land together, a run that was
-  // asked to remove something refuses, so no build ever hands back a file that
-  // was asked to remove text and did not.
-  if (targets.length > 0) {
-    throw new EngineFailure("unsupported");
-  }
+  const pages = targetsByPage(targets);
 
   /**
    * A yield, then a look at whether the run should stop. Spec 0004, AC-17.
@@ -97,7 +111,24 @@ export async function redactDocumentWith(
     prepareDocument(mupdf, work);
     await checkpoint();
 
+    validateTargets(work, pages);
+
+    // The character record: every page, both extraction modes, before a
+    // single page is redacted (INV-12). Pages with no target are recorded
+    // too, so damage to a page nobody ticked is caught as well. Held only for
+    // this run, and dropped with it.
+    const record: PageRecord[] = [];
     for (let index = 0; index < sourcePageCount; index += 1) {
+      const areas = (pages.get(index) ?? []).flatMap((target) =>
+        target.quads.map(targetArea),
+      );
+      record.push(onPage(work, index, (page) => recordPage(page, areas)));
+      await checkpoint();
+    }
+
+    for (let index = 0; index < sourcePageCount; index += 1) {
+      const onThisPage = pages.get(index);
+      if (onThisPage) redactPage(mupdf, work, index, onThisPage, pipeline);
       // Every page is visited, with a target or without, so even an empty run
       // notices a cancel within one page of work.
       await checkpoint();
@@ -126,8 +157,9 @@ export async function redactDocumentWith(
     const output = takeOutput(written);
 
     onPhase?.("verifying");
-    if (!selfCheckPasses(mupdf, output, sourcePageCount)) {
-      throw new EngineFailure("redaction-incomplete");
+    const failure = checkOutput(mupdf, output, record, pages);
+    if (failure !== null) {
+      throw new EngineFailure(failure);
     }
 
     return {
@@ -138,6 +170,47 @@ export async function redactDocumentWith(
   } finally {
     work?.destroy();
     out?.destroy();
+  }
+}
+
+/** Load a page, read it, and hand it back to MuPDF whatever happens. */
+function onPage<T>(doc: PDFDocument, index: number, read: (page: PDFPage) => T): T {
+  const page = doc.loadPage(index);
+  try {
+    return read(page);
+  } finally {
+    page.destroy();
+  }
+}
+
+/**
+ * The three passes over one page, in their fixed order: text on the removal
+ * bands, then pixels and covered line art on the padded areas, then the box on
+ * the line boxes (spec 0004, *Redaction settings*).
+ *
+ * A throw from MuPDF while a pass runs is `unsupported`: the page is a shape
+ * the engine could not redact, which is different from a redaction it could not
+ * prove.
+ */
+function redactPage(
+  mupdf: MuPdf,
+  work: PDFDocument,
+  index: number,
+  targets: readonly RedactionTarget[],
+  pipeline: Pipeline,
+): void {
+  const areas = (area: (quad: Quad) => Quad) =>
+    targets.map((target) => target.quads.map(area));
+
+  try {
+    onPage(work, index, (page) => {
+      pipeline.textPass(mupdf, page, areas(pipeline.removalArea));
+      pipeline.paddedPass(mupdf, page, areas(paddedArea));
+      boxPass(mupdf, page, areas(lineBox));
+    });
+  } catch (failure) {
+    if (failure instanceof EngineFailure) throw failure;
+    throw new EngineFailure("unsupported");
   }
 }
 
@@ -176,29 +249,6 @@ function takeOutput(written: MuBuffer): ArrayBuffer {
     return written.asUint8Array().slice().buffer;
   } finally {
     written.destroy();
-  }
-}
-
-/**
- * Reopen the written output and check it. The document opened for the check is
- * destroyed before this returns, whatever it finds.
- */
-function selfCheckPasses(
-  mupdf: MuPdf,
-  output: ArrayBuffer,
-  sourcePageCount: number,
-): boolean {
-  let check: Document | null = null;
-
-  try {
-    check = mupdf.Document.openDocument(output, "application/pdf");
-    const pdf = check.asPDF();
-    return pdf !== null && structureIsClean(pdf, sourcePageCount);
-  } catch {
-    // An output MuPDF cannot even reopen is an output nobody can vouch for.
-    return false;
-  } finally {
-    check?.destroy();
   }
 }
 

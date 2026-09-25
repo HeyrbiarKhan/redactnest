@@ -38,7 +38,9 @@ export interface RedactionTarget {
   readonly page: number;
   /**
    * In the page space `page.search()` uses, on the prepared page (spec 0004,
-   * AC-22). The exact pass removes and boxes exactly these.
+   * AC-22), one per line the match covers. The engine derives the removal band,
+   * the line box and the padded area from each (`geometry.ts`); none of the
+   * passes uses these quads as they stand.
    */
   readonly quads: readonly Quad[];
   /** Offsets into the page's extracted text, for matches broken across runs. */
@@ -49,6 +51,13 @@ export interface RedactionTarget {
    * the main thread naming anything (spec 0004).
    */
   readonly kind: DetectorKind;
+  /**
+   * The match exactly as detection extracted it, so the engine can prove the
+   * quads really surround it before removing anything (spec 0004, AC-27). A
+   * target whose quads hold other text is refused rather than redacted.
+   * Document text: worker private like the rest of the target, never logged.
+   */
+  readonly text: string;
 }
 
 /**
