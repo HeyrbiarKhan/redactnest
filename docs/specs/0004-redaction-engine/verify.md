@@ -70,3 +70,21 @@ Several steps open the output in a second reader. Use at least two of: Acrobat R
 - AC-22 detection and redaction read the same prepared page · metadata fixture in the engine suite and by hand
 - AC-23 replacement cancels a run and waits for it · worker gated test, manual replacement during a heavy run
 - AC-24 MuPDF says nothing to the console · engine log test, browser quiet console check, manual devtools
+
+## Update from /develop · 2026-09-25
+
+_Slices 1 and 3 are built, and slice 2's owner password fixtures. Slice 2's removal (tasks 8 to 11) is not built: it waits on `/architect` (see the two findings below). Until it lands, `redactDocument` still refuses any ticked target with `unsupported`, so no file that was asked to remove text and did not can leave the tool._
+
+### Where the checks live now
+
+- [ ] `pnpm test -- engine.test` → a PNG, a text file, a docx, an empty file and a marker starting at byte 1020 are `not-pdf` with `loading-engine` never reported, and a marker at byte 1019 reaches the engine; the header window boundary cases → AC-1, value sourcing: header verdict
+- [ ] `pnpm test -- redaction` → the refusals with real MuPDF (1019 opens, 1020 and a PNG are `not-pdf`, a PNG carrying `%PDF-` in a text chunk is `corrupt`, both layered fixtures are `hidden-layers` before `inspecting`); the prepare step; the cleaning run over the metadata fixture; phases; the untouched original; the structural self check firing with the sweep skipped; cancel checks after open, prepare, every page and the rebuild; the RC4, AES-128 and AES-256 fixtures coming out unencrypted and unrestricted → AC-1, AC-2, AC-3, AC-7, AC-8, AC-9, AC-10, AC-12, AC-13, AC-14, AC-15, AC-16, AC-17, AC-22
+- [ ] `pnpm test -- engine-log` → with a spy installed before MuPDF loads: MuPDF prints by default (the canary), a recording log receives the lines from opening, flattening and redacting the damaged fixture, and with the engine's silencer nothing reaches the console → AC-24
+- [ ] `pnpm test:e2e cancel.spec.ts` → the browser cancel test lives here, not in `engine.spec.ts`. It builds the heavy 50 page fixture itself (it is not committed), so for the manual cancel steps above, run this test or use any 50 page PDF with a large image on every page → AC-17, AC-18, AC-19
+- [ ] `pnpm test:e2e design-system.spec.ts` → the tool page's axe, forced colours, reflow and text spacing checks now include the `complete` state, and the keyboard walk meets Redact before Start over → AC-19, spec 0003 AC-6 and AC-18
+
+### Waiting on /architect (slice 2, not built)
+
+- [ ] The ActualText case → an ActualText span that wraps more than the match keeps its replacement string when only the match's glyphs are removed, so ordinary extraction of the output still returns the match, and the target self check as specified does not see it (MuPDF places those characters just outside the target quad) → AC-4, AC-13
+- [ ] Adjacent lines → at ordinary single spacing (12pt text on 12 to 14pt leading) the exact pass removes unticked glyphs on the lines above and below a target, because `page.search()` quads are about 1.37 em tall and MuPDF removes any glyph that touches one. Nothing in the self check notices over removal → AC-4, AC-22
+- [ ] Every step marked (after feature 6), the geometric matrix, the target self check tests, the two run test and `TARGET_PADDING_RATIO` in the `grep` step wait for the same decision → AC-4, AC-5, AC-6, AC-11, AC-13
