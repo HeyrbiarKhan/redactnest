@@ -26,6 +26,11 @@
  * permission revoked between being chosen and being read. It never crosses the
  * boundary. It lives in this set anyway so feature 8 writes copy for one list
  * rather than two (spec 0002).
+ *
+ * Spec 0004 added the last three. `not-pdf` is judged from the bytes before the
+ * engine is fetched (AC-1), `hidden-layers` refuses a document with layers a
+ * viewer can switch (AC-3), and `redaction-incomplete` is the engine refusing to
+ * hand back a file its own self check could not prove clean (AC-13).
  */
 export const ENGINE_ERROR_KINDS = [
   "engine-unavailable",
@@ -36,6 +41,9 @@ export const ENGINE_ERROR_KINDS = [
   "too-large",
   "too-many-pages",
   "file-unreadable",
+  "not-pdf",
+  "hidden-layers",
+  "redaction-incomplete",
 ] as const;
 
 export type EngineErrorKind = (typeof ENGINE_ERROR_KINDS)[number];
@@ -50,8 +58,10 @@ export function isEngineErrorKind(value: unknown): value is EngineErrorKind {
  * Phases a job reports as it advances. Feature 8 decides how they are shown.
  *
  * `checking-entitlement` covers the bounded wait when a file is chosen before
- * the prefetched entitlement has resolved. Features 5 and 6 report `detecting`,
- * `redacting` and `writing`.
+ * the prefetched entitlement has resolved. Feature 6 reports `detecting`. A
+ * redaction run reports `redacting`, `writing` and then `verifying`, the last
+ * being the engine reopening its own output to prove it clean (spec 0004,
+ * AC-16).
  */
 export type ProgressPhase =
   | "checking-entitlement"
@@ -60,7 +70,8 @@ export type ProgressPhase =
   | "inspecting"
   | "detecting"
   | "redacting"
-  | "writing";
+  | "writing"
+  | "verifying";
 
 /**
  * The kinds of sensitive pattern a detector can find.
@@ -80,7 +91,12 @@ export type DetectorKind = (typeof DETECTOR_KINDS)[number];
  * The list comes from feature 5's contract in the scope: no document info or XMP
  * metadata, no annotations, no form fields, no attachments, no bookmarks, no
  * hidden layers, no JavaScript, and no earlier versions left behind by
- * incremental saves. Feature 5 owns which of these it reports having run.
+ * incremental saves. Spec 0004 added page thumbnails and accessibility tags, the
+ * two further things the rebuild drops that a visitor would want to hear about.
+ *
+ * A run reports only the kinds its source actually carried, in this order
+ * (spec 0004, AC-15). `hidden-layers` is never reported in release 1, because a
+ * layered document is refused at open rather than cleaned.
  */
 export const SANITIZED_KINDS = [
   "document-info",
@@ -92,6 +108,8 @@ export const SANITIZED_KINDS = [
   "hidden-layers",
   "javascript",
   "incremental-versions",
+  "page-thumbnails",
+  "accessibility-tags",
 ] as const;
 
 export type SanitizedKind = (typeof SANITIZED_KINDS)[number];

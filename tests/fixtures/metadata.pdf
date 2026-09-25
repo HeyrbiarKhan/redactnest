@@ -1,0 +1,182 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /Lang (en-GB) /Metadata 20 0 R /Outlines 21 0 R /Names << /EmbeddedFiles 23 0 R /JavaScript 26 0 R >> /OpenAction 28 0 R /AA << /WC 28 0 R >> /AF [24 0 R] /AcroForm << /Fields [15 0 R] /NeedAppearances true /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 5 0 R >> >> >> /StructTreeRoot 29 0 R /MarkInfo << /Marked true >> /PageLabels << /Nums [0 << /S /r >>] >> /ViewerPreferences << /HideToolbar true >> /PieceInfo << /RedactNestFixture << /Private (catalog private data) >> >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> /XObject << /Im1 7 0 R >> >> /Contents 6 0 R /Annots [9 0 R 10 0 R 11 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R] /Thumb 8 0 R /Group << /S /Transparency /CS /DeviceRGB /I true >> /PieceInfo << /RedactNestFixture << /Private (page private data) >> >> /LastModified (D:20260101000000Z) /AA << /O 28 0 R >> /Metadata 19 0 R /StructParents 0 >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /CropBox [36 36 576 756] /BleedBox [30 30 582 762] /TrimBox [40 40 572 752] /ArtBox [50 50 562 742] /Rotate 90 /Resources << /Font << /F1 5 0 R >> >> /Contents 17 0 R /Group << /S /Transparency /CS /DeviceRGB >> >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<<  /Length 226 >>
+stream
+BT /F1 18 Tf 72 720 Td (Quarterly report) Tj ET
+BT /F1 12 Tf 72 690 Td (Contact: jane.doe@example.com or 020 7946 0958) Tj ET
+BT /F1 12 Tf 72 660 Td (Keep this sentence exactly as it is) Tj ET
+q 40 0 0 20 400 600 cm /Im1 Do Q
+
+endstream
+endobj
+7 0 obj
+<< /Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Metadata 18 0 R /Length 12 >>
+stream
+È((È((È((È((
+endstream
+endobj
+8 0 obj
+<< /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 12 >>
+stream
+((È((È((È((È
+endstream
+endobj
+9 0 obj
+<< /Type /Annot /Subtype /Link /Rect [72 686 300 704] /Border [0 0 0] /A << /S /URI /URI (https://example.com/secret-link) >> >>
+endobj
+10 0 obj
+<< /Type /Annot /Subtype /Text /Rect [500 700 520 720] /Contents (Private reviewer comment) /T (Reviewer Name) /Popup 11 0 R /Open false >>
+endobj
+11 0 obj
+<< /Type /Annot /Subtype /Popup /Rect [520 620 620 720] /Parent 10 0 R >>
+endobj
+12 0 obj
+<< /Type /Annot /Subtype /FileAttachment /Rect [540 740 556 756] /FS 24 0 R /Contents (Attached file) >>
+endobj
+13 0 obj
+<< /Type /Annot /Subtype /Redact /Rect [70 655 300 675] /QuadPoints [70 675 300 675 70 655 300 655] >>
+endobj
+14 0 obj
+<< /Type /Annot /Subtype /FreeText /Rect [72 560 400 590] /Contents (Hidden annotation text) /DA (/Helv 12 Tf 0 g) /F 2 >>
+endobj
+15 0 obj
+<< /Type /Annot /Subtype /Widget /FT /Tx /T (account_name) /V (Form field value) /Rect [72 500 300 520] /P 3 0 R /DA (/Helv 12 Tf 0 g) /F 4 >>
+endobj
+16 0 obj
+<< /Type /Annot /Subtype /FreeText /Rect [72 440 400 470] /Contents (Visible typed note) /DA (/Helv 12 Tf 0 g) /F 4 >>
+endobj
+17 0 obj
+<<  /Length 63 >>
+stream
+BT /F1 12 Tf 72 700 Td (Draft wording that was replaced) Tj ET
+
+endstream
+endobj
+18 0 obj
+<< /Type /Metadata /Subtype /XML /Length 39 >>
+stream
+<x:xmpmeta>image xmp secret</x:xmpmeta>
+endstream
+endobj
+19 0 obj
+<< /Type /Metadata /Subtype /XML /Length 38 >>
+stream
+<x:xmpmeta>page xmp secret</x:xmpmeta>
+endstream
+endobj
+20 0 obj
+<< /Type /Metadata /Subtype /XML /Length 59 >>
+stream
+<x:xmpmeta><dc:creator>Jane Secret</dc:creator></x:xmpmeta>
+endstream
+endobj
+21 0 obj
+<< /Type /Outlines /First 22 0 R /Last 22 0 R /Count 1 >>
+endobj
+22 0 obj
+<< /Title (Chapter with a secret title) /Parent 21 0 R /Dest [3 0 R /Fit] >>
+endobj
+23 0 obj
+<< /Names [(secret.txt) 24 0 R] >>
+endobj
+24 0 obj
+<< /Type /Filespec /F (secret.txt) /UF (secret.txt) /EF << /F 25 0 R >> /AFRelationship /Data >>
+endobj
+25 0 obj
+<< /Type /EmbeddedFile /Length 24 >>
+stream
+attached secret contents
+endstream
+endobj
+26 0 obj
+<< /Names [(init) 27 0 R] >>
+endobj
+27 0 obj
+<< /S /JavaScript /JS (app.alert\('document script'\);) >>
+endobj
+28 0 obj
+<< /S /JavaScript /JS (this.print\('open action'\);) >>
+endobj
+29 0 obj
+<< /Type /StructTreeRoot /K 30 0 R /ParentTree << /Nums [0 [30 0 R]] >> >>
+endobj
+30 0 obj
+<< /Type /StructElem /S /P /P 29 0 R /Pg 3 0 R /K 0 /Alt (Structure alt text) >>
+endobj
+31 0 obj
+<< /Title (Secret title) /Author (Jane Secret) /Producer (RedactNest fixture) >>
+endobj
+xref
+0 32
+0000000000 65535 f 
+0000000009 00000 n 
+0000000532 00000 n 
+0000000595 00000 n 
+0000001037 00000 n 
+0000001320 00000 n 
+0000001417 00000 n 
+0000001695 00000 n 
+0000001867 00000 n 
+0000001991 00000 n 
+0000002135 00000 n 
+0000002291 00000 n 
+0000002381 00000 n 
+0000002502 00000 n 
+0000002621 00000 n 
+0000002760 00000 n 
+0000002919 00000 n 
+0000003054 00000 n 
+0000003169 00000 n 
+0000003289 00000 n 
+0000003408 00000 n 
+0000003548 00000 n 
+0000003622 00000 n 
+0000003715 00000 n 
+0000003766 00000 n 
+0000003879 00000 n 
+0000003974 00000 n 
+0000004019 00000 n 
+0000004094 00000 n 
+0000004166 00000 n 
+0000004257 00000 n 
+0000004354 00000 n 
+trailer
+<< /Size 32 /Root 1 0 R /Info 31 0 R /ID [<52656461637446697874757265494430> <52656461637446697874757265494430>] >>
+startxref
+4451
+%%EOF
+17 0 obj
+<<  /Length 45 >>
+stream
+BT /F1 12 Tf 72 700 Td (Final wording) Tj ET
+
+endstream
+endobj
+31 0 obj
+<< /Title (Updated secret title) /Author (Jane Secret) /ModDate (D:20260201000000Z) >>
+endobj
+xref
+17 1
+0000005246 00000 n 
+31 1
+0000005343 00000 n 
+trailer
+<< /Size 32 /Root 1 0 R /Info 31 0 R /ID [<52656461637446697874757265494430> <52656461637446697874757265494431>] /Prev 4451 >>
+startxref
+5446
+%%EOF

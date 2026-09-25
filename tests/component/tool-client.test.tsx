@@ -13,12 +13,11 @@
  * the real detector would correctly refuse to run and the component would render
  * its "cannot run in this browser" panel instead of the tool.
  *
- * Two behaviors are only half reachable today, and deliberately so. Both the
- * replace confirm and the leave warning hang off `hasUnsavedWork`, which is only
- * true once a tick has been changed, a redaction is in flight, or a result has
- * not been downloaded. Features 5, 6 and 8 build the checklist and the redact
- * button that make those states reachable, so the halves that exist now are
- * tested here and the rest is recorded as owed in the report.
+ * Both the replace confirm and the leave warning hang off `hasUnsavedWork`,
+ * which is true once a tick has been changed, a redaction is in flight, or a
+ * result has not been downloaded. Spec 0004's Redact button made the last two
+ * reachable, and they are tested with the redaction path at the end of this
+ * file. A changed tick waits for the checklist features 6 and 8 build.
  */
 
 import { act, render, screen } from "@testing-library/react";
@@ -27,13 +26,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToolClient } from "@/app/tool/tool-client";
 import {
+  asMatchId,
   EngineError,
+  OperationCancelled,
   type DocumentSummary,
   type EntitlementSnapshot,
   type ProgressPhase,
+  type RedactionOutcome,
+  type ReviewMatch,
 } from "@/worker/protocol";
-import type { OpenedSession } from "@/worker/client";
+import type { OpenedSession, RedactedOutput } from "@/worker/client";
 import type { SupportReport } from "@/lib/support";
+
+import { expectNoAxeViolations } from "../setup/component";
 
 const mocks = vi.hoisted(() => ({
   /** Every listener `onEngineLost` handed back, so a test can fire the event. */
@@ -47,6 +52,7 @@ const mocks = vi.hoisted(() => ({
   loadedAt: vi.fn(),
   currentPath: vi.fn(),
   reloadDocument: vi.fn(),
+  offerDownload: vi.fn(),
 }));
 
 vi.mock("@/worker/client", () => ({
@@ -57,6 +63,12 @@ vi.mock("@/worker/client", () => ({
     mocks.lostListeners.add(listener);
     return () => mocks.lostListeners.delete(listener);
   },
+}));
+
+// The browser download itself (a blob URL and a click) is proved in a real
+// browser by `tests/e2e/engine.spec.ts`. Here it is the boundary.
+vi.mock("@/lib/download", () => ({
+  offerDownload: mocks.offerDownload,
 }));
 
 vi.mock("@/lib/entitlement", () => ({
@@ -435,7 +447,7 @@ describe("a worker that dies (AC-11)", () => {
 
     expect(screen.queryByTestId("lost")).not.toBeInTheDocument();
     expect(screen.getByTestId("error")).toHaveTextContent(
-      "This file could not be read as a PDF.",
+      "This PDF could not be read. It may be damaged.",
     );
   });
 });
@@ -748,5 +760,302 @@ describe("the tool rendered at the wrong address (spec 0003, INV-11)", () => {
     expect(screen.queryByTestId("unsupported")).not.toBeInTheDocument();
     expect(screen.getByTestId("wrong-url")).toBeInTheDocument();
     expect(mocks.reloadDocument).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Spec 0004, AC-19 and AC-20. The thin working path: Redact, Cancel, the one
+ * line outcome and Download.
+ *
+ * The output the page holds between a run and Download lives in a ref, which
+ * nothing outside the component can see. So "dropped" is asserted through what
+ * it would change: a Download that hands nothing over, or no Download at all.
+ */
+describe("the redaction path (spec 0004)", () => {
+  const MATCHES: readonly ReviewMatch[] = Object.freeze([
+    {
+      id: asMatchId("m1"),
+      type: "email",
+      page: 1,
+      text: "jane@example.com",
+      before: "Contact ",
+      after: " today",
+      tickedByDefault: true,
+    },
+    {
+      id: asMatchId("m2"),
+      type: "phone",
+      page: 1,
+      text: "020 7946 0958",
+      before: "or ",
+      after: ".",
+      tickedByDefault: false,
+    },
+  ]);
+
+  const OUTCOME: RedactionOutcome = Object.freeze<RedactionOutcome>({
+    pageCount: 2,
+    removedByType: { email: 2, phone: 1 },
+    pagesWithoutText: 1,
+    sanitized: ["document-info", "xmp-metadata", "annotations"],
+  });
+
+  /** A session whose redaction the test settles when it chooses. */
+  function sessionWithRun(matches: readonly ReviewMatch[] = []) {
+    let resolve!: (value: RedactedOutput) => void;
+    let reject!: (error: unknown) => void;
+    const session: OpenedSession = {
+      ...openedSession(),
+      matches,
+      redact: vi.fn(
+        () =>
+          new Promise<RedactedOutput>((settleWith, failWith) => {
+            resolve = settleWith;
+            reject = failWith;
+          }),
+      ),
+      cancel: vi.fn(() => reject(new OperationCancelled())),
+    };
+    return {
+      session,
+      finish: async (output = new ArrayBuffer(16), outcome = OUTCOME) => {
+        await act(async () => resolve({ output, outcome }));
+      },
+      fail: async (error: unknown) => {
+        await act(async () => reject(error));
+      },
+    };
+  }
+
+  async function openAndRedact(run: ReturnType<typeof sessionWithRun>): Promise<void> {
+    mocks.openSession.mockResolvedValue(run.session);
+    render(<ToolClient />);
+    await chooseFile(pdfFile());
+    await userEvent.setup().click(await screen.findByTestId("redact"));
+  }
+
+  it("offers Redact once the document is open, and nothing before", async () => {
+    mocks.openSession.mockImplementation(hangsAt("inspecting"));
+    render(<ToolClient />);
+    await chooseFile(pdfFile());
+    await screen.findByTestId("progress");
+
+    expect(screen.queryByTestId("redact")).not.toBeInTheDocument();
+  });
+
+  it("runs over the current ticks, by id and nothing else", async () => {
+    const run = sessionWithRun(MATCHES);
+    await openAndRedact(run);
+
+    // The detector's own recommendation seeds the ticks: m1 is, m2 is not.
+    expect(run.session.redact).toHaveBeenCalledWith(
+      [asMatchId("m1")],
+      expect.any(Object),
+    );
+  });
+
+  it("swaps Redact for Cancel and shows the phase while a run is under way", async () => {
+    const run = sessionWithRun();
+    mocks.openSession.mockResolvedValue(run.session);
+    run.session.redact = vi.fn(
+      (_ids, options?: { onProgress?: (phase: ProgressPhase) => void }) => {
+        options?.onProgress?.("verifying");
+        return new Promise<RedactedOutput>(() => {});
+      },
+    );
+    render(<ToolClient />);
+    await chooseFile(pdfFile());
+    await userEvent.setup().click(await screen.findByTestId("redact"));
+
+    expect(screen.queryByTestId("redact")).not.toBeInTheDocument();
+    expect(screen.getByTestId("cancel")).toBeInTheDocument();
+    expect(screen.getByTestId("progress")).toHaveTextContent("Checking your clean file");
+  });
+
+  it("shows the one line outcome and a Download button when the run completes", async () => {
+    const run = sessionWithRun();
+    await openAndRedact(run);
+    await run.finish();
+
+    expect(screen.getByTestId("outcome")).toHaveTextContent(
+      "Removed 3 items and stripped document info, XMP metadata and annotations.",
+    );
+    expect(screen.getByTestId("download")).toBeInTheDocument();
+    expect(screen.queryByTestId("cancel")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      { ...OUTCOME, removedByType: {}, sanitized: [] },
+      "Removed 0 items. There was nothing else to strip.",
+    ],
+    [
+      { ...OUTCOME, removedByType: { email: 1 }, sanitized: ["bookmarks"] },
+      "Removed 1 item and stripped bookmarks.",
+    ],
+    [
+      { ...OUTCOME, removedByType: {}, sanitized: ["javascript", "page-thumbnails"] },
+      "Removed 0 items and stripped JavaScript and page thumbnails.",
+    ],
+  ] as const)("words the outcome plainly: %j", async (outcome, expected) => {
+    const run = sessionWithRun();
+    await openAndRedact(run);
+    await run.finish(new ArrayBuffer(8), outcome as RedactionOutcome);
+
+    expect(screen.getByTestId("outcome")).toHaveTextContent(expected);
+  });
+
+  it("hands the output over under the output name, then takes Download away", async () => {
+    const output = new ArrayBuffer(32);
+    const run = sessionWithRun();
+    await openAndRedact(run);
+    await run.finish(output);
+
+    await userEvent.setup().click(screen.getByTestId("download"));
+
+    expect(mocks.offerDownload).toHaveBeenCalledTimes(1);
+    expect(mocks.offerDownload).toHaveBeenCalledWith(output, "report-redacted.pdf");
+    expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+    // Still complete, so the outcome stays and the document stays open.
+    expect(screen.getByTestId("outcome")).toBeInTheDocument();
+    expect(run.session.release).not.toHaveBeenCalled();
+    expect(mocks.releaseEngine).not.toHaveBeenCalled();
+  });
+
+  it("goes back to Redact, with no Download, when the run is cancelled", async () => {
+    const run = sessionWithRun();
+    await openAndRedact(run);
+
+    await userEvent.setup().click(screen.getByTestId("cancel"));
+
+    expect(run.session.cancel).toHaveBeenCalledTimes(1);
+    expect(await screen.findByTestId("redact")).toBeInTheDocument();
+    expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["not-pdf", "This file is not a PDF."],
+    ["hidden-layers", "layers that can be switched on and off"],
+  ] as const)(
+    "says what %s means when a document is refused at open",
+    async (kind, words) => {
+      mocks.openSession.mockRejectedValue(new EngineError(kind));
+      render(<ToolClient />);
+      await chooseFile(pdfFile());
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(words);
+    },
+  );
+
+  it("says a run could not be proved clean, and offers no file", async () => {
+    const run = sessionWithRun();
+    await openAndRedact(run);
+    await run.fail(new EngineError("redaction-incomplete"));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "could not confirm that everything was removed",
+    );
+    expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("outcome")).not.toBeInTheDocument();
+  });
+
+  it("drops a reply that arrives after starting over", async () => {
+    const run = sessionWithRun();
+    await openAndRedact(run);
+
+    await userEvent.setup().click(screen.getByTestId("start-over"));
+    await run.finish();
+
+    expect(screen.queryByTestId("outcome")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+    expect(screen.getByTestId("drop-area")).toBeInTheDocument();
+  });
+
+  it("drops a reply that arrives after a different file replaced the document", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const run = sessionWithRun();
+    await openAndRedact(run);
+
+    mocks.openSession.mockImplementation(hangsAt("opening"));
+    await chooseFile(pdfFile("second.pdf"));
+    await run.finish();
+
+    expect(screen.queryByTestId("outcome")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+  });
+
+  it("offers no Download once the worker is lost", async () => {
+    const run = sessionWithRun();
+    await openAndRedact(run);
+    await run.finish();
+
+    await fireEngineLost();
+
+    expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+    expect(screen.getByTestId("lost")).toBeInTheDocument();
+  });
+
+  it("hands nothing over once the page has been left", async () => {
+    const run = sessionWithRun();
+    await openAndRedact(run);
+    await run.finish();
+
+    await firePageHide();
+    await userEvent.setup().click(screen.getByTestId("download"));
+
+    expect(mocks.offerDownload).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Spec 0002's two halves that were owed until now. A finished run nobody has
+   * downloaded is unsaved work, so leaving warns and replacing asks.
+   */
+  it("warns on the way out while a finished file has not been downloaded", async () => {
+    const run = sessionWithRun();
+    await openAndRedact(run);
+    await run.finish();
+
+    expect(wouldWarnOnLeave()).toBe(true);
+
+    await userEvent.setup().click(screen.getByTestId("download"));
+
+    expect(wouldWarnOnLeave()).toBe(false);
+  });
+
+  it("asks before replacing a finished file nobody has downloaded", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const run = sessionWithRun();
+    await openAndRedact(run);
+    await run.finish();
+
+    await chooseFile(pdfFile("second.pdf"));
+
+    expect(confirm).toHaveBeenCalledTimes(1);
+    // Declined, so the finished file is still on offer.
+    expect(screen.getByTestId("download")).toBeInTheDocument();
+  });
+
+  /** Spec 0003's bar, held by the new steps too. */
+  it("has no accessibility violations while reviewing, running or complete", async () => {
+    const run = sessionWithRun();
+    mocks.openSession.mockResolvedValue(run.session);
+    const { container } = render(<ToolClient />);
+    await chooseFile(pdfFile());
+    await screen.findByTestId("redact");
+    await expectNoAxeViolations(container);
+
+    await userEvent.setup().click(screen.getByTestId("redact"));
+    await expectNoAxeViolations(container);
+
+    await run.finish();
+    await expectNoAxeViolations(container);
+  });
+
+  it("warns on the way out while a run is under way", async () => {
+    const run = sessionWithRun();
+    await openAndRedact(run);
+
+    expect(wouldWarnOnLeave()).toBe(true);
   });
 });

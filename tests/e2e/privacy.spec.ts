@@ -112,14 +112,22 @@ async function watchStorage(page: Page): Promise<void> {
   });
 }
 
-/** Everything the page asked the network for, in order. */
+/**
+ * Everything the page asked the network for, in order.
+ *
+ * Http and https only. A download is handed to the browser through a `blob:`
+ * URL, which names memory already inside the tab and goes nowhere, so it is not
+ * a request in the sense this file cares about (spec 0004, AC-21).
+ */
 function recordRequests(page: Page): Request[] {
   const requests: Request[] = [];
-  page.on("request", (request) => requests.push(request));
+  page.on("request", (request) => {
+    if (/^https?:/.test(request.url())) requests.push(request);
+  });
   return requests;
 }
 
-/** Drive the tool as far as a session currently goes: choose a file, open it. */
+/** Choose the fixture under the distinctive name, and wait for it to open. */
 async function openDocument(page: Page): Promise<void> {
   await page.getByTestId("file-input").setInputFiles({
     name: FILE_NAME,
@@ -128,6 +136,20 @@ async function openDocument(page: Page): Promise<void> {
   });
 
   await expect(page.getByTestId("page-count")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+}
+
+/**
+ * Drive a whole run, as far as a session goes: open, redact, download. Spec
+ * 0004, AC-21. Resolves once the browser has the file.
+ */
+async function redactAndDownload(page: Page): Promise<void> {
+  await openDocument(page);
+  await page.getByTestId("redact").click();
+  await expect(page.getByTestId("download")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+
+  const downloading = page.waitForEvent("download");
+  await page.getByTestId("download").click();
+  await (await downloading).path();
 }
 
 test("a document can be opened without anything being written down", async ({ page }) => {
@@ -264,6 +286,59 @@ test("the only thing the tool route asks its own server for is the entitlement",
   // AC-3. Everything else the route fetches is its own code and the engine, both
   // static assets. What is left is the one endpoint spec 0001 allows, and that
   // endpoint accepts no document data and returns none.
+  const dataRequests = requests
+    .map((request) => new URL(request.url()).pathname)
+    .filter((path) => path !== "/tool")
+    .filter((path) => !ASSET_PATHS.some((asset) => asset.test(path)));
+
+  expect([...new Set(dataRequests)]).toEqual(["/api/entitlement"]);
+});
+
+/**
+ * Spec 0004, AC-21. The proof above, carried through a whole run: open, redact
+ * and download. The redacted file comes back to the main thread and is handed
+ * to the browser, and still nothing is written down and nothing goes out.
+ */
+test("a full run, open to download, writes nothing down", async ({ page }) => {
+  await watchStorage(page);
+  await page.goto("/tool");
+  await redactAndDownload(page);
+
+  const writes = await page.evaluate(() => window.__redactnestWrites ?? []);
+
+  expect(
+    writes,
+    `something wrote to browser storage:\n${writes
+      .map((write) => `${write.api}(${write.detail})`)
+      .join("\n")}`,
+  ).toEqual([]);
+});
+
+test("a full run sends no document, text, match or name anywhere", async ({ page }) => {
+  await watchStorage(page);
+  const requests = recordRequests(page);
+
+  await page.goto("/tool");
+  await redactAndDownload(page);
+
+  const origin = new URL(page.url()).origin;
+  for (const request of requests) {
+    const url = request.url();
+    const body = request.postData() ?? "";
+
+    expect(url, "a request named the file").not.toContain("zzsecretpayroll");
+    expect(body, "a request body named the file").not.toContain("zzsecretpayroll");
+    expect(body, "a request body carried extracted text").not.toContain("RedactNest");
+    expect(body, "a request body carried match text").not.toContain(
+      "contact@example.com",
+    );
+    expect(body, "a request body carried a PDF").not.toContain("%PDF-");
+    expect(new URL(url).origin, "the tool route reached a third party origin").toBe(
+      origin,
+    );
+  }
+
+  // The entitlement is still the only thing the route asks its own server for.
   const dataRequests = requests
     .map((request) => new URL(request.url()).pathname)
     .filter((path) => path !== "/tool")

@@ -53,11 +53,22 @@ async function failToOpen(page: Page): Promise<void> {
   await expect(page.getByTestId("error")).toBeVisible({ timeout: ENGINE_TIMEOUT });
 }
 
-/** The three states the tool page can be in today (AC-18). */
+/**
+ * Spec 0004's thin path: a finished run, with its outcome card and the
+ * Download button on screen.
+ */
+async function completeARun(page: Page): Promise<void> {
+  await openDocument(page);
+  await page.getByTestId("redact").click();
+  await expect(page.getByTestId("download")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+}
+
+/** The states the tool page can settle in today (AC-18). */
 const TOOL_STATES: readonly (readonly [string, (page: Page) => Promise<void>])[] = [
   ["idle", async () => {}],
   ["failed", failToOpen],
   ["opened", openDocument],
+  ["complete", completeARun],
 ];
 
 /** Nothing scrolls sideways, which is what WCAG 1.4.10 asks at 320px. */
@@ -222,11 +233,20 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await expect(page.getByTestId("choose-file")).toBeFocused();
   });
 
-  test("Start over is reached and ringed like every other control", async ({ page }) => {
+  // Spec 0004 put Redact first in the action row, the one main action in view,
+  // so the walk meets it before Start over.
+  test("Redact and Start over are reached and ringed like every other control", async ({
+    page,
+  }) => {
     await page.goto("/tool");
     await openDocument(page);
 
     await page.getByTestId("choose-file").focus();
+    await page.keyboard.press("Tab");
+
+    await expect(page.getByTestId("redact")).toBeFocused();
+    await expectFocusRing(page.getByTestId("redact"));
+
     await page.keyboard.press("Tab");
 
     await expect(page.getByTestId("start-over")).toBeFocused();

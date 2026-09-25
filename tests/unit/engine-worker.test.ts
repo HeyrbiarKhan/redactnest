@@ -4,6 +4,7 @@ import {
   asMatchId,
   type DocumentSummary,
   type ErrorMessage,
+  type RedactedMessage,
   type RequestMessage,
   type ResponseMessage,
 } from "@/worker/protocol";
@@ -24,21 +25,32 @@ import {
  *  - Geometry never crosses the boundary (INV-2).
  */
 
-const { openDocument } = vi.hoisted(() => ({ openDocument: vi.fn() }));
+const { openDocument, redactDocument } = vi.hoisted(() => ({
+  openDocument: vi.fn(),
+  redactDocument: vi.fn(),
+}));
 
 vi.mock("@/engine", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/engine")>();
-  return { ...actual, openDocument };
+  return { ...actual, openDocument, redactDocument };
 });
 
 type PhaseCallback = (phase: "loading-engine" | "opening" | "inspecting") => void;
 
+interface RunHooks {
+  onPhase?: (phase: "redacting" | "writing" | "verifying") => void;
+  isCancelled?: () => boolean;
+}
+
 class FakeScope {
   readonly posted: ResponseMessage[] = [];
+  /** The transfer list each message was posted with, in the same order. */
+  readonly transferred: (readonly ArrayBuffer[] | undefined)[] = [];
   private readonly listeners = new Map<string, ((event: unknown) => void)[]>();
 
-  postMessage(message: ResponseMessage): void {
+  postMessage(message: ResponseMessage, transfer?: readonly ArrayBuffer[]): void {
     this.posted.push(message);
+    this.transferred.push(transfer);
   }
 
   addEventListener(type: string, listener: (event: unknown) => void): void {
@@ -83,15 +95,46 @@ function fakeDocument() {
   return { summary: SUMMARY, close: vi.fn() };
 }
 
-function openRequest(overrides: { id?: string; jobId?: string } = {}): RequestMessage {
+function openRequest(
+  overrides: { id?: string; jobId?: string; bytes?: ArrayBuffer } = {},
+): RequestMessage {
   return {
     id: overrides.id ?? "op-1",
     jobId: overrides.jobId ?? "job-1",
     kind: "open",
-    bytes: new ArrayBuffer(64),
+    bytes: overrides.bytes ?? new ArrayBuffer(64),
     limits: { maxBytes: 26_214_400, maxPages: 3 },
     contextChars: 40,
   };
+}
+
+function redactRequest(overrides: { id?: string; jobId?: string } = {}): RequestMessage {
+  return {
+    id: overrides.id ?? "op-2",
+    jobId: overrides.jobId ?? "job-1",
+    kind: "redact",
+    matchIds: [],
+  };
+}
+
+/** What the engine hands back from a run that passed its self check. */
+function engineResult() {
+  return {
+    output: new ArrayBuffer(128),
+    removedByType: {},
+    sanitized: ["document-info", "annotations"],
+  };
+}
+
+/** A promise the test settles when it chooses. */
+function gate<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((settleWith, failWith) => {
+    resolve = settleWith;
+    reject = failWith;
+  });
+  return { promise, resolve, reject };
 }
 
 /** Let the worker's async handler run to completion. */
@@ -111,6 +154,8 @@ async function startWorker(): Promise<void> {
 beforeEach(() => {
   openDocument.mockReset();
   openDocument.mockResolvedValue(fakeDocument());
+  redactDocument.mockReset();
+  redactDocument.mockResolvedValue(engineResult());
 });
 
 afterEach(() => {
@@ -380,21 +425,212 @@ describe("redacting", () => {
       errorKind: "unsupported",
     });
   });
+});
 
-  /**
-   * The non-negotiable, asserted. Until feature 5 builds the removal there is
-   * nothing that could be taken out, and handing back the document unchanged
-   * under a redacted name would be the one failure this product cannot have.
-   */
-  it("never hands back a file it has not actually redacted", async () => {
+/**
+ * Spec 0004. A run, from the worker's side: resolve the ticks, run the engine
+ * on the clean original, relay its phases, and post either the output or one
+ * kind. The engine itself is mocked here; `tests/unit/redaction.test.ts` runs
+ * the real one.
+ */
+describe("a redaction run", () => {
+  it("runs the engine over the bytes the session was opened with", async () => {
+    const bytes = new ArrayBuffer(64);
+    await startWorker();
+
+    scope.send(openRequest({ bytes }));
+    await settle();
+    scope.send(redactRequest());
+    await settle();
+
+    // The same buffer, not a copy of it: the clean original (spec 0004, INV-1).
+    expect(redactDocument).toHaveBeenCalledTimes(1);
+    expect(redactDocument.mock.calls[0][0]).toBe(bytes);
+    expect(redactDocument.mock.calls[0][1]).toEqual([]);
+  });
+
+  /** AC-16. Relayed as they happen, then the result. */
+  it("passes on redacting, writing and verifying, then posts the output", async () => {
+    redactDocument.mockImplementation(
+      async (_bytes: ArrayBuffer, _targets: unknown, hooks: RunHooks) => {
+        hooks.onPhase?.("redacting");
+        hooks.onPhase?.("writing");
+        hooks.onPhase?.("verifying");
+        return engineResult();
+      },
+    );
     await startWorker();
 
     scope.send(openRequest());
     await settle();
-    scope.send({ id: "op-2", jobId: "job-1", kind: "redact", matchIds: [] });
+    scope.send(redactRequest({ id: "op-5" }));
+    await settle();
+
+    const forRun = scope.posted.filter((message) => message.id === "op-5");
+    expect(forRun.map((message) => message.kind)).toEqual([
+      "progress",
+      "progress",
+      "progress",
+      "redacted",
+    ]);
+    expect(
+      forRun.flatMap((message) => (message.kind === "progress" ? [message.phase] : [])),
+    ).toEqual(["redacting", "writing", "verifying"]);
+  });
+
+  /** AC-15. The outcome is the engine's counts plus the open summary's. */
+  it("assembles the outcome from the run and the open summary", async () => {
+    redactDocument.mockResolvedValue({
+      ...engineResult(),
+      removedByType: { email: 2 },
+      sanitized: ["xmp-metadata"],
+    });
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest());
+    await settle();
+
+    const [redacted] = scope.of("redacted") as RedactedMessage[];
+    expect(redacted.outcome).toEqual({
+      pageCount: 2,
+      removedByType: { email: 2 },
+      pagesWithoutText: 1,
+      sanitized: ["xmp-metadata"],
+    });
+  });
+
+  /**
+   * INV-8. The engine made the copy, so its buffer crosses as it is, once, in
+   * the transfer list rather than cloned.
+   */
+  it("transfers the engine's output rather than copying it", async () => {
+    const result = engineResult();
+    redactDocument.mockResolvedValue(result);
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest());
+    await settle();
+
+    const index = scope.posted.findIndex((message) => message.kind === "redacted");
+    const redacted = scope.posted[index] as RedactedMessage;
+    expect(redacted.output).toBe(result.output);
+    expect(scope.transferred[index]).toEqual([result.output]);
+  });
+
+  it("sends the output, the outcome and nothing else", async () => {
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest());
+    await settle();
+
+    const [redacted] = scope.of("redacted");
+    expect(Object.keys(redacted).sort()).toEqual([
+      "id",
+      "jobId",
+      "kind",
+      "outcome",
+      "output",
+    ]);
+  });
+
+  /** AC-12. Nothing ticked is still a run: it cleans the file. */
+  it("accepts an empty tick set", async () => {
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest());
+    await settle();
+
+    expect(scope.of("redacted")).toHaveLength(1);
+    expect(scope.of("error")).toEqual([]);
+  });
+
+  /** AC-14. All or nothing: one kind, and no output. */
+  it.each([
+    [
+      "a described failure keeps its kind",
+      "redaction-incomplete",
+      "redaction-incomplete",
+    ],
+    ["an undescribed failure becomes unsupported", null, "unsupported"],
+  ] as const)("%s", async (_label, kind, expected) => {
+    const { EngineFailure } = await import("@/engine");
+    redactDocument.mockRejectedValue(
+      kind === null ? new TypeError(SECRET) : new EngineFailure(kind),
+    );
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest({ id: "op-3" }));
+    await settle();
 
     expect(scope.of("redacted")).toEqual([]);
-    expect(scope.of("error").at(-1)).toMatchObject({ errorKind: "unsupported" });
+    expect(scope.of("error")).toEqual([
+      { id: "op-3", jobId: "job-1", kind: "error", errorKind: expected },
+    ]);
+  });
+
+  it("lets nothing a failed run said about the document cross the boundary", async () => {
+    redactDocument.mockRejectedValue(new Error(`self check found: ${SECRET}`));
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest());
+    await settle();
+
+    expect(JSON.stringify(scope.posted)).not.toContain("Jane Doe");
+  });
+
+  /** AC-17. A cancel that lands while the run is finishing throws its output away. */
+  it("posts nothing for a run cancelled before it finished", async () => {
+    const run = gate<ReturnType<typeof engineResult>>();
+    redactDocument.mockReturnValue(run.promise);
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest({ id: "op-4" }));
+    scope.send({ id: "op-4", jobId: "job-1", kind: "cancel" });
+    run.resolve(engineResult());
+    await settle();
+
+    expect(scope.posted.filter((message) => message.id === "op-4")).toEqual([]);
+  });
+
+  it("posts nothing when the engine reports it stopped", async () => {
+    const { RunCancelled } = await import("@/engine");
+    redactDocument.mockRejectedValue(new RunCancelled());
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest({ id: "op-4" }));
+    await settle();
+
+    expect(scope.posted.filter((message) => message.id === "op-4")).toEqual([]);
+  });
+
+  /** A run leaves the session open, so a changed tick can run again (AC-14). */
+  it("keeps the document open after a run", async () => {
+    const doc = fakeDocument();
+    openDocument.mockResolvedValue(doc);
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest());
+    await settle();
+
+    expect(doc.close).not.toHaveBeenCalled();
   });
 });
 

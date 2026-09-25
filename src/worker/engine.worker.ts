@@ -19,12 +19,20 @@
  *    failure the product exists to prevent.
  */
 
-import { EngineFailure, openDocument, type OpenDocument, type TargetMap } from "@/engine";
+import {
+  EngineFailure,
+  openDocument,
+  redactDocument,
+  RunCancelled,
+  type OpenDocument,
+  type TargetMap,
+} from "@/engine";
 import type {
   EngineLimits,
   ErrorMessage,
   ProgressMessage,
   ProgressPhase,
+  RedactedMessage,
   RequestMessage,
   ResponseMessage,
   ResultMessage,
@@ -59,8 +67,13 @@ const scope = self as unknown as WorkerScope;
  * stale one is dropped rather than guessed at.
  */
 interface EngineSession {
-  /** Transferred in at open. Never leaves (INV-1). */
+  /**
+   * Transferred in at open. Never leaves (INV-1). The clean original every
+   * redaction run opens its own working copy from, and which no run changes
+   * (spec 0004, AC-11).
+   */
   readonly bytes: ArrayBuffer;
+  /** The review copy, prepared once at open. Never redacted (spec 0004, INV-1). */
   readonly doc: OpenDocument;
   /** Page, quads and extraction offsets. Never crosses the boundary (INV-2). */
   readonly targets: TargetMap;
@@ -173,7 +186,7 @@ async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
   }
 }
 
-function handleRedact(request: Extract<RequestMessage, { kind: "redact" }>) {
+async function handleRedact(request: Extract<RequestMessage, { kind: "redact" }>) {
   const { id, jobId, matchIds } = request;
   const session = sessions.get(jobId);
 
@@ -184,12 +197,59 @@ function handleRedact(request: Extract<RequestMessage, { kind: "redact" }>) {
     return;
   }
 
-  // Feature 5 owns the removal and the write, and wires the `redacted` reply to
-  // real output. Until it lands no detector has minted a target, so every
-  // request resolves to nothing to remove. Reporting that beats handing back a
-  // file that was never redacted: a document that looks clean and is not is the
-  // one failure this product cannot have.
-  postError(id, jobId, "unsupported");
+  // Spec 0004, INV-6. Targets come from this worker's own map and nowhere else;
+  // the main thread sent ids. Each ticked id counts once, however many times it
+  // was named.
+  const targets = [...new Set(matchIds)].flatMap((matchId) => {
+    const target = session.targets.get(matchId);
+    return target ? [target] : [];
+  });
+
+  try {
+    // The clean original, never the review document (spec 0004, INV-1). An
+    // empty tick set is allowed: it cleans the file and removes nothing.
+    const result = await redactDocument(session.bytes, targets, {
+      onPhase: (phase) => {
+        if (!cancelled.has(id)) postProgress(id, jobId, phase);
+      },
+    });
+
+    // A cancel that landed while the write or the self check was running lets
+    // that call finish and then throws its output away (AC-17).
+    if (cancelled.has(id)) return;
+
+    const { summary } = session.doc;
+    const message: RedactedMessage = {
+      id,
+      jobId,
+      kind: "redacted",
+      output: result.output,
+      outcome: {
+        pageCount: summary.pageCount,
+        removedByType: result.removedByType,
+        pagesWithoutText: summary.pagesWithText.filter((hasText) => !hasText).length,
+        sanitized: result.sanitized,
+      },
+    };
+
+    // Transferred as the engine made it: the engine copied it out of MuPDF's
+    // heap itself, so the bytes its self check read are the bytes that cross.
+    // After this the worker holds no usable reference to it (INV-8).
+    scope.postMessage(message, [result.output]);
+  } catch (error) {
+    // Stopping is not failing. A cancelled run posts nothing at all.
+    if (cancelled.has(id) || error instanceof RunCancelled) return;
+
+    // All or nothing (AC-14): one kind, and no output. Whatever the original
+    // error said about the document stops here.
+    postError(
+      id,
+      jobId,
+      error instanceof EngineFailure ? error.errorKind : "unsupported",
+    );
+  } finally {
+    cancelled.delete(id);
+  }
 }
 
 scope.addEventListener("message", (event: MessageEvent<RequestMessage>) => {
@@ -200,7 +260,7 @@ scope.addEventListener("message", (event: MessageEvent<RequestMessage>) => {
       void handleOpen(request);
       break;
     case "redact":
-      handleRedact(request);
+      void handleRedact(request);
       break;
     case "cancel":
       // INV-8: this aborts one operation. It never ends the session, so the

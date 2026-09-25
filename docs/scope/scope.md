@@ -88,11 +88,11 @@ The smallest usable whole. An anonymous visitor drops in a short PDF, sees what 
 The heart of the product. Given a document and a set of targets, remove the text from the content stream itself and strip everything else that quietly carries data, in one pass.
 **Done when:** targeted text is gone from the content stream (extracting text from the output returns nothing for it, rather than returning text that sits under a covering box), and the output carries no document info or XMP metadata, no annotations, no form fields, no attachments, no bookmarks, no hidden layers, no JavaScript, and no earlier versions left behind by incremental saves.
 **Also owed here:** a file that is not a PDF, including an image or a text file, is refused before MuPDF opens it, judged from the bytes rather than the file name or type. Today MuPDF opens a PNG as a one page document even when asked for `application/pdf`.
-spec [0004](../specs/0004-redaction-engine/index.md)
+spec [0004](../specs/0004-redaction-engine/index.md) · code in `src/engine/`, `src/worker/engine.worker.ts`, `src/app/tool/tool-client.tsx`
 - [x] Design it (spec): `/architect redaction engine`
 - [ ] Build it: `/develop redaction engine`
-  - [ ] The door and the prepared page: protocol growth, the `%PDF-` byte check, the layer refusal, the shared prepare step and a silenced MuPDF log · AC-1, AC-2, AC-3, AC-22, AC-24
-  - [ ] A cleaned file leaves the tool: the rebuild, the structural self check, the worker's `redact`, the thin Redact and Download path with its outcome line, and the privacy proof's redaction leg · AC-7, AC-8, AC-9, AC-12, AC-13, AC-14, AC-15, AC-16, AC-19, AC-20, AC-21
+  - [x] The door and the prepared page: protocol growth, the `%PDF-` byte check, the layer refusal, the shared prepare step and a silenced MuPDF log · AC-1, AC-2, AC-3, AC-22, AC-24
+  - [x] A cleaned file leaves the tool: the rebuild, the structural self check, the worker's `redact`, the thin Redact and Download path with its outcome line, and the privacy proof's redaction leg · AC-7, AC-8, AC-9, AC-12, AC-13, AC-14, AC-15, AC-16, AC-19, AC-20, AC-21
   - [ ] Targets really removed, and checked: the exact and padded passes with the target self check, the geometric fixture matrix, two runs from one original, and the encryption fixtures · AC-4, AC-5, AC-6, AC-10, AC-11, AC-13
   - [ ] A run stops cleanly: cancel between pages, one run at a time, a replacement that cancels a run in flight, and the browser cancel test · AC-17, AC-18, AC-23
 - [ ] Verify it: `/check verify redaction engine`

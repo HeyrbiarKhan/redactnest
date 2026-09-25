@@ -2,7 +2,7 @@
 
 **Date**: 2026-09-25
 **Updated**: 2026-09-25, after an independent cross check: layered files refused outright, one shared prepare step before detection and redaction, a padded image pass, a structural self check, replacement during a run, and slice 1 made safe on its own
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 
