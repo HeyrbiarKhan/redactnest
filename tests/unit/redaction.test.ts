@@ -10,6 +10,7 @@ import {
   PIPELINE,
   prepareDocument,
   redactDocumentWith,
+  RunCancelled,
   silenceEngineLog,
   type RedactionTarget,
 } from "@/engine";
@@ -489,5 +490,56 @@ describe("a run asked to remove something, before removal exists", () => {
     await expect(redact("two-pages.pdf", [target])).rejects.toMatchObject({
       errorKind: "unsupported",
     });
+  });
+});
+
+/**
+ * Spec 0004, AC-17. A run looks at `isCancelled` after opening its working
+ * copy, after preparing it, after every page and after the rebuild, and stops
+ * with `RunCancelled`, which is not a failure and carries no kind.
+ */
+describe("cancelling a run", () => {
+  it("checks after opening, preparing, every page and the rebuild", async () => {
+    const isCancelled = vi.fn(() => false);
+
+    await redact("metadata.pdf", [], { isCancelled });
+
+    // Two pages: open, prepare, page 1, page 2, rebuild.
+    expect(isCancelled).toHaveBeenCalledTimes(5);
+  });
+
+  it("stops within a page, before anything is written", async () => {
+    const onPhase = vi.fn();
+    let checks = 0;
+    // True from the check after the first page onwards.
+    const isCancelled = () => (checks += 1) >= 3;
+
+    const run = redact("metadata.pdf", [], { onPhase, isCancelled });
+
+    await expect(run).rejects.toBeInstanceOf(RunCancelled);
+    await expect(run).rejects.not.toBeInstanceOf(EngineFailure);
+    expect(checks).toBe(3);
+    expect(onPhase).not.toHaveBeenCalledWith("writing");
+  });
+
+  it("stops before touching the document when cancelled at once", async () => {
+    const onPhase = vi.fn();
+
+    await expect(
+      redact("two-pages.pdf", [], { onPhase, isCancelled: () => true }),
+    ).rejects.toBeInstanceOf(RunCancelled);
+
+    expect(onPhase.mock.calls.map(([phase]) => phase)).toEqual(["redacting"]);
+  });
+
+  it("leaves the original untouched when it stops", async () => {
+    const bytes = fixture("metadata.pdf");
+    const before = new Uint8Array(bytes).slice();
+
+    await expect(
+      redactDocumentWith(mupdf, bytes, [], { isCancelled: () => true }),
+    ).rejects.toBeInstanceOf(RunCancelled);
+
+    expect(new Uint8Array(bytes)).toEqual(before);
   });
 });
