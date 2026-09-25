@@ -543,3 +543,61 @@ describe("cancelling a run", () => {
     expect(new Uint8Array(bytes)).toEqual(before);
   });
 });
+
+/**
+ * Spec 0004, AC-10. A document anybody can open, but whose owner forbade
+ * editing, comes out unencrypted and unrestricted. The visitor already holds
+ * the content, so the restriction protected nothing from them.
+ *
+ * Each fixture is first checked to be what it claims, so this cannot pass on
+ * a file that was never encrypted.
+ */
+describe("a document with an owner password", () => {
+  const PERMISSIONS = [
+    "print",
+    "copy",
+    "edit",
+    "annotate",
+    "form",
+    "accessibility",
+    "assemble",
+    "print-hq",
+  ] as const;
+
+  describe.each([
+    ["owner-rc4.pdf", "RC4"],
+    ["owner-aes128.pdf", "128-bit AES"],
+    ["owner-aes256.pdf", "256-bit AES"],
+  ])("%s", (name, scheme) => {
+    it(`is encrypted with ${scheme}, opens without a password, and forbids editing`, () => {
+      const source = mupdf.Document.openDocument(fixture(name), "application/pdf");
+      try {
+        expect(source.getMetaData("encryption")).toContain(scheme);
+        expect(source.needsPassword()).toBe(false);
+        expect(source.hasPermission("edit")).toBe(false);
+      } finally {
+        source.destroy();
+      }
+    });
+
+    it("comes out unencrypted, unrestricted and readable", async () => {
+      const { output } = await redact(name);
+
+      const cleaned = mupdf.Document.openDocument(output, "application/pdf");
+      try {
+        expect(cleaned.needsPassword()).toBe(false);
+        expect(cleaned.getMetaData("encryption")).toBe("None");
+        for (const permission of PERMISSIONS) {
+          expect(cleaned.hasPermission(permission), permission).toBe(true);
+        }
+      } finally {
+        cleaned.destroy();
+      }
+
+      inspect(output, (doc) => {
+        expect(keysOf(doc.getTrailer())).not.toContain("Encrypt");
+      });
+      expect(documentText(output)).toContain("Contact: jane.doe@example.com");
+    });
+  });
+});

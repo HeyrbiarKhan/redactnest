@@ -12,6 +12,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
 
 /**
@@ -269,6 +270,31 @@ function damaged() {
   return Uint8Array.from(broken, (character) => character.charCodeAt(0));
 }
 
+/**
+ * Spec 0004, AC-10. A one page PDF anybody can open, with an owner password
+ * that forbids editing, under `scheme`. The output of a run must come out
+ * unencrypted and unrestricted.
+ */
+function ownerPassword(scheme) {
+  const { objects, trailer } = encryptObjects(
+    [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+        "/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+      stream(
+        "",
+        `BT /F1 12 Tf 72 700 Td (Owner password fixture, ${scheme}) Tj ET\n` +
+          "BT /F1 12 Tf 72 680 Td (Contact: jane.doe@example.com) Tj ET\n",
+      ),
+    ],
+    scheme,
+  );
+
+  return writePdf({ objects, trailer: `/Root 1 0 R ${trailer}` }).bytes;
+}
+
 const FIXTURES = [
   ["two-pages.pdf", twoPages(), "2 pages, 1 with text"],
   ["metadata.pdf", metadata(), "every AC-7 kind, two revisions, the AC-22 cases"],
@@ -277,6 +303,9 @@ const FIXTURES = [
   ["header-at-1019.pdf", headerAt(1019), "%PDF- starting at byte 1019"],
   ["header-at-1020.pdf", headerAt(1020), "%PDF- starting at byte 1020"],
   ["damaged.pdf", damaged(), "a broken cross reference MuPDF repairs"],
+  ["owner-rc4.pdf", ownerPassword("rc4"), "owner password, 128 bit RC4"],
+  ["owner-aes128.pdf", ownerPassword("aes-128"), "owner password, AES-128"],
+  ["owner-aes256.pdf", ownerPassword("aes-256"), "owner password, AES-256"],
 ];
 
 const outDir = join(process.cwd(), "tests", "fixtures");
