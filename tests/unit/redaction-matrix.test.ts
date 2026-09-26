@@ -1,14 +1,25 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import type { Matrix, PDFDocument } from "mupdf";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
+  blankedRegion,
+  boundsReach,
+  boxPass,
   EngineFailure,
   lineBox,
   paddedArea,
+  paddedPass,
+  PIPELINE,
+  quadHeight,
   redactDocumentWith,
   silenceEngineLog,
+  type Pass,
+  type Quad,
   type RedactionTarget,
 } from "@/engine";
+import type { EngineErrorKind } from "@/worker/protocol";
 
+import { BOUNDS_PIN } from "../../scripts/lib/redaction-fixtures.mjs";
 import { fixture } from "../support/bytes";
 import {
   containsInAnyEncoding,
@@ -64,6 +75,49 @@ async function outcomeOf(name: string, targets: readonly RedactionTarget[]) {
     if (failure instanceof EngineFailure) return failure.errorKind;
     throw failure;
   }
+}
+
+/**
+ * A run refused with `kind` before anything is removed: neither pass that
+ * removes anything is ever called (spec 0004, AC-28 and AC-29).
+ */
+async function expectRefusedBeforeAnyPass(
+  name: string,
+  targets: readonly RedactionTarget[],
+  kind: EngineErrorKind,
+) {
+  const textPass = vi.fn<Pass>();
+  const paddedPass = vi.fn<Pass>();
+
+  await expect(
+    redactDocumentWith(
+      mupdf,
+      fixture(name),
+      targets,
+      {},
+      {
+        ...PIPELINE,
+        textPass,
+        paddedPass,
+      },
+    ),
+  ).rejects.toMatchObject({ errorKind: kind });
+  expect(textPass).not.toHaveBeenCalled();
+  expect(paddedPass).not.toHaveBeenCalled();
+}
+
+/** A target's one quad's bounds reach, as a share of its height (AC-28). */
+function reachOf(target: RedactionTarget): number {
+  expect(target.quads).toHaveLength(1);
+  const [quad] = target.quads;
+  return boundsReach(paddedArea(quad)) / quadHeight(quad);
+}
+
+/** Eight numbers from the fixture module, as the engine's `Quad`. */
+function asQuad(values: readonly number[]): Quad {
+  if (values.length !== 8) throw new Error("expected eight numbers");
+  const [a, b, c, d, e, f, g, h] = values;
+  return [a, b, c, d, e, f, g, h];
 }
 
 /** The characters of one line, found by its baseline, as `char@x`. */
@@ -314,19 +368,283 @@ describe("the geometric edges", () => {
   });
 
   /**
-   * Text drawn at 30 degrees. MuPDF 1.28.1 removes text inside each redaction
-   * quad's axis aligned bounds rather than the quad itself, so a thin band on
-   * a slant sweeps the lines above and below. The self check sees the loss,
-   * and the run refuses rather than hand back a file missing words. How to
-   * hand MuPDF a slanted area is owed to `/architect` (spec 0004, AC-5).
+   * Text drawn at 30 degrees. MuPDF 1.28.1 acts on each redaction area's
+   * upright bounds rather than the area, so every pass would reach far past
+   * it. The slant check refuses the target before any pass runs (spec 0004,
+   * AC-28).
    */
-  it("refuses text drawn at 30 degrees rather than lose the lines around it", async () => {
-    await expect(
-      outcomeOf("angled-text.pdf", [tick("angled-text.pdf", 0, "Jeremy Quigley")]),
-    ).resolves.toBe("redaction-overreach");
+  it("refuses text drawn at 30 degrees with slanted-text before any pass runs", async () => {
+    await expectRefusedBeforeAnyPass(
+      "angled-text.pdf",
+      [tick("angled-text.pdf", 0, "Jeremy Quigley")],
+      "slanted-text",
+    );
+  });
+});
+
+/**
+ * Spec 0004, AC-5 and AC-28: slanted targets, over `reach.pdf`. Each quad's
+ * reach is held to the number the spec records, then run: within the limit
+ * it redacts and passes its own checks, past it the run is refused before any
+ * pass. The match is `Jeremy Quigley` in 12pt Helvetica on every page.
+ */
+describe("slanted targets", () => {
+  const NAME = "reach.pdf";
+  const match = (page: number) => tick(NAME, page, "Jeremy Quigley");
+
+  it.each([
+    [0, "drawn at 1 degree, 12pt leading", 0.092],
+    [1, "drawn at 1 degree, 14pt leading", 0.092],
+    [4, "turned whole to 90 degrees", 0],
+    [5, "turned whole to 180 degrees", 0],
+    [7, "level, joined from 12pt then 11pt", 0.093],
+  ] as const)(
+    "redacts page %i, %s, and passes its own checks",
+    async (page, _label, reach) => {
+      const target = match(page);
+      expect(reachOf(target)).toBeCloseTo(reach, 2);
+
+      const { output } = await run(NAME, [target]);
+
+      const text = inspect(output, (doc) => pageText(doc, page));
+      expect(text).not.toContain("Jeremy");
+      expect(text).not.toContain("Quigley");
+      for (const kept of [
+        "Account holder",
+        "here",
+        "Descenders above",
+        "Ascenders below",
+      ]) {
+        expect(text).toContain(kept);
+      }
+    },
+  );
+
+  it.each([
+    [2, "drawn at 1.5 degrees, 12pt leading", 0.138],
+    [3, "drawn at 1.5 degrees, 14pt leading", 0.138],
+    [6, "set level with a 12 degree shear", 0.305],
+  ] as const)(
+    "refuses page %i, %s, with slanted-text before any pass runs",
+    async (page, _label, reach) => {
+      const target = match(page);
+      expect(reachOf(target)).toBeCloseTo(reach, 2);
+
+      await expectRefusedBeforeAnyPass(NAME, [target], "slanted-text");
+    },
+  );
+
+  /** A target that does not hold up outranks a slanted one checked before it. */
+  it("names unsupported when a slanted target comes with one naming other text", async () => {
+    await expectRefusedBeforeAnyPass(
+      NAME,
+      [match(2), { ...match(7), text: "John Roe" }],
+      "unsupported",
+    );
   });
 
-  it.todo("removes a match drawn at 30 degrees through all three passes (AC-5)");
+  /** A slanted target outranks an image blanked too far, checked before it. */
+  it("names slanted-text when a slanted target comes with a match over an image at 30 degrees", async () => {
+    await expectRefusedBeforeAnyPass(NAME, [match(9), match(2)], "slanted-text");
+  });
+});
+
+/**
+ * Spec 0004, AC-29: images under a level match, over `reach.pdf`. MuPDF blanks
+ * whole pixels in each image's own pixel grid, so an image drawn at an angle,
+ * or so coarse a pixel spans more than a tenth of the quad's height, would be
+ * blanked well past the padded area. Refused before any pass runs.
+ */
+describe("images under a target", () => {
+  const NAME = "reach.pdf";
+
+  it.each([
+    ["drawn at 30 degrees", 9],
+    ["8 by 8 pixels stretched to 200 pt", 10],
+  ] as const)(
+    "refuses a level match over an image %s (page %i) with redaction-overreach before any pass runs",
+    async (_label, page) => {
+      await expectRefusedBeforeAnyPass(
+        NAME,
+        [tick(NAME, page, "Jeremy Quigley")],
+        "redaction-overreach",
+      );
+    },
+  );
+
+  it("redacts the same match over an upright image at 4 pixels per point", async () => {
+    const target = tick(NAME, 8, "Jeremy Quigley");
+    const { output } = await run(NAME, [target]);
+
+    const padded = target.quads.map(paddedArea);
+    let checked = 0;
+    const marked: string[] = [];
+    forEachImagePixel(output, 8, (x, y, rgb) => {
+      if (!padded.some((quad) => inside(quad, x, y))) return;
+      checked += 1;
+      if (rgb.some((value) => value !== 255)) marked.push(`${x},${y}`);
+    });
+
+    expect(checked).toBeGreaterThan(1000);
+    expect(marked).toEqual([]);
+    expect(inspect(output, (doc) => pageText(doc, 8))).not.toContain("Quigley");
+  });
+});
+
+/**
+ * Spec 0004, *MuPDF's bounds behaviour is pinned by a test*: AC-28 and AC-29
+ * rest on what MuPDF 1.28.1 does, so it is driven directly over
+ * `bounds-pin.pdf` with the engine's own passes. If a later MuPDF acts on the
+ * area rather than its bounds, this fails and `BOUNDS_REACH_RATIO` can be
+ * lifted; if it starts judging covered over all areas together, cutting a
+ * slanted area into pieces becomes worth weighing again.
+ */
+describe("MuPDF acts on each area's bounds", () => {
+  const PIN = "bounds-pin.pdf";
+  const slanted = asQuad(BOUNDS_PIN.slanted);
+  const level = asQuad(BOUNDS_PIN.level);
+  const isWhite = (rgb: readonly number[]) => rgb.every((value) => value === 255);
+  const coloured = (bytes: ArrayBuffer, rgb: string) =>
+    filledPaths(bytes, 0).filter(({ color }) => color.join(",") === rgb);
+
+  /** The pin's page after `passes`, written out so the helpers can read it. */
+  function afterPasses(
+    index: number,
+    passes: readonly (readonly [Pass, readonly (readonly Quad[])[]])[],
+  ): ArrayBuffer {
+    const doc = mupdf.Document.openDocument(fixture(PIN), "application/pdf");
+    try {
+      const pdf: PDFDocument | null = doc.asPDF();
+      if (!pdf) throw new Error("expected a PDF");
+      const page = pdf.loadPage(index);
+      try {
+        for (const [pass, areas] of passes) pass(mupdf, page, areas);
+      } finally {
+        page.destroy();
+      }
+      const buffer = pdf.saveToBuffer("");
+      try {
+        return buffer.asUint8Array().slice().buffer;
+      } finally {
+        buffer.destroy();
+      }
+    } finally {
+      doc.destroy();
+    }
+  }
+
+  /** The one image a page draws: its placement and its size in pixels. */
+  function imageOn(index: number): { transform: Matrix; width: number; height: number } {
+    const found: { transform: Matrix; width: number; height: number }[] = [];
+    inspect(fixture(PIN), (doc) => {
+      const page = doc.loadPage(index);
+      const stext = page.toStructuredText("preserve-images");
+      try {
+        stext.walk({
+          onImageBlock(_bbox, transform, image) {
+            found.push({ transform, width: image.getWidth(), height: image.getHeight() });
+            image.destroy();
+          },
+        });
+      } finally {
+        stext.destroy();
+        page.destroy();
+      }
+    });
+    expect(found).toHaveLength(1);
+    return found[0];
+  }
+
+  it("blanks every image pixel inside a slanted area's bounds, and none outside them", () => {
+    const [x0, y0, x1, y1] = BOUNDS_PIN.bounds;
+    const output = afterPasses(0, [[paddedPass, [[slanted]]]]);
+
+    const wrong: string[] = [];
+    let pastArea = 0;
+    forEachImagePixel(output, 0, (x, y, rgb) => {
+      const inBounds = x >= x0 && x <= x1 && y >= y0 && y <= y1;
+      if (isWhite(rgb) !== inBounds) wrong.push(`${x},${y}`);
+      if (isWhite(rgb) && !inside(slanted, x, y)) pastArea += 1;
+    });
+
+    expect(wrong).toEqual([]);
+    expect(pastArea).toBeGreaterThan(1000);
+  });
+
+  it("removes squares at the bounds' corners, well outside the area, and keeps one just outside the bounds", () => {
+    expect(coloured(fixture(PIN), "1,0,0")).toHaveLength(3);
+
+    const kept = coloured(afterPasses(0, [[paddedPass, [[slanted]]]]), "1,0,0");
+
+    expect(kept).toHaveLength(1);
+    expect(kept[0].bounds[0]).toBeCloseTo(BOUNDS_PIN.outsideSquare[0], 3);
+  });
+
+  it.each([
+    ["both halves in one annotation", [BOUNDS_PIN.halves.map(asQuad)], 1],
+    [
+      "each half in its own annotation",
+      BOUNDS_PIN.halves.map((half) => [asQuad(half)]),
+      1,
+    ],
+    ["one area over the whole bar", [[asQuad(BOUNDS_PIN.whole)]], 0],
+  ] as const)(
+    "judges covered one area at a time: %s leaves %i bar",
+    (_label, areas, bars) => {
+      expect(coloured(fixture(PIN), "0,0,1")).toHaveLength(1);
+
+      expect(coloured(afterPasses(0, [[paddedPass, areas]]), "0,0,1")).toHaveLength(bars);
+    },
+  );
+
+  it("draws the box on the area itself, not its bounds", () => {
+    const [, y0, x1] = BOUNDS_PIN.bounds;
+    // Inside the bounds, far outside the area: the black image before.
+    const corner = [x1 - 4, y0 + 4] as const;
+    const before = render(fixture(PIN), 0);
+    expect(before.isInk(...before.pixelAt(...corner))).toBe(true);
+
+    const image = render(
+      afterPasses(0, [
+        [paddedPass, [[slanted]]],
+        [boxPass, [[slanted]]],
+      ]),
+      0,
+    );
+
+    expect(image.isBlack(...image.pixelAt(200, 292))).toBe(true);
+    expect(image.isInk(...image.pixelAt(...corner))).toBe(false);
+  });
+
+  it.each([
+    ["the image drawn at 30 degrees", 1],
+    ["an 8 by 8 pixel image stretched to 200 pt", 2],
+  ] as const)(
+    "blanks only inside blankedRegion's quad, and past the area, over %s (page %i)",
+    (_label, page) => {
+      const { transform, width, height } = imageOn(page);
+      const region = blankedRegion(transform, width, height, level);
+      if (!region) throw new Error("expected a region");
+
+      const outside: string[] = [];
+      let blanked = 0;
+      let pastArea = 0;
+      forEachImagePixel(
+        afterPasses(page, [[paddedPass, [[level]]]]),
+        page,
+        (x, y, rgb) => {
+          if (!isWhite(rgb)) return;
+          blanked += 1;
+          if (!inside(region, x, y)) outside.push(`${x},${y}`);
+          if (!inside(level, x, y)) pastArea += 1;
+        },
+      );
+
+      expect(blanked).toBeGreaterThan(0);
+      expect(outside).toEqual([]);
+      expect(pastArea).toBeGreaterThan(0);
+    },
+  );
 });
 
 /**
@@ -447,36 +765,39 @@ describe("a match drawn as outlines", () => {
 });
 
 /**
- * Spec 0004, AC-13, *Recorded before redacted*. One form drawn on pages 1 and
- * 3, ticked on page 1 only. Either each drawing is redacted apart and page 3
- * keeps its copy, or the run refuses; it never passes with page 3's text gone.
+ * Spec 0004, AC-5 and AC-13, *Recorded before redacted*. One form drawn on
+ * pages 1 and 3, ticked on page 1 only. MuPDF redacts each drawing apart
+ * (measured), so the run passes and page 3 keeps its copy where it was. A
+ * MuPDF that redacted the shared form in place would fail here, rather than
+ * pass as a `redaction-overreach` this test also accepted.
  */
 describe("a form drawn on two pages, ticked on one", () => {
-  it("keeps page 3's copy, or refuses", async () => {
+  it("redacts page 1's drawing and keeps page 3's copy at its own place", async () => {
     const name = "xobject-two-pages.pdf";
-    let output: ArrayBuffer;
-    try {
-      ({ output } = await run(name, [tick(name, 0, "SECRET-77")]));
-    } catch (failure) {
-      expect(failure).toMatchObject({ errorKind: "redaction-overreach" });
-      return;
-    }
+    const { output } = await run(name, [tick(name, 0, "SECRET-77")]);
 
     expect(inspect(output, (doc) => pageText(doc, 0))).not.toContain("SECRET-77");
-    expect(inspect(output, (doc) => pageText(doc, 2))).toContain(
-      "Case ref SECRET-77 in a form",
+    expect(findTargets(output, 2, "SECRET-77").map(({ quads }) => quads)).toEqual(
+      findTargets(fixture(name), 2, "SECRET-77").map(({ quads }) => quads),
     );
   });
 });
 
 /**
- * Spec 0004, AC-5, *Measured, then recorded*. What MuPDF 1.28.1 does, pinned
- * so a change shows up here first.
+ * What MuPDF 1.28.1 does, measured and pinned so a change shows up here first.
+ * Spec 0004 records each result, under *The measured results* and in its
+ * *Security model* and *Neutral* consequences. The accents are written as
+ * escapes: each is `e` then U+0301, the combining acute, as the fixture draws
+ * them.
  */
 describe("measured cases", () => {
+  const RENEE = "Rene\u0301e";
+  const JOSE = "Jose\u0301";
+
   /**
    * A form drawn twice on one page, ticked in its first drawing: MuPDF
-   * redacts each drawing apart, so the second keeps its text.
+   * redacts each drawing apart, so the second keeps its text (spec 0004,
+   * *Neutral*).
    */
   it("redacts one drawing of a form drawn twice on a page, and keeps the other", async () => {
     const name = "xobject-twice.pdf";
@@ -489,23 +810,49 @@ describe("measured cases", () => {
     expect(findTargets(output, 0, "SECRET-99")[0].quads).toEqual(drawings[1].quads);
   });
 
-  /** A combining mark inside the match sits under the band and goes with it. */
+  /**
+   * A combining mark inside the match sits under the band and goes with it,
+   * U+0301 and all (spec 0004, AC-5). The match's line is the one drawn at
+   * 670pt, 122pt down the page.
+   */
   it("removes a match with a combining mark inside it", async () => {
-    const { output } = await run("combining.pdf", [tick("combining.pdf", 0, "Renée")]);
+    const onItsLine = (bytes: ArrayBuffer) =>
+      pageCharacters(bytes, 0)
+        .filter(({ y }) => Math.abs(y - 122) < 0.5)
+        .map(({ char }) => char);
+    expect(onItsLine(fixture("combining.pdf"))).toContain("\u0301");
 
-    const text = documentText(output);
-    expect(text).not.toContain("Ren");
-    expect(text).toContain("José");
+    const { output } = await run("combining.pdf", [tick("combining.pdf", 0, RENEE)]);
+
+    expect(onItsLine(output)).not.toContain("\u0301");
+    expect(onItsLine(output).join("")).toBe("Name:here");
+    expect(documentText(output)).toContain(JOSE);
   });
 
   /**
    * A combining mark drawn at zero width on the match's last letter sits at
    * the match's very end, past the band's pulled in end, so it survives. The
-   * self check sees the survivor and the run refuses.
+   * self check sees the survivor and the run refuses (spec 0004, *Security
+   * model*).
    */
   it("refuses a match ending in a zero width combining mark", async () => {
     await expect(
-      outcomeOf("combining.pdf", [tick("combining.pdf", 0, "José")]),
+      outcomeOf("combining.pdf", [tick("combining.pdf", 0, JOSE)]),
+    ).resolves.toBe("redaction-incomplete");
+  });
+
+  /**
+   * `reach.pdf` page 7's joined line written as one text object, its size
+   * changed by `Tf` between the runs. MuPDF writes out the gap removed glyphs
+   * leave at the next glyph it keeps, under the size in force there, so when
+   * a size change sits between them the text after the match moves (by the
+   * removed width times one less the ratio of the sizes). The self check sees
+   * the moved glyphs and the run refuses. Measured during slice 4's build and
+   * not yet recorded in spec 0004; the same line as two text objects redacts.
+   */
+  it("refuses a match followed by a size change inside the same text object", async () => {
+    await expect(
+      outcomeOf("reach.pdf", [tick("reach.pdf", 11, "Jeremy Quigley")]),
     ).resolves.toBe("redaction-incomplete");
   });
 });

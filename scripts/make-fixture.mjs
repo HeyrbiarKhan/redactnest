@@ -17,6 +17,7 @@ import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
 import {
   actualText,
   angledText,
+  boundsPin,
   carlito,
   combining,
   formXObjectPage,
@@ -28,6 +29,7 @@ import {
   ocrMisaligned,
   offsetCropBox,
   outlined,
+  reach,
   rotatedPage,
   sharedXObject,
   singleSpacing,
@@ -353,6 +355,13 @@ const FIXTURES = [
   ["superscript.pdf", superscript(), "a superscript inside a match's line box"],
   ["combining.pdf", combining(), "a match holding a combining mark"],
   ["actual-text.pdf", actualText(), "replacement text spans, exact, wider and differing"],
+  // Spec 0004, slice 4: slanted targets, and images MuPDF would blank too far.
+  ["reach.pdf", reach(), "slanted, sheared and joined matches, and matches over images"],
+  [
+    "bounds-pin.pdf",
+    boundsPin(),
+    "what MuPDF blanks and removes around an area's bounds",
+  ],
 ];
 
 const outDir = join(process.cwd(), "tests", "fixtures");

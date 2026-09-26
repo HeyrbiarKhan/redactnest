@@ -19,13 +19,16 @@
  *   - `open.ts` opens and prepares the review copy.
  *   - `prepare.ts` is the one prepare step detection and redaction share.
  *   - `redact.ts` runs a redaction on a working copy of the original.
- *   - `targets.ts` checks each target's quads really surround its text.
- *   - `geometry.ts` derives the band, the line box and the padded area.
+ *   - `targets.ts` checks each target's quads really surround its text, and
+ *     refuses one too slanted, or over an image blanked too far, to redact.
+ *   - `geometry.ts` derives the band, the line box and the padded area, and
+ *     measures how far MuPDF acts past an area it is given.
  *   - `passes.ts` removes text, blanks pixels and draws the boxes.
  *   - `inventory.ts` records what the source carried, for `sanitized`.
  *   - `rebuild.ts` builds the output from the redacted pages alone.
  *   - `characters.ts` records every page's characters and compares them.
- *   - `pixels.ts` checks no image still shows ink under a target.
+ *   - `pixels.ts` measures how far each image under a target would be blanked,
+ *     and checks no image still shows ink under one.
  *   - `self-check.ts` reopens the output and proves it clean.
  *
  * The functions ending in `With` take the loaded MuPDF module as a parameter.
@@ -46,8 +49,13 @@ export {
 export { hasPdfHeader, PDF_HEADER_WINDOW } from "./door";
 export { EngineFailure, RunCancelled } from "./failure";
 export {
+  blankedRegion,
+  BOUNDS_REACH_RATIO,
+  boundsReach,
   containsPoint,
+  imageReach,
   isSoundQuad,
+  isTooSlanted,
   LINE_BOX_BOTTOM,
   LINE_BOX_TOP,
   lineBox,
@@ -64,6 +72,7 @@ export {
 export { loadEngine, silenceEngineLog, type MuPdf } from "./load";
 export { openDocument, openDocumentWith } from "./open";
 export { boxPass, paddedPass, textPass, type Pass } from "./passes";
+export { imagesWithinReach } from "./pixels";
 export { prepareDocument } from "./prepare";
 export { PIPELINE, redactDocument, redactDocumentWith, type Pipeline } from "./redact";
 export {

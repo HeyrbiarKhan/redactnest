@@ -65,7 +65,34 @@ export const TARGET_PADDING_ALONG_RATIO = 0.1;
  */
 export const MIN_QUAD_SIDE = 0.5;
 
+/**
+ * The most a pass may act past a target's padded area, as a share of the
+ * quad's height. Spec 0004, AC-28, AC-29 and INV-15.
+ *
+ * MuPDF 1.28.1 judges covered line art over each redaction area's page bounds
+ * rather than the area itself, and blanks pixels over those bounds taken in
+ * each image's own pixel grid, whole pixels at a time (measured, and pinned in
+ * `redaction-matrix.test.ts`). On a slanted target, or over an image drawn at
+ * an angle or coarsely, that reaches past the padded area over ink and line
+ * art no part of the self check looks at, so a target that would reach further
+ * than this is refused before anything is removed. The same size as the
+ * smallest growth the design already accepts, the tenth the padding grows
+ * along the line. Like the constants above, a rule about geometry rather than
+ * a cap on the visitor.
+ */
+export const BOUNDS_REACH_RATIO = 0.1;
+
+/**
+ * How far past a pixel boundary a mapped edge may fall and still count as on
+ * it, in pixels. Rounding out to whole pixels would otherwise grow a region by
+ * a whole pixel for a floating point error (AC-29).
+ */
+const PIXEL_EDGE_TOLERANCE = 0.001;
+
 type Point = readonly [number, number];
+
+/** An affine placement on the page, `[a, b, c, d, e, f]`, as MuPDF writes one. */
+type Transform = readonly [number, number, number, number, number, number];
 
 /** The four corners in text orientation: along the line from `ul` to `ur`. */
 function corners(quad: Quad): { ul: Point; ur: Point; ll: Point; lr: Point } {
@@ -225,4 +252,170 @@ export function quadBounds(quad: Quad): readonly [number, number, number, number
   const xs = [quad[0], quad[2], quad[4], quad[6]];
   const ys = [quad[1], quad[3], quad[5], quad[7]];
   return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+}
+
+/** The distance from `point` to the segment running from `a` to `b`. */
+function distanceToSegment(point: Point, a: Point, b: Point): number {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const squared = dx * dx + dy * dy;
+  const along =
+    squared === 0
+      ? 0
+      : Math.max(
+          0,
+          Math.min(1, ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / squared),
+        );
+  return distance(point, [a[0] + dx * along, a[1] + dy * along]);
+}
+
+/**
+ * The greatest distance from any of `points` to a convex area, 0 for a point
+ * inside it or on its edge. `Math.max` rather than a running comparison, so a
+ * `NaN` anywhere comes out as `NaN` and every check built on this fails
+ * closed.
+ */
+function farthestFrom(area: Quad, points: readonly Point[]): number {
+  const ring = outline(area);
+  return Math.max(
+    ...points.map((point) =>
+      containsPoint(area, point)
+        ? 0
+        : Math.min(
+            ...ring.map((from, index) =>
+              distanceToSegment(point, from, ring[(index + 1) % 4]),
+            ),
+          ),
+    ),
+  );
+}
+
+/**
+ * How far an area's axis aligned bounds reach past the area. Spec 0004,
+ * *Bounds reach*.
+ *
+ * The greatest distance from a corner of the bounds to the area, 0 for a
+ * corner inside it. MuPDF acts on an area's bounds rather than the area, so
+ * this is how far a pass can take line art past the area it was given. A
+ * level, vertical or upside down rectangle reaches 0; a rectangle at angle θ
+ * reaches its longer side times `|sin 2θ| / 2`. The area must be convex, as
+ * AC-27 makes every padded area, because the distance to a convex area over a
+ * rectangle is greatest at one of its corners.
+ */
+export function boundsReach(area: Quad): number {
+  const [x0, y0, x1, y1] = quadBounds(area);
+  return farthestFrom(area, [
+    [x0, y0],
+    [x1, y0],
+    [x1, y1],
+    [x0, y1],
+  ]);
+}
+
+/**
+ * Is this target quad set at too steep an angle to redact? Spec 0004, AC-28.
+ *
+ * True when its padded area's bounds reach more than `BOUNDS_REACH_RATIO` of
+ * its height past the padded area. Written as "not within the limit" so it
+ * fails closed: feature 6 may ask this of any quad, not only one `isSoundQuad`
+ * accepted, and a quad that yields `NaN` anywhere counts as too slanted.
+ */
+export function isTooSlanted(quad: Quad): boolean {
+  return !(boundsReach(paddedArea(quad)) <= BOUNDS_REACH_RATIO * quadHeight(quad));
+}
+
+/** What `blankedRegion` gives for a placement it cannot invert. */
+const UNPLACEABLE: Quad = [
+  Number.NaN,
+  Number.NaN,
+  Number.NaN,
+  Number.NaN,
+  Number.NaN,
+  Number.NaN,
+  Number.NaN,
+  Number.NaN,
+];
+
+/**
+ * The part of an image MuPDF will blank for an area, as a quad on the page, or
+ * `null` when it blanks nothing there. Spec 0004, AC-29, *The image reach
+ * check*.
+ *
+ * MuPDF blanks whole pixels, over the area's page bounds taken in the image's
+ * own pixel grid. `transform` maps the image's unit square onto the page with
+ * pixel row 0 at the top, so a page point maps to column `u × width` and row
+ * `v × height`. The four corners of the area's page bounds are mapped into
+ * that grid, their bounds there are rounded out to whole pixels and clipped to
+ * the image, and the result is mapped back onto the page. Starting from the
+ * area's page bounds rather than the area makes this a little larger than what
+ * MuPDF blanks, never smaller (measured).
+ *
+ * A placement that cannot be inverted, or an area that is not finite, gives a
+ * quad whose corners are not numbers, so every measure taken of it fails
+ * closed.
+ */
+export function blankedRegion(
+  transform: Transform,
+  width: number,
+  height: number,
+  area: Quad,
+): Quad | null {
+  const [a, b, c, d, e, f] = transform;
+  const determinant = a * d - b * c;
+  const bounds = quadBounds(area);
+  if (
+    determinant === 0 ||
+    !Number.isFinite(determinant) ||
+    !bounds.every(Number.isFinite)
+  ) {
+    return UNPLACEABLE;
+  }
+
+  const toGrid = (x: number, y: number): Point => [
+    ((d * (x - e) - c * (y - f)) / determinant) * width,
+    ((a * (y - f) - b * (x - e)) / determinant) * height,
+  ];
+  const toPage = (column: number, row: number): Point => {
+    const u = column / width;
+    const v = row / height;
+    return [a * u + c * v + e, b * u + d * v + f];
+  };
+
+  const [x0, y0, x1, y1] = bounds;
+  const grid = [toGrid(x0, y0), toGrid(x1, y0), toGrid(x1, y1), toGrid(x0, y1)];
+  const columns = grid.map(([column]) => column);
+  const rows = grid.map(([, row]) => row);
+
+  const columnFrom = Math.max(0, Math.floor(Math.min(...columns) + PIXEL_EDGE_TOLERANCE));
+  const columnTo = Math.min(
+    width,
+    Math.ceil(Math.max(...columns) - PIXEL_EDGE_TOLERANCE),
+  );
+  const rowFrom = Math.max(0, Math.floor(Math.min(...rows) + PIXEL_EDGE_TOLERANCE));
+  const rowTo = Math.min(height, Math.ceil(Math.max(...rows) - PIXEL_EDGE_TOLERANCE));
+  // Written so a `NaN` falls through to a quad of `NaN` rather than reading as
+  // "blanks nothing".
+  if (columnFrom >= columnTo || rowFrom >= rowTo) return null;
+
+  const ul = toPage(columnFrom, rowFrom);
+  const ur = toPage(columnTo, rowFrom);
+  const ll = toPage(columnFrom, rowTo);
+  const lr = toPage(columnTo, rowTo);
+  return [ul[0], ul[1], ur[0], ur[1], ll[0], ll[1], lr[0], lr[1]];
+}
+
+/**
+ * How far the pixels MuPDF blanks in one image for `area` reach past it: the
+ * greatest distance from a corner of `blankedRegion` to the area, 0 when
+ * nothing is blanked. Spec 0004, AC-29. Not a number when the placement cannot
+ * be inverted.
+ */
+export function imageReach(
+  transform: Transform,
+  width: number,
+  height: number,
+  area: Quad,
+): number {
+  const region = blankedRegion(transform, width, height, area);
+  return region === null ? 0 : farthestFrom(area, outline(region));
 }

@@ -25,7 +25,9 @@ import { findTarget } from "../support/targets";
 
 /**
  * The self check, proved to fire, and the refusals that keep a run honest.
- * Spec 0004, AC-13, AC-14, AC-25, AC-26 and AC-27.
+ * Spec 0004, AC-13, AC-14, AC-25, AC-26 and AC-27. The slant and image reach
+ * refusals (AC-28, AC-29) are proved over their fixtures in
+ * `redaction-matrix.test.ts`.
  *
  * Each part of the check is shown to catch the fault it exists for by running
  * the real engine with one step of its pipeline changed through the test seam
@@ -243,6 +245,24 @@ describe("a target that does not surround its match", () => {
         const [ulx, uly, , , llx, lly] = target.quads[0];
         const hairline: Quad = [ulx, uly, ulx + 0.4, uly, llx, lly, llx + 0.4, lly];
         return { ...target, quads: [hairline] };
+      },
+    ],
+    [
+      "holding a sound trapezoid, 4 pt wide at the top and 24 pt at the bottom, whose padded area crosses itself",
+      (target: RedactionTarget) => {
+        const [ulx, uly, urx, , , lly] = target.quads[0];
+        const middle = (ulx + urx) / 2;
+        const trapezoid: Quad = [
+          middle - 2,
+          uly,
+          middle + 2,
+          uly,
+          middle - 12,
+          lly,
+          middle + 12,
+          lly,
+        ];
+        return { ...target, quads: [trapezoid] };
       },
     ],
     ["holding no quads", (target: RedactionTarget) => ({ ...target, quads: [] })],

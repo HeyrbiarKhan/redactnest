@@ -25,7 +25,7 @@ describe("the closed set of failures", () => {
    * Written out rather than derived from the export on purpose. Widening the set
    * is a contract change, and this is the line that makes it deliberate.
    */
-  it("is exactly the thirteen kinds the specs fix", () => {
+  it("is exactly the fourteen kinds the specs fix", () => {
     expect([...ENGINE_ERROR_KINDS]).toEqual([
       "engine-unavailable",
       "encrypted",
@@ -48,6 +48,9 @@ describe("the closed set of failures", () => {
       // wider replacement text.
       "redaction-overreach",
       "replacement-text",
+      // Added by spec 0004 after slice 2's build: a ticked match set at too
+      // steep an angle to redact safely, refused before anything is removed.
+      "slanted-text",
     ]);
   });
 

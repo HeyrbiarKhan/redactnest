@@ -960,7 +960,10 @@ describe("the redaction path (spec 0004)", () => {
     expect(screen.queryByTestId("outcome")).not.toBeInTheDocument();
   });
 
-  /** Spec 0004, AC-25, with the lines *Settled here* fixes until feature 8. */
+  /**
+   * Spec 0004, AC-25 and AC-28, with the lines *Settled here* fixes until
+   * feature 8.
+   */
   it.each([
     [
       "redaction-overreach",
@@ -969,6 +972,10 @@ describe("the redaction path (spec 0004)", () => {
     [
       "replacement-text",
       "A ticked item sits inside hidden replacement text that cannot be removed safely, so no file was made.",
+    ],
+    [
+      "slanted-text",
+      "A ticked item is set at an angle too steep to redact safely, so no file was made.",
     ],
   ] as const)(
     "says what %s means after a run, and offers no file",

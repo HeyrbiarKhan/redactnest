@@ -219,25 +219,39 @@ export function rotatedPage() {
 }
 
 /**
- * Spec 0004, AC-5. Text drawn at 30 degrees, three lines 14pt apart across the
- * line, with the middle one ticked, through all three passes.
+ * A number for a content stream. PDF has no exponent form, so the rounding
+ * error `Math.cos` leaves at a right angle (6e-17) is written as 0.
+ */
+function num(value) {
+  return Math.abs(value) < 1e-6 ? "0" : String(value);
+}
+
+/**
+ * The three spacing lines in 12pt `font`, `leading` apart, turned whole by
+ * `degrees` about the first line's origin `[x, y]`: each line starts `leading`
+ * further across the turned page than the one before, and its text runs at the
+ * same angle.
+ */
+function turnedBlock(font, leading, degrees, [x, y]) {
+  const angle = (degrees * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return [SPACING_LINES.above, SPACING_LINES.target, SPACING_LINES.below]
+    .map(
+      (text, step) =>
+        `BT /${font} 12 Tf ${num(cos)} ${num(sin)} ${num(-sin)} ${num(cos)} ` +
+        `${num(x + step * leading * sin)} ${num(y - step * leading * cos)} Tm ${literal(text)} Tj ET\n`,
+    )
+    .join("");
+}
+
+/**
+ * Spec 0004, AC-5 and AC-28. Text drawn at 30 degrees, three lines 14pt apart
+ * across the line, with the middle one ticked. Refused with `slanted-text`
+ * before any pass runs.
  */
 export function angledText() {
-  const cos = Math.cos(Math.PI / 6);
-  const sin = Math.sin(Math.PI / 6);
-  const at = (step, text) => {
-    const x = 100 + step * 14 * sin;
-    const y = 400 - step * 14 * cos;
-    return `BT /F1 12 Tf ${cos} ${sin} ${-sin} ${cos} ${x} ${y} Tm ${literal(text)} Tj ET\n`;
-  };
-  return document(() => [
-    {
-      content:
-        at(0, SPACING_LINES.above) +
-        at(1, SPACING_LINES.target) +
-        at(2, SPACING_LINES.below),
-    },
-  ]);
+  return document(() => [{ content: turnedBlock("F1", 14, 30, [100, 400]) }]);
 }
 
 /** Spec 0004, AC-5. A crop box that does not start at the origin. */
@@ -509,25 +523,234 @@ export function ocrBare() {
 
 /**
  * Spec 0004, AC-13, *Pixels checked*. Born digital text over images: an inline
- * image under one match and a 1 bit image mask under another.
+ * image under one match and a 1 bit image mask under another, both 170 by 20
+ * pt at 4 pixels per point, fine enough that AC-29 lets them through. The
+ * coarse case lives in `reach()`.
  */
 export function imagesUnder() {
+  const columns = 170 * 4;
+  const rows = 20 * 4;
   return document(({ add }) => {
     const mask = add(
       stream(
-        "/Type /XObject /Subtype /Image /Width 16 /Height 4 /ImageMask true /BitsPerComponent 1",
-        new Uint8Array(8).fill(0),
+        `/Type /XObject /Subtype /Image /Width ${columns} /Height ${rows} /ImageMask true ` +
+          "/BitsPerComponent 1 /Filter /FlateDecode",
+        deflateSync(new Uint8Array((columns / 8) * rows).fill(0)),
       ),
     );
-    const grey = "60".repeat(12 * 4);
+    const grey = deflateSync(new Uint8Array(columns * rows).fill(0x60)).toString("hex");
     return [
       {
         resources: `/XObject << /Mask ${mask} 0 R >>`,
         content:
-          `q 170 0 0 20 140 684 cm BI /W 12 /H 4 /CS /G /BPC 8 /F /AHx ID ${grey}> EI Q\n` +
+          `q 170 0 0 20 140 684 cm BI /W ${columns} /H ${rows} /CS /G /BPC 8 /F [/AHx /Fl] ID ${grey}> EI Q\n` +
           line("F1", 12, 150, 690, "Account 12345678 held") +
           `q 0.2 0.2 0.8 rg 170 0 0 20 140 624 cm /Mask Do Q\n` +
           line("F1", 12, 150, 630, "Sort code 40-11-22 used"),
+      },
+    ];
+  });
+}
+
+/** An image `size` pixels square, every pixel the grey `shade` (0 is black). */
+function flatImage(add, size, shade) {
+  return add(
+    stream(
+      `/Type /XObject /Subtype /Image /Width ${size} /Height ${size} /ColorSpace /DeviceGray ` +
+        "/BitsPerComponent 8 /Filter /FlateDecode",
+      deflateSync(new Uint8Array(size * size).fill(shade)),
+    ),
+  );
+}
+
+/**
+ * Draw `/name` as a square `size` points across, centred on `[x, y]` and turned
+ * by `degrees`, pixel row 0 at the top as always.
+ */
+function drawImage(name, size, degrees, [x, y]) {
+  const angle = (degrees * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const half = size / 2;
+  const tx = x - half * (cos - sin);
+  const ty = y - half * (sin + cos);
+  return (
+    `q ${num(size * cos)} ${num(size * sin)} ${num(-size * sin)} ${num(size * cos)} ` +
+    `${num(tx)} ${num(ty)} cm /${name} Do Q\n`
+  );
+}
+
+/**
+ * Spec 0004, AC-5, AC-27 to AC-29. One page per case, each on its own:
+ *
+ *  0. the three line Helvetica block drawn at 1 degree, 12pt leading;
+ *  1. the same at 14pt leading;
+ *  2. at 1.5 degrees, 12pt leading;
+ *  3. at 1.5 degrees, 14pt leading;
+ *  4. the block (14pt leading) turned whole to 90 degrees;
+ *  5. the same turned to 180 degrees;
+ *  6. the target line set level with a 12 degree shear (text matrix
+ *     `1 0 0.2126 1`), synthetic italic;
+ *  7. the target line level, joined from 12pt then 11pt Helvetica, each run
+ *     its own text object, the 11pt one starting where the 12pt one ends;
+ *  8. a level match over an upright image at 4 pixels per point;
+ *  9. the same match over the same image drawn at 30 degrees;
+ * 10. the same match over an 8 by 8 pixel image stretched to 200 pt;
+ * 11. page 7's line written as one text object, the size changed by `Tf`
+ *     between the runs.
+ *
+ * Pages 0, 1, 4, 5, 7 and 8 redact; pages 2, 3 and 6 are refused with
+ * `slanted-text`, and pages 9 and 10 with `redaction-overreach`. Page 11 is a
+ * measured case: MuPDF 1.28.1 moves the text after the match when a size
+ * change sits between removed glyphs and the next glyph kept in one text
+ * object, and the self check refuses with `redaction-incomplete`. The match is
+ * `Jeremy Quigley` on every page. One file, so a test can tick a slanted
+ * target and an image target together.
+ */
+export function reach() {
+  const lines = (target) =>
+    line("F1", 12, 72, 700, SPACING_LINES.above) +
+    target +
+    line("F1", 12, 72, 672, SPACING_LINES.below);
+  const overImage = (name, image, degrees) => ({
+    resources: `/XObject << /${name} ${image} 0 R >>`,
+    content:
+      drawImage(name, 200, degrees, [250, 400]) +
+      line("F1", 12, 190, 396, "Payee Jeremy Quigley here"),
+  });
+
+  return document(({ add }) => {
+    const fine = flatImage(add, 800, 0xc0);
+    const coarse = flatImage(add, 8, 0xc0);
+    return [
+      { content: turnedBlock("F1", 12, 1, [72, 700]) },
+      { content: turnedBlock("F1", 14, 1, [72, 700]) },
+      { content: turnedBlock("F1", 12, 1.5, [72, 700]) },
+      { content: turnedBlock("F1", 14, 1.5, [72, 700]) },
+      { content: turnedBlock("F1", 14, 90, [100, 400]) },
+      { content: turnedBlock("F1", 14, 180, [500, 400]) },
+      {
+        content: lines(
+          `BT /F1 12 Tf 1 0 0.2126 1 72 686 Tm ${literal(SPACING_LINES.target)} Tj ET\n`,
+        ),
+      },
+      {
+        // 198.048 is where the 12pt run ends, from Helvetica's widths.
+        content: lines(
+          `BT /F1 12 Tf 72 686 Td ${literal("Account holder Jeremy ")} Tj ET\n` +
+            `BT /F1 11 Tf 198.048 686 Td ${literal("Quigley here")} Tj ET\n`,
+        ),
+      },
+      overImage("Fine", fine, 0),
+      overImage("Fine", fine, 30),
+      overImage("Coarse", coarse, 0),
+      {
+        content: lines(
+          `BT /F1 12 Tf 72 686 Td ${literal("Account holder Jeremy ")} Tj ` +
+            `/F1 11 Tf ${literal("Quigley here")} Tj ET\n`,
+        ),
+      },
+    ];
+  });
+}
+
+/** A rectangle as a quad in text orientation: `ul`, `ur`, `ll`, `lr`. */
+function turnedQuad([cx, cy], length, height, degrees) {
+  const angle = (degrees * Math.PI) / 180;
+  const along = [Math.cos(angle), Math.sin(angle)];
+  const across = [-Math.sin(angle), Math.cos(angle)];
+  const at = (u, v) => [
+    cx + along[0] * u + across[0] * v,
+    cy + along[1] * u + across[1] * v,
+  ];
+  return Object.freeze([
+    ...at(-length / 2, -height / 2),
+    ...at(length / 2, -height / 2),
+    ...at(-length / 2, height / 2),
+    ...at(length / 2, height / 2),
+  ]);
+}
+
+/** A level quad from its bounds. */
+function levelQuad(x0, y0, x1, y1) {
+  return Object.freeze([x0, y0, x1, y0, x0, y1, x1, y1]);
+}
+
+/**
+ * Where `bounds-pin.pdf` puts things, in MuPDF's page space (y runs down from
+ * the top of a page 792pt tall), so the pin test acts on exactly the areas
+ * the marks were placed around. Spec 0004, *MuPDF's bounds behaviour is pinned
+ * by a test*.
+ */
+export const BOUNDS_PIN = (() => {
+  const slanted = turnedQuad([200, 292], 120, 20, 30);
+  const xs = [slanted[0], slanted[2], slanted[4], slanted[6]];
+  const ys = [slanted[1], slanted[3], slanted[5], slanted[7]];
+  const [x0, y0, x1, y1] = [
+    Math.min(...xs),
+    Math.min(...ys),
+    Math.max(...xs),
+    Math.max(...ys),
+  ];
+
+  return Object.freeze({
+    /** Page 1: a Redact area 120 by 20 pt at 30 degrees, centred on the image. */
+    slanted,
+    /** Its axis aligned bounds, `[x0, y0, x1, y1]`. */
+    bounds: Object.freeze([x0, y0, x1, y1]),
+    /**
+     * Page 1: 2 pt red squares by their upper left corners. Two sit just inside
+     * the far corners of the bounds, well outside the area; one sits just
+     * outside the bounds.
+     */
+    cornerSquares: Object.freeze([
+      Object.freeze([x1 - 2.1, y0 + 0.1]),
+      Object.freeze([x0 + 0.1, y1 - 2.1]),
+    ]),
+    outsideSquare: Object.freeze([x1 + 1, y0 + 0.1]),
+    /** Page 1: a blue bar 60 pt long, and the areas laid across it. */
+    bar: Object.freeze([170, 600, 230, 602]),
+    halves: Object.freeze([levelQuad(150, 591, 200, 611), levelQuad(200, 591, 250, 611)]),
+    whole: levelQuad(150, 591, 250, 611),
+    /** Pages 2 and 3: a level area 120 by 20 pt, centred on the image. */
+    level: turnedQuad([200, 292], 120, 20, 0),
+    /** Every image's size in pixels, and where the upright images sit. */
+    imagePixels: Object.freeze({ black: 200, coarse: 8 }),
+  });
+})();
+
+/**
+ * Spec 0004, AC-28, AC-29 and INV-15's premise. The pages the bounds pin
+ * drives MuPDF over, with no text at all:
+ *
+ *  1. an upright 200 by 200 pixel black image drawn 200 by 200 pt, the red
+ *     squares around `BOUNDS_PIN.slanted`'s bounds, and the blue bar;
+ *  2. the same image drawn at 30 degrees, centred where it was;
+ *  3. an 8 by 8 pixel black image stretched to 200 pt.
+ */
+export function boundsPin() {
+  const square = ([x, y]) => `${num(x)} ${num(792 - y - 2)} 2 2 re f\n`;
+  const [bx0, by0, bx1, by1] = BOUNDS_PIN.bar;
+
+  return document(({ add }) => {
+    const black = flatImage(add, BOUNDS_PIN.imagePixels.black, 0);
+    const coarse = flatImage(add, BOUNDS_PIN.imagePixels.coarse, 0);
+    return [
+      {
+        resources: `/XObject << /Black ${black} 0 R >>`,
+        content:
+          drawImage("Black", 200, 0, [200, 500]) +
+          "1 0 0 rg\n" +
+          [...BOUNDS_PIN.cornerSquares, BOUNDS_PIN.outsideSquare].map(square).join("") +
+          `0 0 1 rg ${bx0} ${792 - by1} ${bx1 - bx0} ${by1 - by0} re f\n`,
+      },
+      {
+        resources: `/XObject << /Black ${black} 0 R >>`,
+        content: drawImage("Black", 200, 30, [200, 500]),
+      },
+      {
+        resources: `/XObject << /Coarse ${coarse} 0 R >>`,
+        content: drawImage("Coarse", 200, 0, [200, 500]),
       },
     ];
   });

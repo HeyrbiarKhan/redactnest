@@ -1,8 +1,73 @@
 import type { Image, Matrix, PDFPage, Pixmap } from "mupdf";
 
-import { containsPoint, quadBounds } from "./geometry";
+import {
+  BOUNDS_REACH_RATIO,
+  containsPoint,
+  imageReach,
+  paddedArea,
+  quadBounds,
+  quadHeight,
+} from "./geometry";
 import type { MuPdf } from "./load";
-import type { Quad } from "./types";
+import type { Quad, RedactionTarget } from "./types";
+
+/**
+ * Would MuPDF blank every image under these targets only within reach of their
+ * padded areas? Spec 0004, AC-29 and INV-15.
+ *
+ * MuPDF blanks an image's pixels whole, over each area's page bounds taken in
+ * the image's own pixel grid, so an image drawn at an angle or at a coarse
+ * resolution is blanked well past the padded area even under level text, over
+ * ink no part of the self check looks at. So before anything is removed, the
+ * page is walked once with images kept, and for each image block that meets a
+ * padded area's bounds, the region MuPDF will blank may reach no more than
+ * `BOUNDS_REACH_RATIO` of the target quad's height past the padded area.
+ *
+ * Reads each image's size and never decodes it. Fails closed: a placement that
+ * cannot be inverted counts as out of reach. Exported so feature 6 can mark a
+ * match the engine would refuse before anybody ticks it.
+ */
+export function imagesWithinReach(
+  page: PDFPage,
+  targets: readonly Pick<RedactionTarget, "quads">[],
+): boolean {
+  const areas = targets.flatMap((target) =>
+    target.quads.map((quad) => {
+      const padded = paddedArea(quad);
+      return {
+        padded,
+        bounds: quadBounds(padded),
+        limit: BOUNDS_REACH_RATIO * quadHeight(quad),
+      };
+    }),
+  );
+  const stext = page.toStructuredText("preserve-images");
+  let within = true;
+
+  try {
+    stext.walk({
+      onImageBlock(bbox, transform, image) {
+        try {
+          if (!within) return;
+          const width = image.getWidth();
+          const height = image.getHeight();
+          // "Within the limit" rather than "not past it", so a reach that is
+          // not a number counts as out of reach.
+          within = areas.every(
+            ({ padded, bounds, limit }) =>
+              !boundsMeet(bbox, bounds) ||
+              imageReach(transform, width, height, padded) <= limit,
+          );
+        } finally {
+          image.destroy();
+        }
+      },
+    });
+  } finally {
+    stext.destroy();
+  }
+  return within;
+}
 
 /**
  * The pixel half of the self check. Spec 0004, AC-13.
@@ -49,10 +114,12 @@ export function imagesAreBlank(
 }
 
 function meetsAny(bbox: readonly number[], quads: readonly Quad[]): boolean {
-  return quads.some((quad) => {
-    const [x0, y0, x1, y1] = quadBounds(quad);
-    return bbox[0] <= x1 && x0 <= bbox[2] && bbox[1] <= y1 && y0 <= bbox[3];
-  });
+  return quads.some((quad) => boundsMeet(bbox, quadBounds(quad)));
+}
+
+/** Do two `[x0, y0, x1, y1]` boxes touch or overlap? */
+function boundsMeet(a: readonly number[], b: readonly number[]): boolean {
+  return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
 }
 
 /**

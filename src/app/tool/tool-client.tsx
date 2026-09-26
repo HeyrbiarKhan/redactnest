@@ -78,12 +78,14 @@ function errorText(kind: EngineErrorKind, entitlement: EntitlementSnapshot): str
       return "This PDF has layers that can be switched on and off, and RedactNest cannot redact those yet.";
     case "redaction-incomplete":
       return "RedactNest could not confirm that everything was removed from this PDF, so it did not make a file.";
-    // Spec 0004, *Settled here*: the two lines are fixed until feature 8
+    // Spec 0004, *Settled here*: the three lines are fixed until feature 8
     // writes the real copy.
     case "redaction-overreach":
       return "Removing what you ticked would also remove words you did not tick, so no file was made.";
     case "replacement-text":
       return "A ticked item sits inside hidden replacement text that cannot be removed safely, so no file was made.";
+    case "slanted-text":
+      return "A ticked item is set at an angle too steep to redact safely, so no file was made.";
   }
 }
 

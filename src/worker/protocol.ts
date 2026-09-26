@@ -27,15 +27,17 @@
  * boundary. It lives in this set anyway so feature 8 writes copy for one list
  * rather than two (spec 0002).
  *
- * Spec 0004 added the last five. `not-pdf` is judged from the bytes before the
+ * Spec 0004 added the last six. `not-pdf` is judged from the bytes before the
  * engine is fetched (AC-1), `hidden-layers` refuses a document with layers a
  * viewer can switch (AC-3), and `redaction-incomplete` is the engine refusing to
- * hand back a file its own self check could not prove clean (AC-13). The last
+ * hand back a file its own self check could not prove clean (AC-13). The next
  * two name the other ways a self check can fail (AC-25): `replacement-text`
  * means a ticked match sat inside wider replacement text that survived the run,
  * and `redaction-overreach` means removing the ticks would also remove, or
- * hide, words nobody ticked. None of the five says which page or which
- * characters.
+ * hide, words or image content nobody ticked (AC-29 raises it before anything
+ * is removed, too). `slanted-text` refuses a ticked match set at too steep an
+ * angle to redact safely, before anything is removed (AC-28). None of the six
+ * says which page, which characters, or at what angle.
  */
 export const ENGINE_ERROR_KINDS = [
   "engine-unavailable",
@@ -51,6 +53,7 @@ export const ENGINE_ERROR_KINDS = [
   "redaction-incomplete",
   "redaction-overreach",
   "replacement-text",
+  "slanted-text",
 ] as const;
 
 export type EngineErrorKind = (typeof ENGINE_ERROR_KINDS)[number];

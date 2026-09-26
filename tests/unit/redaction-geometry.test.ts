@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  blankedRegion,
+  BOUNDS_REACH_RATIO,
+  boundsReach,
   containsPoint,
   EXTRACTION_OPTIONS,
+  imageReach,
   isSoundQuad,
+  isTooSlanted,
   LINE_ANGLE_TOLERANCE,
   LINE_BOX_BOTTOM,
   LINE_BOX_TOP,
@@ -26,7 +31,8 @@ import {
 /**
  * The target geometry, as spec 0004's *Target geometry* sets it out. Pure
  * arithmetic on quads, so no engine is needed. Verifies AC-4, AC-6 and AC-27
- * at the level of the numbers; the fixture matrix proves them on real pages.
+ * to AC-29 at the level of the numbers; the fixture matrix proves them on real
+ * pages.
  */
 
 /** 100pt along, 16pt across, level, with its top edge at y = 200. */
@@ -55,6 +61,12 @@ function expectQuad(actual: Quad, expected: Quad): void {
   actual.forEach((value, index) => expect(value).toBeCloseTo(expected[index], 9));
 }
 
+/** A region `blankedRegion` found, landing on `expected`. */
+function expectRegion(actual: Quad | null, expected: Quad): void {
+  expect(actual).not.toBeNull();
+  if (actual) expectQuad(actual, expected);
+}
+
 describe("the constants", () => {
   /**
    * Written out rather than read back, so changing one is a deliberate edit to
@@ -69,6 +81,7 @@ describe("the constants", () => {
       TARGET_PADDING_RATIO,
       TARGET_PADDING_ALONG_RATIO,
       MIN_QUAD_SIDE,
+      BOUNDS_REACH_RATIO,
       POSITION_TOLERANCE,
       LINE_ANGLE_TOLERANCE,
       LINE_HEIGHT_MIN,
@@ -81,6 +94,7 @@ describe("the constants", () => {
       TARGET_PADDING_RATIO: 0.25,
       TARGET_PADDING_ALONG_RATIO: 0.1,
       MIN_QUAD_SIDE: 0.5,
+      BOUNDS_REACH_RATIO: 0.1,
       POSITION_TOLERANCE: 0.01,
       LINE_ANGLE_TOLERANCE: 2,
       LINE_HEIGHT_MIN: 0.67,
@@ -205,6 +219,192 @@ describe("a sound quad", () => {
 
   it("accepts a side of exactly half a point", () => {
     expect(isSoundQuad([100, 200, 100.5, 200, 100, 216, 100.5, 216])).toBe(true);
+  });
+
+  /**
+   * Sound itself, but its sides converge so sharply that growing it by the
+   * padding turns its top edge back on itself. AC-27 refuses the target, so
+   * every measure after it can assume a convex padded area.
+   */
+  it("finds a trapezoid 4 pt wide at the top and 24 pt at the bottom sound, and its padded area not", () => {
+    const trapezoid: Quad = [148, 200, 152, 200, 138, 216, 162, 216];
+
+    expect(isSoundQuad(trapezoid)).toBe(true);
+    expect(isSoundQuad(paddedArea(trapezoid))).toBe(false);
+  });
+});
+
+/** A quad sheared by `degrees` along the line, the way synthetic italic draws. */
+function sheared(degrees: number, width: number, height: number): Quad {
+  const lean = height * Math.tan((degrees * Math.PI) / 180);
+  return [
+    100 + lean,
+    200,
+    100 + lean + width,
+    200,
+    100,
+    200 + height,
+    100 + width,
+    200 + height,
+  ];
+}
+
+/** Spec 0004, AC-28, *Bounds reach*. */
+describe("the bounds reach", () => {
+  it.each([0, 90, 180, 270])("is 0 for a rectangle at %i degrees", (degrees) => {
+    expect(boundsReach(rotated(50, 400, degrees, 100, 16))).toBeCloseTo(0, 9);
+  });
+
+  it.each([1, 1.5, 10, 30, 60, -20])(
+    "is the longer side times |sin 2θ| / 2 for a rectangle at %f degrees",
+    (degrees) => {
+      const expected = (100 * Math.abs(Math.sin((2 * degrees * Math.PI) / 180))) / 2;
+
+      expect(boundsReach(rotated(50, 400, degrees, 100, 16))).toBeCloseTo(expected, 9);
+    },
+  );
+
+  /** 0.305 of the height at a shear of 0.2126, about 12 degrees. */
+  it("is 0.75 × sin 2s of the height for a padded quad sheared by s", () => {
+    const shear = Math.atan(0.2126);
+    const quad = sheared((shear * 180) / Math.PI, 100, 16);
+
+    const reach = boundsReach(paddedArea(quad)) / quadHeight(quad);
+    expect(reach).toBeCloseTo(0.75 * Math.sin(2 * shear), 9);
+    expect(reach).toBeCloseTo(0.305, 3);
+    expect(isTooSlanted(quad)).toBe(true);
+  });
+
+  it("is not a number for an area that is not", () => {
+    expect(boundsReach([Number.NaN, 200, 200, 200, 100, 216, 200, 216])).toBeNaN();
+  });
+});
+
+/** Spec 0004, AC-28: refused once the padded area reaches past a tenth of the height. */
+describe("too slanted", () => {
+  /**
+   * A 100 by 16 quad pads to 103.2 by 24, so its reach is 103.2 × sin 2θ / 2,
+   * and 1.6 (a tenth of 16) is reached at this angle.
+   */
+  const limit = (Math.asin((2 * BOUNDS_REACH_RATIO * 16) / 103.2) / 2) * (180 / Math.PI);
+
+  it("turns true just past BOUNDS_REACH_RATIO", () => {
+    expect(isTooSlanted(rotated(50, 400, limit * 0.99, 100, 16))).toBe(false);
+    expect(isTooSlanted(rotated(50, 400, limit * 1.01, 100, 16))).toBe(true);
+  });
+
+  it.each([0, 90, 180, 270])("is never true for a rectangle at %i degrees", (degrees) => {
+    expect(isTooSlanted(rotated(50, 400, degrees, 100, 16))).toBe(false);
+  });
+
+  it.each([
+    ["a NaN corner", [Number.NaN, 200, 200, 200, 100, 216, 200, 216]],
+    ["an infinite corner", [100, 200, Number.POSITIVE_INFINITY, 200, 100, 216, 200, 216]],
+  ] as const)("fails closed on a quad with %s", (_label, quad) => {
+    expect(isTooSlanted(quad)).toBe(true);
+  });
+});
+
+/**
+ * Spec 0004, AC-29, *The image reach check*. `transform` maps an image's unit
+ * square onto the page with pixel row 0 at the top, as MuPDF reports it.
+ */
+describe("the region blanked in an image", () => {
+  /** 200 pt square at (100, 100), 4 pixels per point: pixel edges every 0.25 pt. */
+  const FINE = [200, 0, 0, 200, 100, 100] as const;
+  const FINE_PIXELS = 800;
+
+  it("is the area's bounds for an upright image whose pixel edges fall on them", () => {
+    const area: Quad = [150, 200, 250, 200, 150, 224, 250, 224];
+
+    expectRegion(blankedRegion(FINE, FINE_PIXELS, FINE_PIXELS, area), area);
+    expect(imageReach(FINE, FINE_PIXELS, FINE_PIXELS, area)).toBeCloseTo(0, 9);
+  });
+
+  /** A floating point error must not round out to a whole extra pixel. */
+  it("keeps an edge a hair past a pixel boundary on that boundary", () => {
+    const area: Quad = [150.00001, 200, 249.99999, 200, 150.00001, 224, 249.99999, 224];
+
+    expectRegion(
+      blankedRegion(FINE, FINE_PIXELS, FINE_PIXELS, area),
+      [150, 200, 250, 200, 150, 224, 250, 224],
+    );
+  });
+
+  it("rounds out to whole pixels", () => {
+    const area: Quad = [150.1, 200.1, 249.9, 200.1, 150.1, 223.9, 249.9, 223.9];
+
+    expectRegion(
+      blankedRegion(FINE, FINE_PIXELS, FINE_PIXELS, area),
+      [150, 200, 250, 200, 150, 224, 250, 224],
+    );
+  });
+
+  /**
+   * An 8 by 8 image stretched to 200 pt, pixels 25 pt across, under a level
+   * area 120 by 20: the whole pixels reach 21.2 pt past it (spec 0004).
+   */
+  it("grows to whole coarse pixels", () => {
+    const coarse = [200, 0, 0, 200, 100, 192] as const;
+    const area: Quad = [140, 282, 260, 282, 140, 302, 260, 302];
+
+    expectRegion(
+      blankedRegion(coarse, 8, 8, area),
+      [125, 267, 275, 267, 125, 317, 275, 317],
+    );
+    expect(imageReach(coarse, 8, 8, area)).toBeCloseTo(Math.hypot(15, 15), 9);
+  });
+
+  it("grows with the image's rotation, and holds the area's bounds", () => {
+    const angle = Math.PI / 6;
+    const [cos, sin] = [Math.cos(angle), Math.sin(angle)];
+    const turned = [
+      200 * cos,
+      200 * sin,
+      -200 * sin,
+      200 * cos,
+      200 - 100 * (cos - sin),
+      200 - 100 * (sin + cos),
+    ] as const;
+    const area: Quad = [150, 190, 250, 190, 150, 210, 250, 210];
+
+    const region = blankedRegion(turned, FINE_PIXELS, FINE_PIXELS, area);
+    expect(region).not.toBeNull();
+    for (const corner of [
+      [150, 190],
+      [250, 190],
+      [150, 210],
+      [250, 210],
+    ] as const) {
+      expect(containsPoint(region ?? LEVEL, corner)).toBe(true);
+    }
+    expect(imageReach(turned, FINE_PIXELS, FINE_PIXELS, area)).toBeGreaterThan(20);
+  });
+
+  it("is clipped to the image", () => {
+    const area: Quad = [250, 200, 350, 200, 250, 224, 350, 224];
+
+    expectRegion(
+      blankedRegion(FINE, FINE_PIXELS, FINE_PIXELS, area),
+      [250, 200, 300, 200, 250, 224, 300, 224],
+    );
+  });
+
+  it("is nothing when the area misses the image, which reaches 0", () => {
+    const area: Quad = [400, 400, 450, 400, 400, 420, 450, 420];
+
+    expect(blankedRegion(FINE, FINE_PIXELS, FINE_PIXELS, area)).toBeNull();
+    expect(imageReach(FINE, FINE_PIXELS, FINE_PIXELS, area)).toBe(0);
+  });
+
+  it("fails closed on a placement that cannot be inverted", () => {
+    const flat = [200, 0, 0, 0, 100, 100] as const;
+    const area: Quad = [150, 200, 250, 200, 150, 224, 250, 224];
+
+    expect(blankedRegion(flat, FINE_PIXELS, FINE_PIXELS, area)?.every(Number.isNaN)).toBe(
+      true,
+    );
+    expect(imageReach(flat, FINE_PIXELS, FINE_PIXELS, area)).toBeNaN();
   });
 });
 
