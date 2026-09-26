@@ -47,17 +47,17 @@ Several steps open the output in a second reader. Use at least two of: Acrobat R
 - [ ] `mutool show <output>.pdf pages`, then each page object → only allowlisted keys, and a page that had `/Group` in the source still has it → AC-7, AC-9
 - [ ] `mutool clean -d <output>.pdf plain.pdf`, then search `plain.pdf` for a removed target in plain and UTF-16BE form → no hit → AC-4
 - [ ] Add a `string` field to a member of `LoggablePayload`, run `pnpm typecheck` → it still fails, with the six new kinds in the union → spec 0002 AC-8
-- [ ] `grep -rn "PDF_HEADER_WINDOW\|TARGET_PADDING_RATIO\|TARGET_PADDING_ALONG_RATIO\|REMOVAL_BAND_RATIO\|REMOVAL_INSET_RATIO\|LINE_BOX_TOP\|LINE_BOX_BOTTOM\|MIN_QUAD_SIDE\|BOUNDS_REACH_RATIO\|POSITION_TOLERANCE\|LINE_ANGLE_TOLERANCE\|LINE_HEIGHT_MIN\|LINE_HEIGHT_MAX\|EXTRACTION_OPTIONS" src/` → each declared once in `src/engine`, with a comment naming it as a deliberate exception to the caps rule, and read rather than repeated as a literal; `EXTRACTION_OPTIONS` is also what the Vitest target helper imports → value sourcing: header verdict, removal band, line box, padded area, target verdict, slant verdict, ticked characters, match tolerance, extraction options
+- [ ] `grep -rn "PDF_HEADER_WINDOW\|TARGET_PADDING_RATIO\|TARGET_PADDING_ALONG_RATIO\|REMOVAL_BAND_RATIO\|REMOVAL_INSET_RATIO\|LINE_BOX_TOP\|LINE_BOX_BOTTOM\|MIN_QUAD_SIDE\|BOUNDS_REACH_RATIO\|POSITION_TOLERANCE\|LINE_ANGLE_TOLERANCE\|LINE_HEIGHT_MIN\|LINE_HEIGHT_MAX\|EXTRACTION_OPTIONS" src/` (which also matches `CHECK_EXTRACTION_OPTIONS` after slice 5) → each declared once in `src/engine`, with a comment naming it as a deliberate exception to the caps rule, and read rather than repeated as a literal; `EXTRACTION_OPTIONS` is also what the Vitest target helper imports → value sourcing: header verdict, removal band, line box, padded area, target verdict, slant verdict, ticked characters, match tolerance, extraction options
 - [ ] `grep -rn "dehyphenate\|collect-styles\|accurate-bboxes" src/engine` → no hits → value sourcing: extraction options
 - [ ] `grep -n "applyRedactions" src/engine/*.ts` → exactly three call sites, each with all four arguments written out → AC-4, AC-6, INV-5
 - [ ] In `tests/unit/redaction-matrix.test.ts`, the angled text case → text drawn at 30 degrees is refused with `slanted-text` before any pass runs, and no `todo` for it remains (after slice 4) → AC-28
 - [ ] In the same file, the combining mark cases → a mark inside the match (`Renée`) is removed with it; a mark drawn at zero width on the match's last letter (`José`) survives past the band's pulled in end, and the run refuses with `redaction-incomplete` → AC-5, AC-13
 - [ ] In the same file, the form drawn twice on one page with its first drawing ticked → MuPDF redacts each drawing apart, so the second keeps its text at its own place, and the form drawn on pages 1 and 3 keeps page 3's copy → AC-5, AC-13
 
-### Slanted targets and images blanked too far (spec 0004, slice 4, not built yet)
+### Slanted targets and images blanked too far (spec 0004, slice 4, built)
 
 - [ ] `pnpm test -- redaction-geometry` → the bounds reach is 0 for a rectangle at 0, 90, 180 and 270 degrees, equals the padded area's longer side times `|sin 2θ| / 2` on a rotated rectangle and `0.75 × sin 2s` of the height on a sheared quad (0.305 at a shear of 0.2126); `isTooSlanted` turns true just past `BOUNDS_REACH_RATIO` (0.1) and is true for a quad with a `NaN` corner; `blankedRegion` matches the padded area's bounds on an aligned upright image and grows with rounding and rotation otherwise → AC-28, AC-29, value sourcing: slant verdict, image reach verdict
-- [ ] `pnpm test -- redaction-matrix` → in Helvetica, `Jeremy Quigley` drawn at 1 degree (reach 0.092) redacts at 12pt and 14pt leading and passes its own checks; the same at 1.5 degrees (0.138), the 30 degree fixture, and the line set level with a 12 degree shear (0.305) each fail with `slanted-text` with the spy passes never called; the block rotated whole to 90 and to 180 degrees redacts; a level match joined from 12pt then 11pt redacts → AC-5, AC-28
+- [ ] `pnpm test -- redaction-matrix` → in Helvetica, `Jeremy Quigley` drawn at 1 degree (reach 0.092) redacts at 12pt and 14pt leading and passes its own checks; the same at 1.5 degrees (0.138), the 30 degree fixture, and the line set level with a 12 degree shear (0.305) each fail with `slanted-text` with the spy passes never called; the block rotated whole to 90 and to 180 degrees redacts; a level match joined from 12pt then 11pt, as two text objects, redacts → AC-5, AC-28
 - [ ] In the same file, precedence → a slanted target on page 1 with a mismatched target on page 2 fails with `unsupported`; a slanted target with a level one over an image drawn at 30 degrees fails with `slanted-text` → AC-27, AC-28, AC-29
 - [ ] In the same file, images under a target → a level match over an image drawn at 30 degrees, and over an 8 by 8 image stretched to 200 pt, each fail with `redaction-overreach` before any pass; over an upright image at 4 pixels per point it redacts; `images-under.pdf`, now at 4 pixels per point, still comes out blank under both matches or fails with `redaction-incomplete` → AC-13, AC-29
 - [ ] In the same file, the bounds pin over `bounds-pin.pdf` → at 30 degrees every image pixel inside the area's bounds is blanked and none outside; the squares at two bounds corners are removed and the one outside is kept; the bar across two areas is kept in one annotation and in two, and removed by one 100 pt area; after the box pass a render is black at the centre and white at a bounds corner; on the rotated and coarse image pages every blanked pixel lies inside `blankedRegion`'s quad and some lie past the padded area → AC-28, AC-29, INV-15
@@ -82,7 +82,7 @@ Several steps open the output in a second reader. Use at least two of: Acrobat R
 - AC-10 owner password redacted, output unrestricted · RC4, AES-128 and AES-256 in the engine suite and by hand
 - AC-11 every run starts clean · engine two run test, manual (after feature 6)
 - AC-12 empty run cleans · engine suite, every browser run until feature 6
-- AC-13 self check compares every page's characters, checks the pixels under targets, and checks structure · engine tests with the text pass, the padded pass and the sweep skipped, the shared XObject across pages, the no false alarm sweep over the matrix, the manual OCRmyPDF step, `mutool show`
+- AC-13 self check compares every page's characters, checks the pixels under targets, and checks structure · engine tests with the text pass, the padded pass and the sweep skipped, the shared XObject across pages, the no false alarm sweep over the matrix, the `next-line.pdf` cases after slice 5 (a match moved off the page is a survivor), the manual OCRmyPDF step, `mutool show`
 - AC-14 all or nothing · engine and worker failure tests
 - AC-15 honest outcome · engine suite against the inventory table, worker outcome assembly
 - AC-16 phases in order · worker test, manual
@@ -122,7 +122,7 @@ _The two findings that held slice 2 are resolved in spec 0004. Slice 2 has since
 
 ## Update from /develop · 2026-09-27
 
-_Slice 4 is built, so the section "Slanted targets and images blanked too far" above can now be run, despite its heading. These steps say where each check lives. The fixtures are `reach.pdf` (pages 0 to 11, listed in `reach()` in `scripts/lib/redaction-fixtures.mjs`) and `bounds-pin.pdf`, whose geometry the pin test imports as `BOUNDS_PIN`._
+_Slice 4 is built, so the section "Slanted targets and images blanked too far" above can now be run. These steps say where each check lives. The fixtures are `reach.pdf` (pages 0 to 11, listed in `reach()` in `scripts/lib/redaction-fixtures.mjs`) and `bounds-pin.pdf`, whose geometry the pin test imports as `BOUNDS_PIN`._
 
 ### Commands
 
@@ -134,6 +134,20 @@ _Slice 4 is built, so the section "Slanted targets and images blanked too far" a
 - [ ] `pnpm test -- redaction-check` → the trapezoid target fails with `unsupported`, only `redacting` is reported, and the original bytes are unchanged → AC-27
 - [ ] `node scripts/make-fixture.mjs`, then `git status tests/fixtures` → nothing changed, so the committed fixtures are exactly what the script writes, and `angled-text.pdf` is byte for byte what slice 2 committed → fixtures reviewable as code
 
-### Waiting on /architect
+### Recorded by /architect · 2026-09-27
 
-- [ ] Spec 0004 records the size change finding: inside one text object, a `Tf` that changes the size between removed glyphs and the next glyph kept moves the text after the match, and the run refuses with `redaction-incomplete`. A font change at the same size does not (measured). Until it is recorded, the page 11 case above pins the behaviour → AC-13, AC-28
+_The size change finding is now an honest limit in spec 0004's *Security model*, with its measurements in the rationale's *What slice 4's build turned up*, and it joins the upstream MuPDF report in Follow-up. Horizontal scaling (`Tz`) was measured to do the same; only the `Tf` case is pinned. Measuring beside it found lines shown with `'` or `"` lost by MuPDF's filter, and a leak through them, which slice 5 closes._
+
+- [ ] The page 11 case in the measured cases above still fails with `redaction-incomplete`, and page 7 (the same line as two text objects) still redacts. If page 11 ever redacts cleanly, confirm it with the direct pin below before concluding MuPDF fixed the filter; then change the test to expect a clean redaction and mark the upstream item done → AC-13, the size change limit in *Security model*
+
+### Slice 5: the self check sees text drawn off the page (not built yet)
+
+- [ ] `pnpm test -- redaction-geometry` → `CHECK_EXTRACTION_OPTIONS` is `["clip=no", "ignore-actualtext,clip=no"]` and `EXTRACTION_OPTIONS` is unchanged → AC-13, value sourcing: extraction options
+- [ ] `grep -rn "CHECK_EXTRACTION_OPTIONS\|EXTRACTION_OPTIONS" src/engine` → the record and the self check walk `CHECK_EXTRACTION_OPTIONS`; `targets.ts` still walks `EXTRACTION_OPTIONS[0]` → AC-13, AC-27
+- [ ] `pnpm test -- redaction-matrix` → `next-line.pdf` pages 0 and 1 (a match alone on a `'` or `"` line) fail with `redaction-incomplete`, and neither returns a file; page 2 (the `T*` control) redacts, with the match absent from the decompressed bytes; page 3 fails with `redaction-incomplete` ticked and `unsupported` with nothing ticked; page 4 (text outside the media box) yields a cleaned file with nothing ticked and redacts with the match ticked → AC-4, AC-13, AC-25
+- [ ] In the same file, the direct pin → page 0 written through `sanitize` with nothing removed leaves `Jeremy Quigley` out of default extraction and keeps it under `clip=no`. If this ever fails because the line stays on the page, MuPDF has fixed the `'` fault: mark that upstream item done → AC-13
+- [ ] The comment on the page 11 case no longer says the finding is "not yet recorded in spec 0004" → spec hygiene
+
+### Owed to /test
+
+- [ ] A direct pin on `reach.pdf` page 11, driving MuPDF as the bounds pin does, with the removal band as the engine builds it: no ticked character survives in unclipped extraction, and every character of ` here` moves 3.556 pt back (within 0.01). The engine test asserts only the kind, which a surviving glyph or a self check regression would also satisfy → AC-13, the size change limit in *Security model*

@@ -439,3 +439,78 @@ The estimate maps the area's page bounds into the image's pixel grid, rounds out
 **A sound quad can have an unsound padded area.** A trapezoid 4 pt wide at the top and 24 pt at the bottom passes AC-27's original checks, but its padded area, extrapolated beyond the quad, crosses itself, where a point to convex quad distance means nothing. AC-27 now checks the padded area too.
 
 **The rest** settled what the builder would otherwise have invented: that the slant measure fails closed on `NaN`; the fixture font and page for each new case; a precedence test across pages; the exports and where `slanted-text` goes in the kind list; the bounds pin's file, fixture and geometry; the sheared quad's closed form (`0.75 × sin 2s` of the height); page 3's quads and the absent U+0301 in the measured cases; the stale notes in `verify.md`; and wording that overclaimed.
+
+## What slice 4's build turned up
+
+`/develop` found this while building slice 4's joined level line (AC-28's 12pt then 11pt case): written as two text objects it redacts, written as one it does not. It is pinned as `reach.pdf` page 11. `/architect` then measured the cases beside it with throwaway scripts in Node against the same MuPDF 1.28.1, removing on a level version of the removal band alone, and reading the rewritten content stream. The independent cross check reran the first nine rows and got the same numbers. As before, nothing from the scripts is in the repository.
+
+**The text after a match moves when a setting that scales it changes between the removed glyphs and the next glyph kept** (`Account holder Jeremy Quigley here`, Helvetica, `Jeremy Quigley` removed; a move is where every kept character after the match lands, compared with its source origin, and every kept character was checked, in order, against the source less the match):
+
+| Case | Move of the text after the match |
+|---|---|
+| Two text objects, 12pt then 11pt (page 7) | none |
+| One text object, 12pt then `Tf` to 11pt inside the match (page 11) | 3.556 pt back |
+| One text object, the whole match at 12pt, then `Tf` to 11pt before ` here` | 6.946 pt back |
+| The same at 11pt, then `Tf` to 12pt | 6.946 pt forward |
+| One text object, the whole match at 12pt, then `80 Tz` | 16.670 pt back |
+| A footnote marker after the match: `7 Tf 4 Ts (1)`, then back to 12pt | 34.730 pt back, the marker and ` here` alike |
+| One text object, `Tf` to 11pt before the match | none |
+| One text object, a change of font at the same size after the match | none |
+| One text object, `1 Tc` after the match | none |
+| One text object, the next line after the match reached by `Td`, `T*` or `Tm` | none |
+| One text object, `Tf` to 11pt then `Td` to the next line after the match | none |
+| One text object, `80 Tz`, `3 Tw` or `1 Tc` set for the whole line | none |
+
+Every move equals the width of the removed glyphs drawn before the change, times the ratio of the new setting to the old, less one. At 12pt the match is 83.352 pt wide, so × (11/12 − 1) is −6.946 and × (0.8 − 1) is −16.670; at 11pt it is 76.406 pt, so × (12/11 − 1) is +6.946. On page 11 only `Jeremy ` is drawn before the `Tf`, 42.672 pt, so −3.556. The rewritten stream shows why: for the third row MuPDF writes `(Account holder )Tj/F1 11 Tf[-6946.001]TJ ( here)Tj`, the removed advance in thousandths of text space placed after the `Tf`, where the PDF scales it by 11 instead of 12. Character and word spacing are not part of that scaling, which fits the `Tc` and `Tw` rows not moving. No measured case left a ticked character behind.
+
+**The standalone reproduction, for the upstream report.** A 612 by 792 pt page with Helvetica as `/F1` and this content stream: `BT /F1 12 Tf 72 686 Td (Account holder Jeremy Quigley) Tj /F1 11 Tf ( here) Tj ET`. One `Redact` annotation with the quad `157.025 100.52 237.079 100.52 157.025 102.168 237.079 102.168` (MuPDF.js page space, a thin band through `Jeremy Quigley`), then `page.applyRedactions(false, 0, 0, 0)`. Expected: the `h` of `here` stays at x = 241.786. Observed: it lands at x = 234.840, 6.946 pt back, and the rewritten stream is `q BT/F1 12 Tf 72 686 TD (Account holder )Tj/F1 11 Tf[-6946.001]TJ ( here)Tj ET Q`.
+
+**Why it refuses with `redaction-incomplete`.** A moved character is missing at its old origin and extra at its new one, in both extraction modes, and AC-25 ranks an extra character with replacement text ignored first. So the kind reads as a leak although the ticked text is gone. Feature 11's counts cannot tell the two apart, which is why the corpus measurement in Follow-up counts this cause by hand.
+
+**Why it is recorded as a limit, not fixed:**
+
+- Rewriting the gap in the content stream ourselves is the one thing INV-13 rules out: a second, weaker reading of the page in the place this product cannot afford one.
+- Refusing it before removal would need to see text object boundaries, which structured text does not report, and a check on size alone would also refuse page 7, which redacts cleanly today. A read only check through a MuPDF.js `Device` (its `fillText` calls, or the spans `Text.walk` gives) might tell page 7 from page 11 without editing anything. That is possible but not measured, and it is deferred because the self check already fails closed.
+- The self check already refuses it, on every page, with no file handed back. The failure is closed, and the visitor is told that RedactNest could not confirm the removal and made no file, which is true here too.
+
+The likeliest real trigger is a footnote reference set smaller straight after a name, drawn in the same text object. How common that is in HR and legal documents is unknown until the corpus run measures it. The fix belongs upstream, so it joins the MuPDF report in Follow-up.
+
+### Lines shown with `'` or `"` are lost, and a match on one leaked
+
+The cross check asked whether a move to the next line inside one text object widens the size change limit. It does not, but measuring it turned up a separate fault in the same filter (same scripts, same MuPDF):
+
+| Case (one text object unless stated) | Result |
+|---|---|
+| `14 TL 72 686 Td (… Jeremy Quigley) Tj T* (here next line) Tj`, match removed | clean; rewritten as `0 -14 TD` before the next line |
+| The same with `(here next line) '` in place of `T* … Tj`, match removed | `here next line` lost from extraction |
+| The same with `0 0 (here next line) "` | lost |
+| `'` before the match, the match on the `'` line | that whole line lost, and the match not removed there |
+| `'` in a text object of its own, the match in another | that line lost |
+| `'` on a page where the band removes nothing near it | that line lost |
+| `'`, written with `sanitize` and no redaction at all | lost |
+| `T*`, written with `sanitize` and no redaction at all | clean |
+
+The rewritten stream shows why. `14 TL 72 686 Td (Account holder) Tj (here next line) ' ` comes back as `72 686 TD (Account holder)Tj T* (here next line)Tj`. `TD` moves like `Td` and also sets the leading to minus its vertical move, here −686. MuPDF's own `T*` path writes an explicit `0 -14 TD` and is right, but for `'` and `"` it writes a bare `T*`, which now moves 686 pt up, off the page. A leading of `0 0 Td` then `72 686 Td` merged into one `TD` and failed the same way. Because the engine writes every output with `sanitize` (`WRITE_OPTIONS` in `src/engine/rebuild.ts`), this reaches every page of such a document on every run, including a run with nothing ticked. Where the first move is short, the lines would land elsewhere on the page instead, which was not measured.
+
+**It leaked.** MuPDF 1.28.1's default extraction clips to the page: a glyph drawn off it is left out (`clip=no` keeps it; `mediabox-clip=no` does too, with a warning that the name is deprecated). The self check extracted with those defaults, so it could not see where the filter had put the lost lines. Run through the real engine with a throwaway Vitest configuration outside the repository (a one page Helvetica file, the target found as feature 6 will find it):
+
+| Case | The engine today |
+|---|---|
+| `14 TL 72 700 Td (Name:) Tj (Jeremy Quigley) '`, the match ticked | **hands back a file**: its text reads `Name:`, and `Jeremy Quigley` is in its decompressed bytes |
+| The same with `0 0 (Jeremy Quigley) "` | **hands back a file**, the same way |
+| The same with `T* (Jeremy Quigley) Tj` | hands back a file with the match gone from its bytes |
+| `(Name: Jeremy Quigley) Tj (kept line) '`, the match ticked | refuses with `redaction-overreach` (the kept line is missing) |
+| The same with nothing ticked | refuses with `unsupported` |
+| `reach.pdf` page 11's line | refuses with `redaction-incomplete` |
+
+When the match is the only text on the line, nothing unticked goes missing, and the match itself drawn off the page reads as removed. The file carries a black box over the match and the match in its content: the one failure this product exists to prevent. No visitor could reach it, because nothing is ticked until feature 6.
+
+**The fix: the self check extracts without clipping to the page.** With `clip=no` on both the record and the comparison, the moved match is an extra character at its new origin, so the run refuses with `redaction-incomplete`; a moved kept line is extra too and refuses the same way; nothing ticked still gives `unsupported`. Text a source draws off the page is recorded and compared like any other: written through `sanitize`, with and without a removal elsewhere on the page, it came back with every character at its origin (measured), so it raises no false alarm. Detection keeps the clipped default, because a visitor reviews what the page shows.
+
+- Runner up: a dry run before removal that writes a copy through `sanitize` with nothing removed and refuses with `unsupported` if its characters change. It turns these documents away before anything is removed, with a plainer kind, but it only catches filter faults that appear without a removal, and costs a write and an extraction per run. The unclipped check closes the whole class of a glyph moved rather than removed.
+- Also weighed: a byte search of the output for each target's text, as AC-4's tests do. It misses CID fonts and strings split by kerning, so it cannot be the guarantee.
+- Not considered: patching the stream (INV-13), or dropping `sanitize` from the write, which gives up what keeps shared resources honest.
+
+With slice 5, the `'` and `"` case is an honest limit like the size change: such a document is refused on every run, and nothing is handed back.
+
+**The standalone reproduction, for the upstream report.** A 612 by 792 pt page with Helvetica as `/F1` and the content stream `BT /F1 12 Tf 14 TL 72 686 Td (Account holder) Tj (here next line) ' ET`. Open it, then `saveToBuffer("sanitize")` and reopen. Expected: `here next line` on a baseline 14 pt below `Account holder`. Observed: it is absent from extraction, and the rewritten stream is `q BT/F1 12 Tf 72 686 TD (Account holder)Tj T* (here next line)Tj ET Q`. The same happens through `applyRedactions` on any page holding a Redact annotation.
