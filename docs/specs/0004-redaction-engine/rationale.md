@@ -16,6 +16,8 @@ The consequence of getting this wrong is not a bug report. It is a person sendin
 
 Building slice 2 turned up two more forces, both about geometry. A quad from `page.search()` runs from the font's ascent to its descent as MuPDF measures them, between 1.0 and 1.37 em tall depending on the font, so at single spacing it reaches into the lines above and below. MuPDF removes any glyph whose full height box touches a Redact area, which makes that overlap a removal, not just a picture: whole words on the neighbouring lines vanish, and nothing in the first design noticed. Separately, replacement text (`/ActualText`, a string a PDF can attach to a run of glyphs so that copying yields that string instead) survives whole when only some of its glyphs are removed. Ordinary extraction then still returns the ticked match, and MuPDF places those characters just outside the target's quad, where the first design's check was not looking. The opposite failure matters as much as the leak: a redacted contract missing an unticked word can mean something different.
 
+Building slice 2 turned up a third force, about slant. MuPDF 1.28.1 does not act on a Redact annotation's quads as drawn. It blanks pixels and judges covered line art over each quad's axis aligned bounding box (the upright rectangle around it), and it removes text whose box meets those bounds. On level text the bounds are the quad, so nothing changes. On text set at an angle they are much larger: at 30 degrees a thin band's bounds take in the lines above and below. Text on a scan fed in crooked is set at a small angle too, because Tesseract writes the scan's skew into its text layer, and synthetic italic (a slant made by the text matrix) gives a slanted quad on a level line. The self check sees what happens to text, and the pixels under the target. It does not see pixels blanked or line art removed beyond the target, which is where the bounds reach.
+
 ## Options considered
 
 The feature is one decision with several load bearing parts. Each part below lists the options weighed; the chosen composite is Option 1 in [index.md](index.md).
@@ -95,7 +97,7 @@ The feature is one decision with several load bearing parts. Each part below lis
 ### Where text is removed (after slice 2)
 
 **A thin band through each quad, ends pulled in (chosen).** The quad from 0.45 to 0.55 of its height, each end pulled in by 0.1 of its height (first 0.05, widened after the second cross check), capped at a quarter of its width.
-- Pros: MuPDF's glyph boxes are full height, so a band through the middle touches every glyph of the match and none of the neighbouring lines, down to lines about three quarters of an em apart. Measured to catch punctuation and to work on rotated text and on a match split across lines. Uses only the quad, which is what detection already hands over.
+- Pros: MuPDF's glyph boxes are full height, so a band through the middle touches every glyph of the match and none of the neighbouring lines, down to lines about three quarters of an em apart. Measured to catch punctuation and to work on a page rotated 90 degrees and on a match split across lines (text set at other angles is a separate question, settled after slice 2's build). Uses only the quad, which is what detection already hands over.
 - Cons: the margins are tuned against a handful of fonts. A neighbour kerned deep into the match is still removed, which the check then refuses.
 
 **A band from each glyph's origin and size.** Match the target's characters in the page's structured text at run time and build the band from their baselines.
@@ -164,6 +166,58 @@ The feature is one decision with several load bearing parts. Each part below lis
 - Pros: MuPDF's own code, and the device drops marked content.
 - Cons: fonts and images are written out afresh, so the page is no longer the reviewed page byte for byte, and it is a second output path to prove before it could be trusted.
 
+### How a slanted target goes to MuPDF (after slice 2's build)
+
+**Refuse a target whose padded area's bounds reach more than 0.1 of its height past it (chosen).** One area per quad per pass, as on level text, and a measure of how far the bounds reach past the padded area.
+- Pros: one measure covers rotation, shear and scan skew alike, and it measures exactly what MuPDF does with line art; covered line art keeps working as it does on level text; the reach no check sees is capped at a tenth of the quad's height, the same size as the growth the padded area already has along the line; a name on a scan about a degree crooked still redacts.
+- Cons: text set at an angle cannot be redacted at all in release 1; the allowance shrinks as the match grows, so a whole line tolerates only a third of a degree; up to 0.1 of the height of reach at the corners is still unchecked, and under rotation it points across the line, on top of the 0.25 padding, not along it as the padding's own 0.1 does.
+
+**The same rule at 0.25 of the height.**
+- Pros: about two and a half times the tilt, so most matches on an ordinary crooked scan redact.
+- Cons: the unchecked reach at a match's ends grows two and a half times, and at single spacing the text pass nears the point where the check refuses for over removal (measured from a band reach of 0.296).
+
+**Refuse any tilt at all.**
+- Pros: the simplest statement, with no unchecked reach.
+- Cons: Tesseract writes the skew into its text layer, so nearly every match on a crooked scan is refused.
+
+**Short pieces along the line.** Cut the band, the padded area and the line box into pieces a fraction of the quad's height long.
+- Pros: text comes out exactly at 30 degrees with pieces about 0.3 of the height long (measured), and pixels are blanked over the pieces together, so their reach shrinks with the piece.
+- Cons: MuPDF judges covered line art one area at a time (measured), so an outlined glyph, an underline or a word drawn as one path that straddles a join survives in the file, under the box, where no check looks. That is a leak the product exists to prevent. The end pieces' bounds also reach about 0.65 of the height past the padded area along the line at 30 degrees, whatever their length.
+
+**Pieces for text and pixels, the whole area for line art.**
+- Pros: keeps covered line art whole while text and pixels get the pieces' small reach.
+- Cons: line art is still judged over the whole area's bounds, which at 30 degrees reach the neighbouring lines unseen; the padded pass becomes two passes that must stay in step.
+
+**Overlapping pieces, each longer than any glyph.**
+- Pros: every outlined glyph lies wholly inside some piece.
+- Cons: a longer mark (an underline, a word drawn as one path) still straddles; "longer than any glyph" is a guess about fonts; more geometry to prove, for documents release 1's audience rarely has.
+
+**A split measure: across the line at most 0.1, along it more generous.**
+- Pros: admits ordinary synthetic italic, whose reach points purely along the line (0.305 at a 12 degree shear).
+- Cons: the padded pass would then reach a bullet, icon or cell divider beside the match, the one thing the small growth along the line exists to keep; two limits to state and test instead of one.
+
+**Compare pixels and paths outside the padded areas before and after.**
+- Pros: the design's own "compare, never sample" rule applied to the passes' reach, so skew, shear and images would be answered for rather than refused.
+- Cons: every source image under a target decoded and held for the run, on top of the character record, and a line art comparison MuPDF.js offers only through its vector extraction, with no stable identity to match paths by.
+
+**Hand the slanted area over as it is (what slice 2 built).**
+- Pros: nothing to add.
+- Cons: text at 30 degrees is refused through the check for a reason the visitor cannot learn, and on skewed or sheared text the padded pass acts past its area with nothing checking it (0.305 of the height on synthetic italic, and the run passed).
+
+### Images blanked in their own pixel grid (after the third cross check)
+
+**Measure the region MuPDF will blank in each image, and refuse past the same limit (chosen).** Before any pass, the padded area's page bounds are mapped into each image's pixel grid, rounded out to whole pixels, mapped back, and measured against the padded area; past 0.1 of the quad's height the run ends in `redaction-overreach`.
+- Pros: INV-15 then holds for pixels as well as line art; it reuses the image walk the pixel check already does and reads only each image's size, never its pixels; the estimate is never smaller than what MuPDF blanks (measured).
+- Cons: an image drawn at an angle, or a coarse one, under a ticked item refuses the run, including a flat colour band drawn as a tiny stretched image, where blanking would only have lost colour; on a crooked scan the pixels add to the slant's reach, so the slant allowance shrinks a little.
+
+**Narrow INV-15 and record the reach as a limit.**
+- Pros: no new code.
+- Cons: the reach has no bound (51.5 pt past the area over an image drawn at 30 degrees, 20.5 pt over an 8 by 8 image stretched to 200 pt) and nothing checks it, so words inside such an image could be blanked that nobody ticked.
+
+**Compare the image pixels outside the padded areas before and after.**
+- Pros: answers for the reach instead of refusing it.
+- Cons: decodes and holds every source image under a target for the run, which the memory item already worries about.
+
 ## Rationale
 
 The clean original is kept as bytes because the alternative that saves memory, undo, fails in the worst direction. A missed undo does not crash. It produces a file that removed more than the visitor ticked and reports that it removed less. Holding 25 MB is a known, bounded cost that spec 0001's memory ceiling already has to accommodate, and it gives the field spec 0002 left without a reader its one job. Serializing the review copy was the strongest runner up and remains the move if memory measurement forces it.
@@ -183,6 +237,10 @@ Slice 2's redesign separates two things the first design treated as one: where t
 The second cross check made the check trust less. The first version of the comparison trusted three things it had no business trusting: that the quads surround the match, that a page recorded mid run still shows its source, and that the pixel pass did its job. Each was a way a real leak could pass a check designed to catch leaks. Validating each target against its own text, recording every page before any page changes, and looking at the output's pixels close all three, at the cost of a field feature 6 must set and some extra decoding.
 
 The check was rebuilt for the same reason the rebuild beats subtraction. The first check looked where the target was and asked whether anything was left. Both findings lived just outside that area: replacement text MuPDF placed beside the quad, and neighbours removed above and below it. Comparing whole pages asks the question the visitor actually cares about, "is this the page I reviewed, minus what I ticked?", and has no outside to miss. It costs extractions and memory, both bounded by the page cap, and that is cheap next to a file that silently says something different.
+
+Slanted text is refused because the one fix that works for text, cutting each area into short pieces, breaks the part of the padded pass no check can see. MuPDF judges covered line art one area at a time, so pieces would leave an outlined glyph that straddles a join in the file, under the box, and nothing in the self check reads line art. Handing the slanted area over whole is no better: the text pass is caught by the comparison, but the padded pass blanks pixels and removes line art over the bounds, which on a slanted line grow with the tilt and with the match's length, and nothing checks there either. So the rule measures that reach directly and refuses anything past a small allowance. The allowance is 0.1 of the quad's height, the same size as the smallest growth the design already accepts, but it is not the same kind of reach: under rotation it points across the line, into the neighbouring lines' corners at the match's two ends, on top of the 0.25 padding. That is accepted as a small, bounded extension of what single spacing already costs, in exchange for redacting a name on a scan a feeder turned by about a degree, and the counts behind `slanted-text` will say whether real scans need more. Synthetic italic falls under the same rule: its reach points along the line, toward whatever sits beside the match, which is the direction the small growth along the line was chosen to protect.
+
+The third cross check showed that pixels answer to a different grid. MuPDF blanks whole pixels of each image, over the area's bounds taken in that image's own grid, so an image drawn at an angle or at a coarse resolution is blanked past the padded area even under level text, by as much as a whole pixel or the image's own tilt allows. Narrowing the invariant would have left that reach unbounded and silent, so the same limit applies to it, measured before any pass from each image's placement and size alone.
 
 A match inside wider replacement text is refused because every fix available today is worse than a refusal. The honest repair is to edit the content stream, and doing that ourselves would put a second, weaker PDF parser in the one place this product cannot afford a disagreement about what a page says. The refusal is loud and counted, so if it turns out to be common the counts will say so, and the redraw path or an upstream MuPDF change can be weighed with real numbers.
 
@@ -293,4 +351,91 @@ At 300 both neighbours are lost at either inset, which the comparison reports. A
 | Untouched ligature span beside a target | Clean |
 | Kerned 80 thousandths into the target | Clean |
 | Kerned 300 thousandths into the target | 2 missing in both modes: over removal |
-| Rotated text, band | Clean |
+| Page rotated 90 degrees, band | Clean |
+
+## What slice 2's build turned up
+
+`/develop` found the slant problem while building slice 2, and measured the combining marks and the forms drawn more than once. `/architect` then measured the slant options with throwaway scripts in Node against the same MuPDF 1.28.1, over hand written one page PDFs and through the real engine. Nothing from those scripts is in the repository; the fixtures in slice 4 and the bounds pin are what prove these results for good.
+
+**The text pass at an angle** (`Jeremy Quigley`, 12pt Helvetica, the middle of three lines, its band cut into pieces along the line):
+
+| Tilt | Leading | Whole band | 4 pieces (about 20pt each) | 16 pieces (about 5pt, 0.3 of the height) |
+|---|---|---|---|---|
+| 30 degrees | 12pt and 14pt | the lines above and below lose characters | the lines above and below lose characters | only the match |
+| 5 degrees | 12pt and 14pt | the lines above and below lose characters | only the match | only the match |
+| 3 degrees and below | 12pt and 14pt | only the match | only the match | only the match |
+
+With 16 pieces at 30 degrees, the words beside the match on its own line survived too.
+
+**Pixels, line art and the box at 30 degrees** (one Redact area, 120 by 20pt, at 30 degrees):
+
+| What | Inside the area | Outside the area, inside its bounds | Outside the bounds |
+|---|---|---|---|
+| Pixels of a black image under it (`REDACT_IMAGE_PIXELS`) | 2,402 of 2,402 blanked | 6,490 of 6,490 blanked | none blanked |
+| A 2pt filled square (`REDACT_LINE_ART_REMOVE_IF_COVERED`) | removed | removed, at both corners of the bounds | kept |
+| The box (`applyRedactions(true, …)`) | drawn as a four point path on the area itself, not its bounds | | |
+
+**Covered is judged one area at a time** (a level bar 60pt long across the join of two 50pt areas, padded pass settings):
+
+| Areas | The bar |
+|---|---|
+| One annotation holding both areas | kept |
+| Two annotations, one area each | kept |
+| One 100pt area covering the bar | removed |
+
+**The skew sweep**, through the real engine with its three passes and its self check (12pt Helvetica, the middle of three lines ticked; reach is the padded area's bounds reach as a share of the quad's height):
+
+| Match (width over height) | Tilt | Padded area reach | 12pt leading | 14pt leading |
+|---|---|---|---|---|
+| `Quigley` (2.5) | 1 degree | 0.047 | redacted | redacted |
+| `Quigley` (2.5) | 2 degrees | 0.093 | redacted | redacted |
+| `Quigley` (2.5) | 5 degrees | 0.232 | redacted | redacted |
+| `Jeremy Quigley` (5.1) | 1 degree | 0.092 | redacted | redacted |
+| `Jeremy Quigley` (5.1) | 1.5 degrees | 0.138 | redacted | redacted |
+| `Jeremy Quigley` (5.1) | 3 degrees | 0.275 | redacted | redacted |
+| `Jeremy Quigley` (5.1) | 5 degrees | 0.456 | `redaction-overreach` | `redaction-overreach` |
+| A whole line, 49 characters (17.2) | 0.25 degrees | 0.076 | redacted | redacted |
+| A whole line (17.2) | 0.5 degrees | 0.152 | redacted | redacted |
+| A whole line (17.2) | 1 degree | 0.303 | `redaction-overreach` | redacted |
+| A whole line (17.2) | 1.5 degrees | 0.455 | `redaction-overreach` | `redaction-overreach` |
+
+"Redacted" means the character comparison passed; it does not see the extra pixels and line art the padded pass reached, which is what the limit is for. The reach is the padded area's longer side times `|sin 2θ| / 2`, so it grows in step with the match's length. The text pass first over removed at a band reach of 0.296 (12pt leading), and never at 0.254 or below.
+
+**Other slants**, `Jeremy Quigley` through the real engine:
+
+| Case | Padded area reach | Result today |
+|---|---|---|
+| Set level with a 12 degree shear (synthetic italic, text matrix `1 0 0.2126 1`) | 0.305 | redacted, with the padded pass reaching past its area unseen |
+| Drawn at 90 degrees | 0 | redacted |
+| Drawn at 180 degrees | 0 | redacted |
+
+MuPDF's quad for sheared text is a parallelogram that leans with the glyphs. A real italic font is drawn with an upright text matrix, so its quad stands upright.
+
+**The measured results for AC-5**, pinned in `tests/unit/redaction-matrix.test.ts`:
+
+- A combining mark inside the match (`Renée`, the accent drawn as its own glyph) lies under the band and is removed with the match.
+- A combining mark drawn at zero width on the match's last letter (`José`) sits at the match's very end, past the band's pulled in end, and survives the text pass. The character comparison sees the survivor and the run refuses with `redaction-incomplete`. Recorded as an honest limit, not fixed: catching it would mean not pulling in the band's end, which is what keeps a kerned neighbour, or building the band from glyphs, which the slice 2 redesign weighed and set aside.
+- A form XObject drawn twice on one page, with its first drawing ticked: MuPDF redacts that drawing alone and the second keeps its text at the same quads. Drawn on pages 1 and 3 and ticked on page 1, page 3 keeps its copy. MuPDF redacts per drawing, so the `redaction-overreach` path the two page test also allowed never happens in 1.28.1.
+
+## What the third cross check turned up
+
+A third independent read only review on a different model (Fable 5.1) found ten gaps and five soundness points in the slant update, and you accepted every recommended fix. It measured with its own throwaway scripts; `/architect` reran the image measurements before writing them in.
+
+**Pixels are blanked in the image's own grid, whole pixels at a time** (a level Redact area 120 by 20 pt, padded pass settings):
+
+| Image under the area | Pixels blanked past the area | Furthest past it | `blankedRegion`'s estimate |
+|---|---|---|---|
+| 200 by 200 pixels, upright, 200 pt | 0 | 0 pt | 0 pt |
+| 200 by 200 pixels, drawn at 1 degree | 528 | 2.5 pt | 3.2 pt |
+| 200 by 200 pixels, drawn at 30 degrees | 6,488 | 51.5 pt | 52.3 pt |
+| 8 by 8 pixels, upright, stretched to 200 pt | 5,100 | 20.5 pt | 21.2 pt |
+
+The estimate maps the area's page bounds into the image's pixel grid, rounds out to whole pixels (with a tolerance of 0.001 of a pixel, without which an exactly aligned edge rounds a pixel too far), clips to the image, and maps back. It is never smaller than what MuPDF blanked. Line art inside a form drawn at 30 degrees was removed only inside the level area, so the grid effect is the image's alone.
+
+**Fonts differ in how much tilt they allow.** At 1 degree, `Jeremy Quigley` reaches 0.092 in Helvetica and in Carlito, and 0.121 in Courier, whose quad is shorter for a wider match. Courier refuses it from about 0.83 degrees.
+
+**Level text can make a quad that is not a rectangle.** MuPDF joins characters into one search quad when their corners differ by less than about a tenth of the font size. On a level line in Helvetica: 12pt then 11pt reaches 0.093; a run raised 0.5 pt reaches 0.032 and 1 pt reaches 0.063; from 1.2 pt MuPDF gives two quads, each reaching 0. Mixed fonts in one email address (Times then Helvetica at 11 pt) reached 0.068.
+
+**A sound quad can have an unsound padded area.** A trapezoid 4 pt wide at the top and 24 pt at the bottom passes AC-27's original checks, but its padded area, extrapolated beyond the quad, crosses itself, where a point to convex quad distance means nothing. AC-27 now checks the padded area too.
+
+**The rest** settled what the builder would otherwise have invented: that the slant measure fails closed on `NaN`; the fixture font and page for each new case; a precedence test across pages; the exports and where `slanted-text` goes in the kind list; the bounds pin's file, fixture and geometry; the sheared quad's closed form (`0.75 × sin 2s` of the height); page 3's quads and the absent U+0301 in the measured cases; the stale notes in `verify.md`; and wording that overclaimed.

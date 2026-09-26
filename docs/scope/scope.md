@@ -95,6 +95,7 @@ spec [0004](../specs/0004-redaction-engine/index.md) · code in `src/engine/`, `
   - [x] A cleaned file leaves the tool: the rebuild, the structural self check, the worker's `redact`, the thin Redact and Download path with its outcome line, and the privacy proof's redaction leg · AC-7, AC-8, AC-9, AC-12, AC-13, AC-14, AC-15, AC-16, AC-19, AC-20, AC-21
   - [ ] Targets really removed, and checked: target validation, the band, padded and box passes, the character and pixel self check with its two new kinds, the fixture matrix, two runs from one original, and the encryption fixtures (built) · AC-4, AC-5, AC-6, AC-10, AC-11, AC-13, AC-25, AC-26, AC-27
   - [x] A run stops cleanly: cancel between pages, one run at a time, a replacement that cancels a run in flight, and the browser cancel test · AC-17, AC-18, AC-23
+  - [ ] Slanted targets and images blanked too far refused before anything is removed: the slant check with its `slanted-text` kind, the image reach check, the padded area soundness check, the slant and image fixtures, and the pin on MuPDF's bounds behaviour · AC-5, AC-19, AC-27, AC-28, AC-29
 - [ ] Verify it: `/check verify redaction engine`
 - [ ] Test it: `/test redaction engine`
 - [ ] Review it (fresh model): `/check review redaction engine`
