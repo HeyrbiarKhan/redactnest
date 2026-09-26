@@ -90,13 +90,13 @@ The heart of the product. Given a document and a set of targets, remove the text
 **Also owed here:** a file that is not a PDF, including an image or a text file, is refused before MuPDF opens it, judged from the bytes rather than the file name or type. Today MuPDF opens a PNG as a one page document even when asked for `application/pdf`.
 spec [0004](../specs/0004-redaction-engine/index.md) · code in `src/engine/`, `src/worker/engine.worker.ts`, `src/app/tool/tool-client.tsx`
 - [x] Design it (spec): `/architect redaction engine`
-- [ ] Build it: `/develop redaction engine`
+- [x] Build it: `/develop redaction engine`
   - [x] The door and the prepared page: protocol growth, the `%PDF-` byte check, the layer refusal, the shared prepare step and a silenced MuPDF log · AC-1, AC-2, AC-3, AC-22, AC-24
   - [x] A cleaned file leaves the tool: the rebuild, the structural self check, the worker's `redact`, the thin Redact and Download path with its outcome line, and the privacy proof's redaction leg · AC-7, AC-8, AC-9, AC-12, AC-13, AC-14, AC-15, AC-16, AC-19, AC-20, AC-21
   - [x] Targets really removed, and checked: target validation, the band, padded and box passes, the character and pixel self check with its two new kinds, the fixture matrix, two runs from one original, and the encryption fixtures (built) · AC-4, AC-5, AC-6, AC-10, AC-11, AC-13, AC-25, AC-26, AC-27
   - [x] A run stops cleanly: cancel between pages, one run at a time, a replacement that cancels a run in flight, and the browser cancel test · AC-17, AC-18, AC-23
   - [x] Slanted targets and images blanked too far refused before anything is removed: the slant check with its `slanted-text` kind, the image reach check, the padded area soundness check, the slant and image fixtures, and the pin on MuPDF's bounds behaviour · AC-5, AC-19, AC-27, AC-28, AC-29
-  - [ ] The self check sees text drawn off the page, so a match MuPDF moves off the page rather than removing it is refused: `CHECK_EXTRACTION_OPTIONS` with `clip=no` for the record and the check, the `next-line.pdf` fixtures, and the pin on MuPDF's `'` and `"` rewrite · AC-4, AC-13, AC-25
+  - [x] The self check sees text drawn off the page, so a match MuPDF moves off the page rather than removing it is refused: `CHECK_EXTRACTION_OPTIONS` with `clip=no` for the record and the check, the `next-line.pdf` fixtures, and the pin on MuPDF's `'` and `"` rewrite · AC-4, AC-13, AC-25
 - [ ] Verify it: `/check verify redaction engine`
 - [ ] Test it: `/test redaction engine`
 - [ ] Review it (fresh model): `/check review redaction engine`
