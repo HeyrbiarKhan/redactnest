@@ -937,3 +937,47 @@ export function actualText() {
     },
   ]);
 }
+
+/** The line `next-line-4.pdf` draws wholly off the page, above a page 792pt tall. */
+export const OFF_PAGE_TEXT = "Drawn off the page";
+
+/**
+ * Spec 0004, AC-4, AC-13 and AC-25, slice 5. Lines shown with `'` and `"`, the
+ * operators that move to the next line and show text in one step, after a `Td`
+ * in the same text object. MuPDF 1.28.1's content filter, which the text pass
+ * and the `sanitize` write both run, writes that `Td` as `TD` (which also sets
+ * the leading) and each `'` or `"` as a bare `T*` under it, so the line jumps
+ * 700pt up, off the page. One case per file, `next-line-0.pdf` to
+ * `next-line-4.pdf`, in Helvetica:
+ *
+ *  0. `Name:`, then the match alone on the next line, shown with `'`;
+ *  1. the same shown with `"`;
+ *  2. the same moved with `T*` and shown with `Tj`, the control;
+ *  3. `Name: Jeremy Quigley` shown with `Tj`, then a line of kept text shown
+ *     with `'`;
+ *  4. the match on an ordinary line, and a line of other text drawn wholly
+ *     outside the media box.
+ *
+ * Files, not pages of one file: `sanitize` rewrites every page and the self
+ * check compares every page, so a `'` line on any page fails every run on its
+ * document, and no control could redact beside one. Cases 0, 1 and 3 are
+ * refused, because the self check extracts without clipping to the page and
+ * sees the moved lines; cases 2 and 4 redact. The match is `Jeremy Quigley` in
+ * every case.
+ */
+export function nextLine() {
+  const opening = `BT /F1 12 Tf 14 TL 72 700 Td ${literal("Name:")} Tj `;
+  const match = literal("Jeremy Quigley");
+
+  return Object.freeze(
+    [
+      `${opening}${match} ' ET\n`,
+      `${opening}0 0 ${match} " ET\n`,
+      `${opening}T* ${match} Tj ET\n`,
+      `BT /F1 12 Tf 14 TL 72 700 Td ${literal("Name: Jeremy Quigley")} Tj ` +
+        `${literal("kept line")} ' ET\n`,
+      line("F1", 12, 72, 700, "Name: Jeremy Quigley") +
+        line("F1", 12, 72, 900, OFF_PAGE_TEXT),
+    ].map((content) => document(() => [{ content }])),
+  );
+}

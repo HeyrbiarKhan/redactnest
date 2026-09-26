@@ -24,6 +24,7 @@ import {
   imagesUnder,
   kerning,
   loneGlyphs,
+  nextLine,
   ocrAligned,
   ocrBare,
   ocrMisaligned,
@@ -362,6 +363,20 @@ const FIXTURES = [
     boundsPin(),
     "what MuPDF blanks and removes around an area's bounds",
   ],
+  // Spec 0004, slice 5: text MuPDF moves off the page, and text already there.
+  // One case per file, because a `'` line on any page fails every run on its
+  // document.
+  ...nextLine().map((bytes, index) => [
+    `next-line-${index}.pdf`,
+    bytes,
+    [
+      "the match alone on a line shown with '",
+      'the match alone on a line shown with "',
+      "the match alone on a line moved with T*, the control",
+      "the match, then kept text on a line shown with '",
+      "the match, and a line drawn off the page",
+    ][index],
+  ]),
 ];
 
 const outDir = join(process.cwd(), "tests", "fixtures");

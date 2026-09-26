@@ -4,6 +4,7 @@ import {
   blankedRegion,
   BOUNDS_REACH_RATIO,
   boundsReach,
+  CHECK_EXTRACTION_OPTIONS,
   containsPoint,
   EXTRACTION_OPTIONS,
   imageReach,
@@ -105,6 +106,18 @@ describe("the constants", () => {
   /** MuPDF's defaults, then the same ignoring replacement text. Nothing else. */
   it("extract twice, the second time ignoring replacement text", () => {
     expect([...EXTRACTION_OPTIONS]).toEqual(["", "ignore-actualtext"]);
+  });
+
+  /**
+   * The self check reads the same two ways, in the same order, without
+   * clipping to the page, so a glyph MuPDF moves off the page still counts
+   * (spec 0004, slice 5).
+   */
+  it("check the same two ways without clipping to the page", () => {
+    expect([...CHECK_EXTRACTION_OPTIONS]).toEqual([
+      "clip=no",
+      "ignore-actualtext,clip=no",
+    ]);
   });
 });
 

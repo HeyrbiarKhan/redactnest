@@ -45,18 +45,37 @@ export const LINE_HEIGHT_MIN = 0.67;
 export const LINE_HEIGHT_MAX = 1.5;
 
 /**
- * The two ways every page is extracted, for the record, the check and target
- * validation alike. Also what the Vitest target helper imports.
+ * The two ways a page is read as the visitor sees it: by target validation
+ * (AC-27), and by the Vitest target helper, which stands in for detection.
  *
  * The first is MuPDF's defaults, which is what `page.search()` uses, so
  * character quads and target quads are built alike. The second ignores
  * replacement text (`/ActualText`), so a glyph that survived under replacement
  * text is told apart from replacement text that survived (AC-25).
  *
- * Never `dehyphenate`, `collect-styles`, `segment`, `clip` or `accurate-bboxes`:
- * each changes which characters exist or where their quads sit.
+ * Never `dehyphenate`, `collect-styles`, `segment`, `accurate-bboxes` or `clip`
+ * set here: each changes which characters exist or where their quads sit.
+ * MuPDF 1.28.1's defaults already clip to the page (measured), which is right
+ * for detection, since a visitor reviews only what the page shows. The self
+ * check must not be blind there, so it reads `CHECK_EXTRACTION_OPTIONS`.
  */
 export const EXTRACTION_OPTIONS = Object.freeze(["", "ignore-actualtext"] as const);
+
+/**
+ * The two ways every page is extracted for the record and the self check:
+ * each entry of `EXTRACTION_OPTIONS`, in the same order, without clipping to
+ * the page. Spec 0004, AC-13 and INV-12.
+ *
+ * MuPDF's content filter can move a line it rewrites off the page instead of
+ * removing it (lines shown with `'` or `"`). Clipped, the check would see a
+ * ticked glyph moved there as gone and pass a file that still holds it.
+ * Unclipped, a glyph drawn anywhere in the page's content is a survivor,
+ * wherever it lands.
+ */
+export const CHECK_EXTRACTION_OPTIONS = Object.freeze([
+  "clip=no",
+  "ignore-actualtext,clip=no",
+] as const);
 
 /** One character as the page reports it. */
 export interface Character {
@@ -78,7 +97,10 @@ export interface CharacterList {
   readonly codes: Uint32Array;
 }
 
-/** A page's record, one list per entry of `EXTRACTION_OPTIONS`. */
+/**
+ * A page's record, one list per entry of `CHECK_EXTRACTION_OPTIONS`, so it
+ * holds glyphs drawn off the page as well as on it.
+ */
 export type PageRecord = readonly CharacterList[];
 
 /** A target quad with what the ticked test reads from it worked out once. */
@@ -171,7 +193,7 @@ export function isTicked(character: Character, areas: readonly TargetArea[]): bo
  * character that is not whitespace and not ticked.
  */
 export function recordPage(page: PDFPage, areas: readonly TargetArea[]): PageRecord {
-  return EXTRACTION_OPTIONS.map((options) => {
+  return CHECK_EXTRACTION_OPTIONS.map((options) => {
     const origins: number[] = [];
     const codes: number[] = [];
 
@@ -197,7 +219,7 @@ export function comparePage(
   record: PageRecord,
   lineBoxes: readonly Quad[],
 ): readonly PageDifference[] {
-  return EXTRACTION_OPTIONS.map((options, mode) =>
+  return CHECK_EXTRACTION_OPTIONS.map((options, mode) =>
     compareMode(page, options, record[mode], lineBoxes),
   );
 }

@@ -19,7 +19,7 @@ import {
 } from "@/engine";
 import type { EngineErrorKind } from "@/worker/protocol";
 
-import { BOUNDS_PIN } from "../../scripts/lib/redaction-fixtures.mjs";
+import { BOUNDS_PIN, OFF_PAGE_TEXT } from "../../scripts/lib/redaction-fixtures.mjs";
 import { fixture } from "../support/bytes";
 import {
   containsInAnyEncoding,
@@ -848,11 +848,107 @@ describe("measured cases", () => {
    * a size change sits between them the text after the match moves (by the
    * removed width times one less the ratio of the sizes). The self check sees
    * the moved glyphs and the run refuses. Measured during slice 4's build and
-   * not yet recorded in spec 0004; the same line as two text objects redacts.
+   * recorded as an honest limit in spec 0004's *Security model*; the same line
+   * as two text objects redacts.
    */
   it("refuses a match followed by a size change inside the same text object", async () => {
     await expect(
       outcomeOf("reach.pdf", [tick("reach.pdf", 11, "Jeremy Quigley")]),
     ).resolves.toBe("redaction-incomplete");
+  });
+});
+
+/**
+ * Spec 0004, slice 5: the self check sees text drawn off the page, over
+ * `next-line-0.pdf` to `next-line-4.pdf`. One case per file, because a `'`
+ * line on any page fails every run on its document. MuPDF 1.28.1's filter
+ * moves a line shown with `'` or `"` off the page instead of removing the
+ * match on it. Clipped to the page, the check saw the match gone and handed
+ * back a file that still held it; extracted without clipping, the moved glyphs
+ * are survivors, and the run refuses (AC-4, AC-13, AC-25, INV-12).
+ */
+describe("text off the page", () => {
+  const MATCH = "Jeremy Quigley";
+  const name = (index: number) => `next-line-${index}.pdf`;
+  const match = (index: number) => tick(name(index), 0, MATCH);
+  const unclipped = (bytes: ArrayBuffer) =>
+    inspect(bytes, (doc) => pageText(doc, 0, "clip=no"));
+
+  it.each([
+    ["'", 0],
+    ['"', 1],
+  ] as const)(
+    "refuses a match alone on a line shown with %s (case %i) with redaction-incomplete",
+    async (_operator, index) => {
+      await expect(outcomeOf(name(index), [match(index)])).resolves.toBe(
+        "redaction-incomplete",
+      );
+    },
+  );
+
+  it("redacts case 2, the same match moved to its line with T*, and passes its own checks", async () => {
+    const { output } = await run(name(2), [match(2)]);
+
+    expect(containsInAnyEncoding(decompressedBytes(output), MATCH)).toBe(false);
+    expect(unclipped(output)).toContain("Name:");
+  });
+
+  /** Kept text moved off the page is a survivor too, and so is it missing. */
+  it.each([
+    ["with the match ticked", "redaction-incomplete", true],
+    ["with nothing ticked", "unsupported", false],
+  ] as const)(
+    "refuses case 3, kept text on a line shown with ', %s, with %s",
+    async (_label, kind, ticked) => {
+      await expect(outcomeOf(name(3), ticked ? [match(3)] : [])).resolves.toBe(kind);
+    },
+  );
+
+  describe("case 4, a line drawn wholly off the page", () => {
+    it("is hidden from what detection reads, and on the record the check reads", () => {
+      const source = fixture(name(4));
+
+      expect(inspect(source, (doc) => pageText(doc, 0))).not.toContain(OFF_PAGE_TEXT);
+      expect(unclipped(source)).toContain(OFF_PAGE_TEXT);
+    });
+
+    it("raises no false alarm with nothing ticked", async () => {
+      const { output, removedByType } = await run(name(4), []);
+
+      expect(removedByType).toEqual({});
+      expect(unclipped(output)).toContain(OFF_PAGE_TEXT);
+    });
+
+    it("redacts the match on the page and keeps the line off it", async () => {
+      const { output } = await run(name(4), [match(4)]);
+
+      expect(containsInAnyEncoding(decompressedBytes(output), MATCH)).toBe(false);
+      expect(unclipped(output)).toContain(OFF_PAGE_TEXT);
+    });
+  });
+
+  /**
+   * MuPDF's fault, pinned directly as the bounds pin does it: a `sanitize`
+   * write with nothing removed moves case 0's match off the page, out of
+   * default extraction but still in the file. If this fails because the line
+   * stays on the page, MuPDF has fixed the filter: mark that upstream item in
+   * spec 0004's Follow-up done, and change cases 0, 1 and 3 to expect a clean
+   * run.
+   */
+  it("pins a sanitize write moving a line shown with ' off the page", () => {
+    const source = fixture(name(0));
+    const written = inspect(source, (doc) => {
+      const buffer = doc.saveToBuffer("sanitize");
+      try {
+        return buffer.asUint8Array().slice().buffer;
+      } finally {
+        buffer.destroy();
+      }
+    });
+
+    expect(inspect(source, (doc) => pageText(doc, 0))).toContain(MATCH);
+    expect(inspect(written, (doc) => pageText(doc, 0))).not.toContain(MATCH);
+    expect(unclipped(written)).toContain(MATCH);
+    expect(containsInAnyEncoding(decompressedBytes(written), MATCH)).toBe(true);
   });
 });
