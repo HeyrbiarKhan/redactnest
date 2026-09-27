@@ -10,7 +10,15 @@
  */
 
 import { stream } from "./pdf-writer.mjs";
-import { document, IDENTITY_UNICODE, line } from "./redaction-fixtures.mjs";
+import {
+  document,
+  drawImage,
+  flatImage,
+  IDENTITY_UNICODE,
+  line,
+  literal,
+  num,
+} from "./redaction-fixtures.mjs";
 
 /**
  * A Type0 font whose two byte codes are Unicode code points, as its identity
@@ -260,4 +268,91 @@ export function detectPhone() {
         line("F1", 12, 72, 460, "ZIP codes 90210 and 10001"),
     },
   ]);
+}
+
+/** The addresses `detect-blocked.pdf` holds, by the reason each is blocked. */
+export const DETECT_BLOCKED = Object.freeze({
+  slanted: "slanted@example.com",
+  overImage: "image@example.com",
+  replaced: "dave@example.com",
+  replacedGlyphs: "gave@example.com",
+  hidden: "hidden@example.com",
+  plain: "plain@example.com",
+  wide: "wide@example.com",
+  unequal: Object.freeze({
+    said: "sales@example.com",
+    drawn: "saxes@example.com",
+    found: "es@example.com",
+  }),
+});
+
+/**
+ * Spec 0005, AC-8 and AC-9. A match the engine would refuse, for each reason
+ * detection can see before anything is ticked, and the cases it cannot:
+ *
+ *  1. an address set at 30 degrees (`slanted-text`), and a level address over
+ *     an 8 by 8 pixel image drawn 200 pt across at 30 degrees, which MuPDF
+ *     would blank far past it (`image-overreach`);
+ *  2. an address whose replacement text names a different one: the page draws
+ *     `gave@…` and says `dave@…` (`replacement-text`, one row); glyphs of an
+ *     address behind unrelated replacement text, found only with it ignored
+ *     (`replacement-text`); and a plain address, the control;
+ *  3. the recorded limit, twice. An address inside replacement text wider
+ *     than it, whose glyphs equal the text, which MuPDF.js 1.28.1 cannot tell
+ *     from a span that wraps exactly the match. And replacement text whose
+ *     letters differ from the glyphs in width: the page draws `saxes@…` and
+ *     says `sales@…`, MuPDF aligns the two by its own lights and reads
+ *     `sal es@…` (measured), so detection finds `es@example.com`, whose
+ *     glyphs equal its text inside its quads. Both are listed unblocked, and a
+ *     run that ticks either is refused by the self check with
+ *     `replacement-text`, never a leak. Pinned.
+ *
+ * Page 2 differs by one letter of the same width (`d` and `g` are both 556
+ * thousandths of an em in Helvetica), so MuPDF maps the replacement text onto
+ * the glyphs one for one and ordinary extraction finds the whole address.
+ *
+ * Three pages, within the free page cap.
+ */
+export function detectBlocked() {
+  const turned = (degrees, [x, y], text) => {
+    const angle = (degrees * Math.PI) / 180;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    return `BT /F1 12 Tf ${num(cos)} ${num(sin)} ${num(-sin)} ${num(cos)} ${x} ${y} Tm ${literal(text)} Tj ET
+`;
+  };
+  const span = (actual, drawn) =>
+    `/Span << /ActualText ${literal(actual)} >> BDC ${literal(drawn)} Tj EMC`;
+  const { unequal } = DETECT_BLOCKED;
+
+  return document(({ add }) => {
+    const coarse = flatImage(add, 8, 0xc0);
+    return [
+      {
+        resources: `/XObject << /Coarse ${coarse} 0 R >>`,
+        content:
+          turned(30, [100, 600], `Write to ${DETECT_BLOCKED.slanted} here`) +
+          drawImage("Coarse", 200, 30, [300, 300]) +
+          line("F1", 12, 240, 296, `Over ${DETECT_BLOCKED.overImage} here`),
+      },
+      {
+        content:
+          `BT /F1 12 Tf 72 700 Td ${literal("Contact: ")} Tj ` +
+          `${span(DETECT_BLOCKED.replaced, DETECT_BLOCKED.replacedGlyphs)} ${literal(" today")} Tj ET
+` +
+          `BT /F1 12 Tf 72 660 Td ${literal("See ")} Tj ${span("Figure 1", DETECT_BLOCKED.hidden)} ET
+` +
+          line("F1", 12, 72, 620, `Plain: ${DETECT_BLOCKED.plain} here`),
+      },
+      {
+        content:
+          `BT /F1 12 Tf 72 700 Td ` +
+          `${span(`Name: ${DETECT_BLOCKED.wide} value`, `Name: ${DETECT_BLOCKED.wide} value`)} ET
+` +
+          `BT /F1 12 Tf 72 660 Td ${literal("Write to ")} Tj ` +
+          `${span(unequal.said, unequal.drawn)} ${literal(" today")} Tj ET
+`,
+      },
+    ];
+  });
 }

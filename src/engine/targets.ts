@@ -10,7 +10,7 @@ import {
   quadBounds,
   quadCentre,
 } from "./geometry";
-import { imagesWithinReach } from "./pixels";
+import { imageReachVerdicts } from "./pixels";
 import type { Quad, RedactionTarget } from "./types";
 
 /**
@@ -82,16 +82,28 @@ export function validateTargets(
   }
 
   for (const targets of pages.values()) {
-    if (targets.some((target) => target.quads.some(isTooSlanted))) {
+    if (slantedTargets(targets).some(Boolean)) {
       throw new EngineFailure("slanted-text");
     }
   }
 
   for (const [index, targets] of pages) {
-    if (!onPage(doc, index, (page) => imagesWithinReach(page, targets))) {
+    if (onPage(doc, index, (page) => imageReachVerdicts(page, targets)).some(Boolean)) {
       throw new EngineFailure("redaction-overreach");
     }
   }
+}
+
+/**
+ * Which targets have a quad set at too steep an angle to redact? Spec 0004,
+ * AC-28, and spec 0005, AC-8 (`slanted-text`). One answer per target, `true`
+ * for one that does. `isTooSlanted` fails closed, so a quad that yields `NaN`
+ * anywhere counts as too slanted.
+ */
+export function slantedTargets(
+  targets: readonly Pick<RedactionTarget, "quads">[],
+): readonly boolean[] {
+  return targets.map((target) => target.quads.some(isTooSlanted));
 }
 
 /** What the outline check reads from a target. */

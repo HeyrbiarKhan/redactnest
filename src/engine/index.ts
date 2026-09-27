@@ -85,10 +85,15 @@ export {
 export { loadEngine, silenceEngineLog, type MuPdf } from "./load";
 export { openDocument, openDocumentWith } from "./open";
 export { boxPass, paddedPass, textPass, type Pass } from "./passes";
-export { imagesWithinReach } from "./pixels";
+export { imageReachVerdicts } from "./pixels";
 export { prepareDocument } from "./prepare";
 export { PIPELINE, redactDocument, redactDocumentWith, type Pipeline } from "./redact";
-export { unsoundTargets, unsoundTargetsIn, type OutlinedText } from "./targets";
+export {
+  slantedTargets,
+  unsoundTargets,
+  unsoundTargetsIn,
+  type OutlinedText,
+} from "./targets";
 export {
   CARRIER_KEYS,
   CATALOG_KEYS,

@@ -20,6 +20,11 @@ const FIXTURE = resolve("tests/fixtures/two-pages.pdf");
 // A 10 MB WebAssembly payload has to arrive and compile first.
 const ENGINE_TIMEOUT = 60_000;
 
+// Most tests here open a document, which can take the whole of ENGINE_TIMEOUT
+// when every worker is compiling the engine at once, and then run axe over the
+// review, so each test gets room for both. Alone, one takes about two seconds.
+test.describe.configure({ timeout: ENGINE_TIMEOUT + 30_000 });
+
 /** AC-18: the rule tags this product commits to. */
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
@@ -81,6 +86,16 @@ async function reviewManyRows(page: Page): Promise<void> {
   await expect(page.getByTestId("checklist")).toBeVisible({ timeout: ENGINE_TIMEOUT });
 }
 
+/** Rows the engine would refuse, each disabled with its reason (spec 0005, AC-8). */
+async function reviewBlockedRows(page: Page): Promise<void> {
+  await page
+    .getByTestId("file-input")
+    .setInputFiles(resolve("tests/fixtures/detect-blocked.pdf"));
+  await expect(page.getByRole("checkbox", { name: "slanted@example.com" })).toBeDisabled({
+    timeout: ENGINE_TIMEOUT,
+  });
+}
+
 /** The review state with nothing found: the empty state under the coverage note. */
 async function reviewNothingFound(page: Page): Promise<void> {
   await page
@@ -98,6 +113,7 @@ const TOOL_STATES: readonly (readonly [string, (page: Page) => Promise<void>])[]
   ["opened", openDocument],
   ["reviewing, with both groups", reviewBothGroups],
   ["reviewing, with many rows", reviewManyRows],
+  ["reviewing, with blocked rows", reviewBlockedRows],
   ["reviewing, with nothing found", reviewNothingFound],
   ["complete", completeARun],
 ];
@@ -548,6 +564,31 @@ test.describe("the checklist on the tool page (spec 0005, AC-13)", () => {
       (element) => getComputedStyle(element).appearance,
     );
     expect(appearance).toBe("auto");
+  });
+
+  test("a blocked row is listed with its reason, and cannot be ticked", async ({
+    page,
+  }) => {
+    await page.goto("/tool");
+    await reviewBlockedRows(page);
+
+    const blocked = page.getByRole("checkbox", { name: "slanted@example.com" });
+    await expect(blocked).toBeDisabled();
+    await expect(blocked).not.toBeChecked();
+    await expect(blocked).toHaveAccessibleDescription(
+      /set at too steep an angle to remove safely, so it will stay in the file\.$/,
+    );
+
+    // Forced, because Playwright itself refuses to click a disabled control's
+    // label. The browser gets the click, and the box must still not change.
+    await page
+      .getByText("set at too steep an angle", { exact: false })
+      .click({ force: true });
+    await expect(blocked).not.toBeChecked();
+
+    const plain = page.getByRole("checkbox", { name: "plain@example.com" });
+    await expect(plain).toBeEnabled();
+    await expect(plain).toBeChecked();
   });
 });
 

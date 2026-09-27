@@ -1,9 +1,12 @@
-import type { PDFDocument } from "mupdf";
+import type { PDFDocument, PDFPage } from "mupdf";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   EXTRACTION_OPTIONS,
   EngineFailure,
+  imageReachVerdicts,
+  slantedTargets,
+  unsoundTargets,
   findMatchesIn,
   openDocumentWith,
   POSITION_TOLERANCE,
@@ -18,6 +21,7 @@ import {
 } from "@/engine";
 
 import {
+  DETECT_BLOCKED,
   DETECT_EMAIL,
   DETECT_MANY_COUNT,
   DETECT_PHONE,
@@ -52,6 +56,21 @@ async function find(name: string, contextChars = 40): Promise<readonly FoundMatc
 
 function targetsOf(matches: readonly FoundMatch[]): RedactionTarget[] {
   return matches.flatMap((match) => (match.target ? [match.target] : []));
+}
+
+/**
+ * AC-9's recorded limit, in `detect-blocked.pdf`: listed unblocked, because
+ * nothing MuPDF.js 1.28.1 reports tells them apart, and refused by the self
+ * check with `replacement-text` when ticked. Pinned below, and left out of the
+ * runs that must pass.
+ */
+const RECORDED_LIMIT: ReadonlySet<string> = new Set([
+  DETECT_BLOCKED.wide,
+  DETECT_BLOCKED.unequal.found,
+]);
+
+function removable(matches: readonly FoundMatch[]): RedactionTarget[] {
+  return targetsOf(matches).filter((target) => !RECORDED_LIMIT.has(target.text));
 }
 
 /** A page's text with whitespace removed, so a wrapped value reads as one. */
@@ -263,10 +282,15 @@ describe("quads", () => {
 
 /** AC-6, INV-2 and INV-3: every row that can be ticked is one the engine accepts. */
 describe("every unblocked match redacts", () => {
-  it.each(["detect-email.pdf", "detect-phone.pdf", "detect-unicode.pdf"])(
-    "in %s, each alone",
+  it.each([
+    "detect-email.pdf",
+    "detect-phone.pdf",
+    "detect-unicode.pdf",
+    "detect-blocked.pdf",
+  ])(
+    "in %s, each alone, but for the recorded limit",
     async (name) => {
-      const targets = targetsOf(await find(name));
+      const targets = removable(await find(name));
       expect(targets.length).toBeGreaterThan(0);
       for (const target of targets) {
         await expectRemoved(name, [target]);
@@ -275,10 +299,15 @@ describe("every unblocked match redacts", () => {
     60_000,
   );
 
-  it.each(["detect-email.pdf", "detect-phone.pdf", "detect-unicode.pdf"])(
-    "in %s, all together",
+  it.each([
+    "detect-email.pdf",
+    "detect-phone.pdf",
+    "detect-unicode.pdf",
+    "detect-blocked.pdf",
+  ])(
+    "in %s, all together, but for the recorded limit",
     async (name) => {
-      await expectRemoved(name, targetsOf(await find(name)));
+      await expectRemoved(name, removable(await find(name)));
     },
     60_000,
   );
@@ -393,12 +422,14 @@ describe("phone numbers (AC-2, AC-10)", () => {
 
 /** AC-11 and AC-12: one page at a time, and a page that cannot be read fails. */
 describe("reading pages", () => {
-  it("asks whether to stop once per page read, and stops when told", async () => {
+  it("asks whether to stop after every read of every page, and stops when told", async () => {
     const doc = openDocumentWith(mupdf, fixture("detect-email.pdf"), LIMITS);
     try {
       const asked = vi.fn(() => false);
       await doc.findMatches({ contextChars: 40, isCancelled: asked });
-      expect(asked).toHaveBeenCalledTimes(3);
+      // Three pages, each read three ways: ordinary, with replacement text
+      // ignored, and the image pass.
+      expect(asked).toHaveBeenCalledTimes(9);
 
       let reads = 0;
       await expect(
@@ -437,6 +468,172 @@ describe("reading pages", () => {
 
     await expect(doc.findMatches({ contextChars: 40 })).rejects.toEqual(
       new EngineFailure("unsupported"),
+    );
+  });
+});
+
+/**
+ * AC-8 and AC-9, and INV-2. A match the engine would refuse is listed, so
+ * nobody believes it is gone, with the first reason that applies, no target
+ * and no tick.
+ */
+describe("blocked matches", () => {
+  const byText = async () =>
+    new Map((await find("detect-blocked.pdf")).map((match) => [match.text, match]));
+
+  it.each([
+    [DETECT_BLOCKED.slanted, "slanted-text"],
+    [DETECT_BLOCKED.overImage, "image-overreach"],
+    [DETECT_BLOCKED.replaced, "replacement-text"],
+    [DETECT_BLOCKED.hidden, "replacement-text"],
+  ] as const)(
+    "lists %s blocked %s, with no target and unticked",
+    async (text, reason) => {
+      const match = (await byText()).get(text);
+
+      expect(match).toMatchObject({
+        blocked: reason,
+        target: null,
+        tickedByDefault: false,
+      });
+    },
+  );
+
+  it("leaves the plain address beside them unblocked and ticked", async () => {
+    expect((await byText()).get(DETECT_BLOCKED.plain)).toMatchObject({
+      blocked: null,
+      tickedByDefault: true,
+    });
+  });
+
+  /**
+   * The page draws `gave@…` where its replacement text says `dave@…`. Ordinary
+   * extraction finds the one, and the glyphs found with replacement text
+   * ignored sit in the same place, so they make no second row.
+   */
+  it("gives one place on the page one row", async () => {
+    const matches = await byText();
+
+    expect(matches.has(DETECT_BLOCKED.replacedGlyphs)).toBe(false);
+    expect([...matches.keys()]).toHaveLength(7);
+  });
+
+  it("lists what was found only with replacement text ignored after the page's other matches", async () => {
+    const onPageTwo = (await find("detect-blocked.pdf"))
+      .filter((match) => match.page === 1)
+      .map((match) => match.text);
+
+    expect(onPageTwo).toEqual([
+      DETECT_BLOCKED.replaced,
+      DETECT_BLOCKED.plain,
+      DETECT_BLOCKED.hidden,
+    ]);
+  });
+
+  /**
+   * The pin (AC-9). When MuPDF.js reports replacement spans, or reads the two
+   * modes apart here, these become blocked, this test fails, and the limit in
+   * spec 0005 can close.
+   */
+  it.each([DETECT_BLOCKED.wide, DETECT_BLOCKED.unequal.found])(
+    "lists %s unblocked, and a run that ticks it is refused with replacement-text",
+    async (text) => {
+      const match = (await byText()).get(text);
+      expect(match?.blocked).toBeNull();
+      if (!match?.target) throw new Error("expected a target");
+
+      await expect(
+        redactDocumentWith(mupdf, fixture("detect-blocked.pdf"), [match.target]),
+      ).rejects.toEqual(new EngineFailure("replacement-text"));
+    },
+  );
+});
+
+/**
+ * INV-3. Detection and target validation answer through the same predicates,
+ * one answer per target, so a match's verdict never depends on what else is
+ * ticked beside it.
+ */
+describe("the shared predicates", () => {
+  /** The prepared first page of `detect-blocked.pdf`, and its two matches' targets. */
+  async function pageOne<T>(
+    read: (page: PDFPage, targets: RedactionTarget[]) => T,
+  ): Promise<T> {
+    const found = await find("detect-blocked.pdf");
+    // Blocked matches carry no target, so the geometry is rebuilt with the
+    // same search the stand in uses; the quads agree within tolerance (AC-7).
+    const targets = [DETECT_BLOCKED.slanted, DETECT_BLOCKED.overImage].map(
+      (needle): RedactionTarget => {
+        const [quads] = searched("detect-blocked.pdf", 0, needle);
+        return { page: 0, quads, start: 0, end: 0, kind: "email", text: needle };
+      },
+    );
+    expect(found.filter((match) => match.page === 0)).toHaveLength(2);
+
+    const doc = mupdf.Document.openDocument(
+      fixture("detect-blocked.pdf"),
+      "application/pdf",
+    );
+    const pdf: PDFDocument | null = doc.asPDF();
+    if (!pdf) throw new Error("expected a PDF");
+    try {
+      prepareDocument(mupdf, pdf);
+      const page = pdf.loadPage(0);
+      try {
+        return read(page, targets);
+      } finally {
+        page.destroy();
+      }
+    } finally {
+      doc.destroy();
+    }
+  }
+
+  it("answer per target: slanted, over an image, and neither is unsound", async () => {
+    const answers = await pageOne((page, targets) => ({
+      unsound: unsoundTargets(page, targets),
+      slanted: slantedTargets(targets),
+      overreach: imageReachVerdicts(page, targets),
+    }));
+
+    expect(answers).toEqual({
+      unsound: [false, false],
+      slanted: [true, false],
+      overreach: [false, true],
+    });
+  });
+
+  it("give each target the answer it gets alone", async () => {
+    const [together, first, second] = await pageOne((page, targets) => [
+      imageReachVerdicts(page, targets),
+      imageReachVerdicts(page, [targets[0]]),
+      imageReachVerdicts(page, [targets[1]]),
+    ]);
+
+    expect(together).toEqual([...first, ...second]);
+  });
+
+  /**
+   * AC-6: what a visitor may tick, the engine accepts. Every blocked reason
+   * detection gives is the refusal validation would make.
+   */
+  it("refuse, in a run, exactly what detection blocked", async () => {
+    const run = (targets: RedactionTarget[]) =>
+      redactDocumentWith(mupdf, fixture("detect-blocked.pdf"), targets);
+    const [slanted, overImage] = [DETECT_BLOCKED.slanted, DETECT_BLOCKED.overImage].map(
+      (needle): RedactionTarget => ({
+        page: 0,
+        quads: searched("detect-blocked.pdf", 0, needle)[0],
+        start: 0,
+        end: 0,
+        kind: "email",
+        text: needle,
+      }),
+    );
+
+    await expect(run([slanted])).rejects.toEqual(new EngineFailure("slanted-text"));
+    await expect(run([overImage])).rejects.toEqual(
+      new EngineFailure("redaction-overreach"),
     );
   });
 });

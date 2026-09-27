@@ -13,6 +13,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
+  detectBlocked,
   detectEmail,
   detectMany,
   detectPhone,
@@ -395,6 +396,11 @@ const FIXTURES = [
     "detect-phone.pdf",
     detectPhone(),
     "UK, US and international numbers, and look alikes",
+  ],
+  [
+    "detect-blocked.pdf",
+    detectBlocked(),
+    "a match for each reason detection blocks, and the limit",
   ],
 ];
 

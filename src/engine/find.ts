@@ -1,11 +1,13 @@
 import type { PDFDocument, PDFPage } from "mupdf";
 
 import { detect, readsJoinAsNothing, type Span } from "@/detect";
+import type { BlockedReason } from "@/worker/protocol";
 
 import { EXTRACTION_OPTIONS, walkCharacters, type Character } from "./characters";
 import { checkpoint, EngineFailure } from "./failure";
-import { quadCentre } from "./geometry";
-import { unsoundTargetsIn } from "./targets";
+import { containsPoint, isSoundQuad, quadBounds, quadCentre } from "./geometry";
+import { imageReachVerdicts } from "./pixels";
+import { slantedTargets, unsoundTargetsIn } from "./targets";
 import type { FindOptions, FoundMatch, Quad, RedactionTarget } from "./types";
 
 /**
@@ -47,6 +49,8 @@ interface PageText {
 interface Candidate {
   readonly span: Span;
   readonly text: string;
+  /** The characters it covers, in extraction order, each once. */
+  readonly characters: readonly Character[];
   readonly target: RedactionTarget;
 }
 
@@ -70,6 +74,15 @@ export async function findMatchesIn(
   return found;
 }
 
+/**
+ * One page: three reads, the checks, and the context. Spec 0005, *The find
+ * step*, steps 1 to 7.
+ *
+ * After each read (ordinary extraction, extraction with replacement text
+ * ignored, and the image pass) it yields and asks whether to stop (AC-11), so
+ * a cancel or a replacement open is noticed within one read of work. The page
+ * is destroyed on every path out; each read destroys its own structured text.
+ */
 async function findOnPage(
   doc: PDFDocument,
   index: number,
@@ -79,35 +92,134 @@ async function findOnPage(
 
   try {
     const ordinary = readable(() => pageText(page, EXTRACTION_OPTIONS[0]));
-    // AC-11: after each read, so a cancel or a replacement open is noticed
-    // within one read of work.
     await checkpoint(isCancelled);
 
-    const candidates = ordinary.blocks.flatMap((block) =>
-      detect({
-        text: ordinary.points.slice(block.start, block.end).join(""),
-        joins: block.joins,
-      }).map((span) => candidate(ordinary, index, block.start, span)),
-    );
+    const ignoring = readable(() => pageText(page, EXTRACTION_OPTIONS[1]));
+    await checkpoint(isCancelled);
 
-    // AC-8, first reason: an outline the engine could not trust, asked of the
-    // characters this read already holds, through the predicate target
-    // validation asks (INV-3).
-    const unsound = unsoundTargetsIn(
-      ordinary.characters,
-      candidates.map(({ target }) => target),
-    );
+    const found = candidatesIn(ordinary, index);
+    const targets = found.map(({ target }) => target);
+
+    // The image pass answers for every match at once, so a page with none
+    // skips it.
+    let overreach: readonly boolean[] = [];
+    if (found.length > 0) {
+      overreach = readable(() => imageReachVerdicts(page, targets));
+      await checkpoint(isCancelled);
+    }
+
+    // AC-8's reasons, in its order, through the predicates target validation
+    // asks (INV-3). The first that applies is the one given.
+    const checks: readonly (readonly [BlockedReason, readonly boolean[]])[] = [
+      ["unsound-outline", unsoundTargetsIn(ordinary.characters, targets)],
+      ["replacement-text", replacedTargets(ordinary, ignoring, targets)],
+      ["slanted-text", slantedTargets(targets)],
+      ["image-overreach", overreach],
+    ];
 
     const context = contextReader(ordinary.points, contextChars);
-    return candidates.map(({ span, text, target }, at): FoundMatch => {
+    const listed = found.map(({ span, text, target }, at): FoundMatch => {
       const around = { page: index, kind: span.kind, text, ...context(target) };
-      return unsound[at]
-        ? { ...around, tickedByDefault: false, blocked: "unsound-outline", target: null }
-        : { ...around, tickedByDefault: span.tickedByDefault, blocked: null, target };
+      const blocked = checks.find(([, failed]) => failed[at])?.[0] ?? null;
+      return blocked === null
+        ? { ...around, tickedByDefault: span.tickedByDefault, blocked, target }
+        : { ...around, tickedByDefault: false, blocked, target: null };
     });
+
+    // AC-9: glyphs hidden behind unrelated replacement text are found only
+    // with it ignored. Each is listed, blocked, never skipped, unless it sits
+    // where a match from ordinary extraction already does, so one place on
+    // the page is one row. Listed after the page's ordinary matches, in their
+    // own reading order.
+    const covering = targets.flatMap(({ quads }) => quads.filter(isSoundQuad));
+    const hiddenContext = contextReader(ignoring.points, contextChars);
+    const hidden = candidatesIn(ignoring, index)
+      .filter(({ characters }) =>
+        characters.every(
+          (character) =>
+            !covering.some((quad) => containsPoint(quad, quadCentre(character.quad))),
+        ),
+      )
+      .map(({ span, text, target }): FoundMatch => ({
+        page: index,
+        kind: span.kind,
+        text,
+        ...hiddenContext(target),
+        tickedByDefault: false,
+        blocked: "replacement-text",
+        target: null,
+      }));
+
+    return [...listed, ...hidden];
   } finally {
     page.destroy();
   }
+}
+
+/** Every span on a page, back on the page as characters, quads and a target. */
+function candidatesIn(page: PageText, pageIndex: number): readonly Candidate[] {
+  return page.blocks.flatMap((block) =>
+    detect({
+      text: page.points.slice(block.start, block.end).join(""),
+      joins: block.joins,
+    }).map((span) => candidate(page, pageIndex, block.start, span)),
+  );
+}
+
+/**
+ * Which matches does replacement text cover? Spec 0005, AC-9. One answer per
+ * target, `true` for one that it does.
+ *
+ * The characters whose centres lie inside a match's quads, in each mode's
+ * extraction order, NFKC normalised and with whitespace removed, must spell
+ * the same string with replacement text ignored as in ordinary extraction.
+ * When they do not, what the visitor reads there is not what the page draws
+ * there, and a run would leave the drawn glyphs or the replacement text
+ * behind. A target whose quads are not sound spells nothing either way; it is
+ * blocked as `unsound-outline` first.
+ */
+function replacedTargets(
+  ordinary: PageText,
+  ignoring: PageText,
+  targets: readonly RedactionTarget[],
+): readonly boolean[] {
+  const inOrdinary = spelledInside(ordinary.characters, targets);
+  const inIgnoring = spelledInside(ignoring.characters, targets);
+  return targets.map((_, at) => inOrdinary[at] !== inIgnoring[at]);
+}
+
+function spelledInside(
+  characters: readonly Character[],
+  targets: readonly RedactionTarget[],
+): readonly string[] {
+  const areas = targets.map(({ quads }) => {
+    const sound = quads.filter(isSoundQuad);
+    const bounds = sound.map(quadBounds);
+    return {
+      quads: sound,
+      x0: Math.min(...bounds.map((each) => each[0])),
+      y0: Math.min(...bounds.map((each) => each[1])),
+      x1: Math.max(...bounds.map((each) => each[2])),
+      y1: Math.max(...bounds.map((each) => each[3])),
+    };
+  });
+  const spelled = targets.map(() => [] as string[]);
+
+  for (const character of characters) {
+    const centre = quadCentre(character.quad);
+    areas.forEach((area, at) => {
+      if (
+        centre[0] >= area.x0 &&
+        centre[0] <= area.x1 &&
+        centre[1] >= area.y0 &&
+        centre[1] <= area.y1 &&
+        area.quads.some((quad) => containsPoint(quad, centre))
+      ) {
+        spelled[at].push(...normalise(character.code));
+      }
+    });
+  }
+  return spelled.map((points) => points.join("").replace(/\s/gu, ""));
 }
 
 /**
@@ -235,12 +347,14 @@ function candidate(
     }
   }
 
+  const characters = covered.map((from) => page.characters[from]);
   return {
     span,
     text,
+    characters,
     target: {
       page: pageIndex,
-      quads: lineQuads(covered.map((from) => page.characters[from])),
+      quads: lineQuads(characters),
       start,
       end,
       kind: span.kind,

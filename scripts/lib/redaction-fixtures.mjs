@@ -226,7 +226,7 @@ export function rotatedPage() {
  * A number for a content stream. PDF has no exponent form, so the rounding
  * error `Math.cos` leaves at a right angle (6e-17) is written as 0.
  */
-function num(value) {
+export function num(value) {
   return Math.abs(value) < 1e-6 ? "0" : String(value);
 }
 
@@ -557,7 +557,7 @@ export function imagesUnder() {
 }
 
 /** An image `size` pixels square, every pixel the grey `shade` (0 is black). */
-function flatImage(add, size, shade) {
+export function flatImage(add, size, shade) {
   return add(
     stream(
       `/Type /XObject /Subtype /Image /Width ${size} /Height ${size} /ColorSpace /DeviceGray ` +
@@ -571,7 +571,7 @@ function flatImage(add, size, shade) {
  * Draw `/name` as a square `size` points across, centred on `[x, y]` and turned
  * by `degrees`, pixel row 0 at the top as always.
  */
-function drawImage(name, size, degrees, [x, y]) {
+export function drawImage(name, size, degrees, [x, y]) {
   const angle = (degrees * Math.PI) / 180;
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
@@ -904,7 +904,7 @@ export function combining() {
 }
 
 /** UTF-16BE with its byte order mark, as a PDF hex string. */
-function utf16(text) {
+export function utf16(text) {
   return `<FEFF${[...text].map((c) => c.codePointAt(0).toString(16).padStart(4, "0")).join("")}>`;
 }
 
