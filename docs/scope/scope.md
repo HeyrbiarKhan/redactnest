@@ -97,7 +97,7 @@ spec [0004](../specs/0004-redaction-engine/index.md) · code in `src/engine/`, `
   - [x] A run stops cleanly: cancel between pages, one run at a time, a replacement that cancels a run in flight, and the browser cancel test · AC-17, AC-18, AC-23
   - [x] Slanted targets and images blanked too far refused before anything is removed: the slant check with its `slanted-text` kind, the image reach check, the padded area soundness check, the slant and image fixtures, and the pin on MuPDF's bounds behaviour · AC-5, AC-19, AC-27, AC-28, AC-29
   - [x] The self check sees text drawn off the page, so a match MuPDF moves off the page rather than removing it is refused: `CHECK_EXTRACTION_OPTIONS` with `clip=no` for the record and the check, the `next-line.pdf` fixtures, and the pin on MuPDF's `'` and `"` rewrite · AC-4, AC-13, AC-25
-- [ ] Verify it: `/check verify redaction engine`
+- [x] Verify it: `/check verify redaction engine`
 - [ ] Test it: `/test redaction engine`
 - [ ] Review it (fresh model): `/check review redaction engine`
 - [ ] Document it: `/document redaction engine`
