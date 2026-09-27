@@ -25,6 +25,9 @@ import {
   DETECT_EMAIL,
   DETECT_MANY_COUNT,
   DETECT_PHONE,
+  DETECT_PHONE_COLUMN,
+  DETECT_PHONE_LISTED,
+  DETECT_PHONE_SPACED,
   DETECT_UNICODE_EMAIL,
   DETECT_WRAPS,
   manyAddress,
@@ -248,6 +251,12 @@ describe("quads", () => {
     "1-800-555-0199",
     "00 44 20 7946 0012",
     "(212) 123 4567",
+    // Side by side (AC-27): in the middle of a spaced run, in a comma list,
+    // after a time, and after a ZIP+4.
+    DETECT_PHONE_SPACED[1],
+    DETECT_PHONE_LISTED[1],
+    "020 7946 0400",
+    "(212) 555-0142",
   ])("equal search()'s for the phone number %s", async (needle) => {
     const [match] = (await find("detect-phone.pdf")).filter(
       (each) => each.text === needle,
@@ -418,6 +427,36 @@ describe("phone numbers (AC-2, AC-10)", () => {
     expect(found.every((match) => match.kind === "phone" && match.blocked === null)).toBe(
       true,
     );
+  });
+
+  /** AC-27 and INV-13: numbers side by side, each on its own, none holding a neighbour. */
+  it("gives each number in a column one quad on its own line", async () => {
+    const found = await find("detect-phone.pdf");
+    const column = DETECT_PHONE_COLUMN.map((number) =>
+      found.find((match) => match.text === number),
+    );
+
+    const lines = column.map((match) => {
+      expect(match?.target?.quads).toHaveLength(1);
+      const [quad] = match?.target?.quads ?? [];
+      return quad[1];
+    });
+    expect(new Set(lines).size).toBe(DETECT_PHONE_COLUMN.length);
+  });
+
+  it("gives numbers on one line quads that do not overlap", async () => {
+    const found = await find("detect-phone.pdf");
+
+    for (const numbers of [DETECT_PHONE_SPACED, DETECT_PHONE_LISTED]) {
+      const quads = numbers.map((number) => {
+        const [quad] = found.find((match) => match.text === number)?.target?.quads ?? [];
+        return quad;
+      });
+      quads.slice(1).forEach((quad, index) => {
+        // Each number's left edge sits right of its neighbour's right edge.
+        expect(quad[0]).toBeGreaterThan(quads[index][2]);
+      });
+    }
   });
 });
 

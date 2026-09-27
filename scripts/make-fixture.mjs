@@ -396,7 +396,7 @@ const FIXTURES = [
   [
     "detect-phone.pdf",
     detectPhone(),
-    "UK, US and international numbers, and look alikes",
+    "UK, US and international numbers, numbers side by side, and look alikes",
   ],
   [
     "detect-blocked.pdf",

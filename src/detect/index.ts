@@ -22,7 +22,15 @@ import type { Detector, DetectInput, Span } from "./types";
 import type { DetectorKind } from "@/worker/protocol";
 
 export { KEYWORD_REACH } from "./text";
-export { PHONE_REGIONS, PHONE_WORDS } from "./phone";
+export {
+  EXTENSION_MARKERS,
+  MAX_PARSES_PER_GROUP,
+  MAX_WINDOW_DIGITS,
+  PHONE_READINGS,
+  PHONE_REGIONS,
+  PHONE_WORDS,
+  type PhoneReading,
+} from "./phone";
 export type { Detector, DetectInput, Span } from "./types";
 
 /**

@@ -1,10 +1,9 @@
 /**
  * The text helpers every detector shares. Spec 0005, *Detectors*.
  *
- * Offsets in this folder count code points, never UTF-16 units (INV-12). A
- * regular expression and libphonenumber-js both answer in UTF-16 units, so
- * `codePointIndex` turns their answers into code points before they become a
- * `Span`.
+ * Offsets in this folder count code points, never UTF-16 units (INV-12). Each
+ * detector reads its block as `codePoints`, one string per code point, and
+ * steps through that, so a letter above U+FFFF is one position like any other.
  */
 
 /**
@@ -20,37 +19,6 @@ export const KEYWORD_REACH = 32;
 /** The code points of `text`, one string each. */
 export function codePoints(text: string): readonly string[] {
   return Array.from(text);
-}
-
-/**
- * For each UTF-16 index of `text`, the index of the code point it falls in,
- * plus one entry for the end of the text.
- */
-export function codePointIndex(text: string): Uint32Array {
-  const index = new Uint32Array(text.length + 1);
-  let point = 0;
-
-  for (let unit = 0; unit < text.length; unit += 1) {
-    index[unit] = point;
-    if (
-      isHighSurrogate(text.charCodeAt(unit)) &&
-      isLowSurrogate(text.charCodeAt(unit + 1))
-    ) {
-      unit += 1;
-      index[unit] = point;
-    }
-    point += 1;
-  }
-  index[text.length] = point;
-  return index;
-}
-
-function isHighSurrogate(unit: number): boolean {
-  return unit >= 0xd800 && unit <= 0xdbff;
-}
-
-function isLowSurrogate(unit: number): boolean {
-  return unit >= 0xdc00 && unit <= 0xdfff;
 }
 
 /** A list of keywords, matched in any case as whole words. */

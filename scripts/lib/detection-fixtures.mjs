@@ -1,6 +1,6 @@
 /**
  * The fixtures for pattern detection. Spec 0005, *Build plan*, tasks 7, 10,
- * 14 and 15.
+ * 14, 15 and 22.
  *
  * Written object by object like the redaction matrix, from the same page
  * builders, so a reviewer can read exactly what each page draws and where.
@@ -222,6 +222,27 @@ export function detectUnicode() {
   });
 }
 
+/** The column of `detect-phone.pdf`: five numbers, one per line of one block. */
+export const DETECT_PHONE_COLUMN = Object.freeze([
+  "020 7946 0100",
+  "020 7946 0101",
+  "020 7946 0102",
+  "020 7946 0103",
+  "020 7946 0104",
+]);
+
+/** The numbers `detect-phone.pdf` holds side by side on one line each. */
+export const DETECT_PHONE_SPACED = Object.freeze([
+  "020 7946 0200",
+  "020 7946 0201",
+  "020 7946 0202",
+]);
+export const DETECT_PHONE_LISTED = Object.freeze([
+  "020 7946 0300",
+  "020 7946 0301",
+  "020 7946 0302",
+]);
+
 /** The phone numbers `detect-phone.pdf` holds, as found, with their tick. */
 export const DETECT_PHONE = Object.freeze([
   ["020 7946 0958", true],
@@ -234,18 +255,30 @@ export const DETECT_PHONE = Object.freeze([
   ["12345678901", false],
   ["12345678902", true],
   ["020 7946 0777", true],
+  ...DETECT_PHONE_COLUMN.map((number) => [number, true]),
+  ...DETECT_PHONE_SPACED.map((number) => [number, true]),
+  ...DETECT_PHONE_LISTED.map((number) => [number, true]),
+  ["020 7946 0400", true],
+  ["(212) 555-0142", true],
 ]);
 
 /**
- * Spec 0005, AC-2, AC-4, AC-6 and AC-10. Phone numbers, and the things that
- * look like them:
+ * Spec 0005, AC-2, AC-4, AC-6, AC-10 and AC-27. Phone numbers, and the things
+ * that look like them:
  *
  *  - UK and US national numbers, international numbers with `+` and `00`, and
  *    an extension, each ticked;
  *  - a possible but not valid number, and a valid number written as bare
  *    digits, each unticked, then the same bare digits after `Tel:`, ticked;
  *  - a number wrapped across two lines of one block;
- *  - an invoice code, dates, UK postcodes and ZIP codes, none a phone number.
+ *  - an invoice code, dates, UK postcodes and ZIP codes, none a phone number;
+ *  - numbers side by side (AC-27): a column of five, one per line of one block
+ *    (14 pt apart, as the wrapped number is, so the line join makes them one
+ *    run), three on one line parted by single spaces, a comma and semicolon
+ *    list, a call log line with a time before the number and a duration
+ *    after it, and a US number beside a ZIP+4;
+ *  - a dotted date starting with `0`, which the trunk rule alone would read as
+ *    a UK number.
  */
 export function detectPhone() {
   return document(() => [
@@ -265,7 +298,21 @@ export function detectPhone() {
         line("F1", 12, 72, 520, "Invoice INV-2026-000123 paid") +
         line("F1", 12, 72, 500, "Born 12/05/1980, signed 2026-09-27") +
         line("F1", 12, 72, 480, "Postcodes SW1A 1AA and EC1A 1BB") +
-        line("F1", 12, 72, 460, "ZIP codes 90210 and 10001"),
+        line("F1", 12, 72, 460, "ZIP codes 90210 and 10001") +
+        DETECT_PHONE_COLUMN.map((number, row) =>
+          line("F1", 12, 72, 420 - row * 14, number),
+        ).join("") +
+        line("F1", 12, 72, 330, `Desk ${DETECT_PHONE_SPACED.join(" ")}`) +
+        line(
+          "F1",
+          12,
+          72,
+          310,
+          `Ring ${DETECT_PHONE_LISTED[0]}, ${DETECT_PHONE_LISTED[1]}; ${DETECT_PHONE_LISTED[2]}`,
+        ) +
+        line("F1", 12, 72, 290, "12:30 020 7946 0400 3 min") +
+        line("F1", 12, 72, 270, "Ship to CA 90210-1234 (212) 555-0142") +
+        line("F1", 12, 72, 250, "Born 05.12.1980 in Leeds"),
     },
   ]);
 }
