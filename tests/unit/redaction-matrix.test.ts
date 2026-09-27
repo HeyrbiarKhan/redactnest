@@ -12,7 +12,9 @@ import {
   PIPELINE,
   quadHeight,
   redactDocumentWith,
+  removalBand,
   silenceEngineLog,
+  textPass,
   type Pass,
   type Quad,
   type RedactionTarget,
@@ -856,7 +858,89 @@ describe("measured cases", () => {
       outcomeOf("reach.pdf", [tick("reach.pdf", 11, "Jeremy Quigley")]),
     ).resolves.toBe("redaction-incomplete");
   });
+
+  /**
+   * The same case pinned directly, as the bounds pin does it, because the
+   * refusal above asserts only the kind, which a surviving glyph or a self
+   * check regression would satisfy just as well (spec 0004, AC-13 and the size
+   * change limit in *Security model*). The text pass runs on the removal band
+   * the engine builds, and the page is read back without clipping: nothing
+   * ticked survives anywhere, and only ` here` moves, back by the width of
+   * `Jeremy ` at 12pt (42.672 pt) times 11/12 less one, 3.556 pt.
+   *
+   * If this fails because ` here` stays where it was, MuPDF has fixed its
+   * filter: mark that upstream item in spec 0004's Follow-up done, and change
+   * the case above to expect a clean redaction.
+   */
+  it("pins the text after the match moving 3.556 pt back, with nothing ticked surviving", () => {
+    const source = fixture("reach.pdf");
+    const target = tick("reach.pdf", 11, "Jeremy Quigley");
+    const before = pageCharacters(source, 11, "clip=no");
+    const after = pageCharacters(withTextPass(source, 11, target), 11, "clip=no");
+    const at = ({ char, x, y }: { char: string; x: number; y: number }) =>
+      `${char}@${x.toFixed(2)},${y.toFixed(2)}`;
+
+    // `pageCharacters` drops whitespace, so the match is its letters in a row.
+    const letters = [..."JeremyQuigley"];
+    const start = before.findIndex((_, index) =>
+      letters.every((char, offset) => before[index + offset]?.char === char),
+    );
+    expect(start).toBeGreaterThanOrEqual(0);
+    const baseline = before[start].y;
+    const onLine = ({ y }: { y: number }) => Math.abs(y - baseline) < 0.5;
+
+    const line = before.filter(onLine);
+    const matchAt = line.indexOf(before[start]);
+    const ahead = line.slice(0, matchAt);
+    const behind = line.slice(matchAt + letters.length);
+    expect(behind.map(({ char }) => char).join("")).toBe("here");
+
+    // Every other line, and the text ahead of the match, exactly where it was.
+    expect(after.filter((entry) => !onLine(entry)).map(at)).toEqual(
+      before.filter((entry) => !onLine(entry)).map(at),
+    );
+    const lineAfter = after.filter(onLine);
+    expect(lineAfter.map(({ char }) => char).join("")).toBe("Accountholderhere");
+    expect(lineAfter.slice(0, ahead.length).map(at)).toEqual(ahead.map(at));
+
+    // The four letters of ` here`, each moved back along the line and no other way.
+    const moved = 42.672 * (11 / 12 - 1);
+    lineAfter.slice(ahead.length).forEach((entry, index) => {
+      expect(Math.abs(entry.x - behind[index].x - moved)).toBeLessThanOrEqual(0.01);
+      expect(Math.abs(entry.y - behind[index].y)).toBeLessThanOrEqual(0.01);
+    });
+  });
 });
+
+/**
+ * `bytes` with the text pass run on page `index` over the target's removal
+ * band, as the engine builds it, and written out so the helpers can read it.
+ */
+function withTextPass(
+  bytes: ArrayBuffer,
+  index: number,
+  target: RedactionTarget,
+): ArrayBuffer {
+  const doc = mupdf.Document.openDocument(bytes, "application/pdf");
+  try {
+    const pdf: PDFDocument | null = doc.asPDF();
+    if (!pdf) throw new Error("expected a PDF");
+    const page = pdf.loadPage(index);
+    try {
+      textPass(mupdf, page, [target.quads.map(removalBand)]);
+    } finally {
+      page.destroy();
+    }
+    const buffer = pdf.saveToBuffer("");
+    try {
+      return buffer.asUint8Array().slice().buffer;
+    } finally {
+      buffer.destroy();
+    }
+  } finally {
+    doc.destroy();
+  }
+}
 
 /**
  * Spec 0004, slice 5: the self check sees text drawn off the page, over

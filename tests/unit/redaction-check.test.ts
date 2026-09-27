@@ -1,4 +1,4 @@
-import type { PDFDocument, PDFPage } from "mupdf";
+import type { PDFDocument, PDFObject, PDFPage } from "mupdf";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
@@ -114,6 +114,78 @@ describe("the self check fires", () => {
       kindOf(fixture("two-pages.pdf"), [], { ...PIPELINE, sweepCarriers: dropFirstPage }),
     ).resolves.toBe("unsupported");
   });
+
+  /**
+   * Each recorded character matches one output character at most, so a glyph
+   * drawn a second time in the same place (fake bold) is counted as two. Here
+   * the whole of page 1 is drawn twice after the rebuild, so every second copy
+   * finds no record left to match.
+   */
+  it("fails with unsupported when a run with nothing ticked draws a page's text twice", async () => {
+    const drawTwice = (out: PDFDocument) => {
+      sweepCarriers(out);
+      const page = out.findPage(0);
+      const contents = page.get("Contents");
+      const parts: PDFObject[] = [];
+      if (contents.isArray()) contents.forEach((part) => parts.push(part));
+      else parts.push(contents);
+
+      const twice = out.newArray();
+      for (const part of [...parts, ...parts]) twice.push(part);
+      page.put("Contents", twice);
+    };
+
+    await expect(
+      kindOf(fixture("two-pages.pdf"), [], { ...PIPELINE, sweepCarriers: drawTwice }),
+    ).resolves.toBe("unsupported");
+  });
+
+  /**
+   * The structural half, one rule at a time (AC-13). Each fault is added to the
+   * rebuilt document after the real sweep, through the same seam, and none is a
+   * carrier key, so only the rule it names can catch it.
+   */
+  it.each([
+    [
+      "document info in the trailer",
+      (out: PDFDocument) => {
+        const info = out.newDictionary();
+        info.put("Title", out.newString("Kept private"));
+        out.getTrailer().put("Info", out.addObject(info));
+      },
+    ],
+    [
+      "a catalog key off the catalog's allowlist",
+      (out: PDFDocument) =>
+        out.getTrailer().get("Root").put("PageMode", out.newName("UseOutlines")),
+    ],
+    [
+      "a page key off the page allowlist",
+      (out: PDFDocument) => out.findPage(0).put("Tabs", out.newName("S")),
+    ],
+    [
+      "a script nested below an allowlisted page key",
+      (out: PDFDocument) => {
+        const group = out.newDictionary();
+        group.put("S", out.newName("Transparency"));
+        group.put("JS", out.newString("app.alert(1)"));
+        out.findPage(0).put("Group", group);
+      },
+    ],
+    ["one page fewer than the source", (out: PDFDocument) => out.deletePage(1)],
+  ])(
+    "fails with redaction-incomplete when the rebuild carries %s",
+    async (_label, spoil) => {
+      const spoiled = (out: PDFDocument) => {
+        sweepCarriers(out);
+        spoil(out);
+      };
+
+      await expect(
+        kindOf(fixture("two-pages.pdf"), [], { ...PIPELINE, sweepCarriers: spoiled }),
+      ).resolves.toBe("redaction-incomplete");
+    },
+  );
 
   /**
    * A leak outranks an over removal, and the check compares every page before
