@@ -1,7 +1,7 @@
 # 0005. Pattern detection
 
 **Date**: 2026-09-27
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 

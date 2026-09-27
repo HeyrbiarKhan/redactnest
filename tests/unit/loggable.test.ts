@@ -1,6 +1,7 @@
 import { describe, expectTypeOf, it } from "vitest";
 
 import type {
+  DetectionCounts,
   DetectorKind,
   DocumentSummary,
   EngineErrorKind,
@@ -68,9 +69,11 @@ describe("what may reach a log", () => {
    * label could not select between them and would only imply an isolation the
    * cases were not getting.
    */
-  it("holds for the summary, the outcome, a failure, a phase and a detector", () => {
+  it("holds for the summary, the outcome, the detection counts, a failure, a phase and a detector", () => {
     expectTypeOf<Verdict<DocumentSummary>>().toEqualTypeOf<"kinds and numbers only">();
     expectTypeOf<Verdict<RedactionOutcome>>().toEqualTypeOf<"kinds and numbers only">();
+    // Spec 0005, AC-15: what detection found, by kind and by blocked reason.
+    expectTypeOf<Verdict<DetectionCounts>>().toEqualTypeOf<"kinds and numbers only">();
     expectTypeOf<Verdict<EngineErrorKind>>().toEqualTypeOf<"kinds and numbers only">();
     expectTypeOf<Verdict<ProgressPhase>>().toEqualTypeOf<"kinds and numbers only">();
     expectTypeOf<Verdict<DetectorKind>>().toEqualTypeOf<"kinds and numbers only">();

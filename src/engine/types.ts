@@ -1,4 +1,5 @@
 import type {
+  BlockedReason,
   DetectorKind,
   DocumentSummary,
   MatchId,
@@ -43,7 +44,10 @@ export interface RedactionTarget {
    * passes uses these quads as they stand.
    */
   readonly quads: readonly Quad[];
-  /** Offsets into the page's extracted text, for matches broken across runs. */
+  /**
+   * Code point offsets into the ordinary mode page text detection built, end
+   * exclusive (spec 0005). Not read by the engine yet; kept for feature 13.
+   */
   readonly start: number;
   readonly end: number;
   /**
@@ -69,6 +73,44 @@ export interface RedactionTarget {
 export type TargetMap = Map<MatchId, RedactionTarget>;
 
 /**
+ * One match the find step found, before the worker gives it an id. Spec 0005.
+ *
+ * An engine type, never a protocol one (INV-4): the worker strips it to a
+ * `ReviewMatch`, keeping the target in its private map. A union, so a blocked
+ * match cannot carry a target (INV-2): the worker's existing check, an id with
+ * no target is `unsupported`, then refuses it with no new code path.
+ */
+export type FoundMatch = {
+  /** Zero based, as the engine counts. */
+  readonly page: number;
+  readonly kind: DetectorKind;
+  /** The NFKC page text of the match, a line join as one space (AC-5). */
+  readonly text: string;
+  /** Up to `contextChars` code points either side, whitespace collapsed (AC-5). */
+  readonly before: string;
+  readonly after: string;
+  /** The detector's rule (AC-10), and false whenever blocked. */
+  readonly tickedByDefault: boolean;
+} & (
+  | { readonly blocked: null; readonly target: RedactionTarget }
+  | { readonly blocked: BlockedReason; readonly target: null }
+);
+
+/** How detection is asked to run. */
+export interface FindOptions {
+  /**
+   * Code points of context either side of a match, from the `open` request,
+   * which takes `config.matchContextChars` (spec 0002, INV-9).
+   */
+  readonly contextChars: number;
+  /**
+   * Checked after every read of every page (spec 0005, AC-11). True means
+   * stop: detection throws `RunCancelled` and hands nothing back.
+   */
+  readonly isCancelled?: () => boolean;
+}
+
+/**
  * A document held open for the life of a session.
  *
  * Spec 0002 keeps the document open across steps rather than reopening it per
@@ -81,6 +123,14 @@ export type TargetMap = Map<MatchId, RedactionTarget>;
  */
 export interface OpenDocument {
   readonly summary: DocumentSummary;
+  /**
+   * Find every match on every page with a text layer, by page, then in reading
+   * order (spec 0005, AC-3). Reads this review copy one page at a time and
+   * yields after each read. Throws `EngineFailure("unsupported")` when a page
+   * that reported a text layer cannot be read (AC-12), and `RunCancelled` when
+   * `isCancelled` says so.
+   */
+  findMatches(options: FindOptions): Promise<readonly FoundMatch[]>;
   /**
    * Release the native memory MuPDF holds.
    *

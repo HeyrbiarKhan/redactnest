@@ -346,3 +346,67 @@ test("a full run sends no document, text, match or name anywhere", async ({ page
 
   expect([...new Set(dataRequests)]).toEqual(["/api/entitlement"]);
 });
+
+/**
+ * Spec 0005, AC-15. Detection puts document text on the main thread for the
+ * first time as more than one fixture line: every match, and the words either
+ * side of it. A run over a document full of them, open to download, and none of
+ * it reaches a request, a store or the console.
+ */
+test("a detected redaction sends, stores and logs no match text or context", async ({
+  page,
+}) => {
+  await watchStorage(page);
+  const requests = recordRequests(page);
+  const logged: string[] = [];
+  page.on("console", (message) => logged.push(message.text()));
+
+  await page.goto("/tool");
+  await page.getByTestId("file-input").setInputFiles({
+    name: FILE_NAME,
+    mimeType: "application/pdf",
+    buffer: readFileSync(resolve("tests/fixtures/detect-email.pdf")),
+  });
+
+  // On screen, so the page really holds the text this test looks for.
+  const checklist = page.getByTestId("checklist");
+  await expect(checklist).toContainText("sales@example.org", { timeout: ENGINE_TIMEOUT });
+  await expect(checklist).toContainText("for the report");
+
+  await page.getByTestId("redact").click();
+  await expect(page.getByTestId("download")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+  const downloading = page.waitForEvent("download");
+  await page.getByTestId("download").click();
+  await (await downloading).path();
+
+  const found = [
+    "jane.doe@example.com",
+    "sales@example.org",
+    "support@example.net",
+    "δοκιμή@παράδειγμα.ελ",
+    "left@example.com",
+    // Context either side of a match.
+    "for the report",
+    "Berlin office",
+    "Mail right",
+  ];
+
+  for (const request of requests) {
+    const sent = `${request.url()}\n${request.postData() ?? ""}`;
+    for (const text of found) {
+      expect(sent, `a request carried "${text}"`).not.toContain(text);
+      expect(sent, `a request carried "${text}", encoded`).not.toContain(
+        encodeURIComponent(text),
+      );
+    }
+  }
+
+  const writes = await page.evaluate(() => window.__redactnestWrites ?? []);
+  expect(writes).toEqual([]);
+
+  for (const line of logged) {
+    for (const text of found) {
+      expect(line, `the console printed "${text}"`).not.toContain(text);
+    }
+  }
+});

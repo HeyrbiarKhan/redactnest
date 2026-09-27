@@ -1,8 +1,9 @@
-import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { deflateSync } from "node:zlib";
 
 import { expect, test } from "@playwright/test";
+
+import { inspectInNode } from "./node-inspect";
 
 /**
  * The gate spec 0001 calls "what the scaffold must demonstrate".
@@ -281,60 +282,6 @@ test("a PDF with layers is refused before any review exists", async ({ page }) =
   await expect(page.getByTestId("redact")).toHaveCount(0);
 });
 
-/** What Node's MuPDF finds in a file the page handed over. */
-interface Inspection {
-  readonly pages: number;
-  readonly versions: number;
-  readonly trailer: string[];
-  readonly catalog: string[];
-  readonly keys: string[];
-  readonly text: string;
-  readonly bytes: string;
-}
-
-/**
- * Open the file at `path` with the real MuPDF in Node and describe what a
- * reader could still find in it.
- *
- * Run in a child process on purpose. MuPDF is an ES module with top level
- * await, and Playwright loads this spec as CommonJS, which cannot import it.
- */
-function inspectInNode(path: string): Inspection {
-  const script = [
-    'import * as mupdf from "mupdf";',
-    'import { readFileSync } from "node:fs";',
-    "mupdf.setLog(() => {});",
-    'const doc = mupdf.Document.openDocument(readFileSync(process.argv[1]), "application/pdf").asPDF();',
-    "const keysOf = (dict) => { const keys = []; dict.forEach((_v, k) => keys.push(k)); return keys; };",
-    "const keys = new Set();",
-    "const walk = (obj) => {",
-    "  if (obj.isIndirect()) return;",
-    "  if (obj.isDictionary()) { keysOf(obj).forEach((k) => keys.add(k)); obj.forEach(walk); }",
-    "  else if (obj.isArray()) obj.forEach(walk);",
-    "};",
-    "for (let n = 1; n < doc.countObjects(); n += 1) walk(doc.newIndirect(n).resolve());",
-    'let text = "";',
-    'for (let i = 0; i < doc.countPages(); i += 1) text += doc.loadPage(i).toStructuredText("").asText();',
-    'const bytes = Buffer.from(doc.saveToBuffer("decompress").asUint8Array()).toString("latin1");',
-    "process.stdout.write(JSON.stringify({",
-    "  pages: doc.countPages(),",
-    "  versions: doc.countVersions(),",
-    "  trailer: keysOf(doc.getTrailer()),",
-    '  catalog: keysOf(doc.getTrailer().get("Root")),',
-    "  keys: [...keys],",
-    "  text,",
-    "  bytes,",
-    "}));",
-  ].join("\n");
-
-  const output = execFileSync(
-    process.execPath,
-    ["--input-type=module", "--eval", script, path],
-    { cwd: process.cwd(), maxBuffer: 64 * 1024 * 1024 },
-  );
-  return JSON.parse(output.toString("utf8")) as Inspection;
-}
-
 /**
  * Spec 0004, AC-7 and AC-19. The real engine in the real worker, end to end:
  * the fixture that carries everything is redacted through the page, the file
@@ -352,7 +299,9 @@ test("a redaction in the real worker hands over a file that is really clean", as
 
   const outcome = page.getByTestId("outcome");
   await expect(outcome).toBeVisible({ timeout: ENGINE_TIMEOUT });
-  await expect(outcome).toContainText("Removed 0 items and stripped document info");
+  // Spec 0005: page one's email address and phone number are found and ticked
+  // by default, so the run removes both as well as stripping everything else.
+  await expect(outcome).toContainText("Removed 2 items and stripped document info");
 
   const downloading = page.waitForEvent("download");
   await page.getByTestId("download").click();
@@ -377,6 +326,10 @@ test("a redaction in the real worker hands over a file that is really clean", as
   // What was visible stays visible (AC-8).
   expect(cleaned.text).toContain("Visible typed note");
   expect(cleaned.text).toContain("Form field value");
+  // And what detection found and the visitor left ticked is gone.
+  expect(cleaned.text).not.toContain("jane.doe@example.com");
+  expect(cleaned.text).not.toContain("7946 0958");
+  expect(cleaned.text).toContain("Keep this sentence exactly as it is");
 });
 
 /**

@@ -28,15 +28,17 @@ import {
   type RedactionTarget,
   type TargetMap,
 } from "@/engine";
-import type {
-  EngineLimits,
-  ErrorMessage,
-  ProgressMessage,
-  ProgressPhase,
-  RedactedMessage,
-  RequestMessage,
-  ResponseMessage,
-  ResultMessage,
+import {
+  asMatchId,
+  type EngineLimits,
+  type ErrorMessage,
+  type ProgressMessage,
+  type ProgressPhase,
+  type RedactedMessage,
+  type RequestMessage,
+  type ResponseMessage,
+  type ResultMessage,
+  type ReviewMatch,
 } from "./protocol";
 
 /**
@@ -167,40 +169,76 @@ async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
       if (!cancelled.has(id)) postProgress(id, jobId, phase);
     });
 
-    // A cancelled job reports nothing at all, and keeps nothing either.
-    if (cancelled.has(id)) {
-      doc.close();
-      return;
+    // Only a session that reaches the registry keeps its document. Every other
+    // way out of here, a cancel, a failed detection or a replacement, hands
+    // MuPDF's memory straight back.
+    let kept = false;
+    try {
+      // A cancelled job reports nothing at all, and keeps nothing either.
+      if (cancelled.has(id)) return;
+
+      // Spec 0005, AC-11. Detection runs inside `open`, on the review copy,
+      // and looks at the cancelled set after every read of every page.
+      postProgress(id, jobId, "detecting");
+      const found = await doc.findMatches({
+        contextChars,
+        isCancelled: () => cancelled.has(id),
+      });
+      if (cancelled.has(id)) return;
+
+      // Spec 0005, INV-2 and INV-4. Each match gets an id minted here, so an id
+      // from a finished session can never name a match in a new one. Only an
+      // unblocked match's target goes into the private map: a blocked one has
+      // none, so a `redact` naming it is refused as `unsupported` by the check
+      // in `handleRedact`, with no new code path.
+      const targets: TargetMap = new Map();
+      const matches = found.map((match): ReviewMatch => {
+        const matchId = asMatchId(crypto.randomUUID());
+        if (match.target !== null) targets.set(matchId, match.target);
+        return {
+          id: matchId,
+          type: match.kind,
+          page: match.page + 1,
+          text: match.text,
+          before: match.before,
+          after: match.after,
+          tickedByDefault: match.blocked === null && match.tickedByDefault,
+          blocked: match.blocked,
+        };
+      });
+
+      // AC-1, second half: evicted again on the way out, so two opens that
+      // overlap cannot both end up in the registry whichever order they happen
+      // to finish in. The eviction above cannot cover that, because a session
+      // registered while this one was parsing arrived after it looked.
+      for (const existing of sessions.keys()) endSession(existing);
+
+      sessions.set(jobId, {
+        bytes,
+        doc,
+        targets,
+        limits,
+        contextChars,
+        runs: Promise.resolve(),
+        activeRunId: null,
+      });
+      kept = true;
+
+      const message: ResultMessage = {
+        id,
+        jobId,
+        kind: "result",
+        summary: doc.summary,
+        matches,
+      };
+      scope.postMessage(message);
+    } finally {
+      if (!kept) doc.close();
     }
-
-    // AC-1, second half: evicted again on the way out, so two opens that
-    // overlap cannot both end up in the registry whichever order they happen to
-    // finish in. The eviction above cannot cover that, because a session
-    // registered while this one was parsing arrived after it looked.
-    for (const existing of sessions.keys()) endSession(existing);
-
-    sessions.set(jobId, {
-      bytes,
-      doc,
-      targets: new Map(),
-      limits,
-      contextChars,
-      runs: Promise.resolve(),
-      activeRunId: null,
-    });
-
-    const message: ResultMessage = {
-      id,
-      jobId,
-      kind: "result",
-      summary: doc.summary,
-      // Feature 6 fills this from the detectors, with `contextChars` of context
-      // either side of each match. Until then there is nothing to review.
-      matches: [],
-    };
-    scope.postMessage(message);
   } catch (error) {
-    if (cancelled.has(id)) return;
+    // Stopping is not failing. A detection that noticed its cancel posts
+    // nothing, exactly like a run (spec 0005, AC-11).
+    if (cancelled.has(id) || error instanceof RunCancelled) return;
 
     // Anything that is not already a described failure becomes `unsupported`.
     // Whatever the original error said about the document stops here: it is

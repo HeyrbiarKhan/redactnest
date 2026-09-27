@@ -1,0 +1,263 @@
+/**
+ * The fixtures for pattern detection. Spec 0005, *Build plan*, tasks 7, 10,
+ * 14 and 15.
+ *
+ * Written object by object like the redaction matrix, from the same page
+ * builders, so a reviewer can read exactly what each page draws and where.
+ * None is made by MuPDF. Every value in them is invented: `example.com` and
+ * its kin are reserved for documentation, `020 7946 0xxx` is Ofcom's drama
+ * range, and `555-01xx` is the US one.
+ */
+
+import { stream } from "./pdf-writer.mjs";
+import { document, IDENTITY_UNICODE, line } from "./redaction-fixtures.mjs";
+
+/**
+ * A Type0 font whose two byte codes are Unicode code points, as its identity
+ * ToUnicode map says, for text the built in fonts cannot encode: Greek,
+ * Cyrillic, a fullwidth `＠` and the `ﬁ` ligature. No font program is
+ * embedded, so MuPDF draws with a substitute; extraction reads the map.
+ */
+function identityFont(add) {
+  const unicode = add(stream("", IDENTITY_UNICODE));
+  const descriptor = add(
+    "<< /Type /FontDescriptor /FontName /RedactNestUnicode /FontBBox [0 -200 1000 800] " +
+      "/Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 /ItalicAngle 0 /Flags 4 >>",
+  );
+  const cidFont = add(
+    "<< /Type /Font /Subtype /CIDFontType2 /BaseFont /RedactNestUnicode /CIDToGIDMap /Identity " +
+      "/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> " +
+      `/FontDescriptor ${descriptor} 0 R /DW 600 >>`,
+  );
+  return add(
+    "<< /Type /Font /Subtype /Type0 /BaseFont /RedactNestUnicode /Encoding /Identity-H " +
+      `/DescendantFonts [${cidFont} 0 R] /ToUnicode ${unicode} 0 R >>`,
+  );
+}
+
+/** One line in the identity font: each code point below U+10000 as its own code. */
+function unicodeLine(size, x, y, text) {
+  const hex = [...text]
+    .map((character) => character.codePointAt(0).toString(16).padStart(4, "0"))
+    .join("");
+  return `BT /U ${size} Tf ${x} ${y} Td <${hex}> Tj ET\n`;
+}
+
+/** The email addresses `detect-email.pdf` holds, by page, for the tests to name. */
+export const DETECT_EMAIL = Object.freeze({
+  running: Object.freeze([
+    "jane.doe@example.com",
+    "jane.doe@example.com",
+    "sales@example.org",
+    "support@example.net",
+    "josé.müller@exämple.de",
+  ]),
+  scripts: Object.freeze([
+    "δοκιμή@παράδειγμα.ελ",
+    "пример@почта.рф",
+    // NFKC: the fullwidth `＠` reads as `@`, and the `ﬁ` as `fi`.
+    "info@example.com",
+    "finance@example.com",
+  ]),
+  columns: Object.freeze(["left@example.com", "right@example.org"]),
+  reversed: "שלום@דוגמה.ישראל",
+});
+
+/** The identity font's advance at 12pt, its `/DW` of 600 thousandths of an em. */
+const IDENTITY_ADVANCE = 7.2;
+
+/**
+ * Spec 0005, AC-1, AC-3, AC-5, AC-6 and AC-7. Email addresses as a visitor's
+ * documents hold them:
+ *
+ *  1. running text in Helvetica: an address, the same address again, one
+ *     before a full stop, one after `mailto:`, one with accented letters, and
+ *     a near miss written out in words;
+ *  2. other scripts through the identity font: Greek, Cyrillic, an address
+ *     written with a fullwidth `＠`, one set with the `ﬁ` ligature, and last a
+ *     Hebrew address drawn right to left one positioned glyph at a time, in
+ *     logical order, so extraction order runs against visual order. The
+ *     identity font carries the Hebrew through its map, since no committed font
+ *     holds a right to left script. It has to be a right to left script:
+ *     MuPDF 1.28.1 keeps Hebrew glyphs drawn this way on one line, at bidi
+ *     level 1, but puts each Latin glyph drawn backwards on a line of its own
+ *     (measured), where no address can be found;
+ *  3. two columns, one address in each, so each is its own text block.
+ *
+ * Three pages, within the free page cap, so the browser suite can open it.
+ */
+export function detectEmail() {
+  const reversed = [...DETECT_EMAIL.reversed]
+    .map((glyph, index) => {
+      const hex = glyph.codePointAt(0).toString(16).padStart(4, "0");
+      return `1 0 0 1 ${(400 - (index + 1) * IDENTITY_ADVANCE).toFixed(1)} 620 Tm <${hex}> Tj`;
+    })
+    .join(" ");
+
+  return document(({ add }) => {
+    const unicode = identityFont(add);
+    return [
+      {
+        content:
+          line("F1", 12, 72, 720, "Contact: jane.doe@example.com for the report.") +
+          line(
+            "F1",
+            12,
+            72,
+            700,
+            "Write to jane.doe@example.com again, or to sales@example.org.",
+          ) +
+          line("F1", 12, 72, 680, "Link: mailto:support@example.net") +
+          line("F1", 12, 72, 660, "Berlin office: josé.müller@exämple.de today") +
+          line("F1", 12, 72, 640, "Nothing here: user at example dot com") +
+          line("F1", 12, 72, 620, "Keep this sentence exactly as it is"),
+      },
+      {
+        fonts: `/U ${unicode} 0 R`,
+        content:
+          unicodeLine(12, 72, 720, "Ελλάδα: δοκιμή@παράδειγμα.ελ τώρα") +
+          unicodeLine(12, 72, 700, "Россия: пример@почта.рф сегодня") +
+          unicodeLine(12, 72, 680, "Fullwidth: info＠example.com here") +
+          unicodeLine(12, 72, 660, "Ligature: ﬁnance@example.com here") +
+          unicodeLine(12, 72, 640, "Drawn right to left below") +
+          `BT /U 12 Tf ${reversed} ET\n` +
+          unicodeLine(12, 72, 600, "Keep this line as it is"),
+      },
+      {
+        content:
+          line("F1", 11, 72, 720, "Left column opens here") +
+          line("F1", 11, 72, 706, "Mail left@example.com today") +
+          line("F1", 11, 72, 692, "Left column closes here") +
+          line("F1", 11, 360, 720, "Right column opens here") +
+          line("F1", 11, 360, 706, "Mail right@example.org today") +
+          line("F1", 11, 360, 692, "Right column closes here"),
+      },
+    ];
+  });
+}
+
+/** How many addresses `detect-many.pdf` holds: more than search's 500 cap. */
+export const DETECT_MANY_COUNT = 600;
+
+/** The address in `detect-many.pdf` at `index`, from 0. */
+export function manyAddress(index) {
+  return `m${String(index).padStart(3, "0")}@ex.io`;
+}
+
+/**
+ * Spec 0005, AC-25. One page of 600 addresses, ten to a line in 5pt Courier,
+ * so a detector that asked `search()` would lose a hundred of them to its 500
+ * quad cap.
+ */
+export function detectMany() {
+  const perLine = 10;
+  let content = "";
+  for (let row = 0; row < DETECT_MANY_COUNT / perLine; row += 1) {
+    const addresses = Array.from({ length: perLine }, (_, column) =>
+      manyAddress(row * perLine + column),
+    );
+    content += line("F2", 5, 40, 760 - row * 8, addresses.join("  "));
+  }
+  return document(() => [{ content }]);
+}
+
+/**
+ * The address `detect-unicode.pdf` holds. Its local part starts with U+20BB7
+ * (𠮷, a character used in Japanese names) and U+2D800, both above U+FFFF.
+ */
+export const DETECT_UNICODE_EMAIL = "\u{20BB7}\u{2D800}.tanaka@example.jp";
+
+/** Codes 0x80 and 0x81 name the two letters above U+FFFF, as UTF-16. */
+const ABOVE_BMP_UNICODE = `/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def
+/CMapName /Adobe-AboveBmp-UCS def
+/CMapType 2 def
+1 begincodespacerange
+<00> <FF>
+endcodespacerange
+2 beginbfchar
+<80> <D842DFB7>
+<81> <D876DC00>
+endbfchar
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end
+`;
+
+/**
+ * Spec 0005, AC-26. An address whose local part holds two letters above
+ * U+FFFF, drawn through a ToUnicode map, since no committed font carries
+ * them: codes 0x80 and 0x81 draw Helvetica's `A` and `B` (by `/Differences`,
+ * so their widths are Helvetica's own) and the map names the two letters.
+ * MuPDF.js 1.28.1's walker returns them as U+0BB7 and U+D800.
+ */
+export function detectUnicode() {
+  return document(({ add }) => {
+    const unicode = add(stream("", ABOVE_BMP_UNICODE));
+    const font = add(
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica " +
+        "/Encoding << /BaseEncoding /WinAnsiEncoding /Differences [128 /A /B] >> " +
+        `/ToUnicode ${unicode} 0 R >>`,
+    );
+    return [
+      {
+        fonts: `/F5 ${font} 0 R`,
+        content:
+          line("F5", 12, 72, 720, "Staff directory") +
+          `BT /F5 12 Tf 72 700 Td (Contact: \\200\\201.tanaka@example.jp today) Tj ET\n` +
+          line("F5", 12, 72, 680, "Keep this sentence exactly as it is"),
+      },
+    ];
+  });
+}
+
+/** The phone numbers `detect-phone.pdf` holds, as found, with their tick. */
+export const DETECT_PHONE = Object.freeze([
+  ["020 7946 0958", true],
+  ["+44 20 7946 0958", true],
+  ["(212) 555-0123", true],
+  ["1-800-555-0199", true],
+  ["00 44 20 7946 0012", true],
+  ["020 7946 0321 ext. 123", true],
+  ["(212) 123 4567", false],
+  ["12345678901", false],
+  ["12345678902", true],
+  ["020 7946 0777", true],
+]);
+
+/**
+ * Spec 0005, AC-2, AC-4, AC-6 and AC-10. Phone numbers, and the things that
+ * look like them:
+ *
+ *  - UK and US national numbers, international numbers with `+` and `00`, and
+ *    an extension, each ticked;
+ *  - a possible but not valid number, and a valid number written as bare
+ *    digits, each unticked, then the same bare digits after `Tel:`, ticked;
+ *  - a number wrapped across two lines of one block;
+ *  - an invoice code, dates, UK postcodes and ZIP codes, none a phone number.
+ */
+export function detectPhone() {
+  return document(() => [
+    {
+      content:
+        line("F1", 12, 72, 740, "London office: 020 7946 0958 weekdays") +
+        line("F1", 12, 72, 720, "From abroad: +44 20 7946 0958") +
+        line("F1", 12, 72, 700, "New York: (212) 555-0123") +
+        line("F1", 12, 72, 680, "Toll free: 1-800-555-0199") +
+        line("F1", 12, 72, 660, "Dial 00 44 20 7946 0012 from abroad") +
+        line("F1", 12, 72, 640, "Switchboard 020 7946 0321 ext. 123") +
+        line("F1", 12, 72, 620, "Old number (212) 123 4567 no longer used") +
+        line("F1", 12, 72, 600, "Order 12345678901 shipped") +
+        line("F1", 12, 72, 580, "Tel: 12345678902") +
+        line("F1", 12, 72, 560, "Out of hours call us on 020 7946") +
+        line("F1", 12, 72, 546, "0777 and leave a message") +
+        line("F1", 12, 72, 520, "Invoice INV-2026-000123 paid") +
+        line("F1", 12, 72, 500, "Born 12/05/1980, signed 2026-09-27") +
+        line("F1", 12, 72, 480, "Postcodes SW1A 1AA and EC1A 1BB") +
+        line("F1", 12, 72, 460, "ZIP codes 90210 and 10001"),
+    },
+  ]);
+}

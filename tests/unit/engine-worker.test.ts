@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { FindOptions, FoundMatch, RedactionTarget } from "@/engine";
 import {
   asMatchId,
   type DocumentSummary,
@@ -7,6 +8,7 @@ import {
   type RedactedMessage,
   type RequestMessage,
   type ResponseMessage,
+  type ResultMessage,
 } from "@/worker/protocol";
 
 /**
@@ -90,9 +92,18 @@ const SUMMARY: DocumentSummary = { pageCount: 2, pagesWithText: [true, false] };
 /** Text that must never appear on the other side of the boundary. */
 const SECRET = "Patient Jane Doe, account 4111-1111-1111-1111";
 
-/** A document handle, with its `close` spied on so releasing can be asserted. */
-function fakeDocument() {
-  return { summary: SUMMARY, close: vi.fn() };
+/**
+ * A document handle, with its `close` spied on so releasing can be asserted.
+ * Detection finds nothing unless a test hands it matches.
+ */
+function fakeDocument(found: readonly FoundMatch[] = []) {
+  return {
+    summary: SUMMARY,
+    close: vi.fn(),
+    findMatches: vi.fn<(options: FindOptions) => Promise<readonly FoundMatch[]>>(
+      async () => found,
+    ),
+  };
 }
 
 function openRequest(
@@ -192,7 +203,7 @@ describe("opening a document", () => {
     ]);
   });
 
-  it("passes each phase on as it happens", async () => {
+  it("passes each phase on as it happens, detecting last", async () => {
     openDocument.mockImplementation(
       async (_bytes: ArrayBuffer, _limits: unknown, onPhase?: PhaseCallback) => {
         onPhase?.("loading-engine");
@@ -206,7 +217,11 @@ describe("opening a document", () => {
     scope.send(openRequest());
     await settle();
 
-    expect(scope.of("progress")).toHaveLength(3);
+    expect(
+      scope.posted.flatMap((message) =>
+        message.kind === "progress" ? [message.phase] : [],
+      ),
+    ).toEqual(["loading-engine", "opening", "inspecting", "detecting"]);
     expect(scope.posted.at(-1)?.kind).toBe("result");
   });
 
@@ -246,6 +261,215 @@ describe("opening a document", () => {
     await settle();
 
     expect(doc.close).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Spec 0005. Detection runs inside `open`. The worker mints each match's id,
+ * keeps only an unblocked match's target in its private map, and sends review
+ * rows that carry no geometry (INV-2, INV-4).
+ */
+describe("detecting", () => {
+  const TARGET: RedactionTarget = Object.freeze<RedactionTarget>({
+    page: 0,
+    quads: [[72, 80, 180, 80, 72, 96, 180, 96]],
+    start: 9,
+    end: 25,
+    kind: "email",
+    text: "jane@example.com",
+  });
+
+  const FOUND: readonly FoundMatch[] = Object.freeze([
+    {
+      page: 0,
+      kind: "email",
+      text: "jane@example.com",
+      before: "Contact: ",
+      after: " or call",
+      tickedByDefault: true,
+      blocked: null,
+      target: TARGET,
+    },
+    {
+      page: 1,
+      kind: "phone",
+      text: "020 7946 0958",
+      before: "call ",
+      after: ".",
+      tickedByDefault: true,
+      blocked: "slanted-text",
+      target: null,
+    },
+  ]);
+
+  async function openWith(found: readonly FoundMatch[] = FOUND) {
+    const doc = fakeDocument(found);
+    openDocument.mockResolvedValue(doc);
+    await startWorker();
+    scope.send(openRequest());
+    await settle();
+    return doc;
+  }
+
+  function result(): ResultMessage {
+    const [message] = scope.of("result");
+    if (message?.kind !== "result") throw new Error("expected a result");
+    return message;
+  }
+
+  it("asks the engine with the context window the open carried", async () => {
+    const doc = await openWith();
+
+    expect(doc.findMatches).toHaveBeenCalledWith({
+      contextChars: 40,
+      isCancelled: expect.any(Function),
+    });
+  });
+
+  it("sends each match as a review row, one based, and nothing more", async () => {
+    await openWith();
+
+    const [email, phone] = result().matches;
+    expect(Object.keys(email).sort()).toEqual([
+      "after",
+      "before",
+      "blocked",
+      "id",
+      "page",
+      "text",
+      "tickedByDefault",
+      "type",
+    ]);
+    expect(email).toMatchObject({
+      type: "email",
+      page: 1,
+      text: "jane@example.com",
+      before: "Contact: ",
+      after: " or call",
+      tickedByDefault: true,
+      blocked: null,
+    });
+    expect(phone).toMatchObject({ type: "phone", page: 2, blocked: "slanted-text" });
+    // INV-2: no quads, no offsets, nothing of the target.
+    expect(JSON.stringify(scope.posted)).not.toMatch(/quads|"start"|"end"/);
+  });
+
+  it("sends a blocked match unticked, whatever detection recommended", async () => {
+    await openWith();
+
+    expect(result().matches[1].tickedByDefault).toBe(false);
+  });
+
+  it("mints a fresh id for every match, and new ones for the next document", async () => {
+    await openWith();
+    const first = result().matches.map((match) => match.id);
+
+    scope.send(openRequest({ id: "op-2", jobId: "job-2" }));
+    await settle();
+    const [, second] = scope.of("result") as ResultMessage[];
+
+    expect(new Set(first).size).toBe(2);
+    expect(second.matches.map((match) => match.id)).not.toContain(first[0]);
+    expect(second.matches.map((match) => match.id)).not.toContain(first[1]);
+  });
+
+  it("redacts an unblocked match with the target the engine found", async () => {
+    await openWith();
+    const [email] = result().matches;
+
+    scope.send({ id: "op-2", jobId: "job-1", kind: "redact", matchIds: [email.id] });
+    await settle();
+
+    expect(redactDocument).toHaveBeenCalledTimes(1);
+    expect(redactDocument.mock.calls[0][1]).toEqual([TARGET]);
+  });
+
+  /** INV-2. A blocked match has no target, so the existing check refuses it. */
+  it("refuses a redact naming a blocked match, and runs nothing", async () => {
+    await openWith();
+    const [email, phone] = result().matches;
+
+    scope.send({
+      id: "op-2",
+      jobId: "job-1",
+      kind: "redact",
+      matchIds: [email.id, phone.id],
+    });
+    await settle();
+
+    expect(redactDocument).not.toHaveBeenCalled();
+    expect(scope.of("error")).toEqual([
+      { id: "op-2", jobId: "job-1", kind: "error", errorKind: "unsupported" },
+    ]);
+  });
+
+  /** AC-12. A page with text that cannot be read fails the open, and keeps nothing. */
+  it("reports a page detection cannot read as unsupported, and closes the document", async () => {
+    const { EngineFailure } = await import("@/engine");
+    const doc = fakeDocument();
+    doc.findMatches.mockRejectedValue(new EngineFailure("unsupported"));
+    openDocument.mockResolvedValue(doc);
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest());
+
+    expect(doc.close).toHaveBeenCalledTimes(1);
+    expect(scope.of("result")).toEqual([]);
+    expect(scope.of("error").map((message) => message.id)).toEqual(["op-1", "op-2"]);
+  });
+
+  it("lets nothing a failed detection said about the document cross the boundary", async () => {
+    const doc = fakeDocument();
+    doc.findMatches.mockRejectedValue(new Error(`detector choked on ${SECRET}`));
+    openDocument.mockResolvedValue(doc);
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+
+    expect(scope.of("error")).toEqual([
+      { id: "op-1", jobId: "job-1", kind: "error", errorKind: "unsupported" },
+    ]);
+    expect(JSON.stringify(scope.posted)).not.toContain("Jane Doe");
+  });
+
+  /** AC-11. What the engine reads after each read of each page. */
+  it("gives detection a check that turns true once the open is cancelled", async () => {
+    const detecting = gate<readonly FoundMatch[]>();
+    const doc = fakeDocument();
+    doc.findMatches.mockReturnValue(detecting.promise);
+    openDocument.mockResolvedValue(doc);
+    await startWorker();
+
+    scope.send(openRequest({ id: "op-9" }));
+    await settle();
+    const [{ isCancelled }] = doc.findMatches.mock.calls[0];
+    expect(isCancelled?.()).toBe(false);
+
+    scope.send({ id: "op-9", jobId: "job-1", kind: "cancel" });
+    expect(isCancelled?.()).toBe(true);
+
+    detecting.resolve(FOUND);
+    await settle();
+
+    expect(scope.of("result")).toEqual([]);
+    expect(doc.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("posts nothing when detection stops for a cancel, and closes the document", async () => {
+    const { RunCancelled } = await import("@/engine");
+    const doc = fakeDocument();
+    doc.findMatches.mockRejectedValue(new RunCancelled());
+    openDocument.mockResolvedValue(doc);
+    await startWorker();
+
+    scope.send(openRequest({ id: "op-9" }));
+    await settle();
+
+    expect(scope.posted.filter((message) => message.kind !== "progress")).toEqual([]);
+    expect(doc.close).toHaveBeenCalledTimes(1);
   });
 });
 

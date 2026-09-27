@@ -63,11 +63,42 @@ async function completeARun(page: Page): Promise<void> {
   await expect(page.getByTestId("download")).toBeVisible({ timeout: ENGINE_TIMEOUT });
 }
 
-/** The states the tool page can settle in today (AC-18). */
+/** Spec 0005's review state with both groups: an email and a phone number. */
+async function reviewBothGroups(page: Page): Promise<void> {
+  await page
+    .getByTestId("file-input")
+    .setInputFiles(resolve("tests/fixtures/metadata.pdf"));
+  await expect(page.locator("summary", { hasText: "Phone numbers" })).toBeVisible({
+    timeout: ENGINE_TIMEOUT,
+  });
+}
+
+/** Rows in several scripts, one of them drawn right to left, over four pages. */
+async function reviewManyRows(page: Page): Promise<void> {
+  await page
+    .getByTestId("file-input")
+    .setInputFiles(resolve("tests/fixtures/detect-email.pdf"));
+  await expect(page.getByTestId("checklist")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+}
+
+/** The review state with nothing found: the empty state under the coverage note. */
+async function reviewNothingFound(page: Page): Promise<void> {
+  await page
+    .getByTestId("file-input")
+    .setInputFiles(resolve("tests/fixtures/kerning.pdf"));
+  await expect(page.getByText("Nothing found to remove")).toBeVisible({
+    timeout: ENGINE_TIMEOUT,
+  });
+}
+
+/** The states the tool page can settle in today (AC-18; spec 0005, AC-13). */
 const TOOL_STATES: readonly (readonly [string, (page: Page) => Promise<void>])[] = [
   ["idle", async () => {}],
   ["failed", failToOpen],
   ["opened", openDocument],
+  ["reviewing, with both groups", reviewBothGroups],
+  ["reviewing, with many rows", reviewManyRows],
+  ["reviewing, with nothing found", reviewNothingFound],
   ["complete", completeARun],
 ];
 
@@ -234,16 +265,27 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
   });
 
   // Spec 0004 put Redact first in the action row, the one main action in view,
-  // so the walk meets it before Start over.
-  test("Redact and Start over are reached and ringed like every other control", async ({
+  // so the walk meets it before Start over. Spec 0005 put the checklist above
+  // that row: its group summary, then each row's checkbox, come first.
+  test("the checklist, Redact and Start over are reached and ringed like every other control", async ({
     page,
   }) => {
     await page.goto("/tool");
     await openDocument(page);
 
     await page.getByTestId("choose-file").focus();
-    await page.keyboard.press("Tab");
 
+    await page.keyboard.press("Tab");
+    const summary = page.locator("summary", { hasText: "Email addresses" });
+    await expect(summary).toBeFocused();
+    await expectFocusRing(summary);
+
+    await page.keyboard.press("Tab");
+    const box = page.getByRole("checkbox", { name: "contact@example.com" });
+    await expect(box).toBeFocused();
+    await expectFocusRing(box);
+
+    await page.keyboard.press("Tab");
     await expect(page.getByTestId("redact")).toBeFocused();
     await expectFocusRing(page.getByTestId("redact"));
 
@@ -308,6 +350,10 @@ test.describe("reflow and zoom on the tool page (AC-15)", () => {
     await openDocument(page);
     await expectNoHorizontalScroll(page);
     await expectContained(page.getByRole("region", { name: "Document opened" }));
+    await expectContained(page.getByTestId("coverage"));
+    for (const row of await page.getByTestId("checklist").locator("label").all()) {
+      await expectContained(row);
+    }
   });
 });
 
@@ -409,6 +455,99 @@ test.describe("forced colours (AC-17, AC-18)", () => {
       return { style: style.borderTopStyle, width: style.borderTopWidth };
     });
     expect(edge).toEqual({ style: "solid", width: "1px" });
+  });
+});
+
+/**
+ * The review vocabulary's checks, which waited for the checklist primitives to
+ * be placed on a page (spec 0003, AC-9 and AC-10). Spec 0005, AC-13 and AC-18
+ * placed them.
+ */
+test.describe("the checklist on the tool page (spec 0005, AC-13)", () => {
+  test("Enter and Space on a group summary close and open it", async ({ page }) => {
+    await page.goto("/tool");
+    await reviewManyRows(page);
+    const summary = page.locator("summary", { hasText: "Email addresses" });
+    const group = page.locator("details", { has: summary });
+    const firstRow = page.getByRole("checkbox", { name: "jane.doe@example.com" }).first();
+
+    await summary.focus();
+    await page.keyboard.press("Enter");
+    await expect(group).not.toHaveAttribute("open");
+    await expect(firstRow).toBeHidden();
+
+    await page.keyboard.press("Space");
+    await expect(group).toHaveAttribute("open");
+    await expect(firstRow).toBeVisible();
+  });
+
+  test("a screen reader reads a row as the match, then its page and its context", async ({
+    page,
+  }) => {
+    await page.goto("/tool");
+    await reviewManyRows(page);
+
+    const row = page.getByRole("checkbox", { name: "sales@example.org" });
+    await expect(row).toHaveAccessibleName("sales@example.org");
+    // The page first, then the context line with the match inside it.
+    await expect(row).toHaveAccessibleDescription(
+      /^Page 1 ….*again, or to sales@example\.org\. Link: mailto:.*…$/,
+    );
+  });
+
+  test("a compact count badge reads with its noun, never as a bare number", async ({
+    page,
+  }) => {
+    await page.goto("/tool");
+    await reviewBothGroups(page);
+
+    await expect(page.locator("summary", { hasText: "Email addresses" })).toHaveText(
+      "Email addresses1 email address",
+    );
+    await expect(page.locator("summary", { hasText: "Phone numbers" })).toHaveText(
+      "Phone numbers1 phone number",
+    );
+  });
+
+  test("a long unbroken address wraps inside its row at 320 CSS pixels", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto("/tool");
+    await reviewManyRows(page);
+
+    await expectNoHorizontalScroll(page);
+    for (const row of await page.getByTestId("checklist").locator("label").all()) {
+      await expectContained(row);
+    }
+  });
+
+  test("the coverage note sits above the checklist, outside the live region", async ({
+    page,
+  }) => {
+    await page.goto("/tool");
+    await openDocument(page);
+
+    await expect(page.getByTestId("coverage")).toHaveText(
+      /RedactNest looked for email addresses and phone numbers\. Anything else, such as names and addresses, stays in the file\./,
+    );
+    await expect(page.locator('[aria-live="polite"] [data-testid="review"]')).toHaveCount(
+      0,
+    );
+  });
+
+  test("the checkbox falls back to the native control in forced colours", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ forcedColors: "active" });
+    await page.goto("/tool");
+    await openDocument(page);
+
+    const box = page.getByRole("checkbox", { name: "contact@example.com" });
+    const appearance = await box.evaluate(
+      (element) => getComputedStyle(element).appearance,
+    );
+    expect(appearance).toBe("auto");
   });
 });
 

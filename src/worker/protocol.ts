@@ -86,14 +86,35 @@ export type ProgressPhase =
 /**
  * The kinds of sensitive pattern a detector can find.
  *
- * Seeded with the two release 1 builds. Feature 6 owns the full set of seven and
- * adds the rest (dates, credit cards, IBAN, US Social Security numbers, UK
- * National Insurance numbers) against its own spec. A union only ever grows, so
- * adding a member breaks nothing that already reads one.
+ * Spec 0005 decided all seven. Release 1 builds these two; release 3 (feature
+ * 12) adds `date`, `card`, `iban`, `us-ssn` and `uk-nino` against the same
+ * spec. The order is the order the checklist groups them in (AC-3), and the
+ * coverage note is built from this list, so it names only what is looked for
+ * (AC-14). A union only ever grows, so adding a member breaks nothing that
+ * already reads one.
  */
 export const DETECTOR_KINDS = ["email", "phone"] as const;
 
 export type DetectorKind = (typeof DETECTOR_KINDS)[number];
+
+/**
+ * Why a found match cannot be ticked. Spec 0005, AC-8.
+ *
+ * Each names a refusal the engine would make if the match were ticked, checked
+ * in this order, and the first that applies is the one given: `unsound-outline`
+ * (its outline cannot be trusted, spec 0004's AC-27), `replacement-text` (hidden
+ * replacement text covers it), `slanted-text` (spec 0004's AC-28) and
+ * `image-overreach` (spec 0004's AC-29). A closed set of kinds, like the error
+ * kinds, so it says which rule and nothing about the document.
+ */
+export const BLOCKED_REASONS = Object.freeze([
+  "unsound-outline",
+  "replacement-text",
+  "slanted-text",
+  "image-overreach",
+] as const);
+
+export type BlockedReason = (typeof BLOCKED_REASONS)[number];
 
 /**
  * The things a redaction strips besides the targeted text.
@@ -165,8 +186,25 @@ export interface ReviewMatch {
   readonly before: string;
   /** Up to `config.matchContextChars` of the text after the match. */
   readonly after: string;
-  /** The detector's own recommendation. Seeds the tick set. */
+  /** The detector's own recommendation. Seeds the tick set. False when blocked. */
   readonly tickedByDefault: boolean;
+  /**
+   * Why this match cannot be ticked, or `null` when it can. Spec 0005, AC-8 and
+   * INV-2: a blocked match is still listed, so nobody believes it is gone, but
+   * the worker holds no target for it, so a `redact` naming it is `unsupported`.
+   */
+  readonly blocked: BlockedReason | null;
+}
+
+/**
+ * What detection found, as counts. Spec 0005, AC-15.
+ *
+ * Every match by kind, blocked ones included, and the blocked ones by reason.
+ * Counts and enumerated kinds only, so feature 11 may log it.
+ */
+export interface DetectionCounts {
+  readonly foundByType: Readonly<Partial<Record<DetectorKind, number>>>;
+  readonly blockedByReason: Readonly<Partial<Record<BlockedReason, number>>>;
 }
 
 /**
@@ -237,6 +275,7 @@ export interface RedactionOutcome {
 export type LoggablePayload =
   | DocumentSummary
   | RedactionOutcome
+  | DetectionCounts
   | EngineErrorKind
   | ProgressPhase
   | DetectorKind
@@ -292,7 +331,7 @@ export type RequestMessage = OpenRequest | RedactRequest | CancelRequest;
 export interface ResultMessage extends Envelope {
   readonly kind: "result";
   readonly summary: DocumentSummary;
-  /** Empty until feature 6 fills it. */
+  /** Every match detection found, by page, then in reading order (spec 0005, AC-3). */
   readonly matches: readonly ReviewMatch[];
 }
 

@@ -20,12 +20,12 @@ import { readTrueType } from "./truetype.mjs";
 const CARLITO = readFileSync(new URL("../fonts/Carlito-Regular.ttf", import.meta.url));
 
 /** A PDF literal string, with its three special characters escaped. */
-function literal(text) {
+export function literal(text) {
   return `(${text.replace(/[\\()]/g, (character) => `\\${character}`)})`;
 }
 
 /** One line of text, in font `font` at `size`, with its baseline starting at `x`, `y`. */
-function line(font, size, x, y, text) {
+export function line(font, size, x, y, text) {
   return `BT /${font} ${size} Tf ${x} ${y} Td ${literal(text)} Tj ET\n`;
 }
 
@@ -36,11 +36,12 @@ function line(font, size, x, y, text) {
  * `build` receives `add`, which appends an object and returns its number, and
  * `fonts`, the font resource entries every page can use: `/F1` Helvetica, `/F2`
  * Courier and, when asked for, `/F3` Carlito. It returns one spec per page:
- * `content`, and optionally `resources` (more resource entries), `resourcesRef`
- * (a shared resource dictionary's number, used instead), and `keys` (more page
- * keys, such as `/Rotate 90`).
+ * `content`, and optionally `fonts` (more entries for the page's one `/Font`
+ * dictionary), `resources` (more resource entries), `resourcesRef` (a shared
+ * resource dictionary's number, used instead), and `keys` (more page keys,
+ * such as `/Rotate 90`).
  */
-function document(build, { carlito = false } = {}) {
+export function document(build, { carlito = false } = {}) {
   const objects = [];
   const add = (body) => objects.push(body);
 
@@ -54,9 +55,12 @@ function document(build, { carlito = false } = {}) {
 
   const kids = build({ add, fonts }).map((spec) => {
     const content = add(stream("", spec.content));
+    // Joined rather than interpolated with a gap, so a page with no fonts of
+    // its own writes exactly the bytes it always did.
+    const pageFonts = [fonts, spec.fonts].filter(Boolean).join(" ");
     const resources =
       spec.resourcesRef === undefined
-        ? `<< /Font << ${fonts} >> ${spec.resources ?? ""} >>`
+        ? `<< /Font << ${pageFonts} >> ${spec.resources ?? ""} >>`
         : `${spec.resourcesRef} 0 R`;
     return add(
       `<< /Type /Page /Parent ${pages} 0 R /MediaBox [0 0 612 792] ${spec.keys ?? ""} ` +
@@ -446,7 +450,7 @@ function textLayer(down, left) {
     .join("");
 }
 
-const IDENTITY_UNICODE = `/CIDInit /ProcSet findresource begin
+export const IDENTITY_UNICODE = `/CIDInit /ProcSet findresource begin
 12 dict begin
 begincmap
 /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def

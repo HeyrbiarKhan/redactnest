@@ -31,6 +31,15 @@
  *     and checks no image still shows ink under one.
  *   - `self-check.ts` reopens the output and proves it clean.
  *
+ * Spec 0005 added detection, on the same prepared page:
+ *
+ *   - `find.ts` reads each page's characters, hands each text block to
+ *     `@/detect`, and turns every find into quads and a target, or blocks it
+ *     with the reason the engine would refuse it for. `OpenDocument.findMatches`
+ *     runs it. Only this folder imports `@/detect`.
+ *
+ * Nothing in this folder calls `search()` (spec 0005, INV-11); lint holds it.
+ *
  * The functions ending in `With` take the loaded MuPDF module as a parameter.
  * They are the seam Vitest uses to run the real engine in Node; the worker
  * calls the plain versions, which load the engine themselves.
@@ -46,9 +55,12 @@ export {
   LINE_HEIGHT_MAX,
   LINE_HEIGHT_MIN,
   POSITION_TOLERANCE,
+  walkCharacters,
+  type Character,
 } from "./characters";
 export { hasPdfHeader, PDF_HEADER_WINDOW } from "./door";
-export { EngineFailure, RunCancelled } from "./failure";
+export { checkpoint, EngineFailure, RunCancelled } from "./failure";
+export { findMatchesIn } from "./find";
 export {
   blankedRegion,
   BOUNDS_REACH_RATIO,
@@ -76,6 +88,7 @@ export { boxPass, paddedPass, textPass, type Pass } from "./passes";
 export { imagesWithinReach } from "./pixels";
 export { prepareDocument } from "./prepare";
 export { PIPELINE, redactDocument, redactDocumentWith, type Pipeline } from "./redact";
+export { unsoundTargets, unsoundTargetsIn, type OutlinedText } from "./targets";
 export {
   CARRIER_KEYS,
   CATALOG_KEYS,
@@ -85,6 +98,8 @@ export {
   WRITE_OPTIONS,
 } from "./rebuild";
 export type {
+  FindOptions,
+  FoundMatch,
   OpenDocument,
   Quad,
   RedactionResult,

@@ -104,11 +104,11 @@ spec [0004](../specs/0004-redaction-engine/index.md) · code in `src/engine/`, `
 ### 6. Pattern detection · in-progress
 Find sensitive patterns and present them as a confirm checklist rather than removing anything on the user's behalf. This spec decides the detection approach and defines all seven pattern types; release 1 builds email and phone, and the rest follow in release 3 against this same spec.
 **Done when:** email and phone are found across a document, each match is shown with enough surrounding context to judge it, nothing is removed without a tick, and every match maps to a target the engine can actually remove.
-spec [0005](../specs/0005-pattern-detection/index.md)
+spec [0005](../specs/0005-pattern-detection/index.md) · code in `src/detect`, `src/engine` (`find.ts`, `characters.ts`, `targets.ts`), `src/worker/engine.worker.ts`, `src/lib` (`detectors.ts`, `session.ts`), `src/app/tool` (`review-checklist.tsx`, `tool-client.tsx`), `src/ui` (`checkbox.tsx`, `checklist-item.tsx`), `eslint.config.mjs`, `scripts/lib/detection-fixtures.mjs`
 - [x] Design it (spec): `/architect pattern detection`
 - [ ] Build it: `/develop pattern detection`
-  - [ ] An email found, shown and removed: the protocol's `blocked` field, `src/detect` and its lint zone, the engine's find step, the worker, the session guards, the thin checklist with its coverage note and empty state, and the browser proofs · AC-1, AC-3, AC-4, AC-5, AC-6, AC-7, AC-10, AC-11, AC-12, AC-13, AC-14, AC-15, AC-17, AC-18, AC-25, AC-26
-  - [ ] Phone numbers: libphonenumber-js with `max` metadata, UK and US national formats plus international, and the look alike fixture · AC-2, AC-4, AC-6, AC-10, AC-17
+  - [x] An email found, shown and removed: the protocol's `blocked` field, `src/detect` and its lint zone, the engine's find step, the worker, the session guards, the thin checklist with its coverage note and empty state, and the browser proofs · AC-1, AC-3, AC-4, AC-5, AC-6, AC-7, AC-10, AC-11, AC-12, AC-13, AC-14, AC-15, AC-17, AC-18, AC-25, AC-26
+  - [x] Phone numbers: libphonenumber-js with `max` metadata, UK and US national formats plus international, and the look alike fixture · AC-2, AC-4, AC-6, AC-10, AC-17
   - [ ] Nothing the engine would refuse can be ticked: the shared predicates, both extraction modes, and blocked rows with a reason · AC-8, AC-9, AC-13
   - [ ] Wraps and hardening: the email rejoin, the adversarial input tests, and cancel during detection in the browser · AC-4, AC-11, AC-16
 - [ ] Verify it: `/check verify pattern detection`

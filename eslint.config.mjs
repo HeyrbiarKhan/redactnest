@@ -109,6 +109,104 @@ const noNewWorker = [
   { selector: 'NewExpression[callee.name="Worker"]', message: WORKER_MESSAGE },
 ];
 
+const DETECT_MESSAGE =
+  "Only src/engine may import @/detect (spec 0005, INV-8). Detection runs in " +
+  "the worker, on the page the engine prepared; anywhere else it would pull the " +
+  "detectors, and the phone metadata with them, onto the main thread.";
+
+const PHONE_LIBRARY_MESSAGE =
+  "Only src/detect may import libphonenumber-js (spec 0005, INV-8), so its " +
+  "metadata ships in the worker's chunk and never in a page's.";
+
+const SEARCH_MESSAGE =
+  "Detection walks every character; it never calls search() (spec 0005, " +
+  "INV-11). MuPDF.js caps search at 500 quads and drops the rest without " +
+  "saying so. Tests may compare against search(); src/engine and src/detect " +
+  "may not use it.";
+
+const DETECT_ZONE_MESSAGE =
+  "src/detect is pure text in, offsets out (spec 0005, INV-5). It reaches for " +
+  "no page, no interface, no config and no worker; the only thing it may take " +
+  "from the worker is a type from @/worker/protocol.";
+
+/** Static `import`/`export ... from` of the detectors, by any spelling. */
+const noDetectImport = {
+  group: ["@/detect", "@/detect/*", "**/detect/index", "../detect", "../../detect"],
+  message: DETECT_MESSAGE,
+};
+
+const noPhoneLibraryImport = {
+  group: ["libphonenumber-js", "libphonenumber-js/*"],
+  message: PHONE_LIBRARY_MESSAGE,
+};
+
+/** `await import(...)` and `typeof import(...)` of both, as the engine is backed up. */
+const noDetectAnywhere = [
+  { selector: "ImportExpression > Literal[value=/^@.detect/]", message: DETECT_MESSAGE },
+  { selector: "TSImportType[source.value=/^@.detect/]", message: DETECT_MESSAGE },
+];
+
+const noPhoneLibraryAnywhere = [
+  {
+    selector: "ImportExpression > Literal[value=/^libphonenumber-js/]",
+    message: PHONE_LIBRARY_MESSAGE,
+  },
+  {
+    selector: "TSImportType[source.value=/^libphonenumber-js/]",
+    message: PHONE_LIBRARY_MESSAGE,
+  },
+];
+
+/** Any call to a member named `search`, `page.search()` and `stext.search()` alike. */
+const noSearch = [
+  { selector: 'CallExpression[callee.property.name="search"]', message: SEARCH_MESSAGE },
+];
+
+/** What `src/detect` may not import besides the wall's own bans. */
+const noDetectDependencies = {
+  group: [
+    "@/ui",
+    "@/ui/*",
+    "@/lib",
+    "@/lib/*",
+    "@/config",
+    "@/config/*",
+    "../ui",
+    "../ui/*",
+    "../lib",
+    "../lib/*",
+    "../config",
+    "../config/*",
+    "react",
+    "react/*",
+    "react-dom",
+    "react-dom/*",
+    "next",
+    "next/*",
+  ],
+  message: DETECT_ZONE_MESSAGE,
+};
+
+/**
+ * Every `@/worker` module except the protocol, whose value imports the
+ * `@typescript-eslint` rule in the zone refuses, so only its types come in. A
+ * regex rather than a `group` negation: in gitignore syntax a bare `@/worker`
+ * excludes the directory, and nothing under an excluded directory can be let
+ * back in.
+ */
+const noWorkerButProtocol = {
+  regex: String.raw`^(@|\.\.)/worker(?!/protocol$)(/.*)?$`,
+  message: DETECT_ZONE_MESSAGE,
+};
+
+const noDetectDependenciesAnywhere = [
+  {
+    selector:
+      "ImportExpression > Literal[value=/^(@.(ui|lib|config|worker)|react|next)/]",
+    message: DETECT_ZONE_MESSAGE,
+  },
+];
+
 /**
  * Every way of writing something down that a browser offers us.
  *
@@ -272,32 +370,107 @@ const eslintConfig = defineConfig([
   ]),
 
   {
-    // Everything inside the wall. No MuPDF, no engine, no second worker.
-    // `tests/` is deliberately outside: a unit test of the walled module has to
-    // import it to test it, and a test ships to nobody.
+    // Everything inside the wall. No MuPDF, no engine, no detectors, no phone
+    // library, no second worker. `tests/` is deliberately outside: a unit test
+    // of the walled module has to import it to test it, and a test ships to
+    // nobody.
     name: "redactnest/engine-wall",
     files: [WALL],
     rules: zone(
-      [noMupdfImport, noEngineImport, noToolClientImport],
-      [...noMupdfAnywhere, ...noEngineAnywhere, ...noNewWorker, ...noToolClientAnywhere],
+      [
+        noMupdfImport,
+        noEngineImport,
+        noDetectImport,
+        noPhoneLibraryImport,
+        noToolClientImport,
+      ],
+      [
+        ...noMupdfAnywhere,
+        ...noEngineAnywhere,
+        ...noDetectAnywhere,
+        ...noPhoneLibraryAnywhere,
+        ...noNewWorker,
+        ...noToolClientAnywhere,
+      ],
     ),
   },
   {
-    // The walled module itself. The one place MuPDF is named at all.
+    // The walled module itself. The one place MuPDF is named at all, and the
+    // only importer of the detectors (spec 0005, INV-8). It finds matches by
+    // walking characters, never through `search()` (INV-11).
     name: "redactnest/engine-wall-engine",
     files: ["src/engine/**/*.{ts,mts}"],
     rules: zone(
-      [noEngineImport, noToolClientImport],
-      [...noEngineAnywhere, ...noNewWorker, ...noToolClientAnywhere],
+      [noEngineImport, noPhoneLibraryImport, noToolClientImport],
+      [
+        ...noEngineAnywhere,
+        ...noPhoneLibraryAnywhere,
+        ...noNewWorker,
+        ...noToolClientAnywhere,
+        ...noSearch,
+      ],
     ),
+  },
+  {
+    // The detectors (spec 0005, INV-5 and INV-8). Pure text in, offsets out:
+    // no page, no interface, no config, no worker but the protocol's types, and
+    // no console, since a detector holds document text. The one place the
+    // phone library may be imported.
+    name: "redactnest/detect",
+    files: ["src/detect/**/*.{ts,mts}"],
+    rules: {
+      ...zone(
+        [
+          noMupdfImport,
+          noEngineImport,
+          noDetectImport,
+          noDetectDependencies,
+          noWorkerButProtocol,
+          noToolClientImport,
+        ],
+        [
+          ...noMupdfAnywhere,
+          ...noEngineAnywhere,
+          ...noDetectAnywhere,
+          ...noDetectDependenciesAnywhere,
+          ...noNewWorker,
+          ...noToolClientAnywhere,
+          ...noSearch,
+        ],
+      ),
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/worker/protocol",
+              message: DETECT_ZONE_MESSAGE,
+              allowTypeImports: true,
+            },
+            {
+              name: "../worker/protocol",
+              message: DETECT_ZONE_MESSAGE,
+              allowTypeImports: true,
+            },
+          ],
+        },
+      ],
+      "no-console": "error",
+    },
   },
   {
     // The only importer of the walled module.
     name: "redactnest/engine-wall-worker",
     files: ["src/worker/engine.worker.ts"],
     rules: zone(
-      [noMupdfImport, noToolClientImport],
-      [...noMupdfAnywhere, ...noNewWorker, ...noToolClientAnywhere],
+      [noMupdfImport, noDetectImport, noPhoneLibraryImport, noToolClientImport],
+      [
+        ...noMupdfAnywhere,
+        ...noDetectAnywhere,
+        ...noPhoneLibraryAnywhere,
+        ...noNewWorker,
+        ...noToolClientAnywhere,
+      ],
     ),
   },
   {
@@ -305,8 +478,20 @@ const eslintConfig = defineConfig([
     name: "redactnest/engine-wall-client",
     files: ["src/worker/client.ts"],
     rules: zone(
-      [noMupdfImport, noEngineImport, noToolClientImport],
-      [...noMupdfAnywhere, ...noEngineAnywhere, ...noToolClientAnywhere],
+      [
+        noMupdfImport,
+        noEngineImport,
+        noDetectImport,
+        noPhoneLibraryImport,
+        noToolClientImport,
+      ],
+      [
+        ...noMupdfAnywhere,
+        ...noEngineAnywhere,
+        ...noDetectAnywhere,
+        ...noPhoneLibraryAnywhere,
+        ...noToolClientAnywhere,
+      ],
     ),
   },
   {
@@ -315,10 +500,19 @@ const eslintConfig = defineConfig([
     name: "redactnest/ui",
     files: ["src/ui/**/*.{ts,tsx}"],
     rules: zone(
-      [noMupdfImport, noEngineImport, noUiDependencies, noToolClientImport],
+      [
+        noMupdfImport,
+        noEngineImport,
+        noDetectImport,
+        noPhoneLibraryImport,
+        noUiDependencies,
+        noToolClientImport,
+      ],
       [
         ...noMupdfAnywhere,
         ...noEngineAnywhere,
+        ...noDetectAnywhere,
+        ...noPhoneLibraryAnywhere,
         ...noNewWorker,
         ...noInnerHtml,
         ...noToolClientAnywhere,
@@ -332,8 +526,14 @@ const eslintConfig = defineConfig([
     name: "redactnest/tool-page",
     files: ["src/app/tool/page.tsx"],
     rules: zone(
-      [noMupdfImport, noEngineImport],
-      [...noMupdfAnywhere, ...noEngineAnywhere, ...noNewWorker],
+      [noMupdfImport, noEngineImport, noDetectImport, noPhoneLibraryImport],
+      [
+        ...noMupdfAnywhere,
+        ...noEngineAnywhere,
+        ...noDetectAnywhere,
+        ...noPhoneLibraryAnywhere,
+        ...noNewWorker,
+      ],
     ),
   },
 ]);

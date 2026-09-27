@@ -1,5 +1,6 @@
-import type { PDFPage } from "mupdf";
+import type { PDFPage, StructuredText } from "mupdf";
 
+import { EngineFailure } from "./failure";
 import { containsPoint, quadAngle, quadCentre, quadHeight } from "./geometry";
 import type { Quad } from "./types";
 
@@ -45,8 +46,9 @@ export const LINE_HEIGHT_MIN = 0.67;
 export const LINE_HEIGHT_MAX = 1.5;
 
 /**
- * The two ways a page is read as the visitor sees it: by target validation
- * (AC-27), and by the Vitest target helper, which stands in for detection.
+ * The two ways a page is read as the visitor sees it: by detection (spec 0005,
+ * which reads both), by target validation (AC-27), and by the Vitest target
+ * helper.
  *
  * The first is MuPDF's defaults, which is what `page.search()` uses, so
  * character quads and target quads are built alike. The second ignores
@@ -79,11 +81,21 @@ export const CHECK_EXTRACTION_OPTIONS = Object.freeze([
 
 /** One character as the page reports it. */
 export interface Character {
+  /** The whole code point, above U+FFFF included (spec 0005, AC-26). */
   readonly code: number;
   readonly origin: readonly [number, number];
   readonly quad: Quad;
   /** The direction its line runs, in radians. */
   readonly angle: number;
+  /**
+   * The same direction as the unit vector MuPDF gives at `beginLine`. Detection
+   * measures along it to find a match's two ends on each line (spec 0005).
+   */
+  readonly direction: readonly [number, number];
+  /** Its text block, counted from 0 across the page in extraction order. */
+  readonly block: number;
+  /** Its line, counted the same way, so two characters share a line exactly when this is equal. */
+  readonly line: number;
 }
 
 /**
@@ -132,6 +144,26 @@ function isWhitespace(code: number): boolean {
 /**
  * Visit every character of a page in extraction order, whitespace included.
  * The structured text is destroyed before this returns, whatever happens.
+ *
+ * The one character reader (spec 0005, INV-12): detection, target validation,
+ * the character record and the self check all read a page through here, so
+ * they can never disagree about what a character is.
+ *
+ * It returns every code point whole. MuPDF.js 1.28.1's walker builds each
+ * character with `String.fromCharCode`, which keeps only the low 16 bits of a
+ * code point above U+FFFF (measured: U+1D400 comes back as U+D400, a different
+ * letter, and U+2D800 as U+D800, a lone surrogate), while `asText()` and
+ * `asJSON()` give whole code points. So when a read's text holds a code point
+ * above U+FFFF, each text line's `text` is taken from `asJSON()` and its code
+ * points are put in place of the walked characters, one for one (AC-26). A
+ * page with none skips the JSON, so the common case costs one `asText()`.
+ *
+ * The repair fails closed: when a line's code point count differs from its
+ * walked characters, or a walked character is not its code point's low 16
+ * bits, this throws `EngineFailure("unsupported")`. That is `unsupported` in
+ * detection, validation and the record, and the self check turns any throw
+ * into `redaction-incomplete`. Once MuPDF.js walks whole code points, the pin
+ * in `tests/unit/detection.test.ts` fails and this repair can go.
  */
 export function walkCharacters(
   page: PDFPage,
@@ -140,24 +172,101 @@ export function walkCharacters(
 ): void {
   const stext = page.toStructuredText(options);
   let angle = 0;
+  let direction: readonly [number, number] = [1, 0];
+  let block = -1;
+  let line = -1;
+  let onLine = 0;
 
   try {
+    const whole = wholeCodePoints(stext);
+
     stext.walk({
-      beginLine(_bbox, _wmode, direction) {
-        angle = Math.atan2(direction[1], direction[0]);
+      beginTextBlock() {
+        block += 1;
+      },
+      beginLine(_bbox, _wmode, lineDirection) {
+        line += 1;
+        onLine = 0;
+        direction = [lineDirection[0], lineDirection[1]];
+        angle = Math.atan2(lineDirection[1], lineDirection[0]);
       },
       onChar(text, origin, _font, _size, quad) {
+        let code = text.codePointAt(0) ?? 0;
+        if (whole) {
+          const repaired = whole[line]?.[onLine];
+          if (repaired === undefined || (repaired & 0xffff) !== code) {
+            throw new EngineFailure("unsupported");
+          }
+          code = repaired;
+        }
+        onLine += 1;
+
         visit({
-          code: text.codePointAt(0) ?? 0,
+          code,
           origin: [origin[0], origin[1]],
           quad,
           angle,
+          direction,
+          block,
+          line,
         });
       },
+      endLine() {
+        if (whole && onLine !== whole[line]?.length)
+          throw new EngineFailure("unsupported");
+      },
     });
+
+    if (whole && line + 1 !== whole.length) throw new EngineFailure("unsupported");
   } finally {
     stext.destroy();
   }
+}
+
+/** A code point above U+FFFF, which the walker cannot return whole. */
+const ABOVE_BMP = /[\u{10000}-\u{10FFFF}]/u;
+
+/**
+ * Each text line's code points, from `asJSON()`, or `null` when the page holds
+ * no code point the walker would cut.
+ */
+function wholeCodePoints(stext: StructuredText): readonly (readonly number[])[] | null {
+  if (!ABOVE_BMP.test(stext.asText())) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stext.asJSON());
+  } catch {
+    throw new EngineFailure("unsupported");
+  }
+  return textLines(parsed);
+}
+
+/**
+ * The `text` of every line of every text block, narrowed from the JSON MuPDF
+ * printed. Anything not shaped as expected fails closed.
+ */
+function textLines(json: unknown): readonly (readonly number[])[] {
+  const blocks = field(json, "blocks");
+  if (!Array.isArray(blocks)) throw new EngineFailure("unsupported");
+
+  return blocks.flatMap((block: unknown) => {
+    if (field(block, "type") !== "text") return [];
+    const lines = field(block, "lines");
+    if (!Array.isArray(lines)) throw new EngineFailure("unsupported");
+
+    return lines.map((line: unknown) => {
+      const text = field(line, "text");
+      if (typeof text !== "string") throw new EngineFailure("unsupported");
+      return Array.from(text, (point) => point.codePointAt(0) ?? 0);
+    });
+  });
+}
+
+function field(value: unknown, key: string): unknown {
+  return typeof value === "object" && value !== null && key in value
+    ? (value as Record<string, unknown>)[key]
+    : undefined;
 }
 
 /** The smaller angle between two directions, in degrees. */

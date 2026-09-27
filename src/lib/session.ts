@@ -120,10 +120,16 @@ export function outputNameFor(fileName: string): string {
  *
  * Derived rather than stored, so `hasUnsavedWork` can compare against it without
  * a second field that could drift from the matches it describes.
+ *
+ * A blocked match is left out whatever its `tickedByDefault` says (spec 0005,
+ * AC-8 and INV-2). The worker holds no target for it, so a tick on it would
+ * only ever fail the run.
  */
 export function seededTicks(matches: readonly ReviewMatch[]): ReadonlySet<MatchId> {
   return new Set(
-    matches.filter((match) => match.tickedByDefault).map((match) => match.id),
+    matches
+      .filter((match) => match.tickedByDefault && match.blocked === null)
+      .map((match) => match.id),
   );
 }
 
@@ -205,7 +211,10 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
       // a mistake and run again without hunting for the file a second time
       // (AC-14). The output is already gone; the document is still open.
       if (session.state !== "reviewing" && session.state !== "complete") return session;
-      if (!session.matches.some((match) => match.id === action.id)) return session;
+      // Only a match this session holds, and never a blocked one (spec 0005,
+      // AC-8): the engine would refuse it, so the tick is not offered at all.
+      const match = session.matches.find((candidate) => candidate.id === action.id);
+      if (!match || match.blocked !== null) return session;
 
       const ticked = new Set(session.ticked);
       if (!ticked.delete(action.id)) ticked.add(action.id);

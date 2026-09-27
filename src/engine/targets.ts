@@ -1,12 +1,13 @@
 import type { PDFDocument, PDFPage } from "mupdf";
 
-import { EXTRACTION_OPTIONS, walkCharacters } from "./characters";
+import { EXTRACTION_OPTIONS, walkCharacters, type Character } from "./characters";
 import { EngineFailure } from "./failure";
 import {
   containsPoint,
   isSoundQuad,
   isTooSlanted,
   paddedArea,
+  quadBounds,
   quadCentre,
 } from "./geometry";
 import { imagesWithinReach } from "./pixels";
@@ -60,6 +61,10 @@ function withoutWhitespace(text: string): string {
  *
  * A throw from MuPDF while checking is `unsupported`: a page nobody can check
  * a target on is not a page to redact.
+ *
+ * Each check is decided per target, through predicates detection asks too
+ * (spec 0005, INV-3), so a match detection left unblocked passes here alone
+ * and beside any other unblocked match.
  */
 export function validateTargets(
   doc: PDFDocument,
@@ -71,35 +76,9 @@ export function validateTargets(
     if (!Number.isInteger(index) || index < 0 || index >= pageCount) {
       throw new EngineFailure("unsupported");
     }
-    for (const target of targets) {
-      if (
-        target.quads.length === 0 ||
-        !target.quads.every(holdsUp) ||
-        withoutWhitespace(target.text).length === 0
-      ) {
-        throw new EngineFailure("unsupported");
-      }
+    if (onPage(doc, index, (page) => unsoundTargets(page, targets)).some(Boolean)) {
+      throw new EngineFailure("unsupported");
     }
-
-    const found = targets.map(() => [] as string[]);
-    onPage(doc, index, (page) =>
-      walkCharacters(page, EXTRACTION_OPTIONS[0], (character) => {
-        const centre = quadCentre(character.quad);
-        targets.forEach((target, at) => {
-          if (target.quads.some((quad) => containsPoint(quad, centre))) {
-            found[at].push(String.fromCodePoint(character.code));
-          }
-        });
-      }),
-    );
-
-    targets.forEach((target, at) => {
-      if (
-        !withoutWhitespace(found[at].join("")).includes(withoutWhitespace(target.text))
-      ) {
-        throw new EngineFailure("unsupported");
-      }
-    });
   }
 
   for (const targets of pages.values()) {
@@ -113,6 +92,91 @@ export function validateTargets(
       throw new EngineFailure("redaction-overreach");
     }
   }
+}
+
+/** What the outline check reads from a target. */
+export type OutlinedText = Pick<RedactionTarget, "quads" | "text">;
+
+/**
+ * Which targets do not hold up on this page? Spec 0004, AC-27, and spec 0005,
+ * AC-8 (`unsound-outline`). One answer per target, in order, `true` for one
+ * that does not.
+ *
+ * A target holds up when it has at least one quad, every quad and its padded
+ * area are sound, its `text` is not only whitespace, and the characters whose
+ * centres lie inside its quads, in extraction order with whitespace removed,
+ * contain its `text` as one unbroken run. Without this a run would trust the
+ * quads blindly: a quad in the wrong page space would remove the wrong glyphs,
+ * the real match would be recorded as unticked, and the self check would pass
+ * a file that still says it.
+ *
+ * Reads the page once in ordinary extraction. Detection has that read already,
+ * so it asks `unsoundTargetsIn` with the characters it holds.
+ */
+export function unsoundTargets(
+  page: PDFPage,
+  targets: readonly OutlinedText[],
+): readonly boolean[] {
+  const characters: Character[] = [];
+  walkCharacters(page, EXTRACTION_OPTIONS[0], (character) => characters.push(character));
+  return unsoundTargetsIn(characters, targets);
+}
+
+/**
+ * `unsoundTargets` over characters already read in `EXTRACTION_OPTIONS[0]`.
+ * The same predicate, so detection and validation give the same answer.
+ */
+export function unsoundTargetsIn(
+  characters: readonly Character[],
+  targets: readonly OutlinedText[],
+): readonly boolean[] {
+  const outlined = targets.map(
+    (target) =>
+      target.quads.length > 0 &&
+      target.quads.every(holdsUp) &&
+      withoutWhitespace(target.text).length > 0,
+  );
+  // Each target's reach on the page, so a character far from it costs four
+  // comparisons rather than a point test per quad. Only asked of targets whose
+  // quads are sound, since the point test assumes a convex quad.
+  const reach = targets.map((target, at) =>
+    outlined[at] ? target.quads.map(quadBounds).reduce(union) : null,
+  );
+  const found = targets.map(() => [] as string[]);
+
+  for (const character of characters) {
+    const centre = quadCentre(character.quad);
+    targets.forEach((target, at) => {
+      const bounds = reach[at];
+      if (
+        bounds !== null &&
+        centre[0] >= bounds[0] &&
+        centre[0] <= bounds[2] &&
+        centre[1] >= bounds[1] &&
+        centre[1] <= bounds[3] &&
+        target.quads.some((quad) => containsPoint(quad, centre))
+      ) {
+        found[at].push(String.fromCodePoint(character.code));
+      }
+    });
+  }
+
+  return targets.map(
+    (target, at) =>
+      !outlined[at] ||
+      !withoutWhitespace(found[at].join("")).includes(withoutWhitespace(target.text)),
+  );
+}
+
+type Bounds = readonly [number, number, number, number];
+
+function union(a: Bounds, b: Bounds): Bounds {
+  return [
+    Math.min(a[0], b[0]),
+    Math.min(a[1], b[1]),
+    Math.max(a[2], b[2]),
+    Math.max(a[3], b[3]),
+  ];
 }
 
 /**

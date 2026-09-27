@@ -46,6 +46,8 @@ import { Card } from "@/ui/card";
 import { DropZone } from "@/ui/drop-zone";
 import { Spinner } from "@/ui/spinner";
 
+import { ReviewChecklist } from "./review-checklist";
+
 /**
  * Plain wording for each failure kind. Feature 8 owns the real treatment.
  *
@@ -618,6 +620,24 @@ export function ToolClient() {
 
       <SessionAlert session={session} onRetry={handleRetry} />
 
+      {/*
+        Spec 0005, AC-13. The checklist, outside the live region for the same
+        reason the failure is: a list read out as it appears would drown the
+        phase line. Shown for every step that has a document open to review.
+      */}
+      {(session.state === "reviewing" ||
+        session.state === "redacting" ||
+        session.state === "complete") && (
+        <div className="mt-6">
+          <ReviewChecklist
+            matches={session.matches}
+            ticked={session.ticked}
+            running={session.state === "redacting"}
+            onToggle={(id) => dispatch({ type: "tick-toggled", id })}
+          />
+        </div>
+      )}
+
       {session.state !== "idle" && (
         <div className="mt-6 flex flex-wrap gap-3">
           <SessionAction
@@ -686,8 +706,8 @@ function SessionAction({
 /**
  * What the current step looks like, for the polite live region.
  *
- * The checklist itself belongs to features 6 and 8. This reports the session
- * honestly in the meantime, which is what the browser tests read.
+ * The checklist is `ReviewChecklist`, rendered outside this region (spec 0005,
+ * AC-13). Feature 8 owns the final treatment of both.
  */
 function SessionStatus({ session }: { session: ToolSession }) {
   switch (session.state) {

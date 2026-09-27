@@ -30,3 +30,16 @@ export class RunCancelled extends Error {
     this.name = "RunCancelled";
   }
 }
+
+/**
+ * A yield, then a look at whether the work should stop. Spec 0004, AC-17, and
+ * spec 0005, AC-11: a run calls this after every page, and detection after
+ * every read.
+ *
+ * A macrotask rather than a microtask, so a `cancel` message waiting in the
+ * worker's queue is actually delivered before the check reads the flag.
+ */
+export async function checkpoint(isCancelled?: () => boolean): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  if (isCancelled?.()) throw new RunCancelled();
+}

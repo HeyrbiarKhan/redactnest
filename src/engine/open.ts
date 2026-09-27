@@ -4,6 +4,7 @@ import type { DocumentSummary } from "@/worker/protocol";
 
 import { refuseAtTheDoor } from "./door";
 import { EngineFailure } from "./failure";
+import { findMatchesIn } from "./find";
 import { loadEngine, type MuPdf } from "./load";
 import { prepareDocument } from "./prepare";
 import type { OpenDocument } from "./types";
@@ -161,6 +162,13 @@ function holdOpen(doc: PDFDocument, summary: DocumentSummary): OpenDocument {
 
   return {
     summary,
+    async findMatches(options) {
+      // A closed document's memory is MuPDF's again, so there is nothing to
+      // read. The worker never asks, since it detects before registering the
+      // session a replacement could close.
+      if (closed) throw new EngineFailure("unsupported");
+      return findMatchesIn(doc, summary.pagesWithText, options);
+    },
     close() {
       if (closed) return;
       closed = true;

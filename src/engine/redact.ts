@@ -3,7 +3,7 @@ import type { Buffer as MuBuffer, Document, PDFDocument, PDFPage } from "mupdf";
 import type { DetectorKind } from "@/worker/protocol";
 
 import { recordPage, targetArea, type PageRecord } from "./characters";
-import { EngineFailure, RunCancelled } from "./failure";
+import { checkpoint as yieldThenCheck, EngineFailure } from "./failure";
 import { lineBox, paddedArea, removalBand } from "./geometry";
 import { takeInventory } from "./inventory";
 import { loadEngine, type MuPdf } from "./load";
@@ -86,16 +86,8 @@ export async function redactDocumentWith(
   const { onPhase, isCancelled } = hooks;
   const pages = targetsByPage(targets);
 
-  /**
-   * A yield, then a look at whether the run should stop. Spec 0004, AC-17.
-   *
-   * A macrotask rather than a microtask, so a `cancel` message waiting in the
-   * worker's queue is actually delivered before the check reads the flag.
-   */
-  const checkpoint = async (): Promise<void> => {
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    if (isCancelled?.()) throw new RunCancelled();
-  };
+  /** A yield, then a look at whether the run should stop. Spec 0004, AC-17. */
+  const checkpoint = (): Promise<void> => yieldThenCheck(isCancelled);
 
   onPhase?.("redacting");
 
