@@ -82,7 +82,7 @@ Several steps open the output in a second reader. Use at least two of: Acrobat R
 - AC-10 owner password redacted, output unrestricted · RC4, AES-128 and AES-256 in the engine suite and by hand
 - AC-11 every run starts clean · engine two run test, manual (after feature 6)
 - AC-12 empty run cleans · engine suite, every browser run until feature 6
-- AC-13 self check compares every page's characters, checks the pixels under targets, and checks structure · engine tests with the text pass, the padded pass and the sweep skipped, the shared XObject across pages, the no false alarm sweep over the matrix, the `next-line.pdf` cases after slice 5 (a match moved off the page is a survivor), the manual OCRmyPDF step, `mutool show`
+- AC-13 self check compares every page's characters, checks the pixels under targets, and checks structure · engine tests with the text pass, the padded pass and the sweep skipped, the shared XObject across pages, the no false alarm sweep over the matrix, slice 5's `next-line-0.pdf` to `next-line-4.pdf` cases (a match moved off the page is a survivor), the manual OCRmyPDF step, `mutool show`
 - AC-14 all or nothing · engine and worker failure tests
 - AC-15 honest outcome · engine suite against the inventory table, worker outcome assembly
 - AC-16 phases in order · worker test, manual
@@ -140,12 +140,12 @@ _The size change finding is now an honest limit in spec 0004's *Security model*,
 
 - [ ] The page 11 case in the measured cases above still fails with `redaction-incomplete`, and page 7 (the same line as two text objects) still redacts. If page 11 ever redacts cleanly, confirm it with the direct pin below before concluding MuPDF fixed the filter; then change the test to expect a clean redaction and mark the upstream item done → AC-13, the size change limit in *Security model*
 
-### Slice 5: the self check sees text drawn off the page (not built yet)
+### Slice 5: the self check sees text drawn off the page (built)
 
 - [ ] `pnpm test -- redaction-geometry` → `CHECK_EXTRACTION_OPTIONS` is `["clip=no", "ignore-actualtext,clip=no"]` and `EXTRACTION_OPTIONS` is unchanged → AC-13, value sourcing: extraction options
 - [ ] `grep -rn "CHECK_EXTRACTION_OPTIONS\|EXTRACTION_OPTIONS" src/engine` → the record and the self check walk `CHECK_EXTRACTION_OPTIONS`; `targets.ts` still walks `EXTRACTION_OPTIONS[0]` → AC-13, AC-27
-- [ ] `pnpm test -- redaction-matrix` → `next-line.pdf` pages 0 and 1 (a match alone on a `'` or `"` line) fail with `redaction-incomplete`, and neither returns a file; page 2 (the `T*` control) redacts, with the match absent from the decompressed bytes; page 3 fails with `redaction-incomplete` ticked and `unsupported` with nothing ticked; page 4 (text outside the media box) yields a cleaned file with nothing ticked and redacts with the match ticked → AC-4, AC-13, AC-25
-- [ ] In the same file, the direct pin → page 0 written through `sanitize` with nothing removed leaves `Jeremy Quigley` out of default extraction and keeps it under `clip=no`. If this ever fails because the line stays on the page, MuPDF has fixed the `'` fault: mark that upstream item done → AC-13
+- [ ] `pnpm test -- redaction-matrix` → over `next-line-0.pdf` to `next-line-4.pdf`, one case per file: cases 0 and 1 (a match alone on a `'` or `"` line) fail with `redaction-incomplete`, and neither returns a file; case 2 (the `T*` control) redacts, with the match absent from the decompressed bytes; case 3 fails with `redaction-incomplete` ticked and `unsupported` with nothing ticked; case 4 (text outside the media box) yields a cleaned file with nothing ticked and redacts with the match ticked → AC-4, AC-13, AC-25
+- [ ] In the same file, the direct pin → `next-line-0.pdf` written through `sanitize` with nothing removed leaves `Jeremy Quigley` out of default extraction and keeps it under `clip=no`. If this ever fails because the line stays on the page, MuPDF has fixed the `'` fault: mark that upstream item done → AC-13
 - [ ] The comment on the page 11 case no longer says the finding is "not yet recorded in spec 0004" → spec hygiene
 
 ### Owed to /test
@@ -166,3 +166,7 @@ _Slice 5 is built. One change from task 19 as written: the five cases are five o
 - [ ] `pnpm test` → every suite passes, so extracting without clipping raises no false alarm anywhere in the matrix (872 tests at this build) → AC-13
 - [ ] `node scripts/make-fixture.mjs`, then `git status tests/fixtures` → nothing changed, so the five `next-line-*.pdf` files are exactly what the script writes → fixtures reviewable as code
 - [ ] The comment on `reach.pdf` page 11's case says the size change is recorded in spec 0004's *Security model* → spec hygiene
+
+### Recorded by /architect · 2026-09-27 · slice 5
+
+_Wording only. Task 19, the *Off the page* scenario, the build plan and the slice 5 section above now name `next-line-0.pdf` to `next-line-4.pdf`, one case per file, and say slice 5 is built. The Follow-up's upstream item and the AC-13 line above name the five files too. No design changed._
