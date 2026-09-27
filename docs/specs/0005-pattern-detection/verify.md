@@ -4,7 +4,7 @@ _Steps derived from spec 0005's acceptance criteria and its Value sourcing table
 
 Run the tool at `/tool` against a production build (`pnpm build && pnpm start`), because the content security policy is looser in development. The fixtures are `tests/fixtures/detect-*.pdf`, written by `node scripts/make-fixture.mjs`; every one is within the free cap of 3 pages. Context is 40 characters either side unless a step says otherwise.
 
-Built: slices 1 to 4 of the build plan. **Open**: AC-16's budget for the phone detector. It is linear, but a 100,000 character adversarial block (`+44 ` repeated) took 0.6 to 1.4 s on the build machine, over the one second AC-16 sets, so its budget test is not committed. Owed to `/architect`.
+Built: slices 1 to 5 of the build plan. Nothing is open. The phone detector's budget is 2 s (AC-16); its worst on the build machine is about 0.5 s of CPU on 100,000 characters (random groups of one to three digits), and its parses are counted, not only timed.
 
 ## UI / manual
 
@@ -12,6 +12,8 @@ Built: slices 1 to 4 of the build plan. **Open**: AC-16's budget for the phone d
 - [ ] In that group → `jane.doe@example.com` is two rows, `support@example.net` has no `mailto:`, `sales@example.org` has no full stop, the fullwidth address reads `info@example.com`, the ligature address reads `finance@example.com`, and the Greek, Cyrillic and Hebrew addresses are there, in page order then reading order → AC-1, AC-3
 - [ ] Each row → its page ("Page 2"), and up to 40 characters either side with runs of spaces collapsed; the Greek row's context starts "Ελλάδα: " and never shows page 1's text → AC-5, INV-6
 - [ ] Open `detect-phone.pdf` → a "Phone numbers" group: `020 7946 0958`, `+44 20 7946 0958`, `(212) 555-0123`, `1-800-555-0199`, `00 44 20 7946 0012`, `020 7946 0321 ext. 123`, `12345678902` (after `Tel:`) and the wrapped `020 7946 0777` ticked; `(212) 123 4567` and `12345678901` unticked; no row for `INV-2026-000123`, the dates, the postcodes or the ZIP codes → AC-2, AC-4, AC-10
+- [ ] Further down that group → the column `020 7946 0100` to `020 7946 0104` as five rows, `020 7946 0200`, `0201` and `0202` from the "Desk" line as three rows, `020 7946 0300`, `0301` and `0302` from the comma and semicolon list as three rows, `020 7946 0400` from the call log line with neither `30` nor `3` in it, and `(212) 555-0142` whole, all ticked; no row for `90210-1234` or `05.12.1980`, and no row holds a digit of another number → AC-2, AC-27, INV-13, INV-14
+- [ ] In `detect-phone.pdf`, leave every row ticked, redact, download, and paste the page's text → each of those numbers is gone, while `12:30`, `3 min`, `CA 90210-1234` and `Born 05.12.1980` are still there, and each number's black box covers it alone → AC-6, AC-27
 - [ ] Open `detect-blocked.pdf` → `slanted@example.com`, `image@example.com`, `dave@example.com` and `hidden@example.com` each listed with a disabled checkbox and its reason line (steep angle, image, replacement text, replacement text); clicking one changes nothing; `plain@example.com` is ticked; `gave@example.com` never appears → AC-8, AC-9, AC-13
 - [ ] In `detect-blocked.pdf`, tick only `wide@example.com` (page 3) and press **Redact** → the run fails with the replacement text message and offers no file (the recorded limit, never a leak) → AC-9
 - [ ] Open `detect-wraps.pdf` → `jane.doe@example.com` and `sales@example.org` listed with no space in them, `smith@example.com` listed without "Bob.", nothing from page 2 → AC-4
@@ -51,7 +53,8 @@ Each is ticked in its own spec's `verify.md` as well as here.
 - [ ] Target `page`, `quads` → after a run, each black box sits on its match's own line, one box per line for a wrapped value → characters grouped by line along the line's direction
 - [ ] Target `start`, `end` → not read by anything yet (feature 13); nothing to see
 - [ ] Target `text` → the fullwidth address and the address holding U+20BB7 (`detect-unicode.pdf`) both redact → the raw code points, which validation compares
-- [ ] Detector constants → a UK national number and a US national number are both found; `Tel:` 32 characters before a bare number ticks it, 33 does not → `PHONE_REGIONS`, `KEYWORD_REACH`, `PHONE_WORDS`
+- [ ] Detector constants → a UK national number and a US national number are both found; `0113 496 0000` reads as a UK number and `011 44 20 7946 0958` as an international call, both ticked; `Tel:` 32 characters before a bare number ticks it, 33 does not; `detect-phone.test.ts`'s `PHONE_READINGS` block (an 18 digit window, 10 parses a start, no start with two readings at one count) and its extension block (each marker in `EXTENSION_MARKERS`) pass → `PHONE_REGIONS`, `PHONE_READINGS`, `MAX_WINDOW_DIGITS`, `MAX_PARSES_PER_GROUP`, `EXTENSION_MARKERS`, `KEYWORD_REACH`, `PHONE_WORDS`
+- [ ] A phone match's possible and valid verdicts → `(212) 123 4567` is listed unticked (possible, not valid), `12345678901` unticked until `Tel:` sits before it, and both pins in `detect-phone.test.ts` pass (`2121234567` possible and not valid under `US`; GB lengths 7, 9 and 10 with `00`, US 10 with `011`) → `parsePhoneNumberFromString` from `libphonenumber-js/max`, under the region `PHONE_READINGS` picks, with `extract: false`
 - [ ] Group icon, label, noun → an envelope and "Email addresses", a handset and "Phone numbers", with "email address(es)" and "phone number(s)" in the count → `DETECTOR_LABELS`
 - [ ] Group count → equals the rows in the group → derived from the matches
 - [ ] Row checked → follows every tick change → `session.ticked`
@@ -64,7 +67,7 @@ Each is ticked in its own spec's `verify.md` as well as here.
 
 ## Commands
 
-- [ ] `pnpm test` → all pass, including `detect-email`, `detect-phone`, `detect`, `detect-adversarial`, `detection`, `detectors`, `engine-worker`, `engine-wall` and `session` → AC-1 to AC-17, AC-25, AC-26
+- [ ] `pnpm test` → all pass, including `detect-email`, `detect-phone`, `detect-dates`, `detect`, `detect-adversarial`, `detection`, `detectors`, `engine-worker`, `engine-wall` and `session` → AC-1 to AC-17, AC-25 to AC-27
 - [ ] `pnpm typecheck` → passes, with the `PRECEDENCE` gate in `detect.test.ts` and the `DetectionCounts` gate in `loggable.test.ts` → AC-15, AC-24
 - [ ] `pnpm lint` → passes; `engine-wall.test.ts` proves the `@/detect`, `libphonenumber-js` and `search()` bans and the detect zone → AC-17, INV-5, INV-8, INV-11
 - [ ] `pnpm test:e2e` → all pass: the review states in `design-system.spec.ts`, `review.spec.ts`, the detected run in `privacy.spec.ts`, and the detection replacement in `cancel.spec.ts` → AC-11, AC-13, AC-15, AC-18
@@ -73,7 +76,7 @@ Each is ticked in its own spec's `verify.md` as well as here.
 ## Acceptance-criteria coverage
 
 - AC-1 · email rows in `detect-email.pdf`; `detect-email.test.ts`, `detection.test.ts`
-- AC-2 · phone rows and look alikes; `detect-phone.test.ts` (open: ZIP+4 such as `90210-1234` and dotted dates such as `05.12.1980` come back as possible GB numbers and would be listed unticked, owed to `/architect`)
+- AC-2 · phone rows and look alikes, ZIP+4 and the dotted date included; `detect-phone.test.ts`, `detect-dates.test.ts`
 - AC-3 · one row per occurrence, group order; `detect.test.ts`, `review-checklist.test.tsx`
 - AC-4 · `detect-wraps.pdf`, the wrapped phone number; rejoin tests
 - AC-5 · context steps, `contextChars` 10 and 0
@@ -87,8 +90,9 @@ Each is ticked in its own spec's `verify.md` as well as here.
 - AC-13 · keyboard, screen reader, forced colours, 320px; `design-system.spec.ts`
 - AC-14 · the info note and `kerning.pdf`'s empty state
 - AC-15 · devtools step; `privacy.spec.ts`; `loggable.test.ts`
-- AC-16 · `detect-adversarial.test.ts` (email budget, linear growth for both; phone budget open)
+- AC-16 · `detect-adversarial.test.ts`: a budget for each detector (1 s email, 2 s phone), linear growth for both, and the phone parse count against `MAX_PARSES_PER_GROUP`
 - AC-17 · `engine-wall.test.ts`
 - AC-18 · the section above
 - AC-25 · `detect-many.pdf`: 600 rows, all redacted; the 500 quad guard
 - AC-26 · `detect-unicode.pdf`, and the pin on MuPDF.js's walker
+- AC-27 · the side by side rows in `detect-phone.pdf` and their run; `detect-phone.test.ts` "numbers side by side"; each number's own quads in `detection.test.ts`
