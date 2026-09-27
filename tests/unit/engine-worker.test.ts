@@ -781,6 +781,31 @@ describe("stopping a run, and one run at a time", () => {
     ]);
   });
 
+  /**
+   * AC-23 again, for an open that reuses the running job's own id. That session
+   * is over just the same, so the new document still waits for its run.
+   */
+  it("waits for the run in flight when the new document reuses its job id", async () => {
+    const { RunCancelled } = await import("@/engine");
+    const runs = gatedEngine();
+    await openSession();
+
+    scope.send(redactRequest({ id: "op-r" }));
+    await settle();
+    scope.send(openRequest({ id: "op-2", jobId: "job-1" }));
+    await settle();
+
+    expect(runs[0].hooks.isCancelled?.()).toBe(true);
+    expect(openDocument).toHaveBeenCalledTimes(1);
+
+    runs[0].gate.reject(new RunCancelled());
+    await settle();
+
+    expect(openDocument).toHaveBeenCalledTimes(2);
+    expect(scope.posted.filter((message) => message.id === "op-r")).toEqual([]);
+    expect(scope.of("result").map((message) => message.id)).toEqual(["op-1", "op-2"]);
+  });
+
   it("never starts a run queued behind the one a new document cancelled", async () => {
     const { RunCancelled } = await import("@/engine");
     const runs = gatedEngine();

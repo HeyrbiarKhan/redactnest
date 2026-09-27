@@ -149,19 +149,17 @@ async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
   // AC-1, first half: a document arriving means the one before it is over, so
   // it goes now rather than once this one has parsed. Waiting would leave the
   // previous document open for as long as this one takes, and would leave it
-  // open for good if this one turns out to be unopenable.
-  const evicted = [...sessions.entries()]
-    .filter(([existing]) => existing !== jobId)
-    .map(([, session]) => session);
-  for (const existing of sessions.keys()) {
-    if (existing !== jobId) endSession(existing);
-  }
+  // open for good if this one turns out to be unopenable. That holds for a
+  // session under this same job id too: it is the old document, not this one.
+  const evicted = [...sessions.values()];
+  for (const existing of sessions.keys()) endSession(existing);
 
   try {
     // Spec 0004, AC-23. Ending a session cancelled its run, and the run is
     // given the time it needs to notice, destroy its working copy and let go of
-    // the old bytes before a second document is parsed beside it. Their queues
-    // never reject, so this waits and cannot fail.
+    // the old bytes before a second document is parsed beside it. Every session
+    // is waited on, same job id included. Their queues never reject, so this
+    // waits and cannot fail.
     await Promise.all(evicted.map((session) => session.runs));
     if (cancelled.has(id)) return;
 
