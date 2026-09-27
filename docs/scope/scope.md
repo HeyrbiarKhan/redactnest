@@ -111,6 +111,7 @@ spec [0005](../specs/0005-pattern-detection/index.md) · code in `src/detect`, `
   - [x] Phone numbers: libphonenumber-js with `max` metadata, UK and US national formats plus international, and the look alike fixture · AC-2, AC-4, AC-6, AC-10, AC-17
   - [x] Nothing the engine would refuse can be ticked: the shared predicates, both extraction modes, and blocked rows with a reason · AC-8, AC-9, AC-13
   - [ ] Wraps and hardening: the email rejoin, the adversarial input tests, and cancel during detection in the browser · AC-4, AC-11, AC-16
+  - [ ] Phone numbers side by side: our own phone finder with libphonenumber-js judging each window, the trunk and numeric date rules, the 2 s phone budget with its parse count proof, and the side by side fixture · AC-2, AC-6, AC-10, AC-16, AC-27
 - [ ] Verify it: `/check verify pattern detection`
 - [ ] Test it: `/test pattern detection`
 

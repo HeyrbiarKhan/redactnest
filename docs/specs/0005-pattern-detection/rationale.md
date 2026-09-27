@@ -75,6 +75,14 @@ A small named entity recognition model (a model that tags words as names, places
 | Coverage | a standing note | only in the empty state |
 | Plausible phone numbers (added after acceptance) | listed, unticked | left out |
 | Valid phone numbers written as bare digits (proposed after acceptance, to fix a measured false match) | listed, unticked unless a phone word precedes them | ticked like any valid number |
+| Where the three decisions owed from `/develop` are recorded (update of 2026-09-27) | this spec, updated in place | a new spec replacing it |
+| How phone candidates are found (update of 2026-09-27) | our own scanner, libphonenumber-js judges each window | `findNumbers`, plus a second pass over runs it found nothing in |
+| Phone look alikes (update of 2026-09-27) | the trunk rule plus a shared numeric date rule | excluding named shapes only |
+| Phone budget (update of 2026-09-27) | 2 seconds, every grouping kept | a first group rule that keeps 1 second |
+| Competing windows in one run (update of 2026-09-27) | valid first, then possible | leftmost longest possible |
+| A slash between digit groups (update of 2026-09-27) | separates numbers | glues groups, as first built |
+| Phone extensions (update of 2026-09-27) | a fixed marker list, never a comma | the library's own markers |
+| Proof of the phone detector's cost (update of 2026-09-27) | a parse count as well as a time budget | a time budget only |
 
 ## Rationale
 
@@ -121,6 +129,75 @@ Measured on 2026-09-27 against the published package (MIT, with Google's metadat
 
 `findPhoneNumbersInText` returns valid numbers only, so plausible numbers need the `POSSIBLE` finder. `leniency` accepts `POSSIBLE` and `VALID` only, and the package's types do not declare it. Validity is not enough to tick: a bare eleven digit order number and the tail of an invoice code are valid US numbers. Hence the token boundary rule and the written like a phone rule for the tick.
 
+The update below replaces `findNumbers` as the way candidates are found; this table stays as the record of why the first build used it.
+
+## Update of 2026-09-27: how phone numbers are found
+
+`/develop` built slices 1 to 4 and handed back three decisions: the phone detector took 0.6 to 1.4 s on 100,000 adversarial characters against AC-16's one second; ZIP+4 codes and dotted dates came back as possible UK numbers; and a run of phone numbers separated only by single spaces gave no match at all.
+
+### Context
+
+> ⚠️ Premise note: the three read as separate problems (a performance note, a look alike note and a detection gap). Measured, the first and third share one cause, the way `findNumbers` picks candidates, and the gap is wider than reported. It also misses a number with any other digit group beside it through a space (a call log line `12:30 020 7946 0958 3 min`), and in a comma list it reads the comma as an extension, so `020 7946 0958, 020 7946 0321` lists `020 7946 0958, 020` and leaves `7946 0321` in the file. The adversarial worst was also higher than recorded: about 2.1 s over both regions, on `2 ` or `0 ` repeated. A fix for one that leaves the cause in place leaves the others. So this update treats them as one decision about the finder, plus the look alike rules that sit on top of it.
+
+libphonenumber-js's matcher (a port of Google's `PhoneNumberMatcher`) takes a maximal run of digits and phone punctuation, up to 20 digit blocks, as one candidate. When that candidate is not a number, it tries a short list of inner splits, the last of which breaks at a space and keeps only the text after it. A run of spaced numbers therefore splits into pieces too short to be numbers, and nothing is found. Real documents produce such runs often, because the engine joins the lines of a text block with one space: a staff table's phone column, one number per line, arrives as exactly that run. A missed number stays in the file, and the checklist never says so, which is the failure this product exists to prevent.
+
+GB metadata accepts national numbers of 7, 9 and 10 digits, and, read under GB with no requirement for the leading `0`, any bare run of those lengths is possible. That is where `90210-1234`, `123-45-6789`, `555-0123` and bare 7 and 9 digit IDs came from. Dates that start with `0` pass even a trunk rule (`05.12.1980` reads as `0` then 7 digits). In release 3 `PRECEDENCE` puts `phone` above `date`, so such a date of birth would be claimed as an unticked phone number, and a birth word before it would never tick it.
+
+### Options considered
+
+**Option A: our own scanner finds candidates, libphonenumber-js judges each one (chosen).** A linear pass builds runs of digit groups, cuts each run into windows at unit boundaries, and asks the parser about each window whole (`extract: false`), under the one region its prefix selects.
+- Pros: numbers side by side are found by construction; the comma is never read as an extension; the look alike rules have a natural home (the reading and the unit); the cost per group is bounded and countable.
+- Cons: the candidate grammar becomes code we maintain, and a format the library's matcher handled but ours does not is a new miss.
+
+**Option B: keep `findNumbers`, add a recovery pass** over runs where it found nothing, splitting them into windows as in A.
+- Pros: ordinary text keeps exactly today's behaviour.
+- Cons: two code paths that can disagree; the adversarial cost stays at about 2.1 s plus the recovery pass; the comma bug still needs its own fix, because `findNumbers` does find something in that run, just the wrong span.
+
+**Option C: treat every line join as a hard break for phone numbers.**
+- Pros: one line of code; fixes the one number per line column.
+- Cons: loses numbers wrapped across lines (AC-4), and misses every same line case: runs, call logs, a count or time beside a number.
+
+### Rationale
+
+Option A, because it removes the cause instead of patching its symptoms. The library is best at what only it can do (knowing each country's numbering plan, which changes over time) and weakest at deciding where one number ends and the next begins in extracted PDF text, a job it was never tuned for. Splitting the work that way keeps the maintained metadata and puts the boundary decision where we can test it against the text PDFs actually produce. The grammar we now own is small (groups, units, gaps, brackets, a slash, a marker list) and every piece of it is pinned by a test.
+
+A read only cross check on a second model (Sonnet 5) confirmed the reading table against the library and found no simpler design. It found nine places where the finder's text left the builder to guess, the most serious being that "a window grows unit by unit" could be built as judging only the longest window, which misses `020 7946 0958` in `020 7946 0958 2 020 7946 0321`. All nine were closed in *Detectors* the same day: every window length is tried, the unit grammar, the gap whitespace, `(0)` left out of the parsed digits, what each reading row tests, the joint reading lookup, the tick ignoring an extension, the parse count taken after the memo, and flush digits for the one character extension markers.
+
+The look alikes are fixed by two rules with reasons rather than a list of shapes: the trunk rule says how UK numbers are written, and the date rule is the release 3 date detector's own predicate, so the two detectors cannot disagree about what a date is. The engineer kept every grouping of a number and gave the phone detector a 2 second budget rather than add a grouping rule that would keep it under one; the parse count test makes the bound independent of the machine, so neither budget flakes in CI.
+
+### Evidence: `findNumbers` on text PDFs produce
+
+Measured on 2026-09-27 against libphonenumber-js 1.13.14 with `max` metadata, under GB and US, with `leniency: "POSSIBLE"`:
+
+| Text | What `findNumbers` returned (either region) |
+|---|---|
+| `020 7946 0958 020 7946 0321 020 7946 0123` | nothing |
+| `020 7946 0958  020 7946 0321` (two spaces) | nothing |
+| `212 555 0123 212 555 0124` | nothing |
+| `+44 20 7946 0958 020 7946 0321` | nothing |
+| `12:30 020 7946 0958 3 min` | nothing |
+| `020 7946 0958 2 020 7946 0321` | nothing |
+| `020 7946 0958, 020 7946 0321` | `020 7946 0958, 020` (the comma read as an extension), and nothing for the rest |
+| `020 7946 0958 ` repeated to 100,000 characters | nothing (0 of about 7,100 numbers) |
+| `020-7946-0958 020-7946-0321`, `(212) 555-0123 (212) 555-0124` | both numbers each (a hyphen or bracket inside each number lets the space split work) |
+| `90210-1234`, `123-45-6789`, `555-0123`, `1234567`, `123456789` | each a possible GB number (no leading `0`) |
+| `05.12.1980`, `05-12-1980`, `5.12.1980`, `01.02.2003` | each a possible GB number |
+| `05/12/1980`, `12.05.1980`, `2026-09-27` | nothing (the matcher's own slash date rule, or no possible length) |
+
+CPU time for one `findNumbers` call on 100,000 characters, per region (GB, then US): `+44 ` repeated 328 and 312 ms; `12 34 56 78 90 ` 203 and 531 ms; `2 ` 1,047 and 1,016 ms; `0 ` 1,016 and 1,047 ms. The detector runs both regions, so the worst is about 2.1 s.
+
+### Evidence: the prototype of Option A
+
+A prototype of this design (outside the repository) was measured the same day on the same machine. One `parsePhoneNumberFromString` call costs 5 to 23 µs; `isValid()` about 1 µs. With windows grown unit by unit up to 18 digits, one parse per window, verdicts kept per block, and the reading table (E.164 ranges for international readings):
+
+- Every number today's `detect-phone.test.ts` finds was found with the same text, including a trunk prefix in brackets and a number before a full stop, and every look alike it rejects was rejected. The prototype computed validity but not the tick rule, which slice 5 leaves unchanged, and did not implement extensions; the marker list is specified from libphonenumber's own extension patterns without the comma and semicolon.
+- Every row of the table above that returned nothing now gave each number; the comma list gave both numbers whole; `CA 90210-1234 (212) 555-0123` gave `(212) 555-0123`; `Box 2000 212 555 0123` gave `212 555 0123` under valid first choosing.
+- ZIP+4, the Social Security shape, `555-0123`, bare 7 and 9 digit runs, numeric dates with each separator and a leading `0`, and `2012-01-02 08:00` gave nothing. `0113 496 0000` read as Leeds, and `011 44 20 7946 0958` as a US international call.
+- Worst CPU time over 21 adversarial shapes: about 0.45 to 0.55 s across runs (random `2dd ddd dddd` groups, which are real looking numbers, each needing its parse), with at most about one parse per digit group in practice against the bound of 10.
+- The runner up for the budget, a rule that a national number's first group holds at least three digits, measured 0.36 s at worst, and lost `02 0794 60958` and `0 20 7946 0958`.
+
+libphonenumber-js's `Metadata` gives the national lengths the readings table is written from (`possibleLengths()`: GB 7, 9 and 10; US 10) and the international prefixes (`IDDPrefix()`: GB `00`, US `011`). `isPossible()` alone also accepts a UK number of a `0` and 6 or 8 digits, which are local only lengths (dialled without an area code); the table leaves them out on purpose.
+
 ## References
 
 **Project sources** (verifiable, in this repo):
@@ -131,6 +208,9 @@ Measured on 2026-09-27 against the published package (MIT, with Google's metadat
 - `node_modules/mupdf/dist/mupdf.d.ts`, MuPDF.js 1.28.1: `DeviceFunctions` and `StructuredTextWalker`.
 - `node_modules/mupdf/dist/mupdf.js`, MuPDF.js 1.28.1: `runSearch` (`max_hits = 500`) and the walker's `String.fromCharCode`.
 - The measurements of 2026-09-27 above, run on the real engine and the published libphonenumber-js outside the repository.
+- The update's measurements of 2026-09-27: `findNumbers` on side by side numbers and look alikes, its time on adversarial text, and the prototype of the new finder, all against the libphonenumber-js 1.13.14 in `node_modules`.
+- `node_modules/libphonenumber-js/max/index.d.ts`: `parsePhoneNumberFromString` with its declared `extract` option, and `Metadata` with `numberingPlan.possibleLengths()` and `IDDPrefix()`.
+- `tests/unit/detect-adversarial.test.ts` and `verify.md`: where `/develop` recorded the three owed decisions.
 - `docs/.agent-cache/research/pattern-detection.md`: the research check of 2026-09-27 behind the links below.
 
 **Practices & standards**:
@@ -139,6 +219,9 @@ Measured on 2026-09-27 against the published package (MIT, with Google's metadat
 - The SSA's Social Security number randomization rules.
 - HMRC's National Insurance number prefix and suffix rules.
 - OWASP guidance on Regular expression Denial of Service.
+- ITU-T E.164: an international number is at most 15 digits, country code included.
+- Google libphonenumber's `PhoneNumberMatcher` (candidate pattern, inner match splits, extension patterns), which libphonenumber-js ports.
+- The UK numbering plan: national numbers are written with the trunk prefix `0`.
 - Unicode NFKC normalisation.
 - Fail closed: a check that cannot finish counts against the match.
 
