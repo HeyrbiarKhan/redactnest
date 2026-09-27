@@ -53,6 +53,11 @@ interface PossibleNumbers {
   readonly leniency: "POSSIBLE";
 }
 
+// The three patterns below each match one character from one class, with no
+// quantifier, so none can backtrack (INV-7). The time this detector takes is
+// libphonenumber-js's, linear in the block and paid once per region, which
+// `tests/unit/detect-adversarial.test.ts` measures.
+
 /** A letter or a digit: what a number may not be cut out of (AC-2). */
 const ALPHANUMERIC = /^[\p{L}\p{N}]$/u;
 /** What may join a number to a longer code, as in `INV-2026-000123`. */

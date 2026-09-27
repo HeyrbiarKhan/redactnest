@@ -97,8 +97,61 @@ describe("where an address starts and ends", () => {
     expect(found(text)).toEqual([]);
   });
 
-  it("finds nothing across a synthetic join space, until the rejoin reads it", () => {
-    expect(found("jane.doe@ example.com", [9])).toEqual([]);
+  it("finds nothing across an ordinary space after an @", () => {
+    expect(found("jane.doe@ example.com")).toEqual([]);
+  });
+});
+
+/**
+ * AC-4. A line join right after `@` or `.` is read as absent, once, and the
+ * address across it is kept only when it swallows nothing already found. The
+ * span keeps the join space, so offsets still index the block; the engine
+ * leaves the space out of the text.
+ */
+describe("the rejoin", () => {
+  it("finds an address wrapped right after its @", () => {
+    expect(found("Write to jane.doe@ example.com today", [18])).toEqual([
+      "jane.doe@ example.com",
+    ]);
+  });
+
+  it("finds an address wrapped after a dot in its domain", () => {
+    expect(found("Orders to sales@example. org today", [24])).toEqual([
+      "sales@example. org",
+    ]);
+  });
+
+  it("never turns Call Bob. and smith@example.com into one address", () => {
+    expect(found("Call Bob. smith@example.com today", [9])).toEqual([
+      "smith@example.com",
+    ]);
+  });
+
+  it("lists only the part after the break of a local part wrapped at a dot", () => {
+    expect(found("From john. smith@example.net only", [10])).toEqual([
+      "smith@example.net",
+    ]);
+  });
+
+  it("does not read a join that follows anything but @ or .", () => {
+    expect(found("Write to jane doe@example.com", [13])).toEqual(["doe@example.com"]);
+  });
+
+  it("reads one join only, never two at once", () => {
+    expect(found("jane@ example. com", [5, 14])).toEqual([]);
+  });
+
+  it("keeps offsets in the block the engine built", () => {
+    expect(
+      DETECTORS.email({ text: "Write to jane.doe@ example.com today", joins: [18] }),
+    ).toEqual([{ kind: "email", start: 9, end: 30, tickedByDefault: true }]);
+  });
+
+  it("keeps the addresses on either side of a join it does not use", () => {
+    expect(found("a@example.com. b@example.org", [14])).toEqual([
+      "a@example.com",
+      "b@example.org",
+    ]);
   });
 });
 

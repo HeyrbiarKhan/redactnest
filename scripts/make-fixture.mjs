@@ -18,6 +18,7 @@ import {
   detectMany,
   detectPhone,
   detectUnicode,
+  detectWraps,
 } from "./lib/detection-fixtures.mjs";
 import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
@@ -401,6 +402,11 @@ const FIXTURES = [
     "detect-blocked.pdf",
     detectBlocked(),
     "a match for each reason detection blocks, and the limit",
+  ],
+  [
+    "detect-wraps.pdf",
+    detectWraps(),
+    "addresses wrapped across lines, and across blocks",
   ],
 ];
 

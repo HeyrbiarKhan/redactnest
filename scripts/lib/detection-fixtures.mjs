@@ -356,3 +356,43 @@ export function detectBlocked() {
     ];
   });
 }
+
+/** What `detect-wraps.pdf` should list, and the one thing it must not. */
+export const DETECT_WRAPS = Object.freeze({
+  afterAt: "jane.doe@example.com",
+  afterDot: "sales@example.org",
+  bob: "smith@example.com",
+  split: "split@example.com",
+});
+
+/**
+ * Spec 0005, AC-4. Addresses wrapped onto the next line of their block, and
+ * the joins that must not happen:
+ *
+ *  1. one address wrapped right after its `@`, one wrapped after a dot in its
+ *     domain (both found, each with two quads), and "Call Bob." at a line's
+ *     end with `smith@example.com` starting the next (found as
+ *     `smith@example.com` alone, never `Bob.smith@…`);
+ *  2. two columns, the left one ending `split@` and the right one starting
+ *     `example.com`: two text blocks, so nothing is joined across them.
+ */
+export function detectWraps() {
+  return document(() => [
+    {
+      content:
+        line("F1", 12, 72, 720, "Please write to jane.doe@") +
+        line("F1", 12, 72, 706, "example.com for any details") +
+        line("F1", 12, 72, 692, "Orders go to sales@example.") +
+        line("F1", 12, 72, 678, "org from Monday") +
+        line("F1", 12, 72, 664, "Call Bob.") +
+        line("F1", 12, 72, 650, "smith@example.com answers today"),
+    },
+    {
+      content:
+        line("F1", 11, 72, 720, "Left column opens here") +
+        line("F1", 11, 72, 706, "Write to split@") +
+        line("F1", 11, 360, 720, "example.com is where") +
+        line("F1", 11, 360, 706, "the right column goes on"),
+    },
+  ]);
+}

@@ -18,11 +18,18 @@ import type { DetectInput, Span } from "./types";
  * Letters, marks and digits are Unicode classes, so an address in any script
  * is found (AC-1). The engine hands this text NFKC normalised, so a fullwidth
  * `＠` arrives as `@`.
+ *
+ * An address wrapped right after its `@` or a `.` is found by the rejoin
+ * (AC-4), which reads that one line join as absent and asks the same
+ * question again.
  */
 
 /** RFC 5321's limits, which a real address never exceeds. */
 const MAX_LOCAL = 64;
 const MAX_DOMAIN = 253;
+
+// Each pattern below is anchored at both ends and matches exactly one code
+// point, with no quantifier at all, so it cannot backtrack (INV-7).
 
 /** A character a local part may hold: letters, marks, digits and `. _ % + -`. */
 const LOCAL = /^[\p{L}\p{M}\p{N}._%+-]$/u;
@@ -31,6 +38,8 @@ const LABEL = /^[\p{L}\p{M}\p{N}-]$/u;
 /** The last label is letters, with any marks they carry. */
 const TOP_LEVEL = /^[\p{L}\p{M}]$/u;
 const LETTER = /^\p{L}$/u;
+/** What an address can never hold, so a scan for its `@` stops there. */
+const SPACE = /^\s$/u;
 
 /**
  * Positions to step over as if they were absent. The rejoin (AC-4) reads one
@@ -54,7 +63,82 @@ export function detectEmail(input: DetectInput): readonly Span[] {
       spans.push(found);
     }
   }
-  return spans;
+
+  const rejoined = rejoin(points, input.joins, spans);
+  return rejoined.length === 0
+    ? spans
+    : [...spans, ...rejoined].sort((a, b) => a.start - b.start);
+}
+
+/**
+ * Addresses wrapped onto the next line of their block. Spec 0005, AC-4.
+ *
+ * For each join whose previous character is `@` or `.`, the join space is
+ * treated as invisible and the `@` an address across it would hold is asked
+ * again: the `@` just before the join, or the nearest `@` on either side with
+ * no whitespace between it and the join. An address is kept only when it
+ * crosses the join and overlaps no address already found, so "Call Bob." at a
+ * line's end followed by "smith@example.com" never becomes
+ * `Bob.smith@example.com`. The cost is a local part wrapped at a dot (`john.`
+ * then `smith@example.com`), which lists as `smith@example.com`.
+ *
+ * Linear: each join looks at most `MAX_DOMAIN` code points back and
+ * `MAX_LOCAL` forward for its `@`, and asks at most two of them.
+ */
+function rejoin(
+  points: readonly string[],
+  joins: readonly number[],
+  found: readonly Span[],
+): readonly Span[] {
+  const kept: Span[] = [];
+  // Positions an address already holds, marked once, so each check costs the
+  // candidate's own length rather than the list of every address found.
+  const claimed = new Uint8Array(points.length);
+  for (const span of found) claimed.fill(1, span.start, span.end);
+  const overlaps = (span: Span) => claimed.subarray(span.start, span.end).includes(1);
+
+  for (const join of joins) {
+    const previous = points[join - 1];
+    if (previous !== "@" && previous !== ".") continue;
+
+    const hidden: Hidden = new Set([join]);
+    const ats =
+      previous === "@"
+        ? [join - 1]
+        : [
+            nearestAt(points, join, -1, MAX_DOMAIN),
+            nearestAt(points, join, 1, MAX_LOCAL),
+          ];
+
+    for (const at of ats) {
+      if (at === null) continue;
+      const span = emailAt(points, at, hidden);
+      if (span && span.start < join && join < span.end && !overlaps(span)) {
+        claimed.fill(1, span.start, span.end);
+        kept.push(span);
+        break;
+      }
+    }
+  }
+  return kept;
+}
+
+/**
+ * The nearest `@` from `join` in `step`'s direction with no whitespace between,
+ * within `reach` code points, or `null`.
+ */
+function nearestAt(
+  points: readonly string[],
+  join: number,
+  step: -1 | 1,
+  reach: number,
+): number | null {
+  for (let at = join + step, taken = 0; taken <= reach; at += step, taken += 1) {
+    const point = points[at];
+    if (point === undefined || SPACE.test(point)) return null;
+    if (point === "@") return at;
+  }
+  return null;
 }
 
 /**

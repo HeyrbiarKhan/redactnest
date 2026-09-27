@@ -458,6 +458,42 @@ describe("detecting", () => {
     expect(doc.close).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * AC-11 and spec 0002, AC-1. A second document chosen while the first is
+   * still being read: the client cancels the first open and sends the second,
+   * in that order. The first stops at its next read, posts nothing, and keeps
+   * nothing; the second opens.
+   */
+  it("gives way to a replacement that arrives while it is detecting", async () => {
+    const { RunCancelled } = await import("@/engine");
+    const first = fakeDocument();
+    const second = fakeDocument();
+    const detecting = gate<readonly FoundMatch[]>();
+    first.findMatches.mockImplementation(async ({ isCancelled }) => {
+      await detecting.promise;
+      if (isCancelled?.()) throw new RunCancelled();
+      return FOUND;
+    });
+    openDocument.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    await startWorker();
+
+    scope.send(openRequest({ id: "op-1", jobId: "job-1" }));
+    await settle();
+    scope.send({ id: "op-1", jobId: "job-1", kind: "cancel" });
+    scope.send(openRequest({ id: "op-2", jobId: "job-2" }));
+    detecting.resolve([]);
+    await settle();
+
+    expect(
+      scope.posted.filter(
+        (message) => message.id === "op-1" && message.kind !== "progress",
+      ),
+    ).toEqual([]);
+    expect(first.close).toHaveBeenCalledTimes(1);
+    expect(scope.of("result").map((message) => message.id)).toEqual(["op-2"]);
+    expect(second.close).not.toHaveBeenCalled();
+  });
+
   it("posts nothing when detection stops for a cancel, and closes the document", async () => {
     const { RunCancelled } = await import("@/engine");
     const doc = fakeDocument();

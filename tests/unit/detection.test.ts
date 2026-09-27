@@ -26,6 +26,7 @@ import {
   DETECT_MANY_COUNT,
   DETECT_PHONE,
   DETECT_UNICODE_EMAIL,
+  DETECT_WRAPS,
   manyAddress,
 } from "../../scripts/lib/detection-fixtures.mjs";
 import { fixture } from "../support/bytes";
@@ -635,5 +636,63 @@ describe("the shared predicates", () => {
     await expect(run([overImage])).rejects.toEqual(
       new EngineFailure("redaction-overreach"),
     );
+  });
+});
+
+/**
+ * AC-4. A value that wraps onto the next line of its block is found, with one
+ * quad per line; an address wrapped after `@` or `.` is read with that one
+ * join as nothing; nothing is ever joined across two blocks.
+ */
+describe("wraps", () => {
+  it("finds an address wrapped after its @ and one wrapped after a dot, each with two quads", async () => {
+    const found = await find("detect-wraps.pdf");
+
+    for (const text of [DETECT_WRAPS.afterAt, DETECT_WRAPS.afterDot]) {
+      const match = found.find((each) => each.text === text);
+      expect(match, text).toBeDefined();
+      expect(match?.target?.text).toBe(text);
+      expect(match?.target?.quads).toHaveLength(2);
+      expect(match?.blocked).toBeNull();
+    }
+  });
+
+  it("lists smith@example.com alone after Call Bob., never Bob.smith@", async () => {
+    const texts = (await find("detect-wraps.pdf")).map((match) => match.text);
+
+    expect(texts).toContain(DETECT_WRAPS.bob);
+    expect(texts.some((text) => text.includes("Bob"))).toBe(false);
+  });
+
+  it("joins nothing across two text blocks", async () => {
+    const onPageTwo = (await find("detect-wraps.pdf")).filter(
+      (match) => match.page === 1,
+    );
+
+    expect(onPageTwo).toEqual([]);
+  });
+
+  it("finds the address spec 0004's two line fixture wraps", async () => {
+    const [match] = await find("two-lines.pdf");
+
+    expect(match).toMatchObject({ text: "jane.doe@example.com", blocked: null });
+    expect(match.target?.quads).toHaveLength(2);
+  });
+
+  it("removes every wrapped address, both lines of each", async () => {
+    const targets = targetsOf(await find("detect-wraps.pdf"));
+    const { output } = await redactDocumentWith(
+      mupdf,
+      fixture("detect-wraps.pdf"),
+      targets,
+    );
+
+    const text = packedText(output, 0);
+    expect(text).not.toContain("jane.doe@");
+    expect(text).not.toContain("example.comfor");
+    expect(text).not.toContain("sales@example.");
+    expect(text).not.toContain("smith@example.com");
+    expect(text).toContain("CallBob.");
+    expect(text).toContain("Pleasewriteto");
   });
 });
