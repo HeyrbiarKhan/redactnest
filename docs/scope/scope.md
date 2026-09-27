@@ -87,7 +87,6 @@ The smallest usable whole. An anonymous visitor drops in a short PDF, sees what 
 ### 5. Redaction engine · done · GA
 The heart of the product. Given a document and a set of targets, remove the text from the content stream itself and strip everything else that quietly carries data, in one pass.
 **Done when:** targeted text is gone from the content stream (extracting text from the output returns nothing for it, rather than returning text that sits under a covering box), and the output carries no document info or XMP metadata, no annotations, no form fields, no attachments, no bookmarks, no hidden layers, no JavaScript, and no earlier versions left behind by incremental saves.
-**Also owed here:** a file that is not a PDF, including an image or a text file, is refused before MuPDF opens it, judged from the bytes rather than the file name or type. Today MuPDF opens a PNG as a one page document even when asked for `application/pdf`.
 spec [0004](../specs/0004-redaction-engine/index.md) · code in `src/engine/`, `src/worker/engine.worker.ts`, `src/app/tool/tool-client.tsx`
 - [x] Design it (spec): `/architect redaction engine`
 - [x] Build it: `/develop redaction engine`
