@@ -15,7 +15,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 2 | Coding standards & tooling | Foundation | done |
 | 3 | Document session & privacy guarantee | Foundation | done |
 | 4 | Design system & UI foundation | Foundation | done |
-| 5 | Redaction engine | Release 1 | in-progress |
+| 5 | Redaction engine | Release 1 | done |
 | 6 | Pattern detection | Release 1 | planned |
 | 7 | Scanned page detection & warnings | Release 1 | planned |
 | 8 | Redact flow | Release 1 | planned |
@@ -84,10 +84,9 @@ spec [0003](../specs/0003-design-system-ui-foundation/index.md) · code in `src/
 
 The smallest usable whole. An anonymous visitor drops in a short PDF, sees what was found, ticks what to remove, and downloads a genuinely clean file. No accounts, nothing paid, no marketing site. Small, but a real tool somebody could use tomorrow.
 
-### 5. Redaction engine · in-progress · GA
+### 5. Redaction engine · done · GA
 The heart of the product. Given a document and a set of targets, remove the text from the content stream itself and strip everything else that quietly carries data, in one pass.
 **Done when:** targeted text is gone from the content stream (extracting text from the output returns nothing for it, rather than returning text that sits under a covering box), and the output carries no document info or XMP metadata, no annotations, no form fields, no attachments, no bookmarks, no hidden layers, no JavaScript, and no earlier versions left behind by incremental saves.
-**Also owed here:** a file that is not a PDF, including an image or a text file, is refused before MuPDF opens it, judged from the bytes rather than the file name or type. Today MuPDF opens a PNG as a one page document even when asked for `application/pdf`.
 spec [0004](../specs/0004-redaction-engine/index.md) · code in `src/engine/`, `src/worker/engine.worker.ts`, `src/app/tool/tool-client.tsx`
 - [x] Design it (spec): `/architect redaction engine`
 - [x] Build it: `/develop redaction engine`
@@ -96,11 +95,11 @@ spec [0004](../specs/0004-redaction-engine/index.md) · code in `src/engine/`, `
   - [x] Targets really removed, and checked: target validation, the band, padded and box passes, the character and pixel self check with its two new kinds, the fixture matrix, two runs from one original, and the encryption fixtures (built) · AC-4, AC-5, AC-6, AC-10, AC-11, AC-13, AC-25, AC-26, AC-27
   - [x] A run stops cleanly: cancel between pages, one run at a time, a replacement that cancels a run in flight, and the browser cancel test · AC-17, AC-18, AC-23
   - [x] Slanted targets and images blanked too far refused before anything is removed: the slant check with its `slanted-text` kind, the image reach check, the padded area soundness check, the slant and image fixtures, and the pin on MuPDF's bounds behaviour · AC-5, AC-19, AC-27, AC-28, AC-29
-  - [x] The self check sees text drawn off the page, so a match MuPDF moves off the page rather than removing it is refused: `CHECK_EXTRACTION_OPTIONS` with `clip=no` for the record and the check, the `next-line.pdf` fixtures, and the pin on MuPDF's `'` and `"` rewrite · AC-4, AC-13, AC-25
+  - [x] The self check sees text drawn off the page, so a match MuPDF moves off the page rather than removing it is refused: `CHECK_EXTRACTION_OPTIONS` with `clip=no` for the record and the check, the fixtures `next-line-0.pdf` to `next-line-4.pdf`, and the pin on MuPDF's `'` and `"` rewrite · AC-4, AC-13, AC-25
 - [x] Verify it: `/check verify redaction engine`
 - [x] Test it: `/test redaction engine`
 - [x] Review it (fresh model): `/check review redaction engine`
-- [ ] Document it: `/document redaction engine`
+- [x] Document it: `/document redaction engine`
 
 ### 6. Pattern detection · needs a decision
 Find sensitive patterns and present them as a confirm checklist rather than removing anything on the user's behalf. This spec decides the detection approach and defines all seven pattern types; release 1 builds email and phone, and the rest follow in release 3 against this same spec.
@@ -115,6 +114,7 @@ Detect per page whether a text layer exists, and never let somebody leave with a
 ### 8. Redact flow · needs a decision
 The single page that is the product: drop a PDF, see what was found, tick what to remove, download the clean file, read the summary of what happened.
 **Done when:** an anonymous visitor can take a document up to the page cap from drop to download in one pass, the cap is a config value (3 to start), the scanned page warnings surface in the flow, the summary shows counts by detection type plus what was sanitized, and failure states say plainly what went wrong.
+**Also owed here:** `retireOtherJobs` in `src/worker/client.ts` skips pending operations under the same `jobId` as the open it is making room for. The worker makes no such exception: an open with the same `jobId` cancels that job's run in flight, and a cancelled run posts nothing. So if such an open ever reached a live worker while that job's redact was pending, the redact could never settle, and the visitor would sit on a run that neither finishes nor fails. It is not reachable today, because both callers that reuse a `jobId` get a fresh worker first. The redact flow is where a new path that reopens a job on a live worker would most likely appear, so check this when you add one. A suggested fix and its test are in the open follow up at the end of the [redaction engine review](../reviews/2026-09-27-feat-redaction-engine.md).
 - [ ] Design it (spec): `/architect redact flow`
 
 ### 18. AGPL compliance & source publication · Alpha · from spec 0001
@@ -173,6 +173,7 @@ A landing page plus a small set of pages on what this audience actually searches
 ### 16. Security & how it works page · Alpha
 The page that closes the sale for HR, legal and healthcare buyers: what in memory processing means, what the logs do and do not hold, and why covering text with a box is not redaction.
 **Done when:** the page describes the real implementation accurately, with no claim the code does not support.
+**Also owed here:** a sticky note or a file attachment that shows in the source is flattened into the page like any other visible annotation (spec 0004, AC-22), so its icon stays as a mark on the page even though the note's text and the attached file are gone. Say so plainly, so the page does not suggest every trace of them was removed.
 - [ ] Build it: `/develop security & how it works page`
 
 ### 17. Data processing agreement · Prototype

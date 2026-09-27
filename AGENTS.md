@@ -27,6 +27,7 @@ pnpm test         # Vitest: the unit project (node) and the component project (j
 pnpm test:e2e     # Playwright, in a real browser
 pnpm lint
 pnpm typecheck
+node scripts/make-fixture.mjs   # rewrites tests/fixtures from code; commit what changes
 ```
 
 ## Specs
@@ -40,7 +41,7 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md`.
 - Strict types, no `any`. Narrow from `unknown` at every boundary.
 - Folders by capability under `src/` (`engine`, `worker`, `config`, `lib`, `ui`, `app`), not by layer and not by feature.
 - Expected failures are a closed set of kinds, never free text. The worker never throws across the boundary, and an error payload carries a kind and nothing derived from the document: no file name, no stack trace, no extracted text.
-- The engine wall: only `src/worker/engine.worker.ts` may import `@/engine`, and only `src/engine` may touch `mupdf`. One PDF parser, ever. Document bytes live only inside the worker, so transfer the `ArrayBuffer` rather than copying it.
+- The engine wall: only `src/worker/engine.worker.ts` may import `@/engine`, and only `src/engine` may touch `mupdf`. One PDF parser, ever. Document bytes live only inside the worker, so transfer the `ArrayBuffer` rather than copying it. The one exception is the checked output: it crosses to the main thread once, transferred, and waits in a `useRef` in `tool-client` (never in the session reducer) until Download, dropped whenever the session stops being `complete` with nothing downloaded. Spec 0004, INV-8 and AC-20.
 - `src/ui` holds the design system primitives and is presentation only. Its ESLint zone (`redactnest/ui`) bans imports from `@/worker`, `@/engine`, `@/config`, `@/lib/session` and `@/lib/entitlement`, and bans `dangerouslySetInnerHTML`. The caller reads state and passes what a primitive shows as props. Spec 0003, INV-7.
 - Only `src/app/tool/page.tsx` may import `tool-client`. The load guard in `ToolClient` trusts that it runs at `/tool`, and anywhere else it can only show a dead end. Lint enforces this in every zone, `import()` and `typeof import` included. Spec 0003, INV-11.
 - Every link into `/tool` uses `Button`'s `reload` prop (or a plain `a`) with `TOOL_PATH` from `src/lib/routes.ts`, never `next/link` or `router.push`. A content security policy belongs to the document it arrived with, so a client side navigation would open the visitor's document under the previous page's looser policy, with its scripts still running. Spec 0003, INV-10.
@@ -49,6 +50,7 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md`.
 - Icons come from `lucide-react`, imported by name only (`import { Mail } from "lucide-react"`). A namespace import pulls in the whole set.
 - Design system: build all UI to [`docs/design/design.md`](docs/design/design.md) (art direction and the product bar); token values live in CSS.
 - Every cap and every public URL comes from `src/config`, validated at module load. No page or size limit written as a literal anywhere else.
+- The engine's file format, geometry and self check constants (`PDF_HEADER_WINDOW`, `BOUNDS_REACH_RATIO` and the rest) are the one exception: they are rules about the file format, not caps on the visitor, so they live in `src/engine` where no environment variable can switch a check off. Spec 0004.
 - `NEXT_PUBLIC_MATCH_CONTEXT_CHARS` (default 40, ceiling 200) sets how many characters of surrounding text travel with a match. That ceiling is a privacy limit rather than a display one: the text crosses the worker boundary, so a typo must not be able to widen it to a whole page. Spec 0002, INV-9.
 - Comments explain why, and name the spec invariant they uphold. Match the density already in `src/`.
 - Accessibility: WCAG 2.2 AA on the core path. Keyboard reachable, visible focus, sufficient contrast.
@@ -58,6 +60,7 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md`.
 - A document never leaves the visitor's browser. No code may send document bytes, extracted text, file names or match text over the network. We operate no endpoint that accepts document data.
 - The tool route (`src/app/tool`) loads no third-party script: no auth, analytics or error-reporting SDK. Its strict CSP (`connect-src 'self'`) stays. Any third-party call goes through our own origin or lives on another route.
 - Redaction is real removal through MuPDF, never a drawn box or overlay. Never produce a file that looks redacted but is not.
+- The engine removes first and marks after: the black box is drawn once the text is gone, and no file leaves unless the self check passed on those exact bytes. A run refuses rather than hand back a partial file or remove words nobody ticked. Spec 0004, INV-2.
 - Logs, analytics and error reports carry counts and kinds only, never document content.
 - Documents are never stored. No database of our own; account and subscription data lives in Clerk and Polar.
 - Nothing is written to browser storage: no `localStorage`, `sessionStorage`, IndexedDB, Cache Storage, OPFS or service worker. ESLint `no-restricted-syntax` bans those spellings in every zone, and `tests/e2e/privacy.spec.ts` proves it in a real browser. Spec 0002, INV-3.
@@ -72,7 +75,8 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md`.
 - The `.wasm` file must be served as `application/wasm`.
 - The tool route gets entitlement only from same-origin `GET /api/entitlement`, which fails closed to the free tier.
 - `typecheck` runs `next typegen` before `tsc`. `LayoutProps` and `PageProps` are globals Next.js writes into `.next/types`, and `next-env.d.ts` is generated too; both are gitignored, so a clean checkout has neither and bare `tsc --noEmit` fails with `TS2304: Cannot find name 'LayoutProps'`. It passes on a machine that has run `dev` or `build`, which is why only CI sees it. Do not drop the `typegen` step.
-- MuPDF prints parser diagnostics to the console from inside the worker. Those lines can carry document detail, so error reporting (feature 11) must never capture console output from the worker. `src/worker/client.ts` already calls `preventDefault()` on worker errors for the same reason.
+- MuPDF prints parser diagnostics to the console from inside the worker. Those lines can carry document detail, so error reporting (feature 11) must never capture console output from the worker. `src/worker/client.ts` already calls `preventDefault()` on worker errors for the same reason. Since spec 0004, `silenceEngineLog` in `src/engine/load.ts` installs a callback that discards every line as the engine loads (never `setLog(null)`), which makes this rule a backstop rather than the only defence. Keep both.
+- Whether a file is a PDF is judged from its bytes (`%PDF-` within the first 1024), never from its name or declared type, because MuPDF sniffs content and opens a PNG as a one page document even when told `application/pdf`. The check runs in the engine before MuPDF loads. Spec 0004, AC-1.
 - Tailwind's default palette is wiped (`--color-*: initial`), so a pasted class such as `text-gray-500` fails silently: it generates no CSS and renders no colour. The alpha modifier lint also rejects the `text-<size>/<leading>` shorthand on purpose, because the type scale sets line height.
 - Colour tokens are written `--color-<role>: #RRGGBB;`, hex only. `tests/unit/contrast.test.ts` parses that exact form, so `oklch()` or any other notation breaks it.
 - In ESLint flat config, a later block that sets `no-restricted-imports` or `no-restricted-syntax` replaces the rule rather than merging it. So each zone in `eslint.config.mjs` restates every restriction for its files, and `redactnest/tool-page` comes last so it drops only the tool client ban. Build a new zone with `zone()`, which always adds the storage ban and the colour patterns.
@@ -116,6 +120,7 @@ MCP servers: `@playwright/mcp` (connected, configured in `.mcp.json`, drives a r
 
 <!-- Nested AGENTS.md files are listed here as they are created -->
 - [src/ui/AGENTS.md](src/ui/AGENTS.md): the design system primitives, how to build and test one
+- [src/engine/AGENTS.md](src/engine/AGENTS.md): the redaction engine, its rules, the self check, MuPDF's quirks, the test seams and the fixture script
 
 <!-- BEGIN:nextjs-agent-rules -->
 
