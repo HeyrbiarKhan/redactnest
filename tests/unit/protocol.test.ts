@@ -25,7 +25,7 @@ describe("the closed set of failures", () => {
    * Written out rather than derived from the export on purpose. Widening the set
    * is a contract change, and this is the line that makes it deliberate.
    */
-  it("is exactly the eight kinds the specs fix", () => {
+  it("is exactly the fourteen kinds the specs fix", () => {
     expect([...ENGINE_ERROR_KINDS]).toEqual([
       "engine-unavailable",
       "encrypted",
@@ -38,6 +38,19 @@ describe("the closed set of failures", () => {
       // can no longer be read, and kept in this set so feature 8 writes copy
       // for one list rather than two.
       "file-unreadable",
+      // Added by spec 0004: a file that is not a PDF, a document with layers,
+      // and a redaction the engine could not prove clean.
+      "not-pdf",
+      "hidden-layers",
+      "redaction-incomplete",
+      // Added by spec 0004 after slice 2's findings: removing the ticks would
+      // also remove or hide words nobody ticked, and a ticked match inside
+      // wider replacement text.
+      "redaction-overreach",
+      "replacement-text",
+      // Added by spec 0004 after slice 2's build: a ticked match set at too
+      // steep an angle to redact safely, refused before anything is removed.
+      "slanted-text",
     ]);
   });
 
@@ -161,7 +174,7 @@ describe("the things a redaction strips besides the targeted text", () => {
    * Feature 5's contract from the scope, in the order the scope states it. An
    * entry disappearing from here is a promise quietly dropped.
    */
-  it("is exactly the nine things the scope promises", () => {
+  it("is exactly the nine things the scope promises, and the two spec 0004 adds", () => {
     expect([...SANITIZED_KINDS]).toEqual([
       "document-info",
       "xmp-metadata",
@@ -172,6 +185,8 @@ describe("the things a redaction strips besides the targeted text", () => {
       "hidden-layers",
       "javascript",
       "incremental-versions",
+      "page-thumbnails",
+      "accessibility-tags",
     ]);
   });
 
@@ -182,11 +197,19 @@ describe("the things a redaction strips besides the targeted text", () => {
   /**
    * The lists are separate sets on purpose. A failure kind is not something a
    * redaction strips, and vice versa.
+   *
+   * With one deliberate exception, from spec 0004: `hidden-layers` names the
+   * same thing from both sides. A layered document is refused at open today (the
+   * failure), and the sanitized kind is kept so it means something if a later
+   * decision cleans layers instead of refusing them. Anything else turning up
+   * in both is a mistake.
    */
-  it("shares nothing with the failure set", () => {
+  it("shares nothing with the failure set but the one word spec 0004 shares", () => {
     const failures = new Set<string>(ENGINE_ERROR_KINDS);
 
-    expect(SANITIZED_KINDS.filter((kind) => failures.has(kind))).toEqual([]);
+    expect(SANITIZED_KINDS.filter((kind) => failures.has(kind))).toEqual([
+      "hidden-layers",
+    ]);
   });
 });
 

@@ -4,6 +4,7 @@ import {
   asMatchId,
   type DocumentSummary,
   type ErrorMessage,
+  type RedactedMessage,
   type RequestMessage,
   type ResponseMessage,
 } from "@/worker/protocol";
@@ -24,21 +25,32 @@ import {
  *  - Geometry never crosses the boundary (INV-2).
  */
 
-const { openDocument } = vi.hoisted(() => ({ openDocument: vi.fn() }));
+const { openDocument, redactDocument } = vi.hoisted(() => ({
+  openDocument: vi.fn(),
+  redactDocument: vi.fn(),
+}));
 
 vi.mock("@/engine", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/engine")>();
-  return { ...actual, openDocument };
+  return { ...actual, openDocument, redactDocument };
 });
 
 type PhaseCallback = (phase: "loading-engine" | "opening" | "inspecting") => void;
 
+interface RunHooks {
+  onPhase?: (phase: "redacting" | "writing" | "verifying") => void;
+  isCancelled?: () => boolean;
+}
+
 class FakeScope {
   readonly posted: ResponseMessage[] = [];
+  /** The transfer list each message was posted with, in the same order. */
+  readonly transferred: (readonly ArrayBuffer[] | undefined)[] = [];
   private readonly listeners = new Map<string, ((event: unknown) => void)[]>();
 
-  postMessage(message: ResponseMessage): void {
+  postMessage(message: ResponseMessage, transfer?: readonly ArrayBuffer[]): void {
     this.posted.push(message);
+    this.transferred.push(transfer);
   }
 
   addEventListener(type: string, listener: (event: unknown) => void): void {
@@ -83,15 +95,46 @@ function fakeDocument() {
   return { summary: SUMMARY, close: vi.fn() };
 }
 
-function openRequest(overrides: { id?: string; jobId?: string } = {}): RequestMessage {
+function openRequest(
+  overrides: { id?: string; jobId?: string; bytes?: ArrayBuffer } = {},
+): RequestMessage {
   return {
     id: overrides.id ?? "op-1",
     jobId: overrides.jobId ?? "job-1",
     kind: "open",
-    bytes: new ArrayBuffer(64),
+    bytes: overrides.bytes ?? new ArrayBuffer(64),
     limits: { maxBytes: 26_214_400, maxPages: 3 },
     contextChars: 40,
   };
+}
+
+function redactRequest(overrides: { id?: string; jobId?: string } = {}): RequestMessage {
+  return {
+    id: overrides.id ?? "op-2",
+    jobId: overrides.jobId ?? "job-1",
+    kind: "redact",
+    matchIds: [],
+  };
+}
+
+/** What the engine hands back from a run that passed its self check. */
+function engineResult() {
+  return {
+    output: new ArrayBuffer(128),
+    removedByType: {},
+    sanitized: ["document-info", "annotations"],
+  };
+}
+
+/** A promise the test settles when it chooses. */
+function gate<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((settleWith, failWith) => {
+    resolve = settleWith;
+    reject = failWith;
+  });
+  return { promise, resolve, reject };
 }
 
 /** Let the worker's async handler run to completion. */
@@ -111,6 +154,8 @@ async function startWorker(): Promise<void> {
 beforeEach(() => {
   openDocument.mockReset();
   openDocument.mockResolvedValue(fakeDocument());
+  redactDocument.mockReset();
+  redactDocument.mockResolvedValue(engineResult());
 });
 
 afterEach(() => {
@@ -380,21 +425,410 @@ describe("redacting", () => {
       errorKind: "unsupported",
     });
   });
+});
 
-  /**
-   * The non-negotiable, asserted. Until feature 5 builds the removal there is
-   * nothing that could be taken out, and handing back the document unchanged
-   * under a redacted name would be the one failure this product cannot have.
-   */
-  it("never hands back a file it has not actually redacted", async () => {
+/**
+ * Spec 0004. A run, from the worker's side: resolve the ticks, run the engine
+ * on the clean original, relay its phases, and post either the output or one
+ * kind. The engine itself is mocked here; `tests/unit/redaction.test.ts` runs
+ * the real one.
+ */
+describe("a redaction run", () => {
+  it("runs the engine over the bytes the session was opened with", async () => {
+    const bytes = new ArrayBuffer(64);
+    await startWorker();
+
+    scope.send(openRequest({ bytes }));
+    await settle();
+    scope.send(redactRequest());
+    await settle();
+
+    // The same buffer, not a copy of it: the clean original (spec 0004, INV-1).
+    expect(redactDocument).toHaveBeenCalledTimes(1);
+    expect(redactDocument.mock.calls[0][0]).toBe(bytes);
+    expect(redactDocument.mock.calls[0][1]).toEqual([]);
+  });
+
+  /** AC-16. Relayed as they happen, then the result. */
+  it("passes on redacting, writing and verifying, then posts the output", async () => {
+    redactDocument.mockImplementation(
+      async (_bytes: ArrayBuffer, _targets: unknown, hooks: RunHooks) => {
+        hooks.onPhase?.("redacting");
+        hooks.onPhase?.("writing");
+        hooks.onPhase?.("verifying");
+        return engineResult();
+      },
+    );
     await startWorker();
 
     scope.send(openRequest());
     await settle();
-    scope.send({ id: "op-2", jobId: "job-1", kind: "redact", matchIds: [] });
+    scope.send(redactRequest({ id: "op-5" }));
+    await settle();
+
+    const forRun = scope.posted.filter((message) => message.id === "op-5");
+    expect(forRun.map((message) => message.kind)).toEqual([
+      "progress",
+      "progress",
+      "progress",
+      "redacted",
+    ]);
+    expect(
+      forRun.flatMap((message) => (message.kind === "progress" ? [message.phase] : [])),
+    ).toEqual(["redacting", "writing", "verifying"]);
+  });
+
+  /** AC-15. The outcome is the engine's counts plus the open summary's. */
+  it("assembles the outcome from the run and the open summary", async () => {
+    redactDocument.mockResolvedValue({
+      ...engineResult(),
+      removedByType: { email: 2 },
+      sanitized: ["xmp-metadata"],
+    });
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest());
+    await settle();
+
+    const [redacted] = scope.of("redacted") as RedactedMessage[];
+    expect(redacted.outcome).toEqual({
+      pageCount: 2,
+      removedByType: { email: 2 },
+      pagesWithoutText: 1,
+      sanitized: ["xmp-metadata"],
+    });
+  });
+
+  /**
+   * INV-8. The engine made the copy, so its buffer crosses as it is, once, in
+   * the transfer list rather than cloned.
+   */
+  it("transfers the engine's output rather than copying it", async () => {
+    const result = engineResult();
+    redactDocument.mockResolvedValue(result);
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest());
+    await settle();
+
+    const index = scope.posted.findIndex((message) => message.kind === "redacted");
+    const redacted = scope.posted[index] as RedactedMessage;
+    expect(redacted.output).toBe(result.output);
+    expect(scope.transferred[index]).toEqual([result.output]);
+  });
+
+  it("sends the output, the outcome and nothing else", async () => {
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest());
+    await settle();
+
+    const [redacted] = scope.of("redacted");
+    expect(Object.keys(redacted).sort()).toEqual([
+      "id",
+      "jobId",
+      "kind",
+      "outcome",
+      "output",
+    ]);
+  });
+
+  /** AC-12. Nothing ticked is still a run: it cleans the file. */
+  it("accepts an empty tick set", async () => {
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest());
+    await settle();
+
+    expect(scope.of("redacted")).toHaveLength(1);
+    expect(scope.of("error")).toEqual([]);
+  });
+
+  /** AC-14. All or nothing: one kind, and no output. */
+  it.each([
+    [
+      "a described failure keeps its kind",
+      "redaction-incomplete",
+      "redaction-incomplete",
+    ],
+    ["an undescribed failure becomes unsupported", null, "unsupported"],
+  ] as const)("%s", async (_label, kind, expected) => {
+    const { EngineFailure } = await import("@/engine");
+    redactDocument.mockRejectedValue(
+      kind === null ? new TypeError(SECRET) : new EngineFailure(kind),
+    );
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest({ id: "op-3" }));
+    await settle();
 
     expect(scope.of("redacted")).toEqual([]);
-    expect(scope.of("error").at(-1)).toMatchObject({ errorKind: "unsupported" });
+    expect(scope.of("error")).toEqual([
+      { id: "op-3", jobId: "job-1", kind: "error", errorKind: expected },
+    ]);
+  });
+
+  it("lets nothing a failed run said about the document cross the boundary", async () => {
+    redactDocument.mockRejectedValue(new Error(`self check found: ${SECRET}`));
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest());
+    await settle();
+
+    expect(JSON.stringify(scope.posted)).not.toContain("Jane Doe");
+  });
+
+  /** AC-17. A cancel that lands while the run is finishing throws its output away. */
+  it("posts nothing for a run cancelled before it finished", async () => {
+    const run = gate<ReturnType<typeof engineResult>>();
+    redactDocument.mockReturnValue(run.promise);
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest({ id: "op-4" }));
+    scope.send({ id: "op-4", jobId: "job-1", kind: "cancel" });
+    run.resolve(engineResult());
+    await settle();
+
+    expect(scope.posted.filter((message) => message.id === "op-4")).toEqual([]);
+  });
+
+  it("posts nothing when the engine reports it stopped", async () => {
+    const { RunCancelled } = await import("@/engine");
+    redactDocument.mockRejectedValue(new RunCancelled());
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest({ id: "op-4" }));
+    await settle();
+
+    expect(scope.posted.filter((message) => message.id === "op-4")).toEqual([]);
+  });
+
+  /** A run leaves the session open, so a changed tick can run again (AC-14). */
+  it("keeps the document open after a run", async () => {
+    const doc = fakeDocument();
+    openDocument.mockResolvedValue(doc);
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest());
+    await settle();
+
+    expect(doc.close).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Spec 0004, AC-17, AC-18 and AC-23. Stopping a run, one run at a time, and a
+ * new document arriving while a run is under way.
+ *
+ * The engine is gated here: each run waits on a promise the test settles, and
+ * hands back the hooks the worker gave it, so the test can see what the engine
+ * would see between pages.
+ */
+describe("stopping a run, and one run at a time", () => {
+  /** An engine that waits, run by run, for the test to let it finish. */
+  function gatedEngine() {
+    const runs: {
+      hooks: RunHooks;
+      gate: ReturnType<typeof gate<ReturnType<typeof engineResult>>>;
+    }[] = [];
+    redactDocument.mockImplementation(
+      (_bytes: ArrayBuffer, _targets: unknown, hooks: RunHooks) => {
+        const run = { hooks, gate: gate<ReturnType<typeof engineResult>>() };
+        runs.push(run);
+        return run.gate.promise;
+      },
+    );
+    return runs;
+  }
+
+  async function openSession(): Promise<void> {
+    await startWorker();
+    scope.send(openRequest());
+    await settle();
+  }
+
+  it("gives the engine a check that turns true once the run is cancelled", async () => {
+    const runs = gatedEngine();
+    await openSession();
+
+    scope.send(redactRequest({ id: "op-a" }));
+    await settle();
+    expect(runs[0].hooks.isCancelled?.()).toBe(false);
+
+    scope.send({ id: "op-a", jobId: "job-1", kind: "cancel" });
+
+    // What the engine reads after its next page.
+    expect(runs[0].hooks.isCancelled?.()).toBe(true);
+  });
+
+  it("starts a second run only once the first has settled", async () => {
+    const runs = gatedEngine();
+    await openSession();
+
+    scope.send(redactRequest({ id: "op-a" }));
+    scope.send(redactRequest({ id: "op-b" }));
+    await settle();
+    expect(redactDocument).toHaveBeenCalledTimes(1);
+
+    runs[0].gate.resolve(engineResult());
+    await settle();
+
+    expect(redactDocument).toHaveBeenCalledTimes(2);
+  });
+
+  /** AC-18. The cancelled run still holds its working copy until it settles. */
+  it("holds a run requested behind a cancelled one until the cancelled one settles", async () => {
+    const { RunCancelled } = await import("@/engine");
+    const runs = gatedEngine();
+    await openSession();
+
+    scope.send(redactRequest({ id: "op-a" }));
+    await settle();
+    scope.send({ id: "op-a", jobId: "job-1", kind: "cancel" });
+    scope.send(redactRequest({ id: "op-b" }));
+    await settle();
+    expect(redactDocument).toHaveBeenCalledTimes(1);
+
+    runs[0].gate.reject(new RunCancelled());
+    await settle();
+    expect(redactDocument).toHaveBeenCalledTimes(2);
+
+    runs[1].gate.resolve(engineResult());
+    await settle();
+
+    expect(scope.posted.filter((message) => message.id === "op-a")).toEqual([]);
+    expect(scope.of("redacted").map((message) => message.id)).toEqual(["op-b"]);
+  });
+
+  /** AC-17. Noticed before a queued run starts, so it never costs a working copy. */
+  it("never starts a run that was cancelled while it waited", async () => {
+    const runs = gatedEngine();
+    await openSession();
+
+    scope.send(redactRequest({ id: "op-a" }));
+    scope.send(redactRequest({ id: "op-b" }));
+    scope.send({ id: "op-b", jobId: "job-1", kind: "cancel" });
+    await settle();
+
+    runs[0].gate.resolve(engineResult());
+    await settle();
+
+    expect(redactDocument).toHaveBeenCalledTimes(1);
+    expect(scope.posted.filter((message) => message.id === "op-b")).toEqual([]);
+  });
+
+  it("keeps the queue going after a run fails", async () => {
+    const { EngineFailure } = await import("@/engine");
+    const runs = gatedEngine();
+    await openSession();
+
+    scope.send(redactRequest({ id: "op-a" }));
+    scope.send(redactRequest({ id: "op-b" }));
+    await settle();
+    runs[0].gate.reject(new EngineFailure("redaction-incomplete"));
+    await settle();
+    runs[1].gate.resolve(engineResult());
+    await settle();
+
+    expect(scope.of("error").map((message) => message.id)).toEqual(["op-a"]);
+    expect(scope.of("redacted").map((message) => message.id)).toEqual(["op-b"]);
+  });
+
+  /**
+   * AC-23. A new document cancels the run in flight, and is not parsed until
+   * that run has destroyed its working copy and let go of the old bytes.
+   */
+  it("cancels the run in flight when a new document arrives, and waits for it", async () => {
+    const { RunCancelled } = await import("@/engine");
+    const runs = gatedEngine();
+    await openSession();
+
+    scope.send(redactRequest({ id: "op-r" }));
+    await settle();
+    scope.send(openRequest({ id: "op-2", jobId: "job-2" }));
+    await settle();
+
+    // Told to stop, and nothing new parsed while it has not.
+    expect(runs[0].hooks.isCancelled?.()).toBe(true);
+    expect(openDocument).toHaveBeenCalledTimes(1);
+
+    runs[0].gate.reject(new RunCancelled());
+    await settle();
+
+    expect(openDocument).toHaveBeenCalledTimes(2);
+    expect(scope.posted.filter((message) => message.id === "op-r")).toEqual([]);
+    expect(scope.of("result").map((message) => message.jobId)).toEqual([
+      "job-1",
+      "job-2",
+    ]);
+  });
+
+  /**
+   * AC-23 again, for an open that reuses the running job's own id. That session
+   * is over just the same, so the new document still waits for its run.
+   */
+  it("waits for the run in flight when the new document reuses its job id", async () => {
+    const { RunCancelled } = await import("@/engine");
+    const runs = gatedEngine();
+    await openSession();
+
+    scope.send(redactRequest({ id: "op-r" }));
+    await settle();
+    scope.send(openRequest({ id: "op-2", jobId: "job-1" }));
+    await settle();
+
+    expect(runs[0].hooks.isCancelled?.()).toBe(true);
+    expect(openDocument).toHaveBeenCalledTimes(1);
+
+    runs[0].gate.reject(new RunCancelled());
+    await settle();
+
+    expect(openDocument).toHaveBeenCalledTimes(2);
+    expect(scope.posted.filter((message) => message.id === "op-r")).toEqual([]);
+    expect(scope.of("result").map((message) => message.id)).toEqual(["op-1", "op-2"]);
+  });
+
+  it("never starts a run queued behind the one a new document cancelled", async () => {
+    const { RunCancelled } = await import("@/engine");
+    const runs = gatedEngine();
+    await openSession();
+
+    scope.send(redactRequest({ id: "op-a" }));
+    scope.send(redactRequest({ id: "op-b" }));
+    await settle();
+    scope.send(openRequest({ id: "op-2", jobId: "job-2" }));
+    runs[0].gate.reject(new RunCancelled());
+    await settle();
+
+    expect(redactDocument).toHaveBeenCalledTimes(1);
+    expect(scope.posted.filter((message) => message.id === "op-b")).toEqual([]);
+  });
+
+  it("parses a new document straight away when no run is in flight", async () => {
+    await openSession();
+
+    scope.send(openRequest({ id: "op-2", jobId: "job-2" }));
+    await settle();
+
+    expect(openDocument).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -443,14 +877,29 @@ describe("cancelling", () => {
    */
   it("closes a document that arrives after its open was cancelled", async () => {
     const doc = fakeDocument();
-    openDocument.mockResolvedValue(doc);
+    const parsing = gate<ReturnType<typeof fakeDocument>>();
+    openDocument.mockReturnValue(parsing.promise);
+    await startWorker();
+
+    scope.send(openRequest({ id: "op-9" }));
+    await settle();
+    scope.send({ id: "op-9", jobId: "job-1", kind: "cancel" });
+    parsing.resolve(doc);
+    await settle();
+
+    expect(doc.close).toHaveBeenCalledTimes(1);
+  });
+
+  /** Cheaper still: cancelled before parsing began, so nothing is parsed at all. */
+  it("never parses a document whose open was cancelled straight away", async () => {
     await startWorker();
 
     scope.send(openRequest({ id: "op-9" }));
     scope.send({ id: "op-9", jobId: "job-1", kind: "cancel" });
     await settle();
 
-    expect(doc.close).toHaveBeenCalledTimes(1);
+    expect(openDocument).not.toHaveBeenCalled();
+    expect(scope.posted).toEqual([]);
   });
 
   it("cancels only the operation it names", async () => {

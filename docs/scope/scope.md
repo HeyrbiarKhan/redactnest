@@ -15,7 +15,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 2 | Coding standards & tooling | Foundation | done |
 | 3 | Document session & privacy guarantee | Foundation | done |
 | 4 | Design system & UI foundation | Foundation | done |
-| 5 | Redaction engine | Release 1 | planned |
+| 5 | Redaction engine | Release 1 | in-progress |
 | 6 | Pattern detection | Release 1 | planned |
 | 7 | Scanned page detection & warnings | Release 1 | planned |
 | 8 | Redact flow | Release 1 | planned |
@@ -84,11 +84,23 @@ spec [0003](../specs/0003-design-system-ui-foundation/index.md) · code in `src/
 
 The smallest usable whole. An anonymous visitor drops in a short PDF, sees what was found, ticks what to remove, and downloads a genuinely clean file. No accounts, nothing paid, no marketing site. Small, but a real tool somebody could use tomorrow.
 
-### 5. Redaction engine · needs a decision · GA
+### 5. Redaction engine · in-progress · GA
 The heart of the product. Given a document and a set of targets, remove the text from the content stream itself and strip everything else that quietly carries data, in one pass.
 **Done when:** targeted text is gone from the content stream (extracting text from the output returns nothing for it, rather than returning text that sits under a covering box), and the output carries no document info or XMP metadata, no annotations, no form fields, no attachments, no bookmarks, no hidden layers, no JavaScript, and no earlier versions left behind by incremental saves.
 **Also owed here:** a file that is not a PDF, including an image or a text file, is refused before MuPDF opens it, judged from the bytes rather than the file name or type. Today MuPDF opens a PNG as a one page document even when asked for `application/pdf`.
-- [ ] Design it (spec): `/architect redaction engine`
+spec [0004](../specs/0004-redaction-engine/index.md) · code in `src/engine/`, `src/worker/engine.worker.ts`, `src/app/tool/tool-client.tsx`
+- [x] Design it (spec): `/architect redaction engine`
+- [x] Build it: `/develop redaction engine`
+  - [x] The door and the prepared page: protocol growth, the `%PDF-` byte check, the layer refusal, the shared prepare step and a silenced MuPDF log · AC-1, AC-2, AC-3, AC-22, AC-24
+  - [x] A cleaned file leaves the tool: the rebuild, the structural self check, the worker's `redact`, the thin Redact and Download path with its outcome line, and the privacy proof's redaction leg · AC-7, AC-8, AC-9, AC-12, AC-13, AC-14, AC-15, AC-16, AC-19, AC-20, AC-21
+  - [x] Targets really removed, and checked: target validation, the band, padded and box passes, the character and pixel self check with its two new kinds, the fixture matrix, two runs from one original, and the encryption fixtures (built) · AC-4, AC-5, AC-6, AC-10, AC-11, AC-13, AC-25, AC-26, AC-27
+  - [x] A run stops cleanly: cancel between pages, one run at a time, a replacement that cancels a run in flight, and the browser cancel test · AC-17, AC-18, AC-23
+  - [x] Slanted targets and images blanked too far refused before anything is removed: the slant check with its `slanted-text` kind, the image reach check, the padded area soundness check, the slant and image fixtures, and the pin on MuPDF's bounds behaviour · AC-5, AC-19, AC-27, AC-28, AC-29
+  - [x] The self check sees text drawn off the page, so a match MuPDF moves off the page rather than removing it is refused: `CHECK_EXTRACTION_OPTIONS` with `clip=no` for the record and the check, the `next-line.pdf` fixtures, and the pin on MuPDF's `'` and `"` rewrite · AC-4, AC-13, AC-25
+- [x] Verify it: `/check verify redaction engine`
+- [x] Test it: `/test redaction engine`
+- [x] Review it (fresh model): `/check review redaction engine`
+- [ ] Document it: `/document redaction engine`
 
 ### 6. Pattern detection · needs a decision
 Find sensitive patterns and present them as a confirm checklist rather than removing anything on the user's behalf. This spec decides the detection approach and defines all seven pattern types; release 1 builds email and phone, and the rest follow in release 3 against this same spec.

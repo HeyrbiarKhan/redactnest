@@ -1,0 +1,42 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R 6 0 R] /D << /ON [5 0 R 6 0 R] /Order [5 0 R 6 0 R] >> >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> /Properties << /L1 5 0 R /L2 6 0 R >> >> /Contents 7 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Type /OCG /Name (First layer) >>
+endobj
+6 0 obj
+<< /Type /OCG /Name (Second layer) >>
+endobj
+7 0 obj
+<<  /Length 143 >>
+stream
+/OC /L1 BDC BT /F1 12 Tf 72 700 Td (Text on the first layer) Tj ET EMC
+/OC /L2 BDC BT /F1 12 Tf 72 670 Td (Text on the second layer) Tj ET EMC
+
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000146 00000 n 
+0000000203 00000 n 
+0000000367 00000 n 
+0000000437 00000 n 
+0000000489 00000 n 
+0000000542 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+737
+%%EOF

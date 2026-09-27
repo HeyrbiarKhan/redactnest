@@ -19,12 +19,21 @@
  *    failure the product exists to prevent.
  */
 
-import { EngineFailure, openDocument, type OpenDocument, type TargetMap } from "@/engine";
+import {
+  EngineFailure,
+  openDocument,
+  redactDocument,
+  RunCancelled,
+  type OpenDocument,
+  type RedactionTarget,
+  type TargetMap,
+} from "@/engine";
 import type {
   EngineLimits,
   ErrorMessage,
   ProgressMessage,
   ProgressPhase,
+  RedactedMessage,
   RequestMessage,
   ResponseMessage,
   ResultMessage,
@@ -59,8 +68,13 @@ const scope = self as unknown as WorkerScope;
  * stale one is dropped rather than guessed at.
  */
 interface EngineSession {
-  /** Transferred in at open. Never leaves (INV-1). */
+  /**
+   * Transferred in at open. Never leaves (INV-1). The clean original every
+   * redaction run opens its own working copy from, and which no run changes
+   * (spec 0004, AC-11).
+   */
   readonly bytes: ArrayBuffer;
+  /** The review copy, prepared once at open. Never redacted (spec 0004, INV-1). */
   readonly doc: OpenDocument;
   /** Page, quads and extraction offsets. Never crosses the boundary (INV-2). */
   readonly targets: TargetMap;
@@ -68,6 +82,18 @@ interface EngineSession {
   readonly limits: EngineLimits;
   /** Characters of context each match carries, from `config.matchContextChars`. */
   readonly contextChars: number;
+  /**
+   * The tail of this session's run queue (spec 0004, AC-18). A run starts only
+   * once the one before it has settled, so a session never holds two working
+   * copies at once (INV-7). A run that fails or is cancelled settles its link
+   * rather than breaking the chain.
+   *
+   * Mutable, with `activeRunId`, because a queue is state that moves. These two
+   * are the session's only mutable fields.
+   */
+  runs: Promise<void>;
+  /** The run in flight, so a replacement can cancel it (AC-23). */
+  activeRunId: string | null;
 }
 
 const sessions = new Map<string, EngineSession>();
@@ -106,6 +132,12 @@ function endSession(jobId: string): void {
   const session = sessions.get(jobId);
   if (!session) return;
 
+  // Spec 0004, AC-23. A run in flight for this session is told to stop before
+  // anything is closed. It notices within a page, destroys its working copy and
+  // settles, and `handleOpen` waits for that before it parses anything new. A
+  // run still waiting in the queue finds its session gone and never starts.
+  if (session.activeRunId !== null) cancelled.add(session.activeRunId);
+
   sessions.delete(jobId);
   session.targets.clear();
   session.doc.close();
@@ -117,12 +149,20 @@ async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
   // AC-1, first half: a document arriving means the one before it is over, so
   // it goes now rather than once this one has parsed. Waiting would leave the
   // previous document open for as long as this one takes, and would leave it
-  // open for good if this one turns out to be unopenable.
-  for (const existing of sessions.keys()) {
-    if (existing !== jobId) endSession(existing);
-  }
+  // open for good if this one turns out to be unopenable. That holds for a
+  // session under this same job id too: it is the old document, not this one.
+  const evicted = [...sessions.values()];
+  for (const existing of sessions.keys()) endSession(existing);
 
   try {
+    // Spec 0004, AC-23. Ending a session cancelled its run, and the run is
+    // given the time it needs to notice, destroy its working copy and let go of
+    // the old bytes before a second document is parsed beside it. Every session
+    // is waited on, same job id included. Their queues never reject, so this
+    // waits and cannot fail.
+    await Promise.all(evicted.map((session) => session.runs));
+    if (cancelled.has(id)) return;
+
     const doc = await openDocument(bytes, limits, (phase) => {
       if (!cancelled.has(id)) postProgress(id, jobId, phase);
     });
@@ -145,6 +185,8 @@ async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
       targets: new Map(),
       limits,
       contextChars,
+      runs: Promise.resolve(),
+      activeRunId: null,
     });
 
     const message: ResultMessage = {
@@ -173,7 +215,7 @@ async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
   }
 }
 
-function handleRedact(request: Extract<RequestMessage, { kind: "redact" }>) {
+function handleRedact(request: Extract<RequestMessage, { kind: "redact" }>): void {
   const { id, jobId, matchIds } = request;
   const session = sessions.get(jobId);
 
@@ -184,12 +226,80 @@ function handleRedact(request: Extract<RequestMessage, { kind: "redact" }>) {
     return;
   }
 
-  // Feature 5 owns the removal and the write, and wires the `redacted` reply to
-  // real output. Until it lands no detector has minted a target, so every
-  // request resolves to nothing to remove. Reporting that beats handing back a
-  // file that was never redacted: a document that looks clean and is not is the
-  // one failure this product cannot have.
-  postError(id, jobId, "unsupported");
+  // Spec 0004, INV-6. Targets come from this worker's own map and nowhere else;
+  // the main thread sent ids. Each ticked id counts once, however many times it
+  // was named.
+  const targets = [...new Set(matchIds)].flatMap((matchId) => {
+    const target = session.targets.get(matchId);
+    return target ? [target] : [];
+  });
+
+  // AC-18. One run at a time: this one joins the end of the session's queue.
+  // `runRedaction` settles on every path, so the chain never breaks.
+  session.runs = session.runs.then(() => runRedaction(session, id, jobId, targets));
+}
+
+async function runRedaction(
+  session: EngineSession,
+  id: string,
+  jobId: string,
+  targets: readonly RedactionTarget[],
+): Promise<void> {
+  try {
+    // Checked again as the run leaves the queue (AC-17): cancelled while it
+    // waited, or its session ended by a replacement. Either way it never starts.
+    if (cancelled.has(id) || sessions.get(jobId) !== session) return;
+
+    session.activeRunId = id;
+
+    // The clean original, never the review document (spec 0004, INV-1). An
+    // empty tick set is allowed: it cleans the file and removes nothing.
+    const result = await redactDocument(session.bytes, targets, {
+      onPhase: (phase) => {
+        if (!cancelled.has(id)) postProgress(id, jobId, phase);
+      },
+      // The engine looks at this after every page, so a cancel is noticed
+      // within one page of work.
+      isCancelled: () => cancelled.has(id),
+    });
+
+    // A cancel that landed while the write or the self check was running lets
+    // that call finish and then throws its output away (AC-17).
+    if (cancelled.has(id)) return;
+
+    const { summary } = session.doc;
+    const message: RedactedMessage = {
+      id,
+      jobId,
+      kind: "redacted",
+      output: result.output,
+      outcome: {
+        pageCount: summary.pageCount,
+        removedByType: result.removedByType,
+        pagesWithoutText: summary.pagesWithText.filter((hasText) => !hasText).length,
+        sanitized: result.sanitized,
+      },
+    };
+
+    // Transferred as the engine made it: the engine copied it out of MuPDF's
+    // heap itself, so the bytes its self check read are the bytes that cross.
+    // After this the worker holds no usable reference to it (INV-8).
+    scope.postMessage(message, [result.output]);
+  } catch (error) {
+    // Stopping is not failing. A cancelled run posts nothing at all.
+    if (cancelled.has(id) || error instanceof RunCancelled) return;
+
+    // All or nothing (AC-14): one kind, and no output. Whatever the original
+    // error said about the document stops here.
+    postError(
+      id,
+      jobId,
+      error instanceof EngineFailure ? error.errorKind : "unsupported",
+    );
+  } finally {
+    if (session.activeRunId === id) session.activeRunId = null;
+    cancelled.delete(id);
+  }
 }
 
 scope.addEventListener("message", (event: MessageEvent<RequestMessage>) => {

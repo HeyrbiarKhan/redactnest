@@ -1,10 +1,10 @@
-# Verify: Document session and privacy guarantee · spec 0002 · updated 2026-09-21
+# Verify: Document session and privacy guarantee · spec 0002 · updated 2026-09-25
 
 _Steps derived from spec 0002's acceptance criteria and its Value sourcing table. `/check verify` runs these; `/test` locks the durable ones._
 
 Run the tool at `/tool` against a production build (`pnpm build && pnpm start`), because the content security policy is looser in development and the prerendered route has to be proved under the real one.
 
-Feature 5 has not been built, so nothing can actually be redacted yet. Every step below that names redaction is marked **(after feature 5)** and is expected to be unreachable until then. Feature 6 owns the confirm checklist, so no tick can be changed yet either, and the two steps that start from a changed tick are marked **(after feature 6)** for the same reason.
+Steps marked **(after feature 5)** become reachable once spec [0004](../0004-redaction-engine/index.md) is built: it adds a thin Redact, Cancel and Download path to the tool page, and a run cleans the file even with nothing ticked. `/check verify` for feature 5 ticks them. Feature 6 owns the confirm checklist, so no tick can be changed until it lands, and every step that starts from a changed tick is marked **(after feature 6)**. AC-14 is one of them: its mechanism, a rerun starting from the untouched original, is proved at the engine by spec 0004's AC-11, and its browser step closes with feature 6.
 
 ## UI / manual
 
@@ -25,8 +25,8 @@ Feature 5 has not been built, so nothing can actually be redacted yet. Every ste
 - [x] After choosing a file, inspect the file input in devtools → `files.length` is 0 → AC-2
 - [x] Devtools → Application → Storage: local storage, session storage, IndexedDB and Cache Storage are all empty, and no service worker is registered → AC-2
 - [x] Devtools → Network on the tool route: the only non asset request is `GET /api/entitlement`, and no request body or URL carries the file name or any text from the document → AC-3
-- [ ] **(after feature 5)** Redact, download, then change one tick and run again without touching the file picker → a second file downloads → AC-14
-- [ ] **(after feature 5)** Cancel a redaction in flight → back on the checklist with the document still open and the ticks intact → AC-10
+- [ ] **(after feature 6)** Redact, download, then change one tick and run again without touching the file picker → a second file downloads, and it matches the new ticks rather than a mix of both runs → AC-14
+- [ ] **(after feature 5)** Cancel a redaction in flight → back on the checklist with the document still open and the ticks intact. Needs a run long enough to catch: override `GET /api/entitlement` in devtools to return a paid snapshot and use spec 0004's 50 page fixture → AC-10
 - [ ] **(after feature 5)** Rename the source file on disk to `  spaced out.pdf  `, open and redact it → the download is offered as `spaced out-redacted.pdf`, not `spaced out.pdf-redacted.pdf` → value sourcing: `outputName`
 - [ ] **(after feature 5)** Redact a file named `.pdf` → the download is offered as `document-redacted.pdf` → value sourcing: `outputName`
 - [ ] **(after feature 5)** Watch memory in the task manager across a download → the output is released as soon as the download is handed over, and the object URL no longer resolves → AC-4
@@ -34,6 +34,8 @@ Feature 5 has not been built, so nothing can actually be redacted yet. Every ste
 ## Commands
 
 - [x] `pnpm test:e2e privacy.spec.ts` → 6 pass, including the canary proving the recording proxies are really installed → AC-2, AC-3
+- [ ] **(after feature 5)** `pnpm test:e2e privacy.spec.ts` → the redaction leg passes too: open, redact and download with the recording proxies installed, nothing ever written, no request carrying document bytes, extracted text, match text or the file name, and `GET /api/entitlement` still the only request → AC-2, AC-3
+- [ ] **(after feature 5)** `pnpm test:e2e engine.spec.ts` → the cancel test asserts its cancel landed during `redacting` and the session returned to the checklist with the document open → AC-10
 - [x] `pnpm test:e2e` → the whole browser suite passes under the enforced policy → AC-2, AC-3, AC-12
 - [x] `pnpm test:e2e engine.spec.ts` → 8 pass, including the two that count `Worker` constructions: one tab reuses its worker across documents, and starting over builds a new one → AC-1, AC-5a, AC-5b
 - [x] `pnpm test` → the reducer's every edge, including the ones that must not exist → AC-1, AC-10, AC-11, AC-13, AC-14
@@ -49,18 +51,18 @@ Feature 5 has not been built, so nothing can actually be redacted yet. Every ste
 
 - AC-1 one session per tab · confirm on replace, reducer edges, worker registry eviction on arrival and on completion, client side retirement of the previous job, worker count held at one across documents
 - AC-11a silent retry once per job inside the engine load window · manual kill during `loading-engine`, twice on the same job
-- AC-2 nothing written, no FileList · `privacy.spec.ts` recording proxies + end state, lint zone
-- AC-3 no request carries document data · `privacy.spec.ts` request capture
-- AC-4 output released on download · download helper revoke ordering (after feature 5 for the real bytes)
+- AC-2 nothing written, no FileList · `privacy.spec.ts` recording proxies + end state, lint zone, the redaction leg (after feature 5)
+- AC-3 no request carries document data · `privacy.spec.ts` request capture, the redaction leg (after feature 5)
+- AC-4 output released on download · download helper revoke ordering, and the real output through spec 0004's Download button (after feature 5)
 - AC-5a a session that ended leaves nothing reachable · worker registry eviction on arrival and on completion, client side retirement of the previous job
 - AC-5b release terminates the worker · client release test, manual post after release, worker count rising after a start over
 - AC-6 bytes never on the main thread · transfer list test, `engine.spec.ts` detachment
 - AC-7 no geometry crosses · `ReviewMatch` carries none, redact sends ids only
 - AC-8 typed payloads only · `loggable.test.ts` type gate at `pnpm typecheck`
 - AC-9 entitlement frozen, fails closed · entitlement tests, 4 page refusal
-- AC-10 cancel returns to the previous step · reducer, client cancel (after feature 5 end to end)
+- AC-10 cancel returns to the previous step · reducer, client cancel, spec 0004's gated worker tests and browser cancel test (after feature 5 end to end)
 - AC-11 lost is recoverable from the `File` handle · reducer, manual worker kill
 - AC-12 restore shows idle · `pagehide` release and persisted `pageshow` reset
 - AC-13 leave warning only when work would be lost · `hasUnsavedWork` cases
-- AC-14 retick and rerun · reducer `complete → reviewing` (after feature 5 end to end)
+- AC-14 retick and rerun · reducer `complete → reviewing`, spec 0004's two run engine test proving each run starts from the untouched original (after feature 5), browser step (after feature 6)
 - AC-15 context window from config · config tests, build failure cases

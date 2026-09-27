@@ -1,7 +1,7 @@
 # 0002. Document session and privacy guarantee
 
 **Date**: 2026-09-20
-**Updated**: 2026-09-21, reconciling the session ending rules with the warm engine (AC-1, AC-5a, AC-5b, INV-6, INV-6a)
+**Updated**: 2026-09-21, reconciling the session ending rules with the warm engine (AC-1, AC-5a, AC-5b, INV-6, INV-6a); 2026-09-25, from spec [0004](../0004-redaction-engine/index.md): INV-1 and AC-6 reworded to say where the document really exists, `EngineSession.bytes` given its reader, `sanitized` defined as what was found
 **Status**: Accepted
 
 ## Summary
@@ -35,7 +35,7 @@ The guarantee was never carried by which thread a string sits on. It is carried 
 - **AC-4**: The output buffer is released as soon as the download is handed to the browser. The object URL is revoked and no reference to the output survives in the session.
 - **AC-5a** (both endings): once a session has ended, by release or by replacement, no code in the tab can reach its document bytes, its open MuPDF document or its target map. The two get there by different mechanisms and that is fine: a **replacement** closes the MuPDF document, clears the target map and drops the bytes, one call at a time inside the live worker; a **release** tears the whole worker down from outside and takes all three with it without asking it to do anything.
 - **AC-5b** (release only): a release ends the session by terminating the worker, which additionally returns its whole heap to the browser at once and works even when the worker is wedged and would never read a message.
-- **AC-6**: Document bytes never exist on the main thread. After the handover the main thread's `ArrayBuffer` reports `byteLength` of 0. The main thread holds document **content** only as `matches[].text`, `matches[].before`, `matches[].after` and `outputName`. Everything else it holds about the document is **counts and flags** (`summary`, `outcome`), which carry no content and are the shape feature 11 is allowed to log.
+- **AC-6**: The source document's bytes never exist on the main thread. After the handover the main thread's `ArrayBuffer` reports `byteLength` of 0. The one document the main thread ever holds is the **redacted output**, from the `redacted` reply until the download is handed over (AC-4). Beyond that it holds document **content** only as `matches[].text`, `matches[].before`, `matches[].after` and `outputName`. Everything else it holds about the document is **counts and flags** (`summary`, `outcome`), which carry no content and are the shape feature 11 is allowed to log.
 - **AC-7**: Coordinate quads, page geometry and extraction offsets never cross the worker boundary. The main thread names a match only by its opaque id.
 - **AC-8**: Every log, analytics and error payload this feature can emit is typed with enumerated kinds and numbers only. No free string field exists in any of those types.
 - **AC-9**: A session freezes its entitlement at open, and every cap check for that job reads the frozen snapshot rather than the live value. An anonymous visitor is capped at `config.freePageCap`, not `config.maxPages`.
@@ -88,18 +88,19 @@ The tick comparison is what makes this honest. Someone who opened a file and rea
 | `MatchId` | opaque branded `string`. Minted in the worker, meaningless to the main thread |
 | `ReviewMatch` | `id: MatchId` · `type: DetectorKind` · `page: number` (one based, for display) · `text: string` · `before: string` · `after: string` · `tickedByDefault: boolean`. **No quads** |
 | `EntitlementSnapshot` | `tier: "free" \| "paid"` · `pageCap: number` · `maxFileBytes: number` |
-| `RedactionOutcome` | `pageCount: number` · `removedByType: Readonly<Record<DetectorKind, number>>` · `pagesWithoutText: number` · `sanitized: readonly SanitizedKind[]` |
+| `RedactionOutcome` | `pageCount: number` · `removedByType: Readonly<Partial<Record<DetectorKind, number>>>` · `pagesWithoutText: number` · `sanitized: readonly SanitizedKind[]` |
 | `DetectorKind` | declared here as the union feature 6 populates. Feature 3 needs the type to exist and needs `tickedByDefault` to ride on every match; it does not decide the members |
 
 Worker, `EngineSession`, one entry in a `Map<string, EngineSession>` keyed by `jobId`:
 
 | Field | Type | Note |
 |---|---|---|
-| `bytes` | `ArrayBuffer` | transferred in at open. Never leaves |
-| `doc` | MuPDF `Document` | open for the session's life, closed on release or when a second document replaces this one |
-| `targets` | `Map<MatchId, RedactionTarget>` | page, quads, extraction offsets. **Never crosses the boundary** |
+| `bytes` | `ArrayBuffer` | transferred in at open. The clean original every redaction run opens its own working copy from (spec 0004), so a rerun never starts from a document an earlier run changed. Never changed, never leaves |
+| `doc` | MuPDF `Document` | open for the session's life, closed on release or when a second document replaces this one. The review copy: prepared once at open (hidden annotations and existing Redact marks deleted, then flattened, per spec 0004) and never redacted |
+| `targets` | `Map<MatchId, RedactionTarget>` | page, quads, extraction offsets and, from spec 0004, the detector kind. **Never crosses the boundary** |
 | `limits` | `{ maxBytes: number; maxPages: number }` | handed in at open, from the entitlement snapshot |
 | `cancelled` | `Set<string>` | operation ids the main thread asked to abort |
+| `runs` | `Promise<void>` | added by spec 0004: the tail of the session's run queue, so only one redaction runs at a time |
 
 **State transitions**
 
@@ -171,8 +172,8 @@ Notes that matter when building this:
 | open | `matches[].page` | the engine, converted to one based in the worker for display |
 | review | the initial `ticked` set | each match's own `tickedByDefault` |
 | redact | the target for each ticked id | the worker's private `targets` map. **Never from the main thread**, so a stale or tampered quad cannot cause a wrong removal |
-| redact | `outcome.removedByType` | counted in the worker as targets are applied. Feature 5 owns the counting |
-| redact | `outcome.sanitized` | the sanitisation steps the engine actually ran. Feature 5 owns the list |
+| redact | `outcome.removedByType` | counted in the worker by each target's kind, once spec 0004's self check has passed |
+| redact | `outcome.sanitized` | the kinds spec 0004's engine found in the source and removed, not every check it ran |
 | redact | `outcome.pagesWithoutText` | derived from `summary.pagesWithText` |
 | download | the Blob media type | the literal `application/pdf`, the one type this tool produces |
 | download | the object URL | `URL.createObjectURL` on the main thread, revoked in the next macrotask after the click |
@@ -182,7 +183,7 @@ Notes that matter when building this:
 
 **Key invariants**
 
-- **INV-1**: Document bytes exist in exactly one place, `EngineSession.bytes` in the worker. The main thread holds a `File` handle and never bytes. Match text and its context window do cross, and are the only document derived strings on the main thread beyond `outputName`.
+- **INV-1**: The source document exists only inside the worker, in two forms: `EngineSession.bytes`, the untouched original every redaction run starts from, and MuPDF's parsed copies in the WebAssembly heap (the review document for the session's life, plus a working copy while a run is under way). The main thread never holds the source; it holds a `File` handle. The one document that crosses is the **redacted output**, transferred once and dropped as soon as the download is handed over (INV-7). Match text and its context window also cross, and they are the only strings taken from the source on the main thread beyond `outputName`.
 - **INV-2**: Coordinate quads, page geometry and extraction offsets never cross the boundary. The main thread names a match by `MatchId` alone. Feature 14 will need geometry for drawn boxes and must extend this deliberately rather than by accident.
 - **INV-3**: Nothing is written to `localStorage`, `sessionStorage`, IndexedDB, the Cache API, OPFS or the file system, and no service worker is registered. Not document content, not metadata, not a draft of the tick set.
 - **INV-4**: Every log, analytics and error payload is typed with enumerated kinds and numbers only. No free string field exists in those types, so there is nowhere for a file name or a snippet to be put by accident.
@@ -297,7 +298,7 @@ Ordered by Skateboard: the first slice is a session that exists, holds a documen
 - [ ] Record `NEXT_PUBLIC_MATCH_CONTEXT_CHARS` in root `AGENTS.md` alongside the other caps when this ships, so the "every cap comes from `src/config`" rule keeps its full list.
 - [x] The header comment in `src/worker/client.ts` counted release **call sites** where the spec counts session **endings**. Reworded against INV-6, INV-6a and INV-6b, naming all three words that end something and stating that `releaseEngine()` is neither necessary nor sufficient for a session to have ended. The same stale "termination is the session's real ending" framing was fixed in `endSession` in `src/worker/engine.worker.ts` and on `OpenDocument.close()` in `src/engine/index.ts`, which both cited INV-6 the old way.
 - [x] Confirmed: `src/engine` keeps **no** reference to the caller's `ArrayBuffer`, so AC-5a's reachability claim holds. `openDocument` reads `byteLength`, hands the buffer to MuPDF and never stores it; `holdOpen` closes over the document and the summary only, and is a top level function, so the returned handle has no scope chain back to the parameter. MuPDF copies the bytes into the WebAssembly heap (`new Buffer(arg)` does a `HEAPU8.set`) and its `Document` holds a numeric pointer, so nothing in `mupdf.js` retains our buffer either. Recorded on `openDocument` so the next reader does not have to re-derive it.
-- [ ] Two things that check turned up, both needing a decision rather than a fix here. **INV-1 says the bytes exist "in exactly one place, `EngineSession.bytes`"**, and that is not literally true: while a session is open the document exists twice inside the worker, once as that `ArrayBuffer` and once as MuPDF's copy in the WebAssembly heap. Both are inside the worker so no guarantee moves, but the wording overclaims in a spec whose whole job is to not overclaim. **And `EngineSession.bytes` is written at open and never read again** (`engine.worker.ts` uses it at the declaration, the destructure, the `openDocument` call and the store, and nowhere else), so a 25 MB document carries 25 MB of retained bytes that nothing consumes and that AC-5a then has to account for. Dropping the field would make the guarantee easier to hold and halve peak memory, but it is a data model change and feature 5 may want the original bytes, so `/architect` owns it.
+- [x] Decided by spec [0004](../0004-redaction-engine/index.md): `EngineSession.bytes` stays and gains its reader, since redaction rewrites the document it runs on and MuPDF.js has no deep copy, so every run opens a working copy from the untouched original. INV-1 and AC-6 are reworded to name both forms the source takes inside the worker and the redacted output that crosses. The record of what the check found: **INV-1 says the bytes exist "in exactly one place, `EngineSession.bytes`"**, and that is not literally true: while a session is open the document exists twice inside the worker, once as that `ArrayBuffer` and once as MuPDF's copy in the WebAssembly heap. Both are inside the worker so no guarantee moves, but the wording overclaims in a spec whose whole job is to not overclaim. **And `EngineSession.bytes` is written at open and never read again** (`engine.worker.ts` uses it at the declaration, the destructure, the `openDocument` call and the store, and nowhere else), so a 25 MB document carries 25 MB of retained bytes that nothing consumes and that AC-5a then has to account for. Dropping the field would make the guarantee easier to hold and halve peak memory, but it is a data model change and feature 5 may want the original bytes, so `/architect` owns it.
 
 ## Rationale
 
