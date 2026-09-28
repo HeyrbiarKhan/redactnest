@@ -17,7 +17,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 4 | Design system & UI foundation | Foundation | done |
 | 5 | Redaction engine | Release 1 | done |
 | 6 | Pattern detection | Release 1 | done |
-| 7 | Scanned page detection & warnings | Release 1 | planned |
+| 7 | Scanned page detection & warnings | Release 1 | in-progress |
 | 8 | Redact flow | Release 1 | planned |
 | 9 | Privacy policy & terms | Release 2 | planned |
 | 10 | Billing & paid plan | Release 2 | planned |
@@ -115,10 +115,20 @@ spec [0005](../specs/0005-pattern-detection/index.md) · code in `src/detect`, `
 - [x] Verify it: `/check verify pattern detection`
 - [x] Test it: `/test pattern detection`
 
-### 7. Scanned page detection & warnings · needs a decision · GA
-Detect per page whether a text layer exists, and never let somebody leave with a file that looks redacted and is not.
-**Done when:** pages with no text layer are identified at upload and named plainly, the warning is repeated at download, and a document whose every page lacks a text layer produces no file at all, with a clear explanation of why instead.
-- [ ] Design it (spec): `/architect scanned page detection & warnings`
+### 7. Scanned page detection & warnings · in-progress · GA
+Detect per page whether a text layer exists, and never let somebody leave with a file that looks redacted and is not. Besides scanned pages, that covers three kinds of text a viewer never shows: text under a box drawn over it (a fake redaction already in the source), white or otherwise invisible text that is not OCR, and text outside the crop box, which is now removed in every run.
+**Done when:** pages with no text layer are identified at upload and named plainly, the warning is repeated at download, and a document whose every page lacks a text layer produces no file at all, with a clear explanation of why instead. Text under a box and white or invisible text are named the same way, and text outside the crop box never reaches the output.
+spec [0006](../specs/0006-scanned-page-detection-warnings/index.md)
+- [x] Design it (spec): `/architect scanned page detection & warnings`
+- [ ] Build it: `/develop scanned page detection & warnings`
+  - [ ] Scans named, and no file for a document with nothing readable: the page reading, the refusal, the warnings at open and at download, and the partly redacted name · AC-1, AC-2, AC-3, AC-9, AC-10, AC-11, AC-12, AC-19, AC-20, AC-22, AC-23, AC-26, AC-27, AC-28, AC-29
+  - [ ] Pictures, OCR and the crooked scan: bare pictures, the stamp cap, the machine read note and the crooked scan line · AC-2, AC-4, AC-5, AC-21, AC-25
+  - [ ] Text a viewer never shows: covered and hidden text, and the row marks · AC-6, AC-7, AC-9, AC-13, AC-24
+  - [ ] Nothing outside the visible area survives: the foundation pins, the trim on both copies with its proof, the self check rules, the off page note and picture warning · AC-8, AC-14, AC-15, AC-16, AC-17, AC-18, AC-21, AC-22, AC-29
+- [ ] Verify it: `/check verify scanned page detection & warnings`, including the real scan steps made locally (AC-30)
+- [ ] Test it: `/test scanned page detection & warnings`
+- [ ] Review it (fresh model): `/check review scanned page detection & warnings`
+- [ ] Document it: `/document scanned page detection & warnings`
 
 ### 8. Redact flow · needs a decision
 The single page that is the product: drop a PDF, see what was found, tick what to remove, download the clean file, read the summary of what happened.

@@ -4,7 +4,7 @@ _Steps derived from spec 0004's acceptance criteria and its Value sourcing table
 
 Run the tool at `/tool` against a production build (`pnpm build && pnpm start`), because the content security policy is looser in development and the redaction has to be proved under the real one.
 
-Feature 6 is built, so a visitor can tick matches in the browser. Its `/check verify` ran the steps marked **(after feature 6)** below and ticked them. The two steps on a real OCRmyPDF scan need real scans, which are feature 7's job, so they are marked **(after feature 7)** and wait for it (spec 0005, AC-18). Every step that needs a ticked match is also proved at the engine in the Commands section.
+Feature 6 is built, so a visitor can tick matches in the browser. Its `/check verify` ran the steps marked **(after feature 6)** below and ticked them. The two steps on a real OCRmyPDF scan need real scans, which are feature 7's job, so they are marked **(after feature 7)** and wait for it (spec 0005, AC-18). Feature 7's spec, [0006](../0006-scanned-page-detection-warnings/index.md), closes them under its AC-30: its `/check verify` runs both on scans made locally (one of our own fixtures printed, scanned straight and about a degree crooked, run through OCRmyPDF, kept out of git) and ticks them here. Every step that needs a ticked match is also proved at the engine in the Commands section.
 
 Several steps open the output in a second reader. Use at least two of: Acrobat Reader, a browser's built in PDF viewer, and `mutool show` (MuPDF's command line). A reader that is not MuPDF matters here, because the rebuild and `sanitize` are only as good as other software's reading of them.
 
@@ -27,7 +27,7 @@ Several steps open the output in a second reader. Use at least two of: Acrobat R
 - [x] In devtools, terminate the `redactnest-engine` worker while **Download** is showing → the lost message, and after **Try again** no **Download** appears until a new run completes → AC-20
 - [x] **(after feature 6)** Tick a match, redact, download, open the output → a black box where the match was, no wider than the match and no taller than its own line; select all text in the reader and paste it somewhere → the match is absent and its neighbours are present → AC-4, AC-6
 - [x] **(after feature 6)** In a single spaced document, tick a match in the middle of a paragraph and redact → the lines above and below read exactly as before, in the reader and when pasted → AC-4, AC-6
-- [ ] **(after feature 7)** Run a real scan through OCRmyPDF, open it, tick a match that has descenders (a name with a g, j, p, q or y), redact and download → in the output, no ink of the match shows around or below the box when the image is viewed on its own (for example after `mutool extract`), and the lines around it are still readable → AC-5, AC-13
+- [ ] **(after feature 7, spec 0006 AC-30)** Run a real scan through OCRmyPDF, open it, tick a match that has descenders (a name with a g, j, p, q or y), redact and download → in the output, no ink of the match shows around or below the box when the image is viewed on its own (for example after `mutool extract`), and the lines around it are still readable → AC-5, AC-13
 - [x] **(after feature 6)** Redact with two ticks, download, untick one, redact and download again → the second file shows the unticked match in plain text → AC-11
 
 ## Commands
@@ -66,7 +66,7 @@ Several steps open the output in a second reader. Use at least two of: Acrobat R
 - [x] `grep -rn "textPass\|paddedPass\|boxPass" src/ --include=*.ts --include=*.tsx` → called only from `src/engine/redact.ts` (declared in `passes.ts`, listed in `index.ts`), so nothing reaches a pass without `validateTargets` → AC-28, AC-29, INV-15
 - [x] `pnpm test -- protocol` → `slanted-text` is the last member of `ENGINE_ERROR_KINDS`, and the ordered list in the test matches → AC-28
 - [x] `pnpm test -- tool-client` → `slanted-text` renders "A ticked item is set at an angle too steep to redact safely, so no file was made." → AC-19, AC-28
-- [ ] **(after feature 7)** Run a real scan fed about a degree crooked through OCRmyPDF without `--deskew`. Tick a name and redact → it is removed and passes. A long address or a whole line on the same scan → shown blocked `slanted-text` during review, so it cannot be ticked (feature 6 marks such matches) → AC-28, AC-29
+- [ ] **(after feature 7, spec 0006 AC-30)** Run a real scan fed about a degree crooked through OCRmyPDF without `--deskew`. Tick a name and redact → it is removed and passes. A long address or a whole line on the same scan → shown blocked `slanted-text` during review, so it cannot be ticked (feature 6 marks such matches) → AC-28, AC-29
 
 ## Acceptance criteria coverage
 
@@ -97,7 +97,7 @@ Several steps open the output in a second reader. Use at least two of: Acrobat R
 - AC-25 a failed check names the right kind, leak before overreach · engine self check tests, component test for the two new lines
 - AC-26 a match inside wider replacement text is refused · the inline, UTF-16 and named fixtures in the engine suite
 - AC-27 targets validated against their own text before anything is removed · the target validation tests, the trapezoid whose padded area crosses itself
-- AC-28 a slanted target refused with `slanted-text` before anything is removed · the geometry tests, the slant fixtures, the precedence tests, the bounds pin, the component line, the manual crooked scan (after feature 7)
+- AC-28 a slanted target refused with `slanted-text` before anything is removed · the geometry tests, the slant fixtures, the precedence tests, the bounds pin, the component line, the manual crooked scan (after feature 7, spec 0006 AC-30)
 - AC-29 an image MuPDF would blank too far refused with `redaction-overreach` before anything is removed · the geometry tests, the rotated and coarse image fixtures, the bounds pin's image pages, the regenerated `images-under.pdf`
 
 ## Update from /develop · 2026-09-25
@@ -118,7 +118,7 @@ _The two findings that held slice 2 are resolved in spec 0004. Slice 2 has since
 
 - [x] The replacement text case → a match inside a wider `/ActualText` span, inline or named, fails the run with `replacement-text` and no file; a span that wraps exactly the match is removed with it → AC-5, AC-25, AC-26
 - [x] Adjacent lines → at 12pt text on 12 and 14pt leading, text is removed only on the removal band and every character of the lines above and below survives at its origin; removal forced onto the exact quads through the seam fails with `redaction-overreach` → AC-4, AC-13, AC-25
-- [x] Every step marked (after feature 6), the geometric matrix, the self check tests, the two run test and the geometry constants in the `grep` steps wait for slice 2's build → AC-4, AC-5, AC-6, AC-11, AC-13. _Slice 2 is built, and the steps this names are ticked above. The two OCRmyPDF scan steps now wait for feature 7._
+- [x] Every step marked (after feature 6), the geometric matrix, the self check tests, the two run test and the geometry constants in the `grep` steps wait for slice 2's build → AC-4, AC-5, AC-6, AC-11, AC-13. _Slice 2 is built, and the steps this names are ticked above. The two OCRmyPDF scan steps now wait for feature 7, whose spec 0006 runs them under its AC-30._
 
 ## Update from /develop · 2026-09-27
 
