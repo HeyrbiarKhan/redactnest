@@ -12,7 +12,7 @@
 import { deflateSync } from "node:zlib";
 
 import { stream } from "./pdf-writer.mjs";
-import { document, IDENTITY_UNICODE, line } from "./redaction-fixtures.mjs";
+import { document, IDENTITY_UNICODE, line, literal, num } from "./redaction-fixtures.mjs";
 
 /** The page the builders draw on: US Letter, as `document()` sets it. */
 const PAGE = Object.freeze({ width: 612, height: 792 });
@@ -731,6 +731,183 @@ export function readConcealed() {
       content:
         line("F1", 12, 72, 740, "This page also holds visible words.") +
         `1 1 1 rg ${line("F1", 12, 72, 700, `Write to ${CONCEALED.hiddenEmail}`)}`,
+    },
+  ]);
+}
+
+/** What `trim-text.pdf` holds, for the tests to name. */
+export const TRIM_TEXT = Object.freeze({
+  visibleEmail: "visible.person@example.com",
+  belowCrop: "offpage.person@example.com",
+  belowMedia: "Below the media box",
+  straddling: "Edge",
+});
+
+/**
+ * Spec 0006, AC-14, AC-16 and AC-17. A page cropped to its top half. On it,
+ * a line with an address; below the crop, a line with another address a
+ * viewer never sees; below the media box, a line of its own; and a word
+ * whose glyphs straddle the crop's bottom edge, their quads running from
+ * about 389 to 406 against an edge at 396.
+ */
+export function trimText() {
+  return document(() => [
+    {
+      keys: "/CropBox [0 396 612 792]",
+      content:
+        line("F1", 12, 72, 700, `Contact: ${TRIM_TEXT.visibleEmail}`) +
+        line("F1", 12, 72, 680, "Everything on this line stays where it is.") +
+        line("F1", 12, 72, 200, `Hidden below: ${TRIM_TEXT.belowCrop}`) +
+        line("F1", 12, 72, -30, TRIM_TEXT.belowMedia) +
+        line("F1", 12, 300, 393, TRIM_TEXT.straddling),
+    },
+  ]);
+}
+
+/**
+ * A scan as a picture at `ppi` pixels per inch over `width` by `height`
+ * points: grey, with dark bands across it, margins included, so pixels
+ * blanked outside a crop can be told from pixels kept.
+ */
+function bandedScan(add, width, height, ppi) {
+  const columns = Math.round((width * ppi) / 72);
+  const rows = Math.round((height * ppi) / 72);
+  const pixels = new Uint8Array(columns * rows).fill(230);
+  for (let row = 0; row < rows; row += 8)
+    pixels.fill(30, row * columns, (row + 2) * columns);
+  return add(
+    stream(
+      `/Type /XObject /Subtype /Image /Width ${columns} /Height ${rows} ` +
+        "/ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode",
+      deflateSync(pixels),
+    ),
+  );
+}
+
+/** Typed words enough to make a page readable, and never a stamp (AC-2). */
+const TYPED =
+  line("F1", 12, 72, 700, "This page holds typed words as well as its picture.") +
+  line("F1", 12, 72, 684, "They keep it a page of text rather than a scan.");
+
+/**
+ * Spec 0006, AC-15 and AC-17. Page 1: an upright scan at 150 pixels per inch
+ * over the whole media box, cropped by half an inch on every side, so its
+ * margins lie outside the visible area. Page 2: a picture placed wholly
+ * outside the page, left of the media box.
+ */
+export function trimScan() {
+  return document(({ add }) => {
+    const scan = bandedScan(add, 612, 792, 150);
+    const outside = bandedScan(add, 144, 144, 72);
+    return [
+      {
+        keys: "/CropBox [36 36 576 756]",
+        resources: `/XObject << /Scan ${scan} 0 R >>`,
+        content: `q 612 0 0 792 0 0 cm /Scan Do Q\n${TYPED}`,
+      },
+      {
+        resources: `/XObject << /Outside ${outside} 0 R >>`,
+        content: `q 144 0 0 144 -300 300 cm /Outside Do Q\n${TYPED}`,
+      },
+    ];
+  });
+}
+
+/** A 4 by 4 pixel picture of four colour bands, to stretch into a bleed. */
+function colourBand(add) {
+  const pixels = new Uint8Array(4 * 4 * 3);
+  const colours = [
+    [200, 30, 30],
+    [30, 160, 60],
+    [30, 60, 200],
+    [220, 180, 20],
+  ];
+  for (let row = 0; row < 4; row += 1) {
+    for (let column = 0; column < 4; column += 1) {
+      pixels.set(colours[row], (row * 4 + column) * 3);
+    }
+  }
+  return add(
+    stream(
+      "/Type /XObject /Subtype /Image /Width 4 /Height 4 /ColorSpace /DeviceRGB " +
+        "/BitsPerComponent 8",
+      pixels,
+    ),
+  );
+}
+
+/**
+ * Spec 0006, AC-15. Pictures across the edge that would be blanked far into
+ * the visible area, so every picture on the page is kept and the page is
+ * named instead. Page 1: a 4 by 4 pixel band stretched 100 pt tall across the
+ * crop's top edge into the bleed. Page 2: a picture turned 30 degrees across
+ * the crop's right edge.
+ */
+export function trimKept() {
+  return document(({ add }) => {
+    const band = colourBand(add);
+    const photo = scanImage(add, { columns: 40, rows: 40 });
+    const turn = (30 * Math.PI) / 180;
+    const cos = Math.cos(turn);
+    const sin = Math.sin(turn);
+    const size = 120;
+    // Centred on the crop's right edge at x 560, y 400.
+    const tx = 560 - (size / 2) * (cos - sin);
+    const ty = 400 - (size / 2) * (sin + cos);
+    return [
+      {
+        keys: "/CropBox [0 0 612 740]",
+        resources: `/XObject << /Band ${band} 0 R >>`,
+        content: `q 612 0 0 100 0 700 cm /Band Do Q\n${TYPED}`,
+      },
+      {
+        keys: "/CropBox [0 0 560 792]",
+        resources: `/XObject << /Photo ${photo} 0 R >>`,
+        content:
+          `q ${num(size * cos)} ${num(size * sin)} ${num(-size * sin)} ${num(size * cos)} ` +
+          `${num(tx)} ${num(ty)} cm /Photo Do Q\n${TYPED}`,
+      },
+    ];
+  });
+}
+
+/**
+ * Spec 0006, AC-16. One text object across the crop's left edge: `Offside`
+ * wholly outside it, a size change, then words wholly inside it. MuPDF moves
+ * the text after removed glyphs when a size change sits between them and the
+ * next glyph kept (spec 0004's recorded quirk), so the trim's proof finds the
+ * inside words moved on a line that crosses the edge: `edge-text`.
+ *
+ * `Offside ` at 12 pt Helvetica from x 50 is 41.352 pt wide, so the words
+ * after it start at 91.352, where the crop starts.
+ */
+export function trimRefused() {
+  return document(() => [
+    {
+      keys: "/CropBox [91.352 0 612 792]",
+      content:
+        line("F1", 12, 120, 700, "This page holds typed words inside its crop box.") +
+        line("F1", 12, 120, 684, "They keep it a page of text rather than a scan.") +
+        `BT /F1 12 Tf 50 640 Td ${literal("Offside ")} Tj /F1 11 Tf ` +
+        `${literal("inside words stay put")} Tj ET\n`,
+    },
+  ]);
+}
+
+/**
+ * Spec 0006, AC-16. A page trimmed for a line below its crop that also shows
+ * a line with `'` inside the visible area: the content filter the trim's pass
+ * runs moves that line, which spec 0004 could never redact either, and the
+ * proof blames the filter, not the edge: `unsupported`.
+ */
+export function trimQuote() {
+  return document(() => [
+    {
+      keys: "/CropBox [0 396 612 792]",
+      content:
+        `BT /F1 12 Tf 14 TL 72 700 Td ${literal("Name: Jeremy Quigley")} Tj ` +
+        `${literal("kept line")} ' ET\n` +
+        line("F1", 12, 72, 200, "A line below the crop"),
     },
   ]);
 }

@@ -147,7 +147,8 @@ export type Drawing =
 export interface DrawState {
   /**
    * The bounds of the clip in force: the intersection of the bounds of every
-   * open clip and soft mask that has finite bounds. Null when none does.
+   * open clip and soft mask that has finite bounds, leaving out MuPDF's own
+   * clip to a cropped page's crop box. Null when none is left.
    */
   readonly clip: Rect | null;
   /** A soft mask is in force (spec 0006, AC-6). */
@@ -218,11 +219,50 @@ function isUnbounded(rect: MuRect | Rect): boolean {
   );
 }
 
+/** How a walk is asked to run. */
+export interface WalkOptions {
+  /**
+   * Walk each text object's glyphs, for their origins and em heights. On by
+   * default. The trim reads only where a text object reaches, from its bounds
+   * and the character read, so it leaves this off and saves the walk.
+   */
+  readonly glyphs?: boolean;
+}
+
 /** An open clip, and whether it is a soft mask. */
 interface OpenClip {
   readonly bounds: Rect | null;
   readonly mask: boolean;
+  /**
+   * MuPDF's own clip to the crop box, which it opens before a cropped page's
+   * content. Not a clip the document draws, so never part of the clip in
+   * force.
+   */
+  readonly page: boolean;
 }
+
+/**
+ * Is this clip MuPDF's own crop, rather than one the page's content draws?
+ * MuPDF.js 1.28.1 runs a page whose crop box differs from its media box inside
+ * a clip to the crop box, opened before anything is drawn (measured, and
+ * pinned in `tests/unit/trim.test.ts`). Counted as the clip in force, it
+ * would cut every picture to the visible area, and the trim could never see
+ * the margins of a cropped scan (spec 0006, AC-14 and AC-15).
+ */
+function isPageClip(
+  bounds: Rect | null,
+  visible: Rect,
+  drawn: boolean,
+  depth: number,
+): boolean {
+  if (drawn || depth !== 0 || bounds === null) return false;
+  return bounds.every(
+    (value, at) => Math.abs(value - visible[at]) <= PAGE_CLIP_TOLERANCE,
+  );
+}
+
+/** How close, in points, a clip's bounds must come to the crop box to be MuPDF's. */
+const PAGE_CLIP_TOLERANCE = 0.01;
 
 /**
  * Run `page` through a callback device and hand every drawing to `visit`, in
@@ -236,6 +276,7 @@ export function walkDrawing(
   mupdf: MuPdf,
   page: PDFPage,
   visit: (drawing: Drawing, state: DrawState) => void,
+  { glyphs: walkGlyphs = true }: WalkOptions = {},
 ): void {
   const clips: OpenClip[] = [];
   const groups: boolean[] = [];
@@ -244,12 +285,17 @@ export function walkDrawing(
   let failure: unknown = null;
   let hasFailed = false;
 
+  const visible = toRect(page.getBounds());
+  // Whether anything has been drawn yet, so MuPDF's own crop clip, which it
+  // opens before the page's content, can be told from the content's clips.
+  let drawn = false;
+
   const state = (): DrawState => {
     // A clip with no finite bounds says nothing a bound can, so it is left out
     // of the intersection rather than treated as clipping everything away.
     let clip: Rect | null = null;
     for (const open of clips) {
-      if (open.bounds === null) continue;
+      if (open.bounds === null || open.page) continue;
       clip = clip === null ? open.bounds : (intersect(clip, open.bounds) ?? EMPTY);
     }
     return {
@@ -282,7 +328,10 @@ export function walkDrawing(
     }
   };
 
-  const emit = (drawing: Drawing) => visit(drawing, state());
+  const emit = (drawing: Drawing) => {
+    if (drawing.kind !== "clip" && drawing.kind !== "pop-clip") drawn = true;
+    visit(drawing, state());
+  };
 
   const text = (
     mode: TextMode,
@@ -291,11 +340,11 @@ export function walkDrawing(
     stroke: StrokeState | null,
     paint: Paint | null,
   ) => {
-    const glyphs = glyphsOf(shown, ctm);
+    const glyphs = walkGlyphs ? glyphsOf(shown, ctm) : [];
     const bounds = transformRectOrNull(shown.getBounds(stroke as StrokeState, ctm));
     emit({ kind: "text", mode, glyphs, paint, bounds });
     if (mode === "clip" || mode === "clip-stroke") {
-      clips.push({ bounds, mask: false });
+      clips.push({ bounds, mask: false, page: false });
     }
   };
 
@@ -334,8 +383,9 @@ export function walkDrawing(
           const bounds = transformRectOrNull(
             path.getBounds(null as unknown as StrokeState, ctm),
           );
+          const page = isPageClip(bounds, visible, drawn, clips.length);
           emit({ kind: "clip", bounds });
-          clips.push({ bounds, mask: false });
+          clips.push({ bounds, mask: false, page });
         },
         () => free(path),
       );
@@ -345,7 +395,7 @@ export function walkDrawing(
         () => {
           const bounds = transformRectOrNull(path.getBounds(stroke, ctm));
           emit({ kind: "clip", bounds });
-          clips.push({ bounds, mask: false });
+          clips.push({ bounds, mask: false, page: false });
         },
         () => free(path, stroke),
       );
@@ -428,7 +478,7 @@ export function walkDrawing(
         () => {
           const bounds = transformRectOrNull(UNIT_SQUARE, ctm);
           emit({ kind: "clip", bounds });
-          clips.push({ bounds, mask: false });
+          clips.push({ bounds, mask: false, page: false });
         },
         () => free(image),
       );
@@ -448,7 +498,7 @@ export function walkDrawing(
           emit({ kind: "begin-mask" });
           defining += 1;
           // In force from its end until the matching pop, like a clip.
-          clips.push({ bounds: transformRectOrNull(bbox), mask: true });
+          clips.push({ bounds: transformRectOrNull(bbox), mask: true, page: false });
         },
         () => free(colorspace),
       );
@@ -510,6 +560,10 @@ export function walkDrawing(
     device.destroy();
   }
   if (hasFailed) throw failure;
+}
+
+function toRect(rect: readonly number[]): Rect {
+  return [rect[0], rect[1], rect[2], rect[3]];
 }
 
 /** A rect that holds nothing, for a clip whose parts do not meet. */

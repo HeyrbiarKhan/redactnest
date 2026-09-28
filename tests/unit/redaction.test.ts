@@ -610,13 +610,14 @@ describe("a flattened form value and typed note", () => {
  * is not a failure and carries no kind.
  */
 describe("cancelling a run", () => {
-  it("checks after opening, preparing, every page of both loops and the rebuild", async () => {
+  it("checks after opening, preparing, every page of the trim and both loops, and the rebuild", async () => {
     const isCancelled = vi.fn(() => false);
 
     await redact("metadata.pdf", [], { isCancelled });
 
-    // Two pages: open, prepare, record 1 and 2, redact 1 and 2, rebuild.
-    expect(isCancelled).toHaveBeenCalledTimes(7);
+    // Two pages: open, prepare, trim 1 and 2 (spec 0006, AC-29), record 1
+    // and 2, redact 1 and 2, rebuild.
+    expect(isCancelled).toHaveBeenCalledTimes(9);
   });
 
   it("stops within a page, before anything is written", async () => {

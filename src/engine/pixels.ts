@@ -233,3 +233,154 @@ function pixelRange(
     ? null
     : { columnFrom, columnTo, rowFrom, rowTo };
 }
+
+/**
+ * The third extraction setting, beside the two that are never mixed. Spec
+ * 0006, AC-17: `preserve-images` so image blocks are reported, and `clip=no`
+ * so an image wholly outside the page is reported too. Only the self check's
+ * outside pixel rule reads it.
+ */
+export const IMAGE_CHECK_OPTIONS = "preserve-images,clip=no";
+
+/**
+ * How far past a pixel boundary a mapped edge may fall and still count as on
+ * it, in pixels, so a rounding error never makes a pixel on the edge read as
+ * wholly outside.
+ */
+const PIXEL_EDGE_SLACK = 0.001;
+
+/**
+ * The outside pixel half of the self check. Spec 0006, AC-17.
+ *
+ * On a page the run trimmed in pixel mode, every image the output's unclipped
+ * structured text reports that is not wholly inside the visible area is
+ * decoded, and every pixel wholly outside the visible area must be blank:
+ * white in every channel once converted to RGB, or unpainted for an image
+ * mask. A pixel straddling the edge may be either, as a glyph straddling it
+ * may.
+ *
+ * Fails closed: an image that cannot be decoded, converted or placed counts
+ * as not blank.
+ */
+export function outsidePixelsAreBlank(
+  mupdf: MuPdf,
+  page: PDFPage,
+  visible: readonly [number, number, number, number],
+): boolean {
+  const stext = page.toStructuredText(IMAGE_CHECK_OPTIONS);
+  let blank = true;
+
+  try {
+    stext.walk({
+      onImageBlock(bbox, transform, image) {
+        try {
+          const inside =
+            bbox[0] >= visible[0] &&
+            bbox[1] >= visible[1] &&
+            bbox[2] <= visible[2] &&
+            bbox[3] <= visible[3];
+          if (blank && !inside) blank = blankOutside(mupdf, image, transform, visible);
+        } finally {
+          image.destroy();
+        }
+      },
+    });
+  } finally {
+    stext.destroy();
+  }
+  return blank;
+}
+
+/**
+ * Is every pixel of `image` that lies wholly outside `visible` blank?
+ *
+ * The visible area's corners are mapped into the image's own pixel grid, and
+ * the pixels outside the columns and rows they span, widened to whole pixels,
+ * are the ones wholly outside it. Exact for an upright placement, which is
+ * the only kind a page in pixel mode blanks across the edge (AC-15); for one
+ * at an angle it checks fewer pixels than it could, never a pixel inside.
+ */
+function blankOutside(
+  mupdf: MuPdf,
+  image: Image,
+  transform: Matrix,
+  visible: readonly [number, number, number, number],
+): boolean {
+  let decoded: Pixmap | null = null;
+  let converted: Pixmap | null = null;
+
+  try {
+    decoded = image.toPixmap();
+    const mask = image.getImageMask();
+    // A grey image with no alpha is read as it is: white is 255 in its one
+    // channel, and converting a full page scan to RGB would triple the memory
+    // it takes. Anything else is compared in RGB, as `blankUnder` compares.
+    const grey =
+      !mask && decoded.getAlpha() === 0 && decoded.getColorSpace()?.getType() === "Gray";
+    let pixmap = decoded;
+    if (
+      !mask &&
+      !grey &&
+      (decoded.getAlpha() !== 0 || !decoded.getColorSpace()?.isRGB())
+    ) {
+      converted = decoded.convertToColorSpace(mupdf.ColorSpace.DeviceRGB, false);
+      pixmap = converted;
+    }
+
+    const width = pixmap.getWidth();
+    const height = pixmap.getHeight();
+    const stride = pixmap.getStride();
+    const step = pixmap.getNumberOfComponents();
+    const pixels = pixmap.getPixels();
+    const isBlank = (offset: number): boolean =>
+      mask
+        ? pixels[offset] === 0
+        : grey
+          ? pixels[offset] === 255
+          : pixels[offset] === 255 &&
+            pixels[offset + 1] === 255 &&
+            pixels[offset + 2] === 255;
+
+    const [a, b, c, d, e, f] = transform;
+    const determinant = a * d - b * c;
+    if (determinant === 0 || !Number.isFinite(determinant)) return false;
+
+    const [x0, y0, x1, y1] = visible;
+    const grid = [
+      [x0, y0],
+      [x1, y0],
+      [x1, y1],
+      [x0, y1],
+    ].map(([x, y]) => [
+      ((d * (x - e) - c * (y - f)) / determinant) * width,
+      ((a * (y - f) - b * (x - e)) / determinant) * height,
+    ]);
+    if (!grid.flat().every(Number.isFinite)) return false;
+
+    // The columns and rows a pixel of which may touch the visible area.
+    const touchFromColumn = Math.floor(
+      Math.min(...grid.map(([u]) => u)) - PIXEL_EDGE_SLACK,
+    );
+    const touchToColumn =
+      Math.ceil(Math.max(...grid.map(([u]) => u)) + PIXEL_EDGE_SLACK) - 1;
+    const touchFromRow = Math.floor(
+      Math.min(...grid.map(([, v]) => v)) - PIXEL_EDGE_SLACK,
+    );
+    const touchToRow =
+      Math.ceil(Math.max(...grid.map(([, v]) => v)) + PIXEL_EDGE_SLACK) - 1;
+
+    for (let row = 0; row < height; row += 1) {
+      const rowOutside = row < touchFromRow || row > touchToRow;
+      for (let column = 0; column < width; column += 1) {
+        const outside = rowOutside || column < touchFromColumn || column > touchToColumn;
+        if (outside && !isBlank(row * stride + column * step)) return false;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  } finally {
+    converted?.destroy();
+    decoded?.destroy();
+  }
+}

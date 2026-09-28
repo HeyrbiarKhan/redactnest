@@ -37,6 +37,11 @@ import {
   readSlides,
   readStamped,
   readUnmapped,
+  trimKept,
+  trimQuote,
+  trimRefused,
+  trimScan,
+  trimText,
 } from "./lib/reading-fixtures.mjs";
 import {
   actualText,
@@ -447,6 +452,23 @@ const FIXTURES = [
     readConcealed(),
     "a covered email and phone, and a hidden email",
   ],
+  [
+    "trim-text.pdf",
+    trimText(),
+    "text below the crop, below the media box, and across its edge",
+  ],
+  [
+    "trim-scan.pdf",
+    trimScan(),
+    "a cropped 150 ppi scan, and a picture wholly off the page",
+  ],
+  ["trim-kept.pdf", trimKept(), "a stretched band and a turned picture across the edge"],
+  [
+    "trim-refused.pdf",
+    trimRefused(),
+    "a size change between glyphs outside and inside the crop",
+  ],
+  ["trim-quote.pdf", trimQuote(), "a trimmed page that shows a line with a quote"],
 ];
 
 const outDir = join(process.cwd(), "tests", "fixtures");

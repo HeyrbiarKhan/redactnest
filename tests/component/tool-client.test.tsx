@@ -1473,6 +1473,77 @@ describe("the page readings (spec 0006)", () => {
     await expectNoAxeViolations(container);
   });
 
+  /**
+   * Spec 0006, AC-8, AC-21 and AC-22. What lies outside a page's visible
+   * area: a note at open and a note at complete when the trim removed it, and
+   * a warning with the partly name when it had to keep a picture.
+   */
+  describe("content outside the visible area", () => {
+    const OFF_PAGE: DocumentSummary = Object.freeze({
+      pageCount: 3,
+      pages: Object.freeze([
+        Object.freeze({ findings: ["off-page-content"] }),
+        Object.freeze({ findings: ["off-page-picture"] }),
+        Object.freeze({ findings: [] }),
+      ]) as DocumentSummary["pages"],
+    });
+
+    it("notes the removal at open, warns of the kept picture, and names the file partly", async () => {
+      const run = flagged(OFF_PAGE);
+      await openWith(run.session);
+
+      expect(screen.getByTestId("page-notes")).toHaveTextContent(
+        "Page 1 has content outside its visible area. RedactNest removes it when you redact, since nobody can see it.",
+      );
+      expect(screen.getByTestId("page-warnings")).toHaveTextContent(
+        "Part of a picture on page 2 lies outside the visible page and couldn't be cleared, so it is still in the file.",
+      );
+
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("redact"));
+      await run.finish();
+
+      const card = screen.getByRole("region", { name: "Your clean file is ready" });
+      const removed = within(card).getByTestId("off-page-removed");
+      expect(removed).toHaveTextContent(
+        "Content outside the visible area of page 1 was removed.",
+      );
+      expect(removed).toHaveTextContent(/^Note:/);
+      // Before the download warning, which stays the last thing in the card.
+      const warning = within(card).getByTestId("download-warning");
+      expect(
+        removed.compareDocumentPosition(warning) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(card.lastElementChild).toBe(warning);
+
+      await user.click(screen.getByTestId("download"));
+      expect(mocks.offerDownload).toHaveBeenCalledWith(
+        expect.any(ArrayBuffer),
+        "report-partly-redacted.pdf",
+      );
+    });
+
+    it("keeps the plain name when the trim only removed content", async () => {
+      const summary: DocumentSummary = {
+        pageCount: 1,
+        pages: [{ findings: ["off-page-content"] }],
+      };
+      const run = flagged(summary);
+      await openWith(run.session);
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("redact"));
+      await run.finish();
+
+      expect(screen.getByTestId("off-page-removed")).toBeInTheDocument();
+      expect(screen.queryByTestId("download-warning")).not.toBeInTheDocument();
+      await user.click(screen.getByTestId("download"));
+      expect(mocks.offerDownload).toHaveBeenCalledWith(
+        expect.any(ArrayBuffer),
+        "report-redacted.pdf",
+      );
+    });
+  });
+
   /** Spec 0006, AC-21 and AC-25. What is worth knowing, and changes nothing. */
   describe("the notes", () => {
     const SLANTED: ReviewMatch = Object.freeze<ReviewMatch>({

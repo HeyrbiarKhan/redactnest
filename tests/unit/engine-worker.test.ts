@@ -137,11 +137,20 @@ function redactRequest(overrides: { id?: string; jobId?: string } = {}): Request
 }
 
 /** What the engine hands back from a run that passed its self check. */
+/** What the trim does on a page with nothing outside its visible area. */
+const UNTRIMMED = Object.freeze({
+  removed: false,
+  picturesKept: false,
+  pixelMode: false,
+});
+
 function engineResult() {
   return {
     output: new ArrayBuffer(128),
     removedByType: {},
     sanitized: ["document-info", "annotations"],
+    // One per page of SUMMARY, agreeing with it: neither page was trimmed.
+    trim: [UNTRIMMED, UNTRIMMED],
   };
 }
 
@@ -771,6 +780,63 @@ describe("a redaction run", () => {
       pagesByFinding: { scanned: 1, "machine-read-text": 1 },
       sanitized: ["xmp-metadata"],
     });
+  });
+
+  /**
+   * Spec 0006, AC-18 and INV-6. The summary, the name and the download warning
+   * describe the open's trim, so a run whose trim decided otherwise on any
+   * page hands back no file.
+   */
+  it.each([
+    [
+      "removed something the open did not",
+      [{ ...UNTRIMMED, removed: true, pixelMode: true }, UNTRIMMED],
+    ],
+    ["kept pictures the open did not", [UNTRIMMED, { ...UNTRIMMED, picturesKept: true }]],
+    ["read a different number of pages", [UNTRIMMED]],
+  ])(
+    "posts unsupported, and no output, for a run whose trim %s",
+    async (_label, trim) => {
+      redactDocument.mockResolvedValue({ ...engineResult(), trim });
+      await startWorker();
+
+      scope.send(openRequest());
+      await settle();
+      scope.send(redactRequest());
+      await settle();
+
+      expect(scope.of("redacted")).toEqual([]);
+      expect(scope.of("error")).toEqual([
+        { id: "op-2", jobId: "job-1", kind: "error", errorKind: "unsupported" },
+      ]);
+    },
+  );
+
+  it("posts the output when the run's trim agrees with a trimmed open", async () => {
+    const trimmed = fakeDocument();
+    Object.assign(trimmed, {
+      summary: {
+        pageCount: 2,
+        pages: [{ findings: ["off-page-content"] }, { findings: ["off-page-picture"] }],
+      },
+    });
+    openDocument.mockResolvedValue(trimmed);
+    redactDocument.mockResolvedValue({
+      ...engineResult(),
+      trim: [
+        { removed: true, picturesKept: false, pixelMode: true },
+        { removed: false, picturesKept: true, pixelMode: false },
+      ],
+    });
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest());
+    await settle();
+
+    expect(scope.of("redacted")).toHaveLength(1);
+    expect(scope.of("error")).toEqual([]);
   });
 
   /**

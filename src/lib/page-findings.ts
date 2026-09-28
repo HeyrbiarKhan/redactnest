@@ -272,3 +272,14 @@ export const CONCEALED_TEXT: Readonly<Record<Concealment, string>> = Object.free
   covered: "Hidden under a box on the page.",
   hidden: "Not visible on the page.",
 });
+
+/**
+ * The line at `complete` naming the pages the trim removed content from
+ * (AC-22), in an untitled note before the download warning, or null when it
+ * removed nothing.
+ */
+export function removedOffPageLine(summary: DocumentSummary): string | null {
+  const pages = pagesWith(summary, "off-page-content");
+  if (pages.length === 0) return null;
+  return `Content outside the visible area of ${pageList(pages, { lower: true })} was removed.`;
+}

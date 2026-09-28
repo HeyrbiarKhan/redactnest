@@ -1,6 +1,6 @@
 import type { Document, PDFDocument } from "mupdf";
 
-import type { DocumentSummary } from "@/worker/protocol";
+import { PAGE_FINDINGS, type DocumentSummary, type PageFinding } from "@/worker/protocol";
 
 import { refuseAtTheDoor } from "./door";
 import { EngineFailure } from "./failure";
@@ -8,7 +8,8 @@ import { findMatchesIn } from "./find";
 import { inspectPages, readsAsNothing } from "./inspect";
 import { loadEngine, type MuPdf } from "./load";
 import { prepareDocument } from "./prepare";
-import type { OpenDocument, PageInspection } from "./types";
+import { trimToVisibleArea } from "./trim";
+import type { OpenDocument, PageInspection, TrimOutcome } from "./types";
 
 type OpenPhase = "loading-engine" | "opening" | "inspecting";
 
@@ -83,8 +84,8 @@ export async function openDocument(
  * costs a scan of at most 1024 bytes.
  *
  * The order is fixed (spec 0006, *State transitions*): door, open, password,
- * page cap, layers, prepare, inspect, the refusal. Detection follows, when the
- * worker asks the handle for its matches.
+ * page cap, layers, prepare, inspect, the refusal, trim. Detection follows,
+ * when the worker asks the handle for its matches, on the trimmed page.
  */
 export async function openDocumentWith(
   mupdf: MuPdf,
@@ -149,9 +150,17 @@ export async function openDocumentWith(
       throw new EngineFailure("no-readable-text");
     }
 
+    // AC-14: what lies outside each page's visible area goes from the review
+    // copy too, before detection reads it, so no row can name it and both
+    // copies read the same page (INV-3). The review copy is never redacted
+    // inside its visible area (spec 0004, INV-1, as spec 0006 rewords it).
+    const trim = await trimToVisibleArea(mupdf, pdf, isCancelled);
+
     return holdOpen(pdf, inspections, {
       pageCount,
-      pages: inspections.map(({ findings }) => Object.freeze({ findings })),
+      pages: inspections.map(({ findings }, index) =>
+        Object.freeze({ findings: withTrim(findings, trim[index]) }),
+      ),
     });
   } catch (failure) {
     // The document only survives a successful open. Anything else, a cancel
@@ -160,6 +169,21 @@ export async function openDocumentWith(
     doc?.destroy();
     throw failure;
   }
+}
+
+/**
+ * A page's findings with the trim's two added (spec 0006, AC-8), still in
+ * `PAGE_FINDINGS` order: `off-page-content` when the trim removed something,
+ * `off-page-picture` when it kept the page's pictures.
+ */
+function withTrim(
+  findings: readonly PageFinding[],
+  trim: TrimOutcome | undefined,
+): readonly PageFinding[] {
+  const found = new Set(findings);
+  if (trim?.removed) found.add("off-page-content");
+  if (trim?.picturesKept) found.add("off-page-picture");
+  return PAGE_FINDINGS.filter((finding) => found.has(finding));
 }
 
 /**

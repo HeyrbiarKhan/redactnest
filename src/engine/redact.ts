@@ -12,7 +12,14 @@ import { prepareDocument } from "./prepare";
 import { graftPages, stripToAllowlist, sweepCarriers, WRITE_OPTIONS } from "./rebuild";
 import { checkOutput } from "./self-check";
 import { targetsByPage, validateTargets } from "./targets";
-import type { Quad, RedactionResult, RedactionTarget, RunHooks } from "./types";
+import { trimToVisibleArea } from "./trim";
+import type {
+  Quad,
+  RedactionResult,
+  RedactionTarget,
+  RunHooks,
+  TrimOutcome,
+} from "./types";
 
 /**
  * The steps a run takes that a test needs to be able to change.
@@ -21,11 +28,18 @@ import type { Quad, RedactionResult, RedactionTarget, RunHooks } from "./types";
  * with a step left out or changed and watching the run fail: the text pass
  * skipped leaves a glyph, the padded pass skipped leaves scan ink, removal on
  * the exact quads takes the lines around a target, the sweep skipped leaves a
- * carrier. A parameter with a frozen default, rather than a setter, so the
- * walled module holds no mutable hook and the worker can only ever run the
- * real thing.
+ * carrier. Spec 0006 adds the trim: skipped, it leaves text outside the
+ * visible area, and swapped, it disagrees with the open. A parameter with a
+ * frozen default, rather than a setter, so the walled module holds no mutable
+ * hook and the worker can only ever run the real thing.
  */
 export interface Pipeline {
+  /** What lies outside each page's visible area, removed (`trim.ts`). */
+  readonly trim: (
+    mupdf: MuPdf,
+    pdf: PDFDocument,
+    isCancelled?: () => boolean,
+  ) => Promise<readonly TrimOutcome[]>;
   /** The carrier sweep over the rebuilt document (`rebuild.ts`). */
   readonly sweepCarriers: (out: PDFDocument) => void;
   /** The pass that removes text (`passes.ts`). */
@@ -37,6 +51,7 @@ export interface Pipeline {
 }
 
 export const PIPELINE: Pipeline = Object.freeze({
+  trim: trimToVisibleArea,
   sweepCarriers,
   textPass,
   paddedPass,
@@ -64,13 +79,18 @@ export async function redactDocument(
  * `redactDocument` with the engine already in hand: the same seam
  * `openDocumentWith` gives Vitest, so both run the real MuPDF in Node.
  *
- * The pipeline order is fixed (spec 0004, *State transitions*). The inventory
- * comes before preparing, or flattened annotations would no longer be found.
- * Preparing comes before any Redact annotation is added, or the flatten would
- * bake the markers into the page. Targets are checked on the prepared copy,
- * the page detection read. Every page is recorded before any page is
- * redacted, or a pass that changes a resource shared with a later page would
- * change that page's record too.
+ * The pipeline order is fixed (spec 0004, *State transitions*, as spec 0006
+ * amends it): inventory, prepare, trim, validate targets, slant, images,
+ * record every page, the three passes page by page, rebuild, write, self
+ * check. The inventory comes before preparing, or flattened annotations would
+ * no longer be found. Preparing comes before any Redact annotation is added,
+ * or the flatten would bake the markers into the page. The trim comes right
+ * after preparing, as it does at open, so targets are checked on the page
+ * detection read, prepared and trimmed alike (spec 0004, INV-9, as spec 0006
+ * rewords it). Every page is recorded before any page is redacted, and after
+ * the trim, so a trimmed character is never expected back, and a pass that
+ * changes a resource shared with a later page cannot change that page's
+ * record too.
  *
  * All or nothing (AC-14). Every native object this opens is destroyed on every
  * path out, and nothing is returned unless the self check passed on the exact
@@ -102,6 +122,11 @@ export async function redactDocumentWith(
     const sanitized = takeInventory(work);
     prepareDocument(mupdf, work);
     await checkpoint();
+
+    // Spec 0006, AC-14: on every working copy, with nothing ticked as well,
+    // through the same function the open trims the review copy with (INV-3).
+    // It yields and checks for a cancel after every page.
+    const trim = await pipeline.trim(mupdf, work, isCancelled);
 
     validateTargets(work, pages);
 
@@ -149,7 +174,7 @@ export async function redactDocumentWith(
     const output = takeOutput(written);
 
     onPhase?.("verifying");
-    const failure = checkOutput(mupdf, output, record, pages);
+    const failure = checkOutput(mupdf, output, record, pages, trim);
     if (failure !== null) {
       throw new EngineFailure(failure);
     }
@@ -158,6 +183,7 @@ export async function redactDocumentWith(
       output,
       removedByType: countByKind(targets),
       sanitized,
+      trim,
     };
   } finally {
     work?.destroy();

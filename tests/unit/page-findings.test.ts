@@ -15,6 +15,7 @@ import {
   pageList,
   pagesWith,
   PARTLY_REASON,
+  removedOffPageLine,
   showsAdvice,
   showsCrookedLine,
   WARNING_FINDINGS,
@@ -266,5 +267,21 @@ describe("the concealed row lines", () => {
       covered: "Hidden under a box on the page.",
       hidden: "Not visible on the page.",
     });
+  });
+});
+
+/** AC-22: what the trim removed, named at complete. */
+describe("the removed content line", () => {
+  it("names the pages the trim removed content from", () => {
+    expect(
+      removedOffPageLine(summaryOf(["off-page-content"], [], ["off-page-content"])),
+    ).toBe("Content outside the visible area of pages 1 and 3 was removed.");
+    expect(removedOffPageLine(summaryOf([], ["off-page-content"]))).toBe(
+      "Content outside the visible area of page 2 was removed.",
+    );
+  });
+
+  it("is absent when the trim removed nothing, pictures kept included", () => {
+    expect(removedOffPageLine(summaryOf(["off-page-picture"], []))).toBeNull();
   });
 });

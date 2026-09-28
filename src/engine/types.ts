@@ -29,6 +29,31 @@ export interface PageInspection {
   readonly concealed: readonly ConcealedGlyph[];
 }
 
+/**
+ * What the trim did to one page, decided from its triggers before anything is
+ * removed, never from what a pass reports. Spec 0006, AC-8, AC-14 and AC-15.
+ * The open turns it into `off-page-content` and `off-page-picture`; a run
+ * hands it back so the worker can check it agrees with the open (AC-18).
+ */
+export interface TrimOutcome {
+  /**
+   * The trim ran here for a character or a path, or for an image on a page
+   * blanked in pixel mode: something outside the visible area was removed.
+   */
+  readonly removed: boolean;
+  /**
+   * A picture across the edge would have been blanked more than
+   * `TRIM_PIXEL_REACH` into the visible area, so every picture on the page
+   * was left as it was (AC-15).
+   */
+  readonly picturesKept: boolean;
+  /**
+   * This page was trimmed with its pixels outside the visible area blanked,
+   * which the self check's outside pixel rule then reads (AC-17).
+   */
+  readonly pixelMode: boolean;
+}
+
 /** One glyph a viewer does not see, and why. Spec 0006, *Data model sketch*. */
 export interface ConcealedGlyph {
   /** In the page space structured text uses. */
@@ -191,6 +216,11 @@ export interface RedactionResult {
   readonly removedByType: Readonly<Partial<Record<DetectorKind, number>>>;
   /** The kinds the source actually carried, in `SANITIZED_KINDS` order. */
   readonly sanitized: readonly SanitizedKind[];
+  /**
+   * What this run's trim did, one per page, for the worker to check against
+   * the open's (spec 0006, AC-18).
+   */
+  readonly trim: readonly TrimOutcome[];
 }
 
 /** How a run talks back to the worker while it works. */

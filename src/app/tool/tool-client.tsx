@@ -21,6 +21,7 @@ import {
   noteLines,
   OPEN_WARNING_TITLE,
   PARTLY_REASON,
+  removedOffPageLine,
   showsAdvice,
   warningLines,
 } from "@/lib/page-findings";
@@ -870,8 +871,9 @@ function OpenedDocument({ session }: { session: LiveSession }) {
 }
 
 /**
- * Spec 0004, AC-19, and spec 0006, AC-22. The one line outcome, and, when any
- * page carries a warning, the warning again as the last thing in the card, so
+ * Spec 0004, AC-19, and spec 0006, AC-22. The one line outcome; a note naming
+ * the pages the trim removed content from; and, when any page carries a
+ * warning, the warning again as the last thing in the card, so
  * it sits directly above Download and says why the file's name ends in partly
  * redacted. It stays while the session is `complete`, before and after the
  * download.
@@ -885,12 +887,18 @@ function OutcomeCard({
 }) {
   const { summary } = session;
   const partly = summary !== null && isPartly(summary);
+  const removed = summary === null ? null : removedOffPageLine(summary);
 
   return (
     <Card title="Your clean file is ready">
       <p data-testid="outcome" className="text-ink">
         {outcomeText(outcome)}
       </p>
+      {removed !== null && (
+        <Callout tone="info" data-testid="off-page-removed">
+          <p>{removed}</p>
+        </Callout>
+      )}
       {partly && (
         <Callout
           tone="warning"

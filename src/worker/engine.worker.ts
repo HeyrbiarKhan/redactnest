@@ -27,10 +27,12 @@ import {
   type OpenDocument,
   type RedactionTarget,
   type TargetMap,
+  type TrimOutcome,
 } from "@/engine";
 import {
   asMatchId,
   countPagesByFinding,
+  type DocumentSummary,
   type EngineLimits,
   type ErrorMessage,
   type ProgressMessage,
@@ -77,7 +79,10 @@ interface EngineSession {
    * (spec 0004, AC-11).
    */
   readonly bytes: ArrayBuffer;
-  /** The review copy, prepared once at open. Never redacted (spec 0004, INV-1). */
+  /**
+   * The review copy, prepared and trimmed once at open. Never redacted inside
+   * its visible area (spec 0004, INV-1, as spec 0006 rewords it).
+   */
   readonly doc: OpenDocument;
   /** Page, quads and extraction offsets. Never crosses the boundary (INV-2). */
   readonly targets: TargetMap;
@@ -314,6 +319,14 @@ async function runRedaction(
     if (cancelled.has(id)) return;
 
     const { summary } = session.doc;
+
+    // Spec 0006, AC-18 and INV-6. The summary the visitor was shown, the file
+    // name and the download warning all describe what the open's trim did, so
+    // a run whose trim decided otherwise on any page hands back no file.
+    if (!trimAgrees(result.trim, summary)) {
+      postError(id, jobId, "unsupported");
+      return;
+    }
     const message: RedactedMessage = {
       id,
       jobId,
@@ -348,6 +361,22 @@ async function runRedaction(
     if (session.activeRunId === id) session.activeRunId = null;
     cancelled.delete(id);
   }
+}
+
+/**
+ * Did a run's trim reach the open's decisions, page by page? Which pages had
+ * something removed, and which kept their pictures, are exactly what the
+ * summary's `off-page-content` and `off-page-picture` say (AC-18).
+ */
+function trimAgrees(trim: readonly TrimOutcome[], summary: DocumentSummary): boolean {
+  return (
+    trim.length === summary.pages.length &&
+    trim.every(
+      ({ removed, picturesKept }, index) =>
+        removed === summary.pages[index].findings.includes("off-page-content") &&
+        picturesKept === summary.pages[index].findings.includes("off-page-picture"),
+    )
+  );
 }
 
 scope.addEventListener("message", (event: MessageEvent<RequestMessage>) => {

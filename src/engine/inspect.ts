@@ -205,6 +205,8 @@ interface GlyphPaint {
   readonly origin: Point;
   readonly em: number;
   readonly paint: Paint;
+  /** The paint's relative luminance, `NaN` when its colour is not judged. */
+  readonly luminance: number;
   /** The bounds of the clip in force as it was drawn. */
   readonly clip: Rect | null;
   /**
@@ -332,6 +334,8 @@ interface DrawnGlyph {
   readonly origin: Point;
   readonly em: number;
   readonly paints: GlyphPaint[];
+  /** The drawing order of its last paint, which a cover must come after. */
+  lastOrder: number;
 }
 
 /**
@@ -356,6 +360,12 @@ function concealedGlyphs(
 ): readonly ConcealedGlyph[] {
   const concealed: ConcealedGlyph[] = [];
   const glyphs = byOrigin(drawing.paints);
+  const lastCover = drawing.covers.reduce(
+    (latest, { order }) => Math.max(latest, order),
+    0,
+  );
+  const firstBackdrop =
+    drawing.backdrops.length === 0 ? Infinity : drawing.backdrops[0].order;
 
   /** The glyph's box and its centre, when it is judged at all. */
   const judged = (origin: Point): { box: readonly Point[]; centre: Point } | null => {
@@ -366,11 +376,15 @@ function concealedGlyphs(
   };
 
   for (const glyph of glyphs.all) {
+    // Most glyphs on most pages can be neither covered nor hidden, and are
+    // settled without looking up their character (AC-29's budget).
+    if (!mayBeConcealed(glyph, lastCover, firstBackdrop)) continue;
+
     const seen = judged(glyph.origin);
     if (seen === null) continue;
 
-    const last = Math.max(...glyph.paints.map(({ order }) => order));
-    if (isCovered(seen.box, last, drawing.covers)) {
+    const last = glyph.lastOrder;
+    if (last < lastCover && isCovered(seen.box, last, drawing.covers)) {
       concealed.push({ origin: glyph.origin, kind: "covered" });
     } else if (
       glyph.paints.every((paint) => !shows(paint, glyph.em, seen.centre, drawing))
@@ -395,25 +409,103 @@ function concealedGlyphs(
   return concealed;
 }
 
-/** Group paints by origin, within `POSITION_TOLERANCE`, into glyphs. */
+/**
+ * Group paints into glyphs: every fill and stroke drawn at one origin. A
+ * glyph filled and stroked (render mode 2) is drawn twice from one text
+ * object, with the same text matrix, so its two paints share their origin
+ * exactly, and a map keyed by the exact coordinates groups them without a
+ * tolerance search. `at` answers within `POSITION_TOLERANCE`, for the rare
+ * clip only glyph asked about.
+ */
 function byOrigin(paints: readonly GlyphPaint[]): {
   readonly all: readonly DrawnGlyph[];
   at(origin: Point): DrawnGlyph | null;
 } {
   const all: DrawnGlyph[] = [];
-  const index = originIndex<DrawnGlyph>();
+  const exact = new Map<number, Map<number, DrawnGlyph>>();
   for (const paint of paints) {
-    const glyph = index.find(paint.origin);
-    if (glyph !== null) {
+    const [x, y] = paint.origin;
+    let row = exact.get(x);
+    if (row === undefined) {
+      row = new Map();
+      exact.set(x, row);
+    }
+    const glyph = row.get(y);
+    if (glyph !== undefined) {
       glyph.paints.push(paint);
+      glyph.lastOrder = Math.max(glyph.lastOrder, paint.order);
     } else {
-      const drawn: DrawnGlyph = { origin: paint.origin, em: paint.em, paints: [paint] };
+      const drawn: DrawnGlyph = {
+        origin: paint.origin,
+        em: paint.em,
+        paints: [paint],
+        lastOrder: paint.order,
+      };
       all.push(drawn);
-      index.add(paint.origin, drawn);
+      row.set(y, drawn);
     }
   }
-  return { all, at: (origin) => index.find(origin) };
+
+  let index: ReturnType<typeof originIndex<DrawnGlyph>> | null = null;
+  return {
+    all,
+    at(origin) {
+      if (index === null) {
+        index = originIndex<DrawnGlyph>();
+        for (const glyph of all) index.add(glyph.origin, glyph);
+      }
+      return index.find(origin);
+    },
+  };
 }
+
+/**
+ * Could this glyph be covered or hidden at all? A cheap test that never
+ * answers no for a glyph a rule would conceal, so a glyph it passes over is
+ * one the full judgement would pass over too.
+ *
+ * It could be covered only when a cover is drawn after it. It could be hidden
+ * only when some paint of it is at zero opacity, under `TINY_TEXT_MAX`, in
+ * a clip whose edge comes within reach of it, or in a colour that could be
+ * lost against what is under it: white paper, when nothing is drawn before
+ * it, and anything, when something is.
+ */
+function mayBeConcealed(
+  glyph: DrawnGlyph,
+  lastCover: number,
+  firstBackdrop: number,
+): boolean {
+  if (glyph.lastOrder < lastCover) return true;
+  if (!(glyph.em >= TINY_TEXT_MAX)) return true;
+
+  // The centre of a glyph's box lies within this many ems of its origin in
+  // any font a page draws; a clip further than this from the origin on every
+  // side holds the centre.
+  const reach = CENTRE_REACH_EMS * glyph.em;
+  const [x, y] = glyph.origin;
+  return glyph.paints.some(
+    (paint) =>
+      !(paint.paint.alpha > 0) ||
+      (paint.clip !== null &&
+        !(
+          x - reach >= paint.clip[0] &&
+          x + reach <= paint.clip[2] &&
+          y - reach >= paint.clip[1] &&
+          y + reach <= paint.clip[3]
+        )) ||
+      (paint.plain &&
+        Number.isFinite(paint.luminance) &&
+        (paint.order > firstBackdrop ||
+          contrastRatio(paint.luminance, WHITE_PAPER) < HIDDEN_CONTRAST_MAX)),
+  );
+}
+
+/**
+ * How far from its origin, in ems, a glyph's box centre can lie: well past
+ * the widest advance and the tallest ascent a font gives, so the test above
+ * errs toward judging a glyph in full.
+ */
+const CENTRE_REACH_EMS = 4;
 
 /**
  * Does one opaque cover drawn after `last` hold at least
@@ -477,7 +569,7 @@ function blendsIn(
   backdrops: readonly Backdrop[],
 ): boolean {
   if (!paint.plain) return false;
-  const luminance = relativeLuminance(paint.paint);
+  const { luminance } = paint;
   if (!Number.isFinite(luminance)) return false;
 
   let under = WHITE_PAPER;
@@ -508,6 +600,8 @@ function contrastRatio(a: number, b: number): number {
  * U+FFFD, so it is not readable either.
  */
 function isReadable(code: number): boolean {
+  // Printable ASCII, most of any page, answered without the pattern.
+  if (code > 0x20 && code < 0x7f) return true;
   return !UNREADABLE.test(String.fromCodePoint(code));
 }
 
@@ -515,6 +609,7 @@ const UNREADABLE = /^[\s\p{Cc}\p{Co}\p{Cs}�]$/u;
 
 /** U+FFFD, a lone surrogate, or private use: what an unreadable font extracts as. */
 function isUnmapped(code: number): boolean {
+  if (code < 0x80) return false;
   return UNMAPPED.test(String.fromCodePoint(code));
 }
 
@@ -583,9 +678,15 @@ function readText(page: PDFPage): TextReading {
 function indexByOrigin(
   characters: readonly Character[],
 ): (origin: Point) => Character | null {
-  const index = originIndex<Character>();
-  for (const character of characters) index.add(character.origin, character);
-  return (origin) => index.find(origin);
+  // Built on the first lookup, so a page whose glyphs need none pays nothing.
+  let index: ReturnType<typeof originIndex<Character>> | null = null;
+  return (origin) => {
+    if (index === null) {
+      index = originIndex<Character>();
+      for (const character of characters) index.add(character.origin, character);
+    }
+    return index.find(origin);
+  };
 }
 
 /**
@@ -638,12 +739,15 @@ function readDrawing(mupdf: MuPdf, page: PDFPage): DrawingReading {
           });
         } else if (drawing.paint !== null && !state.defining) {
           paintInside();
+          // Once per text object, not once per glyph.
+          const luminance = relativeLuminance(drawing.paint);
           for (const { origin, em } of drawing.glyphs) {
             paints.push({
               order,
               origin,
               em,
               paint: drawing.paint,
+              luminance,
               clip: state.clip,
               plain,
             });

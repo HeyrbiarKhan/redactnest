@@ -45,6 +45,8 @@
  *     every object MuPDF passed it let go before its callback returns.
  *   - `inspect.ts` turns each page's drawing and text into closed findings,
  *     and the open refuses a document with no page it can read.
+ *   - `trim.ts` removes what lies outside each page's visible area, on both
+ *     copies, right after `prepareDocument`, and proves its text work.
  *
  * Nothing in this folder calls `search()` (spec 0005, INV-11); lint holds it.
  *
@@ -105,6 +107,7 @@ export {
 } from "./geometry";
 export {
   contrastWithWhite,
+  COVER_MIN_OVERLAP,
   HIDDEN_CONTRAST_MAX,
   inspectPages,
   PICTURE_MIN_SHARE,
@@ -114,12 +117,13 @@ export {
   SCAN_MIN_SHARE,
   STAMP_MAX_CHARS,
   TEXT_OVER_PICTURE_MAX,
+  TINY_TEXT_MAX,
   UNREADABLE_RUN,
 } from "./inspect";
 export { loadEngine, silenceEngineLog, type MuPdf } from "./load";
 export { openDocument, openDocumentWith, type OpenHooks } from "./open";
-export { boxPass, paddedPass, textPass, type Pass } from "./passes";
-export { imageReachVerdicts } from "./pixels";
+export { boxPass, paddedPass, textPass, trimPass, type Pass } from "./passes";
+export { IMAGE_CHECK_OPTIONS, imageReachVerdicts, outsidePixelsAreBlank } from "./pixels";
 export { prepareDocument } from "./prepare";
 export { PIPELINE, redactDocument, redactDocumentWith, type Pipeline } from "./redact";
 export {
@@ -128,6 +132,7 @@ export {
   unsoundTargetsIn,
   type OutlinedText,
 } from "./targets";
+export { TRIM_PIXEL_REACH, trimToVisibleArea } from "./trim";
 export {
   CARRIER_KEYS,
   CATALOG_KEYS,
@@ -146,4 +151,5 @@ export type {
   RedactionTarget,
   RunHooks,
   TargetMap,
+  TrimOutcome,
 } from "./types";
