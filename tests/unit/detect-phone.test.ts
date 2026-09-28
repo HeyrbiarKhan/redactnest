@@ -52,6 +52,18 @@ describe("numbers found and ticked (AC-2, AC-10)", () => {
       "0044 (0)20 7946 0958",
     ],
     ["a space between the + and the code", "Call + 44 20 7946 0958", "+ 44 20 7946 0958"],
+    ["a number glued by en dashes", "Call 020–7946–0958", "020–7946–0958"],
+    ["a number glued by non breaking hyphens", "Call 020‑7946‑0958", "020‑7946‑0958"],
+    [
+      "a + country prefix with no separator at all",
+      "Call +442079460958",
+      "+442079460958",
+    ],
+    [
+      "a 00 country prefix with no separator at all",
+      "Dial 00442079460958",
+      "00442079460958",
+    ],
   ])("finds %s, ticked", (_what, text, number) => {
     expect(found(text)).toEqual([[number, true]]);
   });
@@ -135,6 +147,14 @@ describe("extensions", () => {
     expect(texts("020 7946 0958 x2 monitors")).toEqual(["020 7946 0958 x2"]);
   });
 
+  it("does not take extension digits that run into a letter", () => {
+    expect(texts("020 7946 0958 ext. 12a")).toEqual(["020 7946 0958"]);
+  });
+
+  it("keeps the number alone when a marker has no digits after it", () => {
+    expect(texts("020 7946 0958 ext. today")).toEqual(["020 7946 0958"]);
+  });
+
   it("reads the tick from the number alone, never its extension", () => {
     expect(found("Order 12345678901 ext. 4")).toEqual([["12345678901 ext. 4", false]]);
   });
@@ -149,6 +169,12 @@ describe("numbers found and left unticked (AC-10)", () => {
   /** A valid US number, and an order number too. Validity alone never ticks. */
   it("lists a valid number written as bare digits unticked", () => {
     expect(found("Order 12345678901 shipped")).toEqual([["12345678901", false]]);
+  });
+
+  /** The trunk rule's national reading, bare: valid, but written like an ID. */
+  it("lists a valid UK number written as bare digits unticked, and ticks it after a phone word", () => {
+    expect(found("Ref 02079460958")).toEqual([["02079460958", false]]);
+    expect(found("Tel 02079460958")).toEqual([["02079460958", true]]);
   });
 
   it.each(["Tel:", "tel", "Phone", "TELEPHONE", "mobile", "Mob.", "cell", "Fax", "call"])(
@@ -213,8 +239,38 @@ describe("numbers side by side", () => {
     ["a valid number after a digit group", "Box 2000 212 555 0123", ["212 555 0123"]],
     ["numbers split by a slash", "020 7946 0958/0959", ["020 7946 0958"]],
     ["a real number beside a ZIP+4", "CA 90210-1234 (212) 555-0123", ["(212) 555-0123"]],
+    /** Step 1: a `+` anywhere but a run's start ends the run and starts a new one. */
+    [
+      "two international numbers",
+      "+44 20 7946 0958 +44 20 7946 0321",
+      ["+44 20 7946 0958", "+44 20 7946 0321"],
+    ],
+    [
+      "two whole numbers split by a slash",
+      "020 7946 0958/020 7946 0321",
+      ["020 7946 0958", "020 7946 0321"],
+    ],
+    /** INV-14: the date unit is never in a window, and the number beside it is. */
+    ["a full date beside a number", "05.12.1980 020 7946 0958", ["020 7946 0958"]],
   ])("finds exactly the numbers in %s", (_what, text, numbers) => {
     expect(texts(text)).toEqual(numbers);
+  });
+
+  /**
+   * Step 6's second pass: valid windows are taken first, then the longest
+   * possible window fills each stretch they left free, listed unticked.
+   */
+  it("fills the stretch a valid number leaves free with a possible one, unticked", () => {
+    expect(found("(212) 123 4567 (212) 555-0123")).toEqual([
+      ["(212) 123 4567", false],
+      ["(212) 555-0123", true],
+    ]);
+  });
+
+  /** Step 1: units part by 1 to 3 whitespace characters; a fourth ends the run. */
+  it("joins units parted by up to three spaces, and no more", () => {
+    expect(texts("Call 020   7946 0958")).toEqual(["020   7946 0958"]);
+    expect(texts("Call 020    7946 0958")).toEqual([]);
   });
 });
 
@@ -257,6 +313,7 @@ describe("what is not a phone number", () => {
     ["a dashed date starting with 0", "Born 05-12-1980 in Leeds"],
     ["another dotted date", "Signed 01.02.2003"],
     ["a dotted date with a one digit day", "Born 5.12.1980"],
+    ["a date glued by en dashes", "Born 05–12–1980 in Leeds"],
   ])("finds nothing in %s", (_what, text) => {
     expect(found(text)).toEqual([]);
   });

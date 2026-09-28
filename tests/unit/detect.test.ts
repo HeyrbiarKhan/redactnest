@@ -45,6 +45,17 @@ describe("resolving overlaps (AC-3)", () => {
     ]);
   });
 
+  /**
+   * The phone number shares only `0958` with the address, and is still dropped
+   * whole rather than trimmed to `020 7946`: a trimmed span would be a new
+   * match no detector judged.
+   */
+  it("drops a lower kind's span whole where it meets a higher kind's, never trims it", () => {
+    expect(found("Call 020 7946 0958@example.com")).toEqual([
+      ["email", "0958@example.com"],
+    ]);
+  });
+
   it("keeps spans of different kinds that do not overlap, in order of start", () => {
     expect(found("Call 020 7946 0958 or write to jane@example.com")).toEqual([
       ["phone", "020 7946 0958"],

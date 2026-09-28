@@ -91,6 +91,14 @@ describe("the groups (AC-3, AC-13)", () => {
     expect(within(phones).getAllByRole("checkbox")).toHaveLength(2);
   });
 
+  it("counts a group of one with the singular noun", () => {
+    const { container } = show({ matches: [match("e1", "email", "jane@example.com")] });
+
+    expect(container.querySelector("summary")).toHaveTextContent(
+      "Email addresses1 email address",
+    );
+  });
+
   it("shows no group for a kind with nothing found", () => {
     const { container } = show({ matches: [match("e1", "email", "jane@example.com")] });
 
@@ -158,6 +166,24 @@ describe("a blocked match", () => {
     show();
 
     expect(screen.getByRole("checkbox", { name: "jane@example.com" })).toBeEnabled();
+  });
+
+  /** AC-13: Tab goes each group's summary, then each checkbox that is not blocked. */
+  it("is passed over by Tab, while every other row is reached in order", async () => {
+    const user = userEvent.setup();
+    const { container } = show();
+    const [emails, phones] = container.querySelectorAll("summary");
+
+    for (const stop of [
+      emails,
+      screen.getByRole("checkbox", { name: "jane@example.com" }),
+      phones,
+      screen.getByRole("checkbox", { name: "020 7946 0958" }),
+      screen.getByRole("checkbox", { name: "(212) 123 4567" }),
+    ]) {
+      await user.tab();
+      expect(stop).toHaveFocus();
+    }
   });
 });
 

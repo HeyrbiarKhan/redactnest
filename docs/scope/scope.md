@@ -16,7 +16,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 3 | Document session & privacy guarantee | Foundation | done |
 | 4 | Design system & UI foundation | Foundation | done |
 | 5 | Redaction engine | Release 1 | done |
-| 6 | Pattern detection | Release 1 | in-progress |
+| 6 | Pattern detection | Release 1 | done |
 | 7 | Scanned page detection & warnings | Release 1 | planned |
 | 8 | Redact flow | Release 1 | planned |
 | 9 | Privacy policy & terms | Release 2 | planned |
@@ -101,7 +101,7 @@ spec [0004](../specs/0004-redaction-engine/index.md) · code in `src/engine/`, `
 - [x] Review it (fresh model): `/check review redaction engine`
 - [x] Document it: `/document redaction engine`
 
-### 6. Pattern detection · in-progress
+### 6. Pattern detection · done
 Find sensitive patterns and present them as a confirm checklist rather than removing anything on the user's behalf. This spec decides the detection approach and defines all seven pattern types; release 1 builds email and phone, and the rest follow in release 3 against this same spec.
 **Done when:** email and phone are found across a document, each match is shown with enough surrounding context to judge it, nothing is removed without a tick, and every match maps to a target the engine can actually remove.
 spec [0005](../specs/0005-pattern-detection/index.md) · code in `src/detect`, `src/engine` (`find.ts`, `characters.ts`, `targets.ts`), `src/worker/engine.worker.ts`, `src/lib` (`detectors.ts`, `session.ts`), `src/app/tool` (`review-checklist.tsx`, `tool-client.tsx`), `src/ui` (`checkbox.tsx`, `checklist-item.tsx`), `eslint.config.mjs`, `scripts/lib/detection-fixtures.mjs`
@@ -113,7 +113,7 @@ spec [0005](../specs/0005-pattern-detection/index.md) · code in `src/detect`, `
   - [x] Wraps and hardening: the email rejoin, the adversarial input tests, and cancel during detection in the browser · AC-4, AC-11, AC-16
   - [x] Phone numbers side by side: our own phone finder with libphonenumber-js judging each window, the trunk and numeric date rules, the 2 s phone budget with its parse count proof, and the side by side fixture · AC-2, AC-6, AC-10, AC-16, AC-27
 - [x] Verify it: `/check verify pattern detection`
-- [ ] Test it: `/test pattern detection`
+- [x] Test it: `/test pattern detection`
 
 ### 7. Scanned page detection & warnings · needs a decision · GA
 Detect per page whether a text layer exists, and never let somebody leave with a file that looks redacted and is not.
