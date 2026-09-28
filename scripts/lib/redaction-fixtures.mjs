@@ -20,12 +20,12 @@ import { readTrueType } from "./truetype.mjs";
 const CARLITO = readFileSync(new URL("../fonts/Carlito-Regular.ttf", import.meta.url));
 
 /** A PDF literal string, with its three special characters escaped. */
-function literal(text) {
+export function literal(text) {
   return `(${text.replace(/[\\()]/g, (character) => `\\${character}`)})`;
 }
 
 /** One line of text, in font `font` at `size`, with its baseline starting at `x`, `y`. */
-function line(font, size, x, y, text) {
+export function line(font, size, x, y, text) {
   return `BT /${font} ${size} Tf ${x} ${y} Td ${literal(text)} Tj ET\n`;
 }
 
@@ -36,11 +36,12 @@ function line(font, size, x, y, text) {
  * `build` receives `add`, which appends an object and returns its number, and
  * `fonts`, the font resource entries every page can use: `/F1` Helvetica, `/F2`
  * Courier and, when asked for, `/F3` Carlito. It returns one spec per page:
- * `content`, and optionally `resources` (more resource entries), `resourcesRef`
- * (a shared resource dictionary's number, used instead), and `keys` (more page
- * keys, such as `/Rotate 90`).
+ * `content`, and optionally `fonts` (more entries for the page's one `/Font`
+ * dictionary), `resources` (more resource entries), `resourcesRef` (a shared
+ * resource dictionary's number, used instead), and `keys` (more page keys,
+ * such as `/Rotate 90`).
  */
-function document(build, { carlito = false } = {}) {
+export function document(build, { carlito = false } = {}) {
   const objects = [];
   const add = (body) => objects.push(body);
 
@@ -54,9 +55,12 @@ function document(build, { carlito = false } = {}) {
 
   const kids = build({ add, fonts }).map((spec) => {
     const content = add(stream("", spec.content));
+    // Joined rather than interpolated with a gap, so a page with no fonts of
+    // its own writes exactly the bytes it always did.
+    const pageFonts = [fonts, spec.fonts].filter(Boolean).join(" ");
     const resources =
       spec.resourcesRef === undefined
-        ? `<< /Font << ${fonts} >> ${spec.resources ?? ""} >>`
+        ? `<< /Font << ${pageFonts} >> ${spec.resources ?? ""} >>`
         : `${spec.resourcesRef} 0 R`;
     return add(
       `<< /Type /Page /Parent ${pages} 0 R /MediaBox [0 0 612 792] ${spec.keys ?? ""} ` +
@@ -222,7 +226,7 @@ export function rotatedPage() {
  * A number for a content stream. PDF has no exponent form, so the rounding
  * error `Math.cos` leaves at a right angle (6e-17) is written as 0.
  */
-function num(value) {
+export function num(value) {
   return Math.abs(value) < 1e-6 ? "0" : String(value);
 }
 
@@ -446,7 +450,7 @@ function textLayer(down, left) {
     .join("");
 }
 
-const IDENTITY_UNICODE = `/CIDInit /ProcSet findresource begin
+export const IDENTITY_UNICODE = `/CIDInit /ProcSet findresource begin
 12 dict begin
 begincmap
 /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def
@@ -553,7 +557,7 @@ export function imagesUnder() {
 }
 
 /** An image `size` pixels square, every pixel the grey `shade` (0 is black). */
-function flatImage(add, size, shade) {
+export function flatImage(add, size, shade) {
   return add(
     stream(
       `/Type /XObject /Subtype /Image /Width ${size} /Height ${size} /ColorSpace /DeviceGray ` +
@@ -567,7 +571,7 @@ function flatImage(add, size, shade) {
  * Draw `/name` as a square `size` points across, centred on `[x, y]` and turned
  * by `degrees`, pixel row 0 at the top as always.
  */
-function drawImage(name, size, degrees, [x, y]) {
+export function drawImage(name, size, degrees, [x, y]) {
   const angle = (degrees * Math.PI) / 180;
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
@@ -900,7 +904,7 @@ export function combining() {
 }
 
 /** UTF-16BE with its byte order mark, as a PDF hex string. */
-function utf16(text) {
+export function utf16(text) {
   return `<FEFF${[...text].map((c) => c.codePointAt(0).toString(16).padStart(4, "0")).join("")}>`;
 }
 

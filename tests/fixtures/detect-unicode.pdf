@@ -1,0 +1,67 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [8 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<<  /Length 352 >>
+stream
+/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def
+/CMapName /Adobe-AboveBmp-UCS def
+/CMapType 2 def
+1 begincodespacerange
+<00> <FF>
+endcodespacerange
+2 beginbfchar
+<80> <D842DFB7>
+<81> <D876DC00>
+endbfchar
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end
+
+endstream
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << /BaseEncoding /WinAnsiEncoding /Differences [128 /A /B] >> /ToUnicode 5 0 R >>
+endobj
+7 0 obj
+<<  /Length 187 >>
+stream
+BT /F5 12 Tf 72 720 Td (Staff directory) Tj ET
+BT /F5 12 Tf 72 700 Td (Contact: \200\201.tanaka@example.jp today) Tj ET
+BT /F5 12 Tf 72 680 Td (Keep this sentence exactly as it is) Tj ET
+
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R /F5 6 0 R >>  >> /Contents 7 0 R >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000212 00000 n 
+0000000307 00000 n 
+0000000711 00000 n 
+0000000870 00000 n 
+0000001109 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R >>
+startxref
+1257
+%%EOF

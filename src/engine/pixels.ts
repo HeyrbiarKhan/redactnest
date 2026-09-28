@@ -12,8 +12,9 @@ import type { MuPdf } from "./load";
 import type { Quad, RedactionTarget } from "./types";
 
 /**
- * Would MuPDF blank every image under these targets only within reach of their
- * padded areas? Spec 0004, AC-29 and INV-15.
+ * Which targets would MuPDF blank an image under past reach of their padded
+ * areas? Spec 0004, AC-29 and INV-15; spec 0005, AC-8 (`image-overreach`) and
+ * INV-3. One answer per target, in order, `true` for one that would.
  *
  * MuPDF blanks an image's pixels whole, over each area's page bounds taken in
  * the image's own pixel grid, so an image drawn at an angle or at a coarse
@@ -23,15 +24,16 @@ import type { Quad, RedactionTarget } from "./types";
  * padded area's bounds, the region MuPDF will blank may reach no more than
  * `BOUNDS_REACH_RATIO` of the target quad's height past the padded area.
  *
+ * One walk answers for every target, and each answer depends on that target
+ * alone, so detection can block exactly the matches validation would refuse.
  * Reads each image's size and never decodes it. Fails closed: a placement that
- * cannot be inverted counts as out of reach. Exported so feature 6 can mark a
- * match the engine would refuse before anybody ticks it.
+ * cannot be inverted counts as out of reach.
  */
-export function imagesWithinReach(
+export function imageReachVerdicts(
   page: PDFPage,
   targets: readonly Pick<RedactionTarget, "quads">[],
-): boolean {
-  const areas = targets.flatMap((target) =>
+): readonly boolean[] {
+  const areas = targets.map((target) =>
     target.quads.map((quad) => {
       const padded = paddedArea(quad);
       return {
@@ -41,23 +43,25 @@ export function imagesWithinReach(
       };
     }),
   );
+  const overreaches = targets.map(() => false);
   const stext = page.toStructuredText("preserve-images");
-  let within = true;
 
   try {
     stext.walk({
       onImageBlock(bbox, transform, image) {
         try {
-          if (!within) return;
           const width = image.getWidth();
           const height = image.getHeight();
-          // "Within the limit" rather than "not past it", so a reach that is
-          // not a number counts as out of reach.
-          within = areas.every(
-            ({ padded, bounds, limit }) =>
-              !boundsMeet(bbox, bounds) ||
-              imageReach(transform, width, height, padded) <= limit,
-          );
+          areas.forEach((target, at) => {
+            // "Within the limit" rather than "not past it", so a reach that
+            // is not a number counts as out of reach.
+            const within = target.every(
+              ({ padded, bounds, limit }) =>
+                !boundsMeet(bbox, bounds) ||
+                imageReach(transform, width, height, padded) <= limit,
+            );
+            if (!within) overreaches[at] = true;
+          });
         } finally {
           image.destroy();
         }
@@ -66,7 +70,7 @@ export function imagesWithinReach(
   } finally {
     stext.destroy();
   }
-  return within;
+  return overreaches;
 }
 
 /**

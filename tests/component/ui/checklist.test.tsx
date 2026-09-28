@@ -103,6 +103,49 @@ describe("Checkbox", () => {
     }
   });
 
+  /** Spec 0005, AC-13: a row the engine would refuse, and every row mid run. */
+  it("is a native disabled checkbox when disabled, which a click cannot change", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <>
+        <span id="name">Emails</span>
+        <Checkbox
+          id="box"
+          checked={false}
+          disabled
+          onCheckedChange={onChange}
+          aria-labelledby="name"
+        />
+      </>,
+    );
+    const box = screen.getByRole("checkbox", { name: "Emails" });
+
+    await user.click(box);
+    await user.tab();
+
+    expect(box).toBeDisabled();
+    expect(box).not.toHaveFocus();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The accent fill applies only while enabled, and a disabled tick is drawn
+   * in `ink-muted`, so a disabled box never looks like one that still acts.
+   */
+  it("drops the accent fill while disabled", () => {
+    const { container } = render(
+      <Checkbox id="box" checked disabled onCheckedChange={() => {}} />,
+    );
+
+    const box = screen.getByRole("checkbox");
+    expect(box).toHaveClass("enabled:checked:bg-accent", "disabled:bg-subtle");
+    expect(box).not.toHaveClass("checked:bg-accent");
+    for (const tick of container.querySelectorAll("svg")) {
+      expect(tick).toHaveClass("peer-disabled:text-ink-muted");
+    }
+  });
+
   it("passes axe checked, unchecked and indeterminate", async () => {
     const { container } = render(
       <>
@@ -306,6 +349,91 @@ describe("ChecklistItem", () => {
     const { container } = render(
       <Row text="alex@example.com" before="Email: " after=" (work)" />,
     );
+
+    await expectNoAxeViolations(container);
+  });
+});
+
+/**
+ * Spec 0005, AC-8 and AC-13. A row the engine would refuse is listed, so
+ * nobody believes it is gone, and can never be ticked.
+ */
+describe("ChecklistItem, blocked or disabled", () => {
+  const REASON =
+    "This is set at too steep an angle to remove safely, so it will stay in the file.";
+
+  function Blocked(props: { onCheckedChange?: (checked: boolean) => void }) {
+    return (
+      <ul>
+        <ChecklistItem
+          id="match-9"
+          text="slanted@example.com"
+          before="Write to "
+          after=" today"
+          page={2}
+          checked={false}
+          blockedReason={REASON}
+          onCheckedChange={props.onCheckedChange ?? (() => {})}
+        />
+      </ul>
+    );
+  }
+
+  it("shows a disabled checkbox that a click anywhere on the row cannot tick", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<Blocked onCheckedChange={onChange} />);
+
+    await user.click(screen.getByText("Page 2"));
+    await user.click(screen.getByText(REASON));
+
+    const box = screen.getByRole("checkbox", { name: "slanted@example.com" });
+    expect(box).toBeDisabled();
+    expect(box).not.toBeChecked();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("shows its reason, and adds it to the row's description", () => {
+    render(<Blocked />);
+
+    expect(screen.getByText(REASON)).toBeVisible();
+    expect(screen.getByRole("checkbox")).toHaveAccessibleDescription(
+      `Page 2 …Write to slanted@example.com today… ${REASON}`,
+    );
+  });
+
+  it("marks the reason with a shape, hidden from assistive technology", () => {
+    const { container } = render(<Blocked />);
+
+    const icon = screen.getByText(REASON).parentElement?.querySelector("svg");
+    expect(icon).toHaveAttribute("aria-hidden", "true");
+    expect(container.querySelector("label")).toHaveClass("cursor-not-allowed");
+  });
+
+  it("disables a row that is not blocked, without a reason, while a run is under way", () => {
+    render(
+      <ul>
+        <ChecklistItem
+          id="match-1"
+          text="alex@example.com"
+          before=""
+          after=""
+          page={1}
+          checked
+          disabled
+          onCheckedChange={() => {}}
+        />
+      </ul>,
+    );
+
+    const box = screen.getByRole("checkbox", { name: "alex@example.com" });
+    expect(box).toBeDisabled();
+    expect(box).toBeChecked();
+    expect(box).toHaveAccessibleDescription("Page 1 alex@example.com");
+  });
+
+  it("passes axe", async () => {
+    const { container } = render(<Blocked />);
 
     await expectNoAxeViolations(container);
   });

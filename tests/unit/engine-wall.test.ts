@@ -64,6 +64,10 @@ const ARBITRARY_COLOUR = /No arbitrary colour value/;
 const UI_IMPORT = /src\/ui is presentation only/;
 const INNER_HTML = /Document derived text is untrusted input/;
 const TOOL_CLIENT = /Only src\/app\/tool\/page\.tsx may render ToolClient/;
+const DETECT = /Only src\/engine may import @\/detect/;
+const PHONE_LIBRARY = /Only src\/detect may import libphonenumber-js/;
+const SEARCH = /it never calls search\(\)/;
+const DETECT_ZONE = /src\/detect is pure text in, offsets out/;
 
 /** Ordinary main thread code: a route and a shared library, fully walled. */
 const ROUTE = "src/app/probe.ts";
@@ -77,6 +81,10 @@ const PAGE = "src/app/probe.tsx";
 const ENGINE_MODULE = "src/engine/index.ts";
 const WORKER = "src/worker/engine.worker.ts";
 const CLIENT = "src/worker/client.ts";
+
+/** A detector, and the one page allowed to render the tool client. */
+const DETECTOR = "src/detect/probe.ts";
+const TOOL_PAGE = "src/app/tool/page.tsx";
 
 /** Deliberately outside the wall: a unit test has to import what it tests. */
 const UNIT_TEST = "tests/unit/probe.test.ts";
@@ -97,12 +105,18 @@ beforeAll(async () => {
  * make every "allows" case below pass for entirely the wrong reason.
  */
 describe("the harness itself", () => {
-  it.each([ROUTE, LIBRARY, ENGINE_MODULE, WORKER, CLIENT, UNIT_TEST, PRIMITIVE])(
-    "says nothing about ordinary code in %s",
-    async (path) => {
-      expect(await wallErrors(path, "export const pageCount = 2;\n")).toEqual([]);
-    },
-  );
+  it.each([
+    ROUTE,
+    LIBRARY,
+    ENGINE_MODULE,
+    WORKER,
+    CLIENT,
+    UNIT_TEST,
+    PRIMITIVE,
+    DETECTOR,
+  ])("says nothing about ordinary code in %s", async (path) => {
+    expect(await wallErrors(path, "export const pageCount = 2;\n")).toEqual([]);
+  });
 });
 
 /** INV-5. One PDF parser, ever, and only the walled module may reach it. */
@@ -369,7 +383,6 @@ describe("the design system's primitives", () => {
  */
 describe("rendering the tool page's client anywhere but the tool page", () => {
   const HOME = "src/app/page.tsx";
-  const TOOL_PAGE = "src/app/tool/page.tsx";
 
   it("is rejected on another page", async () => {
     expect(
@@ -417,6 +430,184 @@ describe("rendering the tool page's client anywhere but the tool page", () => {
     expect(await wallErrors(TOOL_PAGE, IMPORTS_MUPDF)).toContainEqual(
       expect.stringMatching(MUPDF),
     );
+  });
+});
+
+/**
+ * Spec 0005, INV-8. Only the engine imports the detectors, and only the
+ * detectors import the phone library, so its metadata ships in the worker's
+ * chunk and never in a page's. Both proved in every zone, in every spelling
+ * `no-restricted-imports` misses, as the engine wall is.
+ */
+describe("importing the detectors anywhere but the engine", () => {
+  const IMPORTS_DETECT = 'import { detect } from "@/detect";\nexport const d = detect;\n';
+
+  it.each([
+    ["a static import", IMPORTS_DETECT],
+    [
+      "a subpath import",
+      'import { detectEmail } from "@/detect/email";\nexport const d = detectEmail;\n',
+    ],
+    [
+      "a relative import",
+      'import { detect } from "../detect";\nexport const d = detect;\n',
+    ],
+    ["a dynamic import", 'export const mod = await import("@/detect");\n'],
+    ["a type only import", 'export type Mod = typeof import("@/detect");\n'],
+  ])("is rejected as %s", async (_form, code) => {
+    expect(await wallErrors(ROUTE, code)).toContainEqual(expect.stringMatching(DETECT));
+  });
+
+  it.each([ROUTE, LIBRARY, WORKER, CLIENT, PRIMITIVE, TOOL_PAGE, DETECTOR])(
+    "is rejected in %s",
+    async (path) => {
+      expect(await wallErrors(path, IMPORTS_DETECT)).toContainEqual(
+        expect.stringMatching(DETECT),
+      );
+    },
+  );
+
+  it("is allowed in the engine, which runs detection", async () => {
+    expect(await wallErrors("src/engine/find.ts", IMPORTS_DETECT)).toEqual([]);
+  });
+});
+
+describe("importing the phone library anywhere but the detectors", () => {
+  const IMPORTS_PHONE =
+    'import { findNumbers } from "libphonenumber-js/max";\nexport const f = findNumbers;\n';
+
+  it.each([
+    ["a static import", IMPORTS_PHONE],
+    [
+      "the package root",
+      'import { parsePhoneNumber } from "libphonenumber-js";\nexport const p = parsePhoneNumber;\n',
+    ],
+    ["a dynamic import", 'export const mod = await import("libphonenumber-js/max");\n'],
+    ["a type only import", 'export type Mod = typeof import("libphonenumber-js");\n'],
+  ])("is rejected as %s", async (_form, code) => {
+    expect(await wallErrors(LIBRARY, code)).toContainEqual(
+      expect.stringMatching(PHONE_LIBRARY),
+    );
+  });
+
+  it.each([ROUTE, LIBRARY, ENGINE_MODULE, WORKER, CLIENT, PRIMITIVE, TOOL_PAGE])(
+    "is rejected in %s",
+    async (path) => {
+      expect(await wallErrors(path, IMPORTS_PHONE)).toContainEqual(
+        expect.stringMatching(PHONE_LIBRARY),
+      );
+    },
+  );
+
+  it("is allowed in the detectors", async () => {
+    expect(await wallErrors(DETECTOR, IMPORTS_PHONE)).toEqual([]);
+  });
+});
+
+/** Spec 0005, INV-5. The detectors see text and nothing else. */
+describe("the detectors", () => {
+  it.each([
+    ["the engine", IMPORTS_ENGINE, ENGINE],
+    ["MuPDF", IMPORTS_MUPDF, MUPDF],
+    [
+      "a primitive",
+      'import { Button } from "@/ui/button";\nexport const b = Button;\n',
+      DETECT_ZONE,
+    ],
+    [
+      "the library folder",
+      'import { cx } from "@/lib/cx";\nexport const c = cx;\n',
+      DETECT_ZONE,
+    ],
+    [
+      "the config",
+      'import { config } from "@/config";\nexport const c = config;\n',
+      DETECT_ZONE,
+    ],
+    [
+      "React",
+      'import { useState } from "react";\nexport const u = useState;\n',
+      DETECT_ZONE,
+    ],
+    ["Next.js", 'import Link from "next/link";\nexport const l = Link;\n', DETECT_ZONE],
+    [
+      "the worker client",
+      'import { openSession } from "@/worker/client";\nexport const o = openSession;\n',
+      DETECT_ZONE,
+    ],
+    [
+      "the worker by a relative path",
+      'import { openSession } from "../worker/client";\nexport const o = openSession;\n',
+      DETECT_ZONE,
+    ],
+    [
+      "a value from the protocol",
+      'import { DETECTOR_KINDS } from "@/worker/protocol";\nexport const k = DETECTOR_KINDS;\n',
+      DETECT_ZONE,
+    ],
+    [
+      "the worker dynamically",
+      'export const mod = await import("@/worker/client");\n',
+      DETECT_ZONE,
+    ],
+  ])("may not import %s", async (_what, code, message) => {
+    const [result] = await eslint.lintText(code, {
+      filePath: DETECTOR,
+      warnIgnored: false,
+    });
+    expect(result.messages.map((each) => each.message)).toContainEqual(
+      expect.stringMatching(message),
+    );
+  });
+
+  it("may import a type from the protocol", async () => {
+    const [result] = await eslint.lintText(
+      'import type { DetectorKind } from "@/worker/protocol";\nexport type K = DetectorKind;\n',
+      { filePath: DETECTOR, warnIgnored: false },
+    );
+    expect(result.messages).toEqual([]);
+  });
+
+  it("may not write to the console, since it holds document text", async () => {
+    const [result] = await eslint.lintText(
+      'export const log = () => console.log("x");\n',
+      {
+        filePath: DETECTOR,
+        warnIgnored: false,
+      },
+    );
+    expect(result.messages.map((each) => each.ruleId)).toContain("no-console");
+  });
+
+  it("still carries the storage ban", async () => {
+    expect(
+      await wallErrors(
+        DETECTOR,
+        'export const go = () => localStorage.setItem("k", "v");\n',
+      ),
+    ).toContainEqual(expect.stringMatching(STORAGE));
+  });
+});
+
+/**
+ * Spec 0005, INV-11. Detection walks every character, because MuPDF.js caps
+ * `search()` at 500 quads and drops the rest in silence.
+ */
+describe("calling search()", () => {
+  const CALLS_SEARCH =
+    'export const hits = (stext: { search(n: string): unknown }) => stext.search("a");\n';
+
+  it.each(["src/engine/find.ts", ENGINE_MODULE, DETECTOR])(
+    "is rejected in %s",
+    async (path) => {
+      expect(await wallErrors(path, CALLS_SEARCH)).toContainEqual(
+        expect.stringMatching(SEARCH),
+      );
+    },
+  );
+
+  it("is allowed in a test, which compares against it", async () => {
+    expect(await wallErrors(UNIT_TEST, CALLS_SEARCH)).toEqual([]);
   });
 });
 

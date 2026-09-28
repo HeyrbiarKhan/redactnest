@@ -16,8 +16,9 @@
  * Both the replace confirm and the leave warning hang off `hasUnsavedWork`,
  * which is true once a tick has been changed, a redaction is in flight, or a
  * result has not been downloaded. Spec 0004's Redact button made the last two
- * reachable, and they are tested with the redaction path at the end of this
- * file. A changed tick waits for the checklist features 6 and 8 build.
+ * reachable, and they are tested with the redaction path near the end of this
+ * file. Spec 0005's checklist made the first reachable, and it is tested with
+ * the checklist at the very end.
  */
 
 import { act, render, screen } from "@testing-library/react";
@@ -781,6 +782,7 @@ describe("the redaction path (spec 0004)", () => {
       before: "Contact ",
       after: " today",
       tickedByDefault: true,
+      blocked: null,
     },
     {
       id: asMatchId("m2"),
@@ -790,6 +792,7 @@ describe("the redaction path (spec 0004)", () => {
       before: "or ",
       after: ".",
       tickedByDefault: false,
+      blocked: null,
     },
   ]);
 
@@ -1087,5 +1090,187 @@ describe("the redaction path (spec 0004)", () => {
     await openAndRedact(run);
 
     expect(wouldWarnOnLeave()).toBe(true);
+  });
+});
+
+/**
+ * Spec 0005, AC-13 and AC-14, and the spec 0002 edges a changed tick makes
+ * reachable at last: the replace confirm (its AC-1), the leave warning (its
+ * AC-13) and the tick and run again from `complete` (its AC-14).
+ */
+describe("the checklist (spec 0005)", () => {
+  const EMAIL = asMatchId("m-email");
+  const PHONE = asMatchId("m-phone");
+  const BLOCKED = asMatchId("m-blocked");
+
+  const MATCHES: readonly ReviewMatch[] = Object.freeze([
+    {
+      id: EMAIL,
+      type: "email",
+      page: 1,
+      text: "jane@example.com",
+      before: "Contact ",
+      after: " today",
+      tickedByDefault: true,
+      blocked: null,
+    },
+    {
+      id: PHONE,
+      type: "phone",
+      page: 1,
+      text: "(212) 123 4567",
+      before: "Old number ",
+      after: " retired",
+      tickedByDefault: false,
+      blocked: null,
+    },
+    {
+      id: BLOCKED,
+      type: "email",
+      page: 2,
+      text: "slanted@example.com",
+      before: "Write to ",
+      after: "",
+      tickedByDefault: false,
+      blocked: "slanted-text",
+    },
+  ]);
+
+  function withMatches(matches: readonly ReviewMatch[] = MATCHES): OpenedSession {
+    return {
+      ...openedSession(),
+      matches,
+      redact: vi.fn(() => new Promise<RedactedOutput>(() => {})),
+    };
+  }
+
+  async function openWith(session: OpenedSession) {
+    mocks.openSession.mockResolvedValue(session);
+    const rendered = render(<ToolClient />);
+    await chooseFile(pdfFile());
+    await screen.findByTestId("review");
+    return rendered;
+  }
+
+  it("lists what was found once the document is open, with the coverage note above", async () => {
+    await openWith(withMatches());
+
+    expect(screen.getByTestId("coverage")).toHaveTextContent(
+      "RedactNest looked for email addresses and phone numbers.",
+    );
+    expect(screen.getByRole("checkbox", { name: "jane@example.com" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "(212) 123 4567" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "slanted@example.com" })).toBeDisabled();
+  });
+
+  it("sits outside the polite live region", async () => {
+    const { container } = await openWith(withMatches());
+
+    const region = container.querySelector('[aria-live="polite"]');
+    expect(region?.contains(screen.getByTestId("review"))).toBe(false);
+  });
+
+  it("shows the empty state when nothing was found", async () => {
+    await openWith(withMatches([]));
+
+    expect(screen.getByText("Nothing found to remove")).toBeVisible();
+    expect(screen.getByTestId("redact")).toBeInTheDocument();
+  });
+
+  it("runs Redact over the ticks as the visitor left them", async () => {
+    const session = withMatches();
+    await openWith(session);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("checkbox", { name: "jane@example.com" }));
+    await user.click(screen.getByRole("checkbox", { name: "(212) 123 4567" }));
+    await user.click(screen.getByTestId("redact"));
+
+    expect(session.redact).toHaveBeenCalledWith([PHONE], expect.any(Object));
+  });
+
+  it("never lets a blocked match into a run", async () => {
+    const session = withMatches();
+    await openWith(session);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByText(/too steep an angle/));
+    await user.click(screen.getByTestId("redact"));
+
+    expect(session.redact).toHaveBeenCalledWith([EMAIL], expect.any(Object));
+  });
+
+  it("disables every checkbox while a run is under way", async () => {
+    await openWith(withMatches());
+
+    await userEvent.setup().click(screen.getByTestId("redact"));
+
+    for (const box of screen.getAllByRole("checkbox")) expect(box).toBeDisabled();
+  });
+
+  it("warns on the way out once a tick has changed, and not before (spec 0002, AC-13)", async () => {
+    await openWith(withMatches());
+    expect(wouldWarnOnLeave()).toBe(false);
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("checkbox", { name: "(212) 123 4567" }));
+
+    expect(wouldWarnOnLeave()).toBe(true);
+  });
+
+  it("asks before a second file replaces changed ticks, and keeps them on no (spec 0002, AC-1)", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await openWith(withMatches());
+    await userEvent
+      .setup()
+      .click(screen.getByRole("checkbox", { name: "(212) 123 4567" }));
+
+    await chooseFile(pdfFile("second.pdf"));
+
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(mocks.openSession).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("checkbox", { name: "(212) 123 4567" })).toBeChecked();
+  });
+
+  it("goes back to Redact from complete when a tick changes (spec 0002, AC-14)", async () => {
+    const run = {
+      finish: undefined as undefined | (() => void),
+    };
+    const session: OpenedSession = {
+      ...withMatches(),
+      redact: vi.fn(
+        () =>
+          new Promise<RedactedOutput>((resolve) => {
+            run.finish = () =>
+              resolve({
+                output: new ArrayBuffer(8),
+                outcome: {
+                  pageCount: 2,
+                  removedByType: { email: 1 },
+                  pagesWithoutText: 1,
+                  sanitized: [],
+                },
+              });
+          }),
+      ),
+    };
+    await openWith(session);
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("redact"));
+    await act(async () => run.finish?.());
+    await screen.findByTestId("download");
+
+    await user.click(screen.getByRole("checkbox", { name: "(212) 123 4567" }));
+
+    expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("redact"));
+    expect(session.redact).toHaveBeenLastCalledWith([EMAIL, PHONE], expect.any(Object));
+  });
+
+  it("has no accessibility violations with groups and a blocked row", async () => {
+    const { container } = await openWith(withMatches());
+
+    await expectNoAxeViolations(container);
   });
 });

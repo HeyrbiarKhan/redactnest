@@ -16,7 +16,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 3 | Document session & privacy guarantee | Foundation | done |
 | 4 | Design system & UI foundation | Foundation | done |
 | 5 | Redaction engine | Release 1 | done |
-| 6 | Pattern detection | Release 1 | planned |
+| 6 | Pattern detection | Release 1 | done |
 | 7 | Scanned page detection & warnings | Release 1 | planned |
 | 8 | Redact flow | Release 1 | planned |
 | 9 | Privacy policy & terms | Release 2 | planned |
@@ -101,10 +101,19 @@ spec [0004](../specs/0004-redaction-engine/index.md) · code in `src/engine/`, `
 - [x] Review it (fresh model): `/check review redaction engine`
 - [x] Document it: `/document redaction engine`
 
-### 6. Pattern detection · needs a decision
+### 6. Pattern detection · done
 Find sensitive patterns and present them as a confirm checklist rather than removing anything on the user's behalf. This spec decides the detection approach and defines all seven pattern types; release 1 builds email and phone, and the rest follow in release 3 against this same spec.
 **Done when:** email and phone are found across a document, each match is shown with enough surrounding context to judge it, nothing is removed without a tick, and every match maps to a target the engine can actually remove.
-- [ ] Design it (spec): `/architect pattern detection`
+spec [0005](../specs/0005-pattern-detection/index.md) · code in `src/detect`, `src/engine` (`find.ts`, `characters.ts`, `targets.ts`), `src/worker/engine.worker.ts`, `src/lib` (`detectors.ts`, `session.ts`), `src/app/tool` (`review-checklist.tsx`, `tool-client.tsx`), `src/ui` (`checkbox.tsx`, `checklist-item.tsx`), `eslint.config.mjs`, `scripts/lib/detection-fixtures.mjs`
+- [x] Design it (spec): `/architect pattern detection`
+- [x] Build it: `/develop pattern detection`
+  - [x] An email found, shown and removed: the protocol's `blocked` field, `src/detect` and its lint zone, the engine's find step, the worker, the session guards, the thin checklist with its coverage note and empty state, and the browser proofs · AC-1, AC-3, AC-4, AC-5, AC-6, AC-7, AC-10, AC-11, AC-12, AC-13, AC-14, AC-15, AC-17, AC-18, AC-25, AC-26
+  - [x] Phone numbers: libphonenumber-js with `max` metadata, UK and US national formats plus international, and the look alike fixture · AC-2, AC-4, AC-6, AC-10, AC-17
+  - [x] Nothing the engine would refuse can be ticked: the shared predicates, both extraction modes, and blocked rows with a reason · AC-8, AC-9, AC-13
+  - [x] Wraps and hardening: the email rejoin, the adversarial input tests, and cancel during detection in the browser · AC-4, AC-11, AC-16
+  - [x] Phone numbers side by side: our own phone finder with libphonenumber-js judging each window, the trunk and numeric date rules, the 2 s phone budget with its parse count proof, and the side by side fixture · AC-2, AC-6, AC-10, AC-16, AC-27
+- [x] Verify it: `/check verify pattern detection`
+- [x] Test it: `/test pattern detection`
 
 ### 7. Scanned page detection & warnings · needs a decision · GA
 Detect per page whether a text layer exists, and never let somebody leave with a file that looks redacted and is not.
@@ -115,6 +124,7 @@ Detect per page whether a text layer exists, and never let somebody leave with a
 The single page that is the product: drop a PDF, see what was found, tick what to remove, download the clean file, read the summary of what happened.
 **Done when:** an anonymous visitor can take a document up to the page cap from drop to download in one pass, the cap is a config value (3 to start), the scanned page warnings surface in the flow, the summary shows counts by detection type plus what was sanitized, and failure states say plainly what went wrong.
 **Also owed here:** `retireOtherJobs` in `src/worker/client.ts` skips pending operations under the same `jobId` as the open it is making room for. The worker makes no such exception: an open with the same `jobId` cancels that job's run in flight, and a cancelled run posts nothing. So if such an open ever reached a live worker while that job's redact was pending, the redact could never settle, and the visitor would sit on a run that neither finishes nor fails. It is not reachable today, because both callers that reuse a `jobId` get a fresh worker first. The redact flow is where a new path that reopens a job on a live worker would most likely appear, so check this when you add one. A suggested fix and its test are in the open follow up at the end of the [redaction engine review](../reviews/2026-09-27-feat-redaction-engine.md).
+**Also owed here:** the review checklist is too slow on a big document. `ReviewChecklist` in `src/app/tool/review-checklist.tsx` renders every row again on each session change, with a new toggle handler per row, so a 50 page document with thousands of matches freezes the page for seconds, and a single tick takes 5 to 6 s. Feature 8 must avoid rendering a row again when nothing about it changed. Spec 0005's first Follow-up (measure at the paid cap, then decide on virtual scrolling or a cap) belongs to the same fix.
 - [ ] Design it (spec): `/architect redact flow`
 
 ### 18. AGPL compliance & source publication · Alpha · from spec 0001

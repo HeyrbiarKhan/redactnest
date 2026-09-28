@@ -7,6 +7,7 @@ The redaction engine: MuPDF compiled to WebAssembly, behind the engine wall. It 
 - One file per step, mapped in the header of `index.ts`. `index.ts` is the only entry: callers import from `@/engine`, never from a file inside it.
 - Only `src/worker/engine.worker.ts` imports this folder, and only this folder names `mupdf`. The `redactnest/engine-wall` lint zones enforce both. `tests/` sits outside the wall on purpose, because a test of the walled module has to import it.
 - `objects.ts` holds the small readers over MuPDF's object model that the inventory, the rebuild and the self check share, so all three agree on what "an object carries a key" means.
+- `find.ts` is detection's step (spec 0005): it reads each page through `walkCharacters`, hands each text block to `@/detect`, and turns every find into quads and a target, or blocks it with the reason the engine would refuse it for. It yields and checks for a cancel after each page read through the same `checkpoint` in `failure.ts` that a run uses (AC-11). This folder is the only importer of `@/detect` (INV-8).
 
 ## Conventions
 
@@ -23,6 +24,8 @@ The redaction engine: MuPDF compiled to WebAssembly, behind the engine wall. It 
 - The engine only yields and asks. At each checkpoint a run yields a macrotask (`setTimeout` with 0, so a waiting `cancel` message is delivered first), then reads `isCancelled`. The worker owns the run queue, the cancelled set and replacement. AC-17, AC-18, AC-23.
 - `PDF_HEADER_WINDOW`, the geometry values in `geometry.ts` and the self check's values in `characters.ts` are engine constants, never config. They are rules about the file format and about geometry, not caps on the visitor, and an environment variable would let a typo switch a check off. They are the deliberate exception to "every cap comes from `src/config`", and each comment says so.
 - Two extraction settings, never mixed. `EXTRACTION_OPTIONS` (MuPDF's defaults, which clip to the page) serves detection and target validation. `CHECK_EXTRACTION_OPTIONS` (the same plus `clip=no`) serves the character record and the self check. Never add `dehyphenate`, `collect-styles`, `segment`, `clip` or `accurate-bboxes` to the first: each changes which characters exist or where they sit.
+- Detection and redaction ask the same checks. `unsoundTargetsIn`, `slantedTargets` and `imageReachVerdicts` in `targets.ts` each answer per target; `validateTargets` composes them in its fixed order, and `find.ts` asks them per match. Never write a second copy of a check in `find.ts`, or a match could be tickable and then refused. Spec 0005, INV-3.
+- `walkCharacters` in `characters.ts` is the one character reader for detection, target validation, the record and the self check, and it returns whole code points. Nothing downstream of it indexes text by UTF-16 unit. Spec 0005, INV-12.
 - The character record holds document text (code points and positions) for the length of a run. It is never logged, never crosses the boundary, and is dropped when the run returns or fails.
 
 ## The self check
@@ -44,6 +47,8 @@ Measured on MuPDF 1.28.1. The ones the design rests on are pinned by a test, so 
 - `asUint8Array()` on a MuPDF buffer is a view into the WebAssembly heap. Copy it with `slice()` before the buffer is destroyed, as `takeOutput` in `redact.ts` does.
 - A missing key comes back as one shared `Null` object, and calling `get` on it throws. Look keys up through `hasKey` and the other readers in `objects.ts`.
 - `graftPage` is not relied on to carry a page's `/Group`, so `rebuild.ts` grafts it across explicitly.
+- MuPDF.js 1.28.1's structured text walker builds each character with `String.fromCharCode`, so a code point above U+FFFF comes back as its low 16 bits. `walkCharacters` puts back each such line's code points from `asJSON()`, and fails closed (`unsupported`, or `redaction-incomplete` in the self check) when the counts or the low bits disagree. Pinned in `tests/unit/characters.test.ts`, so a release that fixes it fails the pin and the repair can go. Spec 0005, AC-26.
+- `search()` stops at 500 quads and drops the rest without saying so. That is why detection walks characters, and why lint bans `search()` in this folder and in `src/detect`. Spec 0005, AC-25.
 
 ## Tests
 
@@ -53,10 +58,11 @@ Measured on MuPDF 1.28.1. The ones the design rests on are pinned by a test, so 
 - `tests/support/targets.ts` (`findTargets`) stands in for feature 6. It prepares the fixture as the review copy is prepared, searches with `EXTRACTION_OPTIONS`, and sets `text` to the needle.
 - `tests/support/bytes.ts` loads a committed fixture without importing MuPDF, for tests of what happens before the engine loads.
 - Where the rest live: `tests/unit/redaction*.test.ts` (removal, the fixture matrix, the self check, geometry, the inventory), `engine.test.ts` (the size cap, the header window, loading), `engine-log.test.ts` (silence) and `engine-worker.test.ts` (queue, cancel, replacement). In a real browser: `tests/e2e/engine.spec.ts`, `cancel.spec.ts` and the redaction leg of `privacy.spec.ts`.
+- Detection: `tests/unit/detection.test.ts` covers the find step, blocked matches and wraps, compares `findMatches` with `findTargets`, and proves each shared predicate answers a target alone as it does in the full set. `characters.test.ts` covers the code point repair. In a real browser: `tests/e2e/review.spec.ts`. A test that calls `search()` goes through `searchQuads` in `tests/support/targets.ts`, which refuses an answer the 500 quad cap may have cut short.
 
 ## Fixtures
 
-- `tests/fixtures/*.pdf` are written by `node scripts/make-fixture.mjs`, object by object, with `scripts/lib/`: `pdf-writer.mjs` serialises, `redaction-fixtures.mjs` holds the matrix, `pdf-encrypt.mjs` encrypts the `rc4`, `aes-128` and `aes-256` owner password files with `node:crypto`, and `truetype.mjs` reads Carlito's metrics. None is made by MuPDF, so an engine bug cannot write a fixture that hides itself.
+- `tests/fixtures/*.pdf` are written by `node scripts/make-fixture.mjs`, object by object, with `scripts/lib/`: `pdf-writer.mjs` serialises, `redaction-fixtures.mjs` holds the matrix, `detection-fixtures.mjs` the `detect-*.pdf` set, `pdf-encrypt.mjs` encrypts the `rc4`, `aes-128` and `aes-256` owner password files with `node:crypto`, and `truetype.mjs` reads Carlito's metrics. None is made by MuPDF, so an engine bug cannot write a fixture that hides itself.
 - Change the script, never a PDF by hand. Run it and commit what changes. With no script change, a run leaves `git status tests/fixtures` clean.
 - Fonts: MuPDF's built in Helvetica (a 1.37 em quad) and Courier (1.25 em), and Carlito embedded (1.0 em, metric compatible with Calibri) from `scripts/fonts/`, with its SIL Open Font License beside it. Microsoft's fonts cannot ship in this public AGPL repository.
 - Write each needle in the same case as the page, because the target helper searches for it.

@@ -12,6 +12,14 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import {
+  detectBlocked,
+  detectEmail,
+  detectMany,
+  detectPhone,
+  detectUnicode,
+  detectWraps,
+} from "./lib/detection-fixtures.mjs";
 import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
 import {
@@ -377,6 +385,29 @@ const FIXTURES = [
       "the match, and a line drawn off the page",
     ][index],
   ]),
+  // Spec 0005: pattern detection.
+  [
+    "detect-email.pdf",
+    detectEmail(),
+    "email in running text, scripts, columns, reversed",
+  ],
+  ["detect-many.pdf", detectMany(), "600 email addresses on one page"],
+  ["detect-unicode.pdf", detectUnicode(), "an email holding letters above U+FFFF"],
+  [
+    "detect-phone.pdf",
+    detectPhone(),
+    "UK, US and international numbers, numbers side by side, and look alikes",
+  ],
+  [
+    "detect-blocked.pdf",
+    detectBlocked(),
+    "a match for each reason detection blocks, and the limit",
+  ],
+  [
+    "detect-wraps.pdf",
+    detectWraps(),
+    "addresses wrapped across lines, and across blocks",
+  ],
 ];
 
 const outDir = join(process.cwd(), "tests", "fixtures");

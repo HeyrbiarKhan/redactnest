@@ -62,6 +62,7 @@ const MATCHES: readonly ReviewMatch[] = [
     before: "contact ",
     after: " for details",
     tickedByDefault: true,
+    blocked: null,
   },
   {
     id: OFF,
@@ -71,8 +72,28 @@ const MATCHES: readonly ReviewMatch[] = [
     before: "call ",
     after: " any time",
     tickedByDefault: false,
+    blocked: null,
   },
 ];
+
+/** Listed, and not tickable: spec 0005 blocks it, so the worker holds no target. */
+const BLOCKED: ReviewMatch = {
+  id: asMatchId("m-blocked"),
+  type: "email",
+  page: 1,
+  text: "slanted@example.com",
+  before: "write to ",
+  after: " today",
+  tickedByDefault: false,
+  blocked: "slanted-text",
+};
+
+/** The same, as if a detector had recommended it anyway. */
+const BLOCKED_TICKED: ReviewMatch = {
+  ...BLOCKED,
+  id: asMatchId("m-blocked-ticked"),
+  tickedByDefault: true,
+};
 
 function file(name = "quarterly-report.pdf"): File {
   return new File([new Uint8Array([1, 2, 3])], name, { type: "application/pdf" });
@@ -288,6 +309,29 @@ describe("redacting", () => {
     expect(session.matches).toEqual(MATCHES);
     expect(session.summary).toEqual(SUMMARY);
     expect(session.phase).toBeNull();
+  });
+
+  /**
+   * AC-10. A cancel undoes the run, never the review that went into it. Both
+   * seeded ticks are flipped, one on and one off, so a cancel that fell back to
+   * the seeded set fails here whichever way it went wrong.
+   */
+  it("keeps the ticks changed before the run through its cancel", () => {
+    const session = live(
+      drive(
+        CHOOSE,
+        { type: "opened", summary: SUMMARY, matches: MATCHES },
+        { type: "tick-toggled", id: ON },
+        { type: "tick-toggled", id: OFF },
+        { type: "redact-started" },
+        { type: "cancelled" },
+      ),
+    );
+
+    expect(session.state).toBe("reviewing");
+    expect([...session.ticked]).toEqual([OFF]);
+    // Still work worth warning about on the way out (AC-13).
+    expect(hasUnsavedWork(session)).toBe(true);
   });
 
   it("fails with a kind from the closed set and nothing else", () => {
@@ -580,5 +624,57 @@ describe("the seeded tick set", () => {
 
   it("is empty when there is nothing to review", () => {
     expect(seededTicks([]).size).toBe(0);
+  });
+
+  /**
+   * Spec 0005, AC-8. The worker already sends a blocked match unticked, and
+   * this holds even if it did not: a match with no target is never seeded.
+   */
+  it("leaves out a blocked match, whatever its recommendation says", () => {
+    expect([...seededTicks([...MATCHES, BLOCKED_TICKED])]).toEqual([ON]);
+  });
+});
+
+/**
+ * Spec 0005, AC-8 and INV-2. A blocked match is listed so nobody believes it is
+ * gone, but it has no target, so it can never be ticked: not from review, not
+ * from complete, and not by an action that names it by hand.
+ */
+describe("a blocked match", () => {
+  const WITH_BLOCKED = [...MATCHES, BLOCKED];
+
+  it.each(["reviewing", "complete"] as const)("cannot be ticked while %s", (state) => {
+    const before = drive(
+      CHOOSE,
+      { type: "opened", summary: SUMMARY, matches: WITH_BLOCKED },
+      ...(state === "complete"
+        ? ([{ type: "redact-started" }, { type: "redacted", outcome: OUTCOME }] as const)
+        : []),
+    );
+
+    expect(sessionReducer(before, { type: "tick-toggled", id: BLOCKED.id })).toBe(before);
+  });
+
+  it("does not count as unsaved work, because it was never offered", () => {
+    const session = drive(CHOOSE, {
+      type: "opened",
+      summary: SUMMARY,
+      matches: [BLOCKED_TICKED],
+    });
+
+    expect(live(session).ticked.size).toBe(0);
+    expect(hasUnsavedWork(session)).toBe(false);
+  });
+
+  it("leaves the other matches tickable", () => {
+    const session = live(
+      drive(
+        CHOOSE,
+        { type: "opened", summary: SUMMARY, matches: WITH_BLOCKED },
+        { type: "tick-toggled", id: OFF },
+      ),
+    );
+
+    expect([...session.ticked].sort()).toEqual([OFF, ON].sort());
   });
 });

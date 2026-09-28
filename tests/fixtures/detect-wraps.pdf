@@ -1,0 +1,57 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R 8 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<<  /Length 326 >>
+stream
+BT /F1 12 Tf 72 720 Td (Please write to jane.doe@) Tj ET
+BT /F1 12 Tf 72 706 Td (example.com for any details) Tj ET
+BT /F1 12 Tf 72 692 Td (Orders go to sales@example.) Tj ET
+BT /F1 12 Tf 72 678 Td (org from Monday) Tj ET
+BT /F1 12 Tf 72 664 Td (Call Bob.) Tj ET
+BT /F1 12 Tf 72 650 Td (smith@example.com answers today) Tj ET
+
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R >>  >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<<  /Length 211 >>
+stream
+BT /F1 11 Tf 72 720 Td (Left column opens here) Tj ET
+BT /F1 11 Tf 72 706 Td (Write to split@) Tj ET
+BT /F1 11 Tf 360 720 Td (example.com is where) Tj ET
+BT /F1 11 Tf 360 706 Td (the right column goes on) Tj ET
+
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R >>  >> /Contents 7 0 R >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000218 00000 n 
+0000000313 00000 n 
+0000000691 00000 n 
+0000000829 00000 n 
+0000001092 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R >>
+startxref
+1230
+%%EOF

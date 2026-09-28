@@ -1,5 +1,9 @@
 "use client";
 
+import { Ban } from "lucide-react";
+
+import { cx } from "@/lib/cx";
+
 import { Checkbox } from "./checkbox";
 
 interface ChecklistItemProps {
@@ -12,6 +16,14 @@ interface ChecklistItemProps {
   readonly after: string;
   readonly page: number;
   readonly checked: boolean;
+  /** Nothing can change for now, such as while a run is under way. */
+  readonly disabled?: boolean;
+  /**
+   * Why this row can never be ticked (spec 0005, AC-8 and AC-13). The row is
+   * disabled, and the reason shows under the context and joins the checkbox's
+   * description, so a screen reader hears it with the row.
+   */
+  readonly blockedReason?: string;
   readonly onCheckedChange: (checked: boolean) => void;
 }
 
@@ -34,24 +46,35 @@ export function ChecklistItem({
   after,
   page,
   checked,
+  disabled = false,
+  blockedReason,
   onCheckedChange,
 }: ChecklistItemProps) {
   const textId = `${id}-text`;
   const pageId = `${id}-page`;
   const contextId = `${id}-context`;
+  const reasonId = `${id}-reason`;
+  const blocked = blockedReason !== undefined;
+  const inactive = disabled || blocked;
 
   return (
     <li>
       <label
         htmlFor={id}
-        className="flex cursor-pointer items-start gap-3 rounded-lg px-3 py-3 transition-colors duration-150 hover:bg-canvas motion-reduce:transition-none"
+        className={cx(
+          "flex items-start gap-3 rounded-lg px-3 py-3",
+          inactive
+            ? "cursor-not-allowed"
+            : "cursor-pointer transition-colors duration-150 hover:bg-canvas motion-reduce:transition-none",
+        )}
       >
         <Checkbox
           id={id}
           checked={checked}
+          disabled={inactive}
           onCheckedChange={onCheckedChange}
           aria-labelledby={textId}
-          aria-describedby={`${pageId} ${contextId}`}
+          aria-describedby={cx(pageId, contextId, blocked && reasonId)}
         />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="flex items-start justify-between gap-3">
@@ -70,6 +93,17 @@ export function ChecklistItem({
             </mark>
             {after && `${after}…`}
           </span>
+          {blocked && (
+            <span id={reasonId} className="flex items-start gap-2 text-small text-ink">
+              {/* A shape as well as words, so the reason is not told by colour alone. */}
+              <Ban
+                aria-hidden="true"
+                className="size-5 shrink-0 text-ink-muted"
+                strokeWidth={1.75}
+              />
+              <span className="min-w-0">{blockedReason}</span>
+            </span>
+          )}
         </span>
       </label>
     </li>

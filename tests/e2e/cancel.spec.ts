@@ -1,11 +1,14 @@
 import { randomBytes } from "node:crypto";
+import { resolve } from "node:path";
 
 import { expect, test } from "@playwright/test";
 
 import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
 
 /**
- * Spec 0004, AC-17 and AC-19. A redaction run stopped in a real browser.
+ * Spec 0004, AC-17 and AC-19. A redaction run stopped in a real browser, and
+ * spec 0002, AC-10: stopped with a changed tick, which the cancel keeps. And
+ * spec 0005, AC-11: detection stopped the same way, by a second document.
  *
  * The run has to last long enough to be caught, so the document is made heavy
  * on purpose: fifty pages, each with its own large uncompressed image, which
@@ -25,8 +28,11 @@ const PAGES = 50;
 const IMAGE_WIDTH = 400;
 const IMAGE_HEIGHT = 384;
 
-/** The heavy fixture: one large image and a line of text on every page. */
-function heavyPdf(): Buffer {
+/**
+ * The heavy fixture: one large image and a line of text on every page. The
+ * line is `Heavy page N` unless the caller wants something a detector finds.
+ */
+function heavyPdf(line = (page: number) => `Heavy page ${page}`): Buffer {
   const pageNumbers = Array.from({ length: PAGES }, (_, index) => index);
   const pageObject = (index: number) => 5 + index * 3;
 
@@ -41,7 +47,7 @@ function heavyPdf(): Buffer {
         `/Contents ${pageObject(index) + 1} 0 R >>`,
       stream(
         "",
-        `q 612 0 0 700 0 92 cm /Im1 Do Q BT /F1 14 Tf 72 40 Td (Heavy page ${index + 1}) Tj ET\n`,
+        `q 612 0 0 700 0 92 cm /Im1 Do Q BT /F1 14 Tf 72 40 Td (${line(index + 1)}) Tj ET\n`,
       ),
       stream(
         `/Type /XObject /Subtype /Image /Width ${IMAGE_WIDTH} /Height ${IMAGE_HEIGHT} ` +
@@ -97,4 +103,147 @@ test("a run can be cancelled while it is under way, and the tool carries on", as
   // one until it has let go of its working copy (AC-18), finishes normally.
   await page.getByTestId("redact").click();
   await expect(page.getByTestId("download")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+});
+
+/**
+ * Spec 0002, AC-10. A cancel undoes the run, never the review that went into
+ * it. So the heavy document again, for a run long enough to catch, with an
+ * address on every page so there is a checklist and a tick to change.
+ *
+ * Not the dense document below, which has the matches but far too many of
+ * them: its six thousand rows make each render of the checklist take seconds,
+ * long enough to stall the very click that cancels.
+ */
+test("a cancelled run keeps the ticks that were changed before it", async ({ page }) => {
+  test.setTimeout(180_000);
+
+  await page.route("**/api/entitlement", (route) =>
+    route.fulfill({
+      json: { tier: "paid", pageCap: PAGES, maxFileBytes: 26_214_400 },
+    }),
+  );
+
+  await page.goto("/tool");
+  await page.getByTestId("file-input").setInputFiles({
+    name: "heavy.pdf",
+    mimeType: "application/pdf",
+    buffer: heavyPdf((n) => `Page ${n}, write to person${n}@example.com`),
+  });
+
+  // One address per page, each naming exactly one row.
+  const row = (n: number) =>
+    page.getByRole("checkbox", { name: `person${n}@example.com`, exact: true });
+  const changed = row(1);
+  const kept = row(2);
+  await expect(changed).toBeChecked({ timeout: ENGINE_TIMEOUT });
+  await expect(kept).toBeChecked();
+
+  await changed.click();
+  await expect(changed).not.toBeChecked();
+
+  await page.getByTestId("redact").click();
+  // Present only while the session is `redacting`, as in the first test above.
+  await page.getByTestId("cancel").click({ timeout: 5_000 });
+
+  // Back on the checklist, with the document open and the review as it was.
+  await expect(page.getByTestId("redact")).toBeVisible();
+  await expect(page.getByTestId("page-count")).toHaveText(/50 pages/);
+  await expect(page.getByTestId("download")).toHaveCount(0);
+  await expect(changed).not.toBeChecked();
+  await expect(kept).toBeChecked();
+});
+
+/**
+ * Spec 0005's dense document: fifty pages of text, every line holding an
+ * address and a phone number, so detection reads for long enough to be
+ * interrupted. Built here for the same reason as the heavy one above.
+ */
+function densePdf(): Buffer {
+  const pageNumbers = Array.from({ length: PAGES }, (_, index) => index);
+  const pageObject = (index: number) => 3 + index * 2;
+  const rows = 60;
+
+  const content = (page: number) =>
+    Array.from({ length: rows }, (_, row) => {
+      const n = page * rows + row;
+      const four = String(n % 1000).padStart(4, "0");
+      return (
+        `BT /F1 9 Tf 36 ${780 - row * 12} Td ` +
+        `(Row ${n}: person${n}@example.com or 020 7946 ${four} about account ${n}) Tj ET`
+      );
+    }).join("\n");
+
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    `<< /Type /Pages /Kids [${pageNumbers.map((index) => `${pageObject(index)} 0 R`).join(" ")}] /Count ${PAGES} >>`,
+    ...pageNumbers.flatMap((index) => [
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ` +
+        `/Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> ` +
+        `/Contents ${pageObject(index) + 1} 0 R >>`,
+      stream("", `${content(index)}\n`),
+    ]),
+  ];
+
+  return Buffer.from(writePdf({ objects, trailer: "/Root 1 0 R" }).bytes);
+}
+
+declare global {
+  interface Window {
+    __redactnestPageCounts?: string[];
+  }
+}
+
+/**
+ * Spec 0005, AC-11. Detection is stopped within one read when a second
+ * document replaces the one it is reading, and the first posts nothing.
+ *
+ * Every page count the page ever shows is recorded as it appears, so a first
+ * document whose review slipped through before the replacement fails this test
+ * rather than letting it pass without having cancelled anything.
+ */
+test("detection gives way to a second document chosen while it reads", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+
+  await page.route("**/api/entitlement", (route) =>
+    route.fulfill({
+      json: { tier: "paid", pageCap: PAGES, maxFileBytes: 26_214_400 },
+    }),
+  );
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    window.__redactnestPageCounts = seen;
+    new MutationObserver(() => {
+      const count = document.querySelector('[data-testid="page-count"]')?.textContent;
+      if (count && seen.at(-1) !== count) seen.push(count);
+    }).observe(document, { childList: true, subtree: true, characterData: true });
+  });
+
+  await page.goto("/tool");
+  const input = page.getByTestId("file-input");
+  await input.setInputFiles({
+    name: "dense.pdf",
+    mimeType: "application/pdf",
+    buffer: densePdf(),
+  });
+  await expect(page.getByTestId("progress")).toHaveText(/Looking for sensitive details/, {
+    timeout: ENGINE_TIMEOUT,
+  });
+
+  // Nothing ticked has changed, so the replacement asks nothing.
+  await input.setInputFiles(resolve("tests/fixtures/two-pages.pdf"));
+
+  await expect(page.getByTestId("page-count")).toHaveText(/2 pages/, {
+    timeout: ENGINE_TIMEOUT,
+  });
+  await expect(page.getByRole("checkbox", { name: "contact@example.com" })).toBeVisible();
+  await expect(page.getByTestId("error")).toHaveCount(0);
+
+  // The first document's review never arrives, now or late.
+  await page.waitForTimeout(3_000);
+  await expect(page.getByTestId("page-count")).toHaveText(/2 pages/);
+  expect(await page.evaluate(() => window.__redactnestPageCounts)).toEqual([
+    "This document has 2 pages.",
+  ]);
 });

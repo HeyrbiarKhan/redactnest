@@ -1,4 +1,4 @@
-# Verify: Design system & UI foundation · spec 0003 · updated 2026-09-22
+# Verify: Design system & UI foundation · spec 0003 · updated 2026-09-28
 _Steps derived from spec 0003 acceptance criteria and its Value sourcing table. `/check verify` runs these; `/test` locks the durable ones._
 
 Run against a production build (`pnpm build && pnpm start`, with the environment in `playwright.config.ts`), because the tool route's content security policy is looser under `next dev`.
@@ -38,11 +38,20 @@ Run against a production build (`pnpm build && pnpm start`, with the environment
 - [x] `pnpm test:e2e` → all pass, including `tests/e2e/design-system.spec.ts` and the same origin request tests in `tests/e2e/privacy.spec.ts` → AC-4, AC-6, AC-7, AC-12, AC-13, AC-14, AC-15, AC-16, AC-17, AC-18, AC-20
 - [x] `git grep -n "Geist" src` → nothing → AC-4
 
-## Owed to feature 8 (not verifiable in a browser yet)
+## The checklist primitives on a page (placed by feature 6)
 
-- `Checkbox`, `CountBadge`, `ChecklistGroup`, `ChecklistItem` and `EmptyState` are not placed on a page, so they are proved only in jsdom. When feature 8 places them: Enter and Space on a group summary close and open it; a long unbroken email wraps inside its row; the checkbox falls back to the native control in forced colours; a screen reader reads a row as the match, then "Page N" and the context line; a compact count badge is read as "2 items". Values for rows come from the `ReviewMatch` fields and the session's tick set (spec 0002); group labels, icons and nouns from feature 6.
+`Checkbox`, `CountBadge`, `ChecklistGroup`, `ChecklistItem` and `EmptyState` were proved only in jsdom until a page used them. Spec 0005 moved their first placement from feature 8 to feature 6, which put them on `/tool` as a thin checklist; feature 8 still owns the final layout. Feature 6's `/check verify` ran these steps in a real browser and ticked them here and in spec 0005's `verify.md` (its AC-18). Values for rows come from the `ReviewMatch` fields and the session's tick set (spec 0002); group labels, icons and nouns from `DETECTOR_LABELS` in `src/lib/detectors.ts` (spec 0005).
+
+- [x] Enter and Space on a group summary close and open it → AC-6, AC-10
+- [x] A long unbroken email wraps inside its row → AC-9, AC-15
+- [x] The checkbox falls back to the native control in forced colours → AC-17
+- [x] A screen reader reads a row as the match, then "Page N" and the context line → AC-9, AC-11
+- [x] The compact count badge reads its count with its noun: a group of email addresses reads "12 email addresses" → AC-10
+
+## Not verifiable in a real browser
+
 - The `lost` worker callout has no real browser run, because Playwright cannot kill a worker. Its component test covers it.
 
 ## Acceptance-criteria coverage
 
-- AC-1 … contrast test (token set, palette wipe, light scheme) · AC-2 … contrast test, the mutation step · AC-3 … lint steps, `engine-wall.test.ts` · AC-4 … font network and computed style steps, contrast test, `git grep` · AC-5 … `tests/component/ui/*` · AC-6 … keyboard walk steps · AC-7 … e2e target size tests · AC-8 … tab stop and picker steps, drop zone tests · AC-9 … `checklist.test.tsx`, owed browser proof · AC-10 … `checklist.test.tsx`, owed browser proof · AC-11 … screen reader and unsupported steps, `callout.test.tsx` · AC-12 … tool page state steps, `tool-client.test.tsx` live region tests · AC-13 … home page step · AC-14 … skip link, landmarks, footer steps · AC-15 … 320px and 200% steps · AC-16 … reduced motion step · AC-17 … forced colours step · AC-18 … `pnpm test`, `pnpm test:e2e` · AC-19 … `src/ui` lint step · AC-20 … network and header steps · AC-21 … the real page load step, `shell.spec.ts`, `button.test.tsx`, the guard cases in `tool-client.test.tsx`
+- AC-1 … contrast test (token set, palette wipe, light scheme) · AC-2 … contrast test, the mutation step · AC-3 … lint steps, `engine-wall.test.ts` · AC-4 … font network and computed style steps, contrast test, `git grep` · AC-5 … `tests/component/ui/*` · AC-6 … keyboard walk steps · AC-7 … e2e target size tests · AC-8 … tab stop and picker steps, drop zone tests · AC-9 … `checklist.test.tsx`, the checklist steps placed by feature 6 · AC-10 … `checklist.test.tsx`, the checklist steps placed by feature 6 · AC-11 … screen reader and unsupported steps, `callout.test.tsx` · AC-12 … tool page state steps, `tool-client.test.tsx` live region tests · AC-13 … home page step · AC-14 … skip link, landmarks, footer steps · AC-15 … 320px and 200% steps · AC-16 … reduced motion step · AC-17 … forced colours step · AC-18 … `pnpm test`, `pnpm test:e2e` · AC-19 … `src/ui` lint step · AC-20 … network and header steps · AC-21 … the real page load step, `shell.spec.ts`, `button.test.tsx`, the guard cases in `tool-client.test.tsx`
