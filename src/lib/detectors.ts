@@ -78,6 +78,17 @@ export const NOTHING_FOUND = Object.freeze({
 });
 
 /**
+ * The same two lines when some page carries a warning (spec 0006, AC-26), so
+ * neither claims to speak for a page RedactNest could not read.
+ */
+export const COVERAGE_NOTE_PARTLY = `RedactNest looked for ${lookedFor("conjunction")} on the pages it could read. Anything else, such as names and addresses, stays in the file.`;
+
+export const NOTHING_FOUND_PARTLY = Object.freeze({
+  title: NOTHING_FOUND.title,
+  helper: `RedactNest found no ${lookedFor("disjunction")} on the pages it could read. Redact still makes a cleaned copy, with metadata and hidden content removed.`,
+});
+
+/**
  * What detection found, as counts only (AC-15): every match by kind, blocked
  * ones included, and the blocked ones by reason. A `LoggablePayload`, so it
  * carries no text at all.

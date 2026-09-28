@@ -13,6 +13,16 @@ import { config } from "@/config";
 import { currentPath, loadedAt, loadGuard, reloadDocument } from "@/lib/document-load";
 import { offerDownload } from "@/lib/download";
 import { getEntitlement, prefetchEntitlement } from "@/lib/entitlement";
+import {
+  ADVICE,
+  ALL_CLEAR,
+  DOWNLOAD_WARNING_TITLE,
+  isPartly,
+  OPEN_WARNING_TITLE,
+  PARTLY_REASON,
+  showsAdvice,
+  warningLines,
+} from "@/lib/page-findings";
 import { TOOL_PATH } from "@/lib/routes";
 import {
   hasUnsavedWork,
@@ -88,6 +98,12 @@ function errorText(kind: EngineErrorKind, entitlement: EntitlementSnapshot): str
       return "A ticked item sits inside hidden replacement text that cannot be removed safely, so no file was made.";
     case "slanted-text":
       return "A ticked item is set at an angle too steep to redact safely, so no file was made.";
+    // Spec 0006, AC-26: built here and fixed until feature 8 writes the final
+    // copy for every failure kind. Each says why no file was made.
+    case "no-readable-text":
+      return "RedactNest can't read any text in this PDF. It looks like a scan, or its text is in a form RedactNest can't read, so nothing could be found and no file was made. If you have the original, run it through text recognition (OCR) first, then open the result here.";
+    case "edge-text":
+      return "This PDF has text at the edge of a page that RedactNest can't remove cleanly, so it can't be redacted and no file was made.";
   }
 }
 
@@ -628,14 +644,31 @@ export function ToolClient() {
       {(session.state === "reviewing" ||
         session.state === "redacting" ||
         session.state === "complete") && (
-        <div className="mt-6">
-          <ReviewChecklist
-            matches={session.matches}
-            ticked={session.ticked}
-            running={session.state === "redacting"}
-            onToggle={(id) => dispatch({ type: "tick-toggled", id })}
-          />
-        </div>
+        <>
+          <div className="mt-6">
+            <ReviewChecklist
+              matches={session.matches}
+              ticked={session.ticked}
+              running={session.state === "redacting"}
+              partly={session.summary !== null && isPartly(session.summary)}
+              onToggle={(id) => dispatch({ type: "tick-toggled", id })}
+            />
+          </div>
+
+          {/*
+            Spec 0006, AC-22. The outcome card sits directly above the action
+            row that holds Download, so the download warning it ends with is
+            beside the one action it is about. Its own polite region, in the
+            page from the moment a document is open, so the outcome is still
+            heard once when it appears; the region above keeps to the phase
+            line and the opened document (spec 0003, AC-12).
+          */}
+          <div aria-live="polite" className="flex flex-col not-empty:mt-6">
+            {session.state === "complete" && session.outcome && (
+              <OutcomeCard session={session} outcome={session.outcome} />
+            )}
+          </div>
+        </>
       )}
 
       {session.state !== "idle" && (
@@ -716,21 +749,8 @@ function SessionStatus({ session }: { session: ToolSession }) {
       return session.phase ? <StatusLine text={PHASE_TEXT[session.phase]} /> : null;
 
     case "reviewing":
-      return <OpenedDocument session={session} />;
-
     case "complete":
-      return (
-        <>
-          <OpenedDocument session={session} />
-          {session.outcome && (
-            <Card title="Your clean file is ready">
-              <p data-testid="outcome" className="text-ink">
-                {outcomeText(session.outcome)}
-              </p>
-            </Card>
-          )}
-        </>
-      );
+      return <OpenedDocument session={session} />;
 
     case "idle":
     case "failed":
@@ -795,11 +815,18 @@ function SessionAlert({
   }
 }
 
+/**
+ * The opened document card. Spec 0006, AC-19 and AC-20: the all clear line
+ * when no page carries a warning, otherwise the warning callout naming each
+ * page RedactNest cannot fully check. Inside the polite live region, so both
+ * are heard once, with the open. The words come from `src/lib/page-findings`,
+ * the same helpers the name and the download warning read (INV-5).
+ */
 function OpenedDocument({ session }: { session: LiveSession }) {
   const { summary } = session;
   if (!summary) return null;
 
-  const withText = summary.pagesWithText.filter(Boolean).length;
+  const partly = isPartly(summary);
 
   return (
     <Card title="Document opened">
@@ -808,10 +835,64 @@ function OpenedDocument({ session }: { session: LiveSession }) {
           This document has {summary.pageCount}{" "}
           {summary.pageCount === 1 ? "page" : "pages"}.
         </p>
-        <p data-testid="text-layer-count" className="text-small text-ink-muted">
-          {withText} of {summary.pageCount} have a text layer.
-        </p>
+        {!partly && (
+          <p data-testid="all-clear" className="text-small text-ink-muted">
+            {ALL_CLEAR}
+          </p>
+        )}
       </div>
+      {partly && (
+        <Callout
+          tone="warning"
+          title={OPEN_WARNING_TITLE}
+          headingLevel={3}
+          data-testid="page-warnings"
+        >
+          {warningLines(summary).map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+          {showsAdvice(summary) && <p data-testid="page-advice">{ADVICE}</p>}
+        </Callout>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * Spec 0004, AC-19, and spec 0006, AC-22. The one line outcome, and, when any
+ * page carries a warning, the warning again as the last thing in the card, so
+ * it sits directly above Download and says why the file's name ends in partly
+ * redacted. It stays while the session is `complete`, before and after the
+ * download.
+ */
+function OutcomeCard({
+  session,
+  outcome,
+}: {
+  session: LiveSession;
+  outcome: RedactionOutcome;
+}) {
+  const { summary } = session;
+  const partly = summary !== null && isPartly(summary);
+
+  return (
+    <Card title="Your clean file is ready">
+      <p data-testid="outcome" className="text-ink">
+        {outcomeText(outcome)}
+      </p>
+      {partly && (
+        <Callout
+          tone="warning"
+          title={DOWNLOAD_WARNING_TITLE}
+          headingLevel={3}
+          data-testid="download-warning"
+        >
+          {warningLines(summary).map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+          <p>{PARTLY_REASON}</p>
+        </Callout>
+      )}
     </Card>
   );
 }

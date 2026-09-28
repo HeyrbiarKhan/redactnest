@@ -102,8 +102,8 @@ const METADATA_SECRETS = [
 
 /** Spec 0004, AC-1 and AC-2, with the real engine behind the door. */
 describe("opening, with the engine", () => {
-  it("opens a PDF whose marker starts at byte 1019", () => {
-    const doc = openDocumentWith(mupdf, fixture("header-at-1019.pdf"), LIMITS);
+  it("opens a PDF whose marker starts at byte 1019", async () => {
+    const doc = await openDocumentWith(mupdf, fixture("header-at-1019.pdf"), LIMITS);
 
     expect(doc.summary.pageCount).toBe(1);
     doc.close();
@@ -112,10 +112,10 @@ describe("opening, with the engine", () => {
   it.each([
     ["a marker starting at byte 1020", fixture("header-at-1020.pdf")],
     ["a PNG", onePixelPng()],
-  ])("refuses %s as not-pdf even with the engine in hand", (_label, bytes) => {
-    expect(() => openDocumentWith(mupdf, bytes, LIMITS)).toThrow(
-      expect.objectContaining({ errorKind: "not-pdf" }),
-    );
+  ])("refuses %s as not-pdf even with the engine in hand", async (_label, bytes) => {
+    await expect(openDocumentWith(mupdf, bytes, LIMITS)).rejects.toMatchObject({
+      errorKind: "not-pdf",
+    });
   });
 
   /**
@@ -123,24 +123,26 @@ describe("opening, with the engine", () => {
    * still opens it as an image, because it sniffs content. Redaction needs a PDF
    * document object, so this is `corrupt`.
    */
-  it("refuses a file that passes the header check but opens as something else", () => {
+  it("refuses a file that passes the header check but opens as something else", async () => {
     const disguised = onePixelPng("%PDF-1.7 in a PNG comment");
 
-    expect(() => openDocumentWith(mupdf, disguised, LIMITS)).toThrow(
-      expect.objectContaining({ errorKind: "corrupt" }),
-    );
+    await expect(openDocumentWith(mupdf, disguised, LIMITS)).rejects.toMatchObject({
+      errorKind: "corrupt",
+    });
   });
 
-  it("refuses a file with a PDF header and nothing MuPDF can read after it", () => {
-    expect(() =>
+  it("refuses a file with a PDF header and nothing MuPDF can read after it", async () => {
+    await expect(
       openDocumentWith(mupdf, bytesOf("%PDF-1.7\nnothing to see here\n"), LIMITS),
-    ).toThrow(expect.objectContaining({ errorKind: "corrupt" }));
+    ).rejects.toMatchObject({ errorKind: "corrupt" });
   });
 
-  it("reports opening and inspecting, in that order", () => {
+  it("reports opening and inspecting, in that order", async () => {
     const onPhase = vi.fn();
 
-    openDocumentWith(mupdf, fixture("two-pages.pdf"), LIMITS, onPhase).close();
+    (
+      await openDocumentWith(mupdf, fixture("two-pages.pdf"), LIMITS, { onPhase })
+    ).close();
 
     expect(onPhase.mock.calls.map(([phase]) => phase)).toEqual(["opening", "inspecting"]);
   });
@@ -150,12 +152,12 @@ describe("opening, with the engine", () => {
 describe("a document with layers", () => {
   it.each(["layers-all-on.pdf", "layers-one-off.pdf"])(
     "refuses %s as hidden-layers, whatever its layers' states",
-    (name) => {
+    async (name) => {
       const onPhase = vi.fn();
 
-      expect(() => openDocumentWith(mupdf, fixture(name), LIMITS, onPhase)).toThrow(
-        expect.objectContaining({ errorKind: "hidden-layers" }),
-      );
+      await expect(
+        openDocumentWith(mupdf, fixture(name), LIMITS, { onPhase }),
+      ).rejects.toMatchObject({ errorKind: "hidden-layers" });
       // Before anything is inspected, so no review of it can exist.
       expect(onPhase).not.toHaveBeenCalledWith("inspecting");
     },

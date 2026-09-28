@@ -21,7 +21,7 @@
  * the checklist at the very end.
  */
 
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -108,9 +108,13 @@ const PAID: EntitlementSnapshot = Object.freeze({
   maxFileBytes: 100 * 1024 * 1024,
 });
 
+/** Page 1 typed, page 2 blank: quiet, so the plain name and the all clear line. */
 const SUMMARY: DocumentSummary = Object.freeze({
   pageCount: 2,
-  pagesWithText: Object.freeze([true, false]) as readonly boolean[],
+  pages: Object.freeze([
+    Object.freeze({ findings: [] }),
+    Object.freeze({ findings: ["blank"] }),
+  ]) as DocumentSummary["pages"],
 });
 
 function pdfFile(name = "report.pdf"): File {
@@ -799,7 +803,7 @@ describe("the redaction path (spec 0004)", () => {
   const OUTCOME: RedactionOutcome = Object.freeze<RedactionOutcome>({
     pageCount: 2,
     removedByType: { email: 2, phone: 1 },
-    pagesWithoutText: 1,
+    pagesByFinding: { blank: 1 },
     sanitized: ["document-info", "xmp-metadata", "annotations"],
   });
 
@@ -1248,7 +1252,7 @@ describe("the checklist (spec 0005)", () => {
                 outcome: {
                   pageCount: 2,
                   removedByType: { email: 1 },
-                  pagesWithoutText: 1,
+                  pagesByFinding: { blank: 1 },
                   sanitized: [],
                 },
               });
@@ -1271,6 +1275,196 @@ describe("the checklist (spec 0005)", () => {
   it("has no accessibility violations with groups and a blocked row", async () => {
     const { container } = await openWith(withMatches());
 
+    await expectNoAxeViolations(container);
+  });
+});
+
+/**
+ * Spec 0006, slice 1. What the page readings say on screen: the all clear line
+ * or the warning at open, the warning again above Download, the partly
+ * redacted name, and the two refusal lines.
+ */
+describe("the page readings (spec 0006)", () => {
+  /** Page 1 typed, page 2 a scan, page 3 blank, page 4 drawn only. */
+  const FLAGGED: DocumentSummary = Object.freeze({
+    pageCount: 4,
+    pages: Object.freeze([
+      Object.freeze({ findings: [] }),
+      Object.freeze({ findings: ["scanned"] }),
+      Object.freeze({ findings: ["blank"] }),
+      Object.freeze({ findings: ["drawn-only"] }),
+    ]) as DocumentSummary["pages"],
+  });
+
+  const OUTCOME: RedactionOutcome = Object.freeze<RedactionOutcome>({
+    pageCount: 4,
+    removedByType: {},
+    pagesByFinding: { scanned: 1, "drawn-only": 1, blank: 1 },
+    sanitized: [],
+  });
+
+  function flagged(summary: DocumentSummary = FLAGGED) {
+    let finish!: () => void;
+    const session: OpenedSession = {
+      ...openedSession(),
+      summary,
+      redact: vi.fn(
+        () =>
+          new Promise<RedactedOutput>((resolve) => {
+            finish = () => resolve({ output: new ArrayBuffer(8), outcome: OUTCOME });
+          }),
+      ),
+    };
+    return { session, finish: () => act(async () => finish()) };
+  }
+
+  async function openWith(session: OpenedSession) {
+    mocks.openSession.mockResolvedValue(session);
+    const rendered = render(<ToolClient />);
+    await chooseFile(pdfFile());
+    await screen.findByTestId("review");
+    return rendered;
+  }
+
+  it("says every page can be read when no page carries a warning (AC-19)", async () => {
+    await openWith(openedSession());
+
+    expect(screen.getByTestId("all-clear")).toHaveTextContent(
+      "RedactNest can read the text on every page.",
+    );
+    expect(screen.queryByTestId("page-warnings")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("text-layer-count")).not.toBeInTheDocument();
+  });
+
+  it("names each warned page in the opened document card, with the advice (AC-20)", async () => {
+    const { container } = await openWith(flagged().session);
+
+    const warning = screen.getByTestId("page-warnings");
+    expect(
+      within(warning).getByRole("heading", {
+        level: 3,
+        name: "Some pages can't be fully checked",
+      }),
+    ).toBeInTheDocument();
+    expect(warning).toHaveTextContent(
+      "Page 2 is a scanned image. Text in the image can't be found or removed.",
+    );
+    expect(warning).toHaveTextContent(
+      "Page 4 has no text RedactNest can read. Anything on it, such as words in a picture or drawn as shapes, can't be found or removed.",
+    );
+    expect(within(warning).getByTestId("page-advice")).toHaveTextContent(
+      "If you have the original, run it through text recognition (OCR) first, then open the result here.",
+    );
+    // The blank page is never named.
+    expect(warning).not.toHaveTextContent("Page 3");
+    expect(screen.queryByTestId("all-clear")).not.toBeInTheDocument();
+
+    // Heard once, with the open: inside the first polite region, in the card.
+    expect(container.querySelector('[aria-live="polite"]')).toContainElement(warning);
+    expect(screen.getByRole("region", { name: "Document opened" })).toContainElement(
+      warning,
+    );
+    expect(warning).not.toHaveAttribute("role");
+    expect(warning).toHaveTextContent(/^Warning:/);
+  });
+
+  it("qualifies the coverage note when a page carries a warning (AC-26)", async () => {
+    await openWith(flagged().session);
+
+    expect(screen.getByTestId("coverage")).toHaveTextContent(
+      "on the pages it could read",
+    );
+  });
+
+  it("repeats the warning directly above Download, and names the file partly redacted (AC-22, AC-23)", async () => {
+    const run = flagged();
+    await openWith(run.session);
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("redact"));
+    await run.finish();
+
+    const card = screen.getByRole("region", { name: "Your clean file is ready" });
+    const warning = within(card).getByTestId("download-warning");
+    expect(
+      within(warning).getByRole("heading", {
+        level: 3,
+        name: "Not every page was checked",
+      }),
+    ).toBeInTheDocument();
+    expect(warning).toHaveTextContent("Page 2 is a scanned image.");
+    expect(warning).toHaveTextContent("Page 4 has no text RedactNest can read.");
+    expect(warning).toHaveTextContent(
+      "That is why the file's name ends in partly redacted.",
+    );
+    // The last thing in the outcome card, and the card sits right above the
+    // row that holds Download.
+    expect(card.lastElementChild).toBe(warning);
+    const download = screen.getByTestId("download");
+    expect(card.closest('[aria-live="polite"]')?.nextElementSibling).toContainElement(
+      download,
+    );
+
+    await user.click(download);
+    expect(mocks.offerDownload).toHaveBeenCalledWith(
+      expect.any(ArrayBuffer),
+      "report-partly-redacted.pdf",
+    );
+    // It stays after the download too.
+    expect(screen.getByTestId("download-warning")).toBeInTheDocument();
+  });
+
+  it("keeps the plain name and shows no download warning when no page carries one", async () => {
+    const session: OpenedSession = {
+      ...openedSession(),
+      redact: vi.fn(async () => ({ output: new ArrayBuffer(8), outcome: OUTCOME })),
+    };
+    await openWith(session);
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("redact"));
+    await user.click(await screen.findByTestId("download"));
+
+    expect(mocks.offerDownload).toHaveBeenCalledWith(
+      expect.any(ArrayBuffer),
+      "report-redacted.pdf",
+    );
+    expect(screen.queryByTestId("download-warning")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      "no-readable-text",
+      "RedactNest can't read any text in this PDF. It looks like a scan, or its text is in a form RedactNest can't read, so nothing could be found and no file was made. If you have the original, run it through text recognition (OCR) first, then open the result here.",
+    ],
+    [
+      "edge-text",
+      "This PDF has text at the edge of a page that RedactNest can't remove cleanly, so it can't be redacted and no file was made.",
+    ],
+  ] as const)(
+    "says plainly why no file was made for %s, with only Start over (AC-26)",
+    async (kind, words) => {
+      mocks.openSession.mockRejectedValue(new EngineError(kind));
+      const { container } = render(<ToolClient />);
+      await chooseFile(pdfFile());
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent(words);
+      expect(container.querySelector('[aria-live="polite"]')?.contains(alert)).toBe(
+        false,
+      );
+      expect(screen.queryByTestId("review")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("redact")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+      expect(screen.getByTestId("start-over")).toBeInTheDocument();
+    },
+  );
+
+  it("has no accessibility violations with the warning at open and at download (AC-27)", async () => {
+    const run = flagged();
+    const { container } = await openWith(run.session);
+    await expectNoAxeViolations(container);
+
+    await userEvent.setup().click(screen.getByTestId("redact"));
+    await run.finish();
     await expectNoAxeViolations(container);
   });
 });

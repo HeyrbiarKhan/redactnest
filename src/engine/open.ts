@@ -5,9 +5,10 @@ import type { DocumentSummary } from "@/worker/protocol";
 import { refuseAtTheDoor } from "./door";
 import { EngineFailure } from "./failure";
 import { findMatchesIn } from "./find";
+import { inspectPages, readsAsNothing } from "./inspect";
 import { loadEngine, type MuPdf } from "./load";
 import { prepareDocument } from "./prepare";
-import type { OpenDocument } from "./types";
+import type { OpenDocument, PageInspection } from "./types";
 
 type OpenPhase = "loading-engine" | "opening" | "inspecting";
 
@@ -17,10 +18,22 @@ interface OpenLimits {
 }
 
 /**
+ * How an open talks back to the worker while it works. Spec 0006, AC-29.
+ *
+ * `isCancelled` is asked after every page inspection reads, so a cancel or a
+ * replacement open is noticed within one page, as detection and a run already
+ * notice one.
+ */
+export interface OpenHooks {
+  readonly onPhase?: (phase: OpenPhase) => void;
+  readonly isCancelled?: () => boolean;
+}
+
+/**
  * Open a document and report what is safe to report.
  *
- * The summary is counts and per page flags only: no text, no file name, nothing
- * that could identify the document.
+ * The summary is counts and per page findings only: no text, no file name,
+ * nothing that could identify the document.
  *
  * The caller owns the returned handle and must `close()` it. Every failure path
  * in here closes the document before throwing, so a refused open leaks nothing.
@@ -47,14 +60,14 @@ interface OpenLimits {
 export async function openDocument(
   bytes: ArrayBuffer,
   limits: OpenLimits,
-  onPhase?: (phase: OpenPhase) => void,
+  hooks: OpenHooks = {},
 ): Promise<OpenDocument> {
   refuseAtTheDoor(bytes, limits);
 
-  onPhase?.("loading-engine");
+  hooks.onPhase?.("loading-engine");
   const mupdf = await loadEngine();
 
-  return openDocumentWith(mupdf, bytes, limits, onPhase);
+  return openDocumentWith(mupdf, bytes, limits, hooks);
 }
 
 /**
@@ -68,13 +81,17 @@ export async function openDocument(
  * The door is checked again in here, so a caller that already holds the engine
  * cannot skip it. On the path through `openDocument` it has passed already and
  * costs a scan of at most 1024 bytes.
+ *
+ * The order is fixed (spec 0006, *State transitions*): door, open, password,
+ * page cap, layers, prepare, inspect, the refusal. Detection follows, when the
+ * worker asks the handle for its matches.
  */
-export function openDocumentWith(
+export async function openDocumentWith(
   mupdf: MuPdf,
   bytes: ArrayBuffer,
   limits: OpenLimits,
-  onPhase?: (phase: OpenPhase) => void,
-): OpenDocument {
+  { onPhase, isCancelled }: OpenHooks = {},
+): Promise<OpenDocument> {
   refuseAtTheDoor(bytes, limits);
 
   onPhase?.("opening");
@@ -121,16 +138,25 @@ export function openDocumentWith(
     // opening it, and never again (INV-1).
     prepareDocument(mupdf, pdf);
 
-    const pagesWithText: boolean[] = [];
-    for (let index = 0; index < pageCount; index += 1) {
-      pagesWithText.push(pageHasText(pdf, index));
+    // Spec 0006, AC-1: every page read once, on the prepared page, before
+    // detection. A page that throws fails the open (AC-11).
+    const inspections = await inspectPages(mupdf, pdf, isCancelled);
+
+    // AC-10, decided from the readings before anything else happens (INV-2).
+    // No session exists for a refused document, so no run can ever start on
+    // one and no second check is needed in the worker.
+    if (inspections.every(readsAsNothing)) {
+      throw new EngineFailure("no-readable-text");
     }
 
-    return holdOpen(pdf, { pageCount, pagesWithText });
+    return holdOpen(pdf, inspections, {
+      pageCount,
+      pages: inspections.map(({ findings }) => Object.freeze({ findings })),
+    });
   } catch (failure) {
-    // The document only survives a successful open. Anything else hands the
-    // native memory straight back rather than waiting for a session that will
-    // never exist.
+    // The document only survives a successful open. Anything else, a cancel
+    // included, hands the native memory straight back rather than waiting for
+    // a session that will never exist.
     doc?.destroy();
     throw failure;
   }
@@ -155,9 +181,15 @@ function hasLayers(pdf: PDFDocument): boolean {
  *
  * The MuPDF document itself stays captured in here, so nothing outside this
  * module can reach it or name its type. That is the engine wall at the value
- * level rather than only at the import level.
+ * level rather than only at the import level. The page inspections stay in
+ * here too: detection needs each page's readable flag, and nothing outside the
+ * engine needs any of it but the findings the summary already carries (INV-8).
  */
-function holdOpen(doc: PDFDocument, summary: DocumentSummary): OpenDocument {
+function holdOpen(
+  doc: PDFDocument,
+  inspections: readonly PageInspection[],
+  summary: DocumentSummary,
+): OpenDocument {
   let closed = false;
 
   return {
@@ -167,7 +199,7 @@ function holdOpen(doc: PDFDocument, summary: DocumentSummary): OpenDocument {
       // read. The worker never asks, since it detects before registering the
       // session a replacement could close.
       if (closed) throw new EngineFailure("unsupported");
-      return findMatchesIn(doc, summary.pagesWithText, options);
+      return findMatchesIn(doc, inspections, options);
     },
     close() {
       if (closed) return;
@@ -176,30 +208,4 @@ function holdOpen(doc: PDFDocument, summary: DocumentSummary): OpenDocument {
       doc.destroy();
     },
   };
-}
-
-/**
- * Does this page carry a text layer?
- *
- * Feature 7 builds the scanned page warnings on this. The extracted text is read
- * inside the worker and dropped immediately; only the boolean leaves this
- * function, and only the boolean ever crosses the worker boundary.
- *
- * A page that cannot be read at all counts as having no text layer. That is the
- * cautious answer: it produces a warning rather than a false all clear.
- */
-function pageHasText(doc: PDFDocument, index: number): boolean {
-  let page: ReturnType<PDFDocument["loadPage"]> | null = null;
-  let stext: { asText(): string; destroy(): void } | null = null;
-
-  try {
-    page = doc.loadPage(index);
-    stext = page.toStructuredText("");
-    return stext.asText().trim().length > 0;
-  } catch {
-    return false;
-  } finally {
-    stext?.destroy();
-    page?.destroy();
-  }
 }

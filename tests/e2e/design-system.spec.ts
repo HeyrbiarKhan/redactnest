@@ -106,6 +106,36 @@ async function reviewNothingFound(page: Page): Promise<void> {
   });
 }
 
+/**
+ * Spec 0006, AC-27. A typed page, a scan and a blank page: the warning callout
+ * in the opened document card, with its advice line.
+ */
+async function reviewFlagged(page: Page): Promise<void> {
+  await page
+    .getByTestId("file-input")
+    .setInputFiles(resolve("tests/fixtures/read-mixed.pdf"));
+  await expect(page.getByTestId("page-warnings")).toBeVisible({
+    timeout: ENGINE_TIMEOUT,
+  });
+}
+
+/** The same, run to completion: the warning again, above Download. */
+async function completeFlagged(page: Page): Promise<void> {
+  await reviewFlagged(page);
+  await page.getByTestId("redact").click();
+  await expect(page.getByTestId("download-warning")).toBeVisible({
+    timeout: ENGINE_TIMEOUT,
+  });
+}
+
+/** Spec 0006, AC-26. A document with nothing readable, refused at open. */
+async function refuseUnreadable(page: Page): Promise<void> {
+  await page
+    .getByTestId("file-input")
+    .setInputFiles(resolve("tests/fixtures/read-scans.pdf"));
+  await expect(page.getByTestId("error")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+}
+
 /** The states the tool page can settle in today (AC-18; spec 0005, AC-13). */
 const TOOL_STATES: readonly (readonly [string, (page: Page) => Promise<void>])[] = [
   ["idle", async () => {}],
@@ -116,6 +146,10 @@ const TOOL_STATES: readonly (readonly [string, (page: Page) => Promise<void>])[]
   ["reviewing, with blocked rows", reviewBlockedRows],
   ["reviewing, with nothing found", reviewNothingFound],
   ["complete", completeARun],
+  // Spec 0006, AC-27.
+  ["reviewing, with pages that cannot be read", reviewFlagged],
+  ["complete, partly redacted", completeFlagged],
+  ["refused, with nothing readable", refuseUnreadable],
 ];
 
 /** Nothing scrolls sideways, which is what WCAG 1.4.10 asks at 320px. */
@@ -311,6 +345,34 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await expectFocusRing(page.getByTestId("start-over"));
   });
 
+  /**
+   * Spec 0006, AC-27. The warnings add no tab stop: the walk over a flagged
+   * document is the walk over any other, and the warning is read in the card.
+   */
+  test("walks a flagged document the same way, past the warning to Redact", async ({
+    page,
+  }) => {
+    await page.goto("/tool");
+    await reviewFlagged(page);
+    await expect(page.getByTestId("page-warnings")).toContainText(
+      "Page 2 is a scanned image.",
+    );
+
+    await page.getByTestId("choose-file").focus();
+
+    await page.keyboard.press("Tab");
+    await expect(page.locator("summary", { hasText: "Email addresses" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("checkbox", { name: "jane.doe@example.com" }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("redact")).toBeFocused();
+    await expectFocusRing(page.getByTestId("redact"));
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("start-over")).toBeFocused();
+  });
+
   test("draws the ring at full colour the moment focus lands", async ({ page }) => {
     await page.goto("/tool");
     await openDocument(page);
@@ -456,6 +518,22 @@ test.describe("forced colours (AC-17, AC-18)", () => {
       return { style: style.borderTopStyle, width: style.borderTopWidth };
     });
     expect(callout).toEqual({ style: "solid", width: "1px" });
+  });
+
+  /** Spec 0006, AC-27. The page warnings keep their edge once colour is gone. */
+  test("keeps the edge of the page warnings, at open and at download", async ({
+    page,
+  }) => {
+    await page.goto("/tool");
+    await completeFlagged(page);
+
+    for (const id of ["page-warnings", "download-warning"]) {
+      const edge = await page.getByTestId(id).evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { style: style.borderTopStyle, width: style.borderTopWidth };
+      });
+      expect(edge, id).toEqual({ style: "solid", width: "1px" });
+    }
   });
 
   /**

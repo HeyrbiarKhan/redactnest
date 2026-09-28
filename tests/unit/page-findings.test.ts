@@ -1,0 +1,210 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  ADVICE,
+  ALL_CLEAR,
+  DOWNLOAD_WARNING_TITLE,
+  FINDING_TONE,
+  findingLine,
+  isPartly,
+  NOTE_FINDINGS,
+  OPEN_WARNING_TITLE,
+  pageList,
+  pagesWith,
+  PARTLY_REASON,
+  showsAdvice,
+  WARNING_FINDINGS,
+  warningLines,
+} from "@/lib/page-findings";
+import { PAGE_FINDINGS, type DocumentSummary, type PageFinding } from "@/worker/protocol";
+
+/**
+ * What the page readings mean in words. Spec 0006, *Page findings*, *Page
+ * lists* and *Copy*, and INV-5: the name, the warnings and the qualifier all
+ * come from these helpers over one summary.
+ */
+
+function summaryOf(...pages: readonly (readonly PageFinding[])[]): DocumentSummary {
+  return { pageCount: pages.length, pages: pages.map((findings) => ({ findings })) };
+}
+
+describe("the tone of each finding", () => {
+  it("makes the first seven warnings, then two notes, and blank quiet", () => {
+    expect(WARNING_FINDINGS).toEqual([
+      "covered-text",
+      "hidden-text",
+      "scanned",
+      "drawn-only",
+      "unreadable-text",
+      "bare-picture",
+      "off-page-picture",
+    ]);
+    expect(NOTE_FINDINGS).toEqual(["machine-read-text", "off-page-content"]);
+    expect(FINDING_TONE.blank).toBe("quiet");
+    expect(Object.keys(FINDING_TONE).sort()).toEqual([...PAGE_FINDINGS].sort());
+  });
+});
+
+/** AC-23: the one predicate behind the name and the download warning. */
+describe("partly redacted", () => {
+  it.each(WARNING_FINDINGS)("is true when a page carries %s", (finding) => {
+    expect(isPartly(summaryOf([], [finding]))).toBe(true);
+  });
+
+  it.each(["blank", "machine-read-text", "off-page-content"] as const)(
+    "is never made true by %s",
+    (finding) => {
+      expect(isPartly(summaryOf([], [finding]))).toBe(false);
+    },
+  );
+
+  it("is false for a document of typed pages", () => {
+    expect(isPartly(summaryOf([], []))).toBe(false);
+  });
+});
+
+describe("the pages carrying a finding", () => {
+  it("are one based and ascending", () => {
+    const summary = summaryOf(["scanned"], [], ["scanned", "bare-picture"], ["blank"]);
+    expect(pagesWith(summary, "scanned")).toEqual([1, 3]);
+    expect(pagesWith(summary, "bare-picture")).toEqual([3]);
+    expect(pagesWith(summary, "covered-text")).toEqual([]);
+  });
+});
+
+/** Spec 0006, *Page lists*: the examples it gives, and the pair rule. */
+describe("page lists", () => {
+  it.each([
+    [[2], "Page 2"],
+    [[2, 5], "Pages 2 and 5"],
+    [[3, 4, 5, 6, 7, 8, 9], "Pages 3 to 9"],
+    [[1, 3, 4, 5, 6, 7, 8, 9, 12], "Pages 1, 3 to 9 and 12"],
+    [[2, 3], "Pages 2 and 3"],
+    [[1, 2, 3], "Pages 1 to 3"],
+    [[1, 2, 4, 5, 6], "Pages 1, 2 and 4 to 6"],
+    [[9, 2, 2, 5], "Pages 2, 5 and 9"],
+  ] as const)("reads %j as %s", (pages, words) => {
+    expect(pageList(pages)).toBe(words);
+  });
+
+  it("lowers the first word when it follows another", () => {
+    expect(pageList([4], { lower: true })).toBe("page 4");
+    expect(pageList([1, 2], { lower: true })).toBe("pages 1 and 2");
+  });
+});
+
+/** Spec 0006, *Copy*: each line's one page and many page forms. */
+describe("the line for each finding", () => {
+  it.each([
+    [
+      "covered-text",
+      "Page 1 has text hidden under a box or shape drawn over it. It may look redacted, but the text is still in the file.",
+      "Pages 1 and 2 have text hidden under a box or shape drawn over it. It may look redacted, but the text is still in the file.",
+    ],
+    [
+      "hidden-text",
+      "Page 1 has text you can't see, such as text the same colour as the page. It is still in the file.",
+      "Pages 1 and 2 have text you can't see, such as text the same colour as the page. It is still in the file.",
+    ],
+    [
+      "scanned",
+      "Page 1 is a scanned image. Text in the image can't be found or removed.",
+      "Pages 1 and 2 are scanned images. Text in the images can't be found or removed.",
+    ],
+    [
+      "drawn-only",
+      "Page 1 has no text RedactNest can read. Anything on it, such as words in a picture or drawn as shapes, can't be found or removed.",
+      "Pages 1 and 2 have no text RedactNest can read. Anything on them, such as words in a picture or drawn as shapes, can't be found or removed.",
+    ],
+    [
+      "unreadable-text",
+      "Page 1 has text in a font RedactNest can't read, so that text can't be found or removed.",
+      "Pages 1 and 2 have text in a font RedactNest can't read, so that text can't be found or removed.",
+    ],
+    [
+      "bare-picture",
+      "Page 1 has a picture with no text over it. Words inside a picture can't be found or removed.",
+      "Pages 1 and 2 have pictures with no text over them. Words inside a picture can't be found or removed.",
+    ],
+    [
+      "off-page-picture",
+      "Part of a picture on page 1 lies outside the visible page and couldn't be cleared, so it is still in the file.",
+      "Part of a picture on pages 1 and 2 lies outside the visible page and couldn't be cleared, so it is still in the file.",
+    ],
+    [
+      "machine-read-text",
+      "Page 1 is a scan with machine read text. RedactNest reads that text, so it can only find what the text recognition got right.",
+      "Pages 1 and 2 are scans with machine read text. RedactNest reads that text, so it can only find what the text recognition got right.",
+    ],
+    [
+      "off-page-content",
+      "Page 1 has content outside its visible area. RedactNest removes it when you redact, since nobody can see it.",
+      "Pages 1 and 2 have content outside their visible area. RedactNest removes it when you redact, since nobody can see it.",
+    ],
+  ] as const)("words %s for one page and for several", (finding, one, many) => {
+    expect(findingLine(summaryOf([finding], []), finding)).toBe(one);
+    expect(findingLine(summaryOf([finding], [finding]), finding)).toBe(many);
+  });
+
+  it("has no line for blank, or for a finding no page carries", () => {
+    expect(findingLine(summaryOf(["blank"]), "blank")).toBeNull();
+    expect(findingLine(summaryOf([]), "scanned")).toBeNull();
+  });
+});
+
+/** AC-20: one line per warning present, in order, a page named in each it carries. */
+describe("the warning lines", () => {
+  it("follow PAGE_FINDINGS order, and name a page carrying two warnings in both", () => {
+    const summary = summaryOf(
+      ["bare-picture"],
+      ["scanned", "unreadable-text"],
+      ["machine-read-text"],
+      ["covered-text"],
+    );
+
+    expect(warningLines(summary)).toEqual([
+      findingLine(summary, "covered-text"),
+      findingLine(summary, "scanned"),
+      findingLine(summary, "unreadable-text"),
+      findingLine(summary, "bare-picture"),
+    ]);
+    expect(warningLines(summary)[1]).toMatch(/^Page 2 /);
+    expect(warningLines(summary)[2]).toMatch(/^Page 2 /);
+  });
+
+  it("never holds a note", () => {
+    expect(warningLines(summaryOf(["machine-read-text"], ["off-page-content"]))).toEqual(
+      [],
+    );
+  });
+});
+
+describe("the advice line", () => {
+  it.each(["scanned", "drawn-only", "unreadable-text", "bare-picture"] as const)(
+    "follows %s, which text recognition can help with",
+    (finding) => {
+      expect(showsAdvice(summaryOf([finding]))).toBe(true);
+    },
+  );
+
+  it.each([
+    "covered-text",
+    "hidden-text",
+    "off-page-picture",
+    "machine-read-text",
+  ] as const)("does not follow %s alone", (finding) => {
+    expect(showsAdvice(summaryOf([finding]))).toBe(false);
+  });
+});
+
+describe("the fixed lines", () => {
+  it("read as the spec writes them", () => {
+    expect(ALL_CLEAR).toBe("RedactNest can read the text on every page.");
+    expect(OPEN_WARNING_TITLE).toBe("Some pages can't be fully checked");
+    expect(ADVICE).toBe(
+      "If you have the original, run it through text recognition (OCR) first, then open the result here.",
+    );
+    expect(DOWNLOAD_WARNING_TITLE).toBe("Not every page was checked");
+    expect(PARTLY_REASON).toBe("That is why the file's name ends in partly redacted.");
+  });
+});

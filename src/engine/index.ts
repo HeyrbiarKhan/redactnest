@@ -38,6 +38,14 @@
  *     with the reason the engine would refuse it for. `OpenDocument.findMatches`
  *     runs it. Only this folder imports `@/detect`.
  *
+ * Spec 0006 added reading every page before review:
+ *
+ *   - `device.ts` is the one drawing reader: it runs a page through a MuPDF
+ *     callback device and hands out what the page draws as plain data, with
+ *     every object MuPDF passed it let go before its callback returns.
+ *   - `inspect.ts` turns each page's drawing and text into closed findings,
+ *     and the open refuses a document with no page it can read.
+ *
  * Nothing in this folder calls `search()` (spec 0005, INV-11); lint holds it.
  *
  * The functions ending in `With` take the loaded MuPDF module as a parameter.
@@ -58,6 +66,19 @@ export {
   walkCharacters,
   type Character,
 } from "./characters";
+export {
+  intersect,
+  transformPoint,
+  transformRect,
+  walkDrawing,
+  type Drawing,
+  type DrawState,
+  type Glyph,
+  type Paint,
+  type Rect,
+  type TextMode,
+  type Transform,
+} from "./device";
 export { hasPdfHeader, PDF_HEADER_WINDOW } from "./door";
 export { checkpoint, EngineFailure, RunCancelled } from "./failure";
 export { findMatchesIn } from "./find";
@@ -82,8 +103,21 @@ export {
   TARGET_PADDING_ALONG_RATIO,
   TARGET_PADDING_RATIO,
 } from "./geometry";
+export {
+  contrastWithWhite,
+  HIDDEN_CONTRAST_MAX,
+  inspectPages,
+  PICTURE_MIN_SHARE,
+  READING_GRID,
+  readsAsNothing,
+  relativeLuminance,
+  SCAN_MIN_SHARE,
+  STAMP_MAX_CHARS,
+  TEXT_OVER_PICTURE_MAX,
+  UNREADABLE_RUN,
+} from "./inspect";
 export { loadEngine, silenceEngineLog, type MuPdf } from "./load";
-export { openDocument, openDocumentWith } from "./open";
+export { openDocument, openDocumentWith, type OpenHooks } from "./open";
 export { boxPass, paddedPass, textPass, type Pass } from "./passes";
 export { imageReachVerdicts } from "./pixels";
 export { prepareDocument } from "./prepare";
@@ -106,6 +140,7 @@ export type {
   FindOptions,
   FoundMatch,
   OpenDocument,
+  PageInspection,
   Quad,
   RedactionResult,
   RedactionTarget,

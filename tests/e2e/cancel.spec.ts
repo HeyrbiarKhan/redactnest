@@ -29,8 +29,15 @@ const IMAGE_WIDTH = 400;
 const IMAGE_HEIGHT = 384;
 
 /**
- * The heavy fixture: one large image and a line of text on every page. The
- * line is `Heavy page N` unless the caller wants something a detector finds.
+ * The heavy fixture: one large image and two lines of text on every page. The
+ * first line is `Heavy page N` unless the caller wants something a detector
+ * finds.
+ *
+ * The second line is there for spec 0006. A page that is a large picture with
+ * fewer than forty readable characters on it reads as a stamped scan, and a
+ * document of nothing else is refused at open (AC-2, AC-10). The typed
+ * sentence makes each page one RedactNest can read, so the run this test
+ * needs still happens; the pictures are still named as bare.
  */
 function heavyPdf(line = (page: number) => `Heavy page ${page}`): Buffer {
   const pageNumbers = Array.from({ length: PAGES }, (_, index) => index);
@@ -47,7 +54,8 @@ function heavyPdf(line = (page: number) => `Heavy page ${page}`): Buffer {
         `/Contents ${pageObject(index) + 1} 0 R >>`,
       stream(
         "",
-        `q 612 0 0 700 0 92 cm /Im1 Do Q BT /F1 14 Tf 72 40 Td (${line(index + 1)}) Tj ET\n`,
+        `q 612 0 0 700 0 92 cm /Im1 Do Q BT /F1 14 Tf 72 40 Td (${line(index + 1)}) Tj ET\n` +
+          "BT /F1 10 Tf 72 20 Td (Every page of this heavy document carries a typed sentence.) Tj ET\n",
       ),
       stream(
         `/Type /XObject /Subtype /Image /Width ${IMAGE_WIDTH} /Height ${IMAGE_HEIGHT} ` +

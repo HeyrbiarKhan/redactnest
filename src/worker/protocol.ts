@@ -38,6 +38,11 @@
  * is removed, too). `slanted-text` refuses a ticked match set at too steep an
  * angle to redact safely, before anything is removed (AC-28). None of the six
  * says which page, which characters, or at what angle.
+ *
+ * Spec 0006 added the last two. `no-readable-text` refuses at open a document
+ * with no page RedactNest can read, so it never produces a file (AC-10), and
+ * `edge-text` names a trim whose proof failed only on lines that cross a
+ * page's visible edge (AC-16). Neither says which page.
  */
 export const ENGINE_ERROR_KINDS = [
   "engine-unavailable",
@@ -54,6 +59,8 @@ export const ENGINE_ERROR_KINDS = [
   "redaction-overreach",
   "replacement-text",
   "slanted-text",
+  "no-readable-text",
+  "edge-text",
 ] as const;
 
 export type EngineErrorKind = (typeof ENGINE_ERROR_KINDS)[number];
@@ -232,18 +239,57 @@ export interface EngineLimits {
 }
 
 /**
+ * What reading a page can say about it. Spec 0006, *Page findings*.
+ *
+ * The first seven are warnings: text a viewer never shows (`covered-text`,
+ * `hidden-text`), and places RedactNest cannot see into (`scanned`,
+ * `drawn-only`, `unreadable-text`, `bare-picture`, `off-page-picture`). Any of
+ * them names the file partly redacted (AC-23). The next two are notes, and
+ * `blank` says nothing at all. The array's order is the order the lines are
+ * shown in (AC-20, AC-21), so the fake redaction comes first.
+ *
+ * A closed set of kinds, like the error kinds: a finding says which rule held
+ * on a page, never what the page holds or where (AC-28, INV-1).
+ */
+export const PAGE_FINDINGS = Object.freeze([
+  "covered-text",
+  "hidden-text",
+  "scanned",
+  "drawn-only",
+  "unreadable-text",
+  "bare-picture",
+  "off-page-picture",
+  "machine-read-text",
+  "off-page-content",
+  "blank",
+] as const);
+
+export type PageFinding = (typeof PAGE_FINDINGS)[number];
+
+/**
+ * One page, as reading it found it. Spec 0006, AC-1.
+ *
+ * A set, with no repeats, in `PAGE_FINDINGS` order. An empty list is a page
+ * with readable text and nothing else to say.
+ */
+export interface PageReading {
+  readonly findings: readonly PageFinding[];
+}
+
+/**
  * What opening a document tells the main thread.
  *
- * Counts and flags only. No text, no file name, no bytes: the document itself
+ * Counts and kinds only. No text, no file name, no bytes: the document itself
  * never leaves the worker.
  */
 export interface DocumentSummary {
   readonly pageCount: number;
   /**
-   * Per page: does this page carry a text layer? Feature 7 turns this into the
-   * scanned page warnings; the scaffold only has to produce it honestly.
+   * One reading per page, in page order, so page `n` is `pages[n - 1]`
+   * (spec 0006, AC-1). The main thread turns these into the warnings, the
+   * notes and the partly redacted name, through `src/lib/page-findings.ts`.
    */
-  readonly pagesWithText: readonly boolean[];
+  readonly pages: readonly PageReading[];
 }
 
 /**
@@ -255,8 +301,31 @@ export interface DocumentSummary {
 export interface RedactionOutcome {
   readonly pageCount: number;
   readonly removedByType: Readonly<Partial<Record<DetectorKind, number>>>;
-  readonly pagesWithoutText: number;
+  /**
+   * Pages per finding, from the open summary (spec 0006, AC-28), so feature 11
+   * can tell which blind spot is common without a word of content. A finding
+   * no page carries is left out.
+   */
+  readonly pagesByFinding: Readonly<Partial<Record<PageFinding, number>>>;
   readonly sanitized: readonly SanitizedKind[];
+}
+
+/**
+ * How many pages carry each finding. Spec 0006, AC-28.
+ *
+ * Pure, and derived from the same readings the warnings are, so the count a
+ * log carries can never disagree with what the visitor was told (INV-5). Keys
+ * follow `PAGE_FINDINGS` order, and a finding no page carries is left out.
+ */
+export function countPagesByFinding(
+  pages: readonly PageReading[],
+): Readonly<Partial<Record<PageFinding, number>>> {
+  const counts: Partial<Record<PageFinding, number>> = {};
+  for (const finding of PAGE_FINDINGS) {
+    const count = pages.filter((page) => page.findings.includes(finding)).length;
+    if (count > 0) counts[finding] = count;
+  }
+  return Object.freeze(counts);
 }
 
 /**
@@ -279,7 +348,8 @@ export type LoggablePayload =
   | EngineErrorKind
   | ProgressPhase
   | DetectorKind
-  | SanitizedKind;
+  | SanitizedKind
+  | PageFinding;
 
 /* Main thread to worker. */
 

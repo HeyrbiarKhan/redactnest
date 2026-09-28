@@ -23,6 +23,16 @@ import {
 import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
 import {
+  readBlank,
+  readMixed,
+  readPages,
+  readPrivate,
+  readRefusedMix,
+  readScans,
+  readStamped,
+  readUnmapped,
+} from "./lib/reading-fixtures.mjs";
+import {
   actualText,
   angledText,
   boundsPin,
@@ -408,6 +418,15 @@ const FIXTURES = [
     detectWraps(),
     "addresses wrapped across lines, and across blocks",
   ],
+  // Spec 0006: reading every page before review.
+  ["read-pages.pdf", readPages(), "one page per reading rule and near miss"],
+  ["read-scans.pdf", readScans(), "every page a scan"],
+  ["read-blank.pdf", readBlank(), "every page blank, one a white rectangle"],
+  ["read-stamped.pdf", readStamped(), "every page a scan with a Bates number"],
+  ["read-unmapped.pdf", readUnmapped(), "every page in a font with no character map"],
+  ["read-private.pdf", readPrivate(), "every page in private use code points"],
+  ["read-refused-mix.pdf", readRefusedMix(), "a scan, a blank, a stamped scan, unmapped"],
+  ["read-mixed.pdf", readMixed(), "a typed page, a scan and a blank page"],
 ];
 
 const outDir = join(process.cwd(), "tests", "fixtures");

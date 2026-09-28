@@ -1,7 +1,7 @@
 # 0006. Scanned page detection and warnings
 
 **Date**: 2026-09-28
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 

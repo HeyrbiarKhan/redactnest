@@ -8,7 +8,13 @@ import { checkpoint, EngineFailure } from "./failure";
 import { containsPoint, isSoundQuad, quadBounds, quadCentre } from "./geometry";
 import { imageReachVerdicts } from "./pixels";
 import { slantedTargets, unsoundTargetsIn } from "./targets";
-import type { FindOptions, FoundMatch, Quad, RedactionTarget } from "./types";
+import type {
+  FindOptions,
+  FoundMatch,
+  PageInspection,
+  Quad,
+  RedactionTarget,
+} from "./types";
 
 /**
  * The find step. Spec 0005, *The find step*.
@@ -57,18 +63,19 @@ interface Candidate {
 const WHITESPACE = /^\s$/u;
 
 /**
- * Every match on every page that reported a text layer, by page, then in
- * reading order (AC-3). A page without a text layer is not read at all
- * (AC-12).
+ * Every match on every page that holds a readable character, by page, then in
+ * reading order (AC-3). Any other page is not read at all (AC-12, as spec
+ * 0006 rewords it), so a scanned page's stamp is still searched and a blank
+ * page costs nothing.
  */
 export async function findMatchesIn(
   doc: PDFDocument,
-  pagesWithText: readonly boolean[],
+  pages: readonly Pick<PageInspection, "readable">[],
   options: FindOptions,
 ): Promise<readonly FoundMatch[]> {
   const found: FoundMatch[] = [];
-  for (let index = 0; index < pagesWithText.length; index += 1) {
-    if (!pagesWithText[index]) continue;
+  for (let index = 0; index < pages.length; index += 1) {
+    if (!pages[index].readable) continue;
     found.push(...(await findOnPage(doc, index, options)));
   }
   return found;
@@ -223,10 +230,10 @@ function spelledInside(
 }
 
 /**
- * Run a read of a page that reported a text layer. A throw from MuPDF on the
- * way fails the open with `unsupported` (AC-12): a page with text that cannot
- * be read cannot be reviewed, and reviewing the rest would pass it over in
- * silence.
+ * Run a read of a page that holds a readable character. A throw from MuPDF on
+ * the way fails the open with `unsupported` (AC-12): a page with text that
+ * cannot be read cannot be reviewed, and reviewing the rest would pass it over
+ * in silence.
  */
 function readable<T>(read: () => T): T {
   try {

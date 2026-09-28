@@ -39,6 +39,11 @@ vi.mock("@/engine", async (importOriginal) => {
 
 type PhaseCallback = (phase: "loading-engine" | "opening" | "inspecting") => void;
 
+interface OpenHooks {
+  onPhase?: PhaseCallback;
+  isCancelled?: () => boolean;
+}
+
 interface RunHooks {
   onPhase?: (phase: "redacting" | "writing" | "verifying") => void;
   isCancelled?: () => boolean;
@@ -87,7 +92,10 @@ class FakeScope {
   }
 }
 
-const SUMMARY: DocumentSummary = { pageCount: 2, pagesWithText: [true, false] };
+const SUMMARY: DocumentSummary = {
+  pageCount: 2,
+  pages: [{ findings: [] }, { findings: ["scanned", "machine-read-text"] }],
+};
 
 /** Text that must never appear on the other side of the boundary. */
 const SECRET = "Patient Jane Doe, account 4111-1111-1111-1111";
@@ -188,7 +196,7 @@ describe("opening a document", () => {
     expect(openDocument).toHaveBeenCalledWith(
       expect.any(ArrayBuffer),
       { maxBytes: 26_214_400, maxPages: 3 },
-      expect.any(Function),
+      { onPhase: expect.any(Function), isCancelled: expect.any(Function) },
     );
   });
 
@@ -205,7 +213,7 @@ describe("opening a document", () => {
 
   it("passes each phase on as it happens, detecting last", async () => {
     openDocument.mockImplementation(
-      async (_bytes: ArrayBuffer, _limits: unknown, onPhase?: PhaseCallback) => {
+      async (_bytes: ArrayBuffer, _limits: unknown, { onPhase }: OpenHooks = {}) => {
         onPhase?.("loading-engine");
         onPhase?.("opening");
         onPhase?.("inspecting");
@@ -756,7 +764,8 @@ describe("a redaction run", () => {
     expect(redacted.outcome).toEqual({
       pageCount: 2,
       removedByType: { email: 2 },
-      pagesWithoutText: 1,
+      // Spec 0006, AC-28: pages per finding, from the open summary's readings.
+      pagesByFinding: { scanned: 1, "machine-read-text": 1 },
       sanitized: ["xmp-metadata"],
     });
   });
@@ -1105,7 +1114,7 @@ describe("cancelling", () => {
 
   it("suppresses progress that arrives after the cancel", async () => {
     openDocument.mockImplementation(
-      async (_bytes: ArrayBuffer, _limits: unknown, onPhase?: PhaseCallback) => {
+      async (_bytes: ArrayBuffer, _limits: unknown, { onPhase }: OpenHooks = {}) => {
         await Promise.resolve();
         onPhase?.("opening");
         return fakeDocument();
@@ -1148,6 +1157,54 @@ describe("cancelling", () => {
     await settle();
 
     expect(doc.close).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * Spec 0006, AC-29. Inspection reads every page inside the open, so the
+   * open is handed the same check detection gets, and a cancel that lands
+   * while it inspects posts nothing: the engine stops with `RunCancelled` and
+   * has already let go of the document.
+   */
+  it("gives the open a check that turns true once it is cancelled, and posts nothing", async () => {
+    const { RunCancelled } = await import("@/engine");
+    const inspecting = gate<void>();
+    let asked: (() => boolean) | undefined;
+    openDocument.mockImplementation(
+      async (_bytes: ArrayBuffer, _limits: unknown, { isCancelled }: OpenHooks = {}) => {
+        asked = isCancelled;
+        await inspecting.promise;
+        if (isCancelled?.()) throw new RunCancelled();
+        return fakeDocument();
+      },
+    );
+    await startWorker();
+
+    scope.send(openRequest({ id: "op-9" }));
+    await settle();
+    expect(asked?.()).toBe(false);
+
+    scope.send({ id: "op-9", jobId: "job-1", kind: "cancel" });
+    expect(asked?.()).toBe(true);
+
+    inspecting.resolve();
+    await settle();
+
+    expect(scope.of("result")).toEqual([]);
+    expect(scope.of("error")).toEqual([]);
+  });
+
+  /** A refusal at open reaches the main thread as its kind and nothing else. */
+  it("reports a document with nothing readable as no-readable-text", async () => {
+    const { EngineFailure } = await import("@/engine");
+    openDocument.mockRejectedValue(new EngineFailure("no-readable-text"));
+    await startWorker();
+
+    scope.send(openRequest({ id: "op-3" }));
+    await settle();
+
+    expect(scope.posted).toEqual([
+      { id: "op-3", jobId: "job-1", kind: "error", errorKind: "no-readable-text" },
+    ]);
   });
 
   /** Cheaper still: cancelled before parsing began, so nothing is parsed at all. */

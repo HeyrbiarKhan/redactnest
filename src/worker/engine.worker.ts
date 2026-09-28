@@ -30,6 +30,7 @@ import {
 } from "@/engine";
 import {
   asMatchId,
+  countPagesByFinding,
   type EngineLimits,
   type ErrorMessage,
   type ProgressMessage,
@@ -165,8 +166,13 @@ async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
     await Promise.all(evicted.map((session) => session.runs));
     if (cancelled.has(id)) return;
 
-    const doc = await openDocument(bytes, limits, (phase) => {
-      if (!cancelled.has(id)) postProgress(id, jobId, phase);
+    // Spec 0006, AC-29. Inspection reads every page inside the open, so the
+    // open asks the cancelled set after every page, as detection does below.
+    const doc = await openDocument(bytes, limits, {
+      onPhase: (phase) => {
+        if (!cancelled.has(id)) postProgress(id, jobId, phase);
+      },
+      isCancelled: () => cancelled.has(id),
     });
 
     // Only a session that reaches the registry keeps its document. Every other
@@ -314,7 +320,9 @@ async function runRedaction(
       outcome: {
         pageCount: summary.pageCount,
         removedByType: result.removedByType,
-        pagesWithoutText: summary.pagesWithText.filter((hasText) => !hasText).length,
+        // Spec 0006, AC-28 and INV-5: from the same readings the visitor was
+        // shown, so a log can never disagree with the warnings.
+        pagesByFinding: countPagesByFinding(summary.pages),
         sanitized: result.sanitized,
       },
     };

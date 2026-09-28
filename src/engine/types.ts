@@ -3,8 +3,24 @@ import type {
   DetectorKind,
   DocumentSummary,
   MatchId,
+  PageFinding,
   SanitizedKind,
 } from "@/worker/protocol";
+
+/**
+ * What reading one page found, before the trim adds its two findings. Spec
+ * 0006, *Data model sketch*.
+ *
+ * Private to the engine. The review document's handle holds one per page for
+ * detection, and drops them with the document (INV-8). Only `findings` ever
+ * reaches the summary.
+ */
+export interface PageInspection {
+  /** No repeats, in `PAGE_FINDINGS` order. */
+  readonly findings: readonly PageFinding[];
+  /** The page holds a readable character (AC-3), so detection reads it (AC-12). */
+  readonly readable: boolean;
+}
 
 /**
  * One quad, as MuPDF gives them: four corners, upper left first, then upper
@@ -124,11 +140,11 @@ export interface FindOptions {
 export interface OpenDocument {
   readonly summary: DocumentSummary;
   /**
-   * Find every match on every page with a text layer, by page, then in reading
-   * order (spec 0005, AC-3). Reads this review copy one page at a time and
-   * yields after each read. Throws `EngineFailure("unsupported")` when a page
-   * that reported a text layer cannot be read (AC-12), and `RunCancelled` when
-   * `isCancelled` says so.
+   * Find every match on every page that holds a readable character, by page,
+   * then in reading order (spec 0005, AC-3; spec 0006, AC-12). Reads this
+   * review copy one page at a time and yields after each read. Throws
+   * `EngineFailure("unsupported")` when such a page cannot be read (AC-12), and
+   * `RunCancelled` when `isCancelled` says so.
    */
   findMatches(options: FindOptions): Promise<readonly FoundMatch[]>;
   /**
@@ -143,8 +159,8 @@ export interface OpenDocument {
 }
 
 /**
- * What a run hands the worker. The worker adds the page counts from the open
- * summary to make the `RedactionOutcome`.
+ * What a run hands the worker. The worker adds the page count and the pages
+ * per finding from the open summary to make the `RedactionOutcome`.
  */
 export interface RedactionResult {
   /**

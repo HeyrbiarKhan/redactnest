@@ -3,8 +3,10 @@ import { SearchCheck } from "lucide-react";
 import {
   BLOCKED_REASON_TEXT,
   COVERAGE_NOTE,
+  COVERAGE_NOTE_PARTLY,
   DETECTOR_LABELS,
   NOTHING_FOUND,
+  NOTHING_FOUND_PARTLY,
 } from "@/lib/detectors";
 import { DETECTOR_KINDS, type MatchId, type ReviewMatch } from "@/worker/protocol";
 import { Callout } from "@/ui/callout";
@@ -19,6 +21,11 @@ interface ReviewChecklistProps {
   readonly ticked: ReadonlySet<MatchId>;
   /** A run is under way, so no tick may change (AC-13). */
   readonly running: boolean;
+  /**
+   * Some page carries a warning (spec 0006, AC-26), so the note and the empty
+   * state speak only for the pages RedactNest could read.
+   */
+  readonly partly: boolean;
   readonly onToggle: (id: MatchId) => void;
 }
 
@@ -40,25 +47,27 @@ export function ReviewChecklist({
   matches,
   ticked,
   running,
+  partly,
   onToggle,
 }: ReviewChecklistProps) {
   const groups = DETECTOR_KINDS.map((kind) => ({
     kind,
     rows: matches.filter((match) => match.type === kind),
   })).filter(({ rows }) => rows.length > 0);
+  const nothingFound = partly ? NOTHING_FOUND_PARTLY : NOTHING_FOUND;
 
   return (
     <div data-testid="review" className="flex flex-col gap-4">
       <Callout tone="info" data-testid="coverage">
-        {COVERAGE_NOTE}
+        {partly ? COVERAGE_NOTE_PARTLY : COVERAGE_NOTE}
       </Callout>
 
       <Card title="What RedactNest found" data-testid="checklist">
         {groups.length === 0 ? (
           <EmptyState
             icon={SearchCheck}
-            title={NOTHING_FOUND.title}
-            helper={NOTHING_FOUND.helper}
+            title={nothingFound.title}
+            helper={nothingFound.helper}
           />
         ) : (
           <div className="flex flex-col gap-2">

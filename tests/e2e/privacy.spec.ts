@@ -423,6 +423,74 @@ test("a detected redaction sends, stores and logs no match text or context", asy
 });
 
 /**
+ * Spec 0006, AC-28. A document whose pages carry warnings: the readings cross
+ * to the main thread as closed kinds, and nothing of the page, not its text,
+ * not what a finding said about it, reaches a request, a store or the console,
+ * from open to download.
+ */
+test("a flagged document sends, stores and logs no page text or finding detail", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+
+  await watchStorage(page);
+  const requests = recordRequests(page);
+  const logged: string[] = [];
+  page.on("console", (message) => logged.push(message.text()));
+
+  await page.goto("/tool");
+  await page.getByTestId("file-input").setInputFiles({
+    name: FILE_NAME,
+    mimeType: "application/pdf",
+    buffer: readFileSync(resolve("tests/fixtures/read-mixed.pdf")),
+  });
+
+  // On screen, so the page really holds what this test looks for.
+  await expect(page.getByTestId("page-warnings")).toContainText("scanned image", {
+    timeout: ENGINE_TIMEOUT,
+  });
+  await page.getByTestId("redact").click();
+  await expect(page.getByTestId("download-warning")).toBeVisible({
+    timeout: ENGINE_TIMEOUT,
+  });
+  const downloading = page.waitForEvent("download");
+  await page.getByTestId("download").click();
+  await (await downloading).path();
+
+  const secret = [
+    // The document's own text.
+    "Letter with an enclosure",
+    "jane.doe@example.com",
+    // What reading its pages found, in the protocol's words and on screen.
+    "scanned",
+    "Page 2",
+    "zzsecretpayroll",
+  ];
+
+  for (const request of requests) {
+    const sent = `${request.url()}\n${request.postData() ?? ""}`;
+    for (const text of secret) {
+      expect(sent, `a request carried "${text}"`).not.toContain(text);
+    }
+  }
+
+  const writes = await page.evaluate(() => window.__redactnestWrites ?? []);
+  expect(writes).toEqual([]);
+
+  for (const line of logged) {
+    for (const text of secret) {
+      expect(line, `the console printed "${text}"`).not.toContain(text);
+    }
+  }
+
+  const dataRequests = requests
+    .map((request) => new URL(request.url()).pathname)
+    .filter((path) => path !== "/tool")
+    .filter((path) => !ASSET_PATHS.some((asset) => asset.test(path)));
+  expect([...new Set(dataRequests)]).toEqual(["/api/entitlement"]);
+});
+
+/**
  * Record every object URL the page makes for a PDF, and read each one straight
  * away, in the same task that made it, before anything could revoke it. That
  * read is the control: it proves the probe below can see a live URL, and that

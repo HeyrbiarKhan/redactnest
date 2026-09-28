@@ -34,12 +34,22 @@ import {
  * ids in it were minted by a worker that has died.
  */
 
-const SUMMARY: DocumentSummary = { pageCount: 2, pagesWithText: [true, false] };
+/** A typed page and a blank one: quiet, so the plain name. */
+const SUMMARY: DocumentSummary = {
+  pageCount: 2,
+  pages: [{ findings: [] }, { findings: ["blank"] }],
+};
+
+/** A typed page and a scan: the scan warns, so the name says partly. */
+const SCANNED: DocumentSummary = {
+  pageCount: 2,
+  pages: [{ findings: [] }, { findings: ["scanned"] }],
+};
 
 const OUTCOME: RedactionOutcome = {
   pageCount: 2,
   removedByType: { email: 2 },
-  pagesWithoutText: 1,
+  pagesByFinding: { blank: 1 },
   sanitized: ["xmp-metadata", "annotations"],
 };
 
@@ -227,11 +237,48 @@ describe("the output name", () => {
     [".pdf", "document-redacted.pdf"],
     ["   ", "document-redacted.pdf"],
   ])("turns %s into %s", (input, expected) => {
-    expect(outputNameFor(input)).toBe(expected);
+    expect(outputNameFor(input, false)).toBe(expected);
   });
 
-  it("is derived once, at open", () => {
+  /** Spec 0006, AC-23. The same stem, with the caveat in the name. */
+  it.each([
+    ["quarterly-report.pdf", "quarterly-report-partly-redacted.pdf"],
+    ["REPORT.PDF", "REPORT-partly-redacted.pdf"],
+    ["  spaced out.pdf  ", "spaced out-partly-redacted.pdf"],
+    [".pdf", "document-partly-redacted.pdf"],
+  ])("turns %s into %s when partly redacted", (input, expected) => {
+    expect(outputNameFor(input, true)).toBe(expected);
+  });
+
+  it("is the plain name when a file is chosen, before any page is read", () => {
     expect(live(drive(CHOOSE)).outputName).toBe("quarterly-report-redacted.pdf");
+  });
+
+  /** Spec 0006, AC-23 and INV-5: set again at open, from the readings. */
+  it("says partly once the open finds a page carrying a warning", () => {
+    const session = live(
+      drive(CHOOSE, { type: "opened", summary: SCANNED, matches: MATCHES }),
+    );
+    expect(session.outputName).toBe("quarterly-report-partly-redacted.pdf");
+  });
+
+  it("stays plain when the open finds only quiet pages", () => {
+    const session = live(
+      drive(CHOOSE, { type: "opened", summary: SUMMARY, matches: MATCHES }),
+    );
+    expect(session.outputName).toBe("quarterly-report-redacted.pdf");
+  });
+
+  it("goes back to the plain name on a retry, until the new worker has read the pages", () => {
+    const session = live(
+      drive(
+        CHOOSE,
+        { type: "opened", summary: SCANNED, matches: MATCHES },
+        { type: "worker-lost" },
+        { type: "retry" },
+      ),
+    );
+    expect(session.outputName).toBe("quarterly-report-redacted.pdf");
   });
 });
 

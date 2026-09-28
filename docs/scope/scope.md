@@ -121,7 +121,7 @@ Detect per page whether a text layer exists, and never let somebody leave with a
 spec [0006](../specs/0006-scanned-page-detection-warnings/index.md)
 - [x] Design it (spec): `/architect scanned page detection & warnings`
 - [ ] Build it: `/develop scanned page detection & warnings`
-  - [ ] Scans named, and no file for a document with nothing readable: the page reading, the refusal, the warnings at open and at download, and the partly redacted name · AC-1, AC-2, AC-3, AC-9, AC-10, AC-11, AC-12, AC-19, AC-20, AC-22, AC-23, AC-26, AC-27, AC-28, AC-29
+  - [x] Scans named, and no file for a document with nothing readable: the page reading, the refusal, the warnings at open and at download, and the partly redacted name · AC-1, AC-2, AC-3, AC-9, AC-10, AC-11, AC-12, AC-19, AC-20, AC-22, AC-23, AC-26, AC-27, AC-28, AC-29
   - [ ] Pictures, OCR and the crooked scan: bare pictures, the stamp cap, the machine read note and the crooked scan line · AC-2, AC-4, AC-5, AC-21, AC-25
   - [ ] Text a viewer never shows: covered and hidden text, and the row marks · AC-6, AC-7, AC-9, AC-13, AC-24
   - [ ] Nothing outside the visible area survives: the foundation pins, the trim on both copies with its proof, the self check rules, the off page note and picture warning · AC-8, AC-14, AC-15, AC-16, AC-17, AC-18, AC-21, AC-22, AC-29
