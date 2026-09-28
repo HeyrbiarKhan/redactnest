@@ -1,10 +1,10 @@
-# Verify: Document session and privacy guarantee · spec 0002 · updated 2026-09-25
+# Verify: Document session and privacy guarantee · spec 0002 · updated 2026-09-28
 
 _Steps derived from spec 0002's acceptance criteria and its Value sourcing table. `/check verify` runs these; `/test` locks the durable ones._
 
 Run the tool at `/tool` against a production build (`pnpm build && pnpm start`), because the content security policy is looser in development and the prerendered route has to be proved under the real one.
 
-Steps marked **(after feature 5)** become reachable once spec [0004](../0004-redaction-engine/index.md) is built: it adds a thin Redact, Cancel and Download path to the tool page, and a run cleans the file even with nothing ticked. `/check verify` for feature 5 ticks them. Feature 6 owns the confirm checklist, so no tick can be changed until it lands, and every step that starts from a changed tick is marked **(after feature 6)**. AC-14 is one of them: its mechanism, a rerun starting from the untouched original, is proved at the engine by spec 0004's AC-11, and its browser step closes with feature 6.
+Steps marked **(after feature 5)** needed spec [0004](../0004-redaction-engine/index.md)'s thin Redact, Cancel and Download path. Steps marked **(after feature 6)** start from a changed tick, so they needed spec [0005](../0005-pattern-detection/index.md)'s checklist. Both features are built, and every **(after feature 6)** step is ticked; AC-14's mechanism, a rerun starting from the untouched original, is also proved at the engine by spec 0004's AC-11. Four **(after feature 5)** steps are ticked because tests elsewhere prove them, and each names its test. Three still wait for a run: no leave warning after a download, a cancel keeping a changed tick, and the output released after a download.
 
 ## UI / manual
 
@@ -26,16 +26,16 @@ Steps marked **(after feature 5)** become reachable once spec [0004](../0004-red
 - [x] Devtools → Application → Storage: local storage, session storage, IndexedDB and Cache Storage are all empty, and no service worker is registered → AC-2
 - [x] Devtools → Network on the tool route: the only non asset request is `GET /api/entitlement`, and no request body or URL carries the file name or any text from the document → AC-3
 - [x] **(after feature 6)** Redact, download, then change one tick and run again without touching the file picker → a second file downloads, and it matches the new ticks rather than a mix of both runs → AC-14
-- [ ] **(after feature 5)** Cancel a redaction in flight → back on the checklist with the document still open and the ticks intact. Needs a run long enough to catch: override `GET /api/entitlement` in devtools to return a paid snapshot and use spec 0004's 50 page fixture → AC-10
-- [ ] **(after feature 5)** Rename the source file on disk to `  spaced out.pdf  `, open and redact it → the download is offered as `spaced out-redacted.pdf`, not `spaced out.pdf-redacted.pdf` → value sourcing: `outputName`
-- [ ] **(after feature 5)** Redact a file named `.pdf` → the download is offered as `document-redacted.pdf` → value sourcing: `outputName`
+- [ ] **(after feature 5)** Change a tick, then cancel a redaction in flight → back on the checklist with the document still open and the changed tick intact. Needs a run long enough to catch, on a document with matches: override `GET /api/entitlement` in devtools to return a paid snapshot and use the dense 50 page document `tests/e2e/cancel.spec.ts` builds (`densePdf`, an address and a phone number on every line). Spec 0004's heavy fixture has no text, so it has no checklist and no ticks to keep. The reducer keeps the tick set on a cancel, but no test asserts it yet → AC-10
+- [x] **(after feature 5)** Rename the source file on disk to `  spaced out.pdf  `, open and redact it → the download is offered as `spaced out-redacted.pdf`, not `spaced out.pdf-redacted.pdf` → value sourcing: `outputName`. _Proven by `tests/unit/session.test.ts` (`outputNameFor`, the `"  spaced out.pdf  "` case), with `tests/unit/download.test.ts` ("names it as the session decided") and `tests/e2e/engine.spec.ts` ("a redaction in the real worker hands over a file that is really clean", whose download is offered under the session's name) proving the name reaches the browser unchanged._
+- [x] **(after feature 5)** Redact a file named `.pdf` → the download is offered as `document-redacted.pdf` → value sourcing: `outputName`. _Proven by `tests/unit/session.test.ts` (`outputNameFor`, the `".pdf"` case), through the same chain to the browser as the step above._
 - [ ] **(after feature 5)** Watch memory in the task manager across a download → the output is released as soon as the download is handed over, and the object URL no longer resolves → AC-4
 
 ## Commands
 
 - [x] `pnpm test:e2e privacy.spec.ts` → 6 pass, including the canary proving the recording proxies are really installed → AC-2, AC-3
-- [ ] **(after feature 5)** `pnpm test:e2e privacy.spec.ts` → the redaction leg passes too: open, redact and download with the recording proxies installed, nothing ever written, no request carrying document bytes, extracted text, match text or the file name, and `GET /api/entitlement` still the only request → AC-2, AC-3
-- [ ] **(after feature 5)** `pnpm test:e2e engine.spec.ts` → the cancel test asserts its cancel landed during `redacting` and the session returned to the checklist with the document open → AC-10
+- [x] **(after feature 5)** `pnpm test:e2e privacy.spec.ts` → the redaction leg passes too: open, redact and download with the recording proxies installed, nothing ever written, no request carrying document bytes, extracted text, match text or the file name, and `GET /api/entitlement` still the only request → AC-2, AC-3. _Proven by "a full run, open to download, writes nothing down" and "a full run sends no document, text, match or name anywhere", which cover every part of this step; ticked in spec 0004's `verify.md` (its AC-21)._
+- [x] **(after feature 5)** `pnpm test:e2e cancel.spec.ts` → the cancel test asserts its cancel landed during `redacting` and the session went back to review with the document open (Redact and the page count showing, no Download) → AC-10. _Proven by "a run can be cancelled while it is under way, and the tool carries on". The test lives in `cancel.spec.ts`, not `engine.spec.ts`; ticked in spec 0004's `verify.md`._
 - [x] `pnpm test:e2e` → the whole browser suite passes under the enforced policy → AC-2, AC-3, AC-12
 - [x] `pnpm test:e2e engine.spec.ts` → 8 pass, including the two that count `Worker` constructions: one tab reuses its worker across documents, and starting over builds a new one → AC-1, AC-5a, AC-5b
 - [x] `pnpm test` → the reducer's every edge, including the ones that must not exist → AC-1, AC-10, AC-11, AC-13, AC-14

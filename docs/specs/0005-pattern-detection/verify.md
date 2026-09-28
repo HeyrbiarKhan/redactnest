@@ -1,4 +1,4 @@
-# Verify: Pattern detection · spec 0005 · updated 2026-09-27
+# Verify: Pattern detection · spec 0005 · updated 2026-09-28
 
 _Steps derived from spec 0005's acceptance criteria and its Value sourcing table. `/check verify` runs these; `/test` locks the durable ones._
 
@@ -14,7 +14,7 @@ Built: slices 1 to 5 of the build plan. Nothing is open. The phone detector's bu
 - [x] Open `detect-phone.pdf` → a "Phone numbers" group: `020 7946 0958`, `+44 20 7946 0958`, `(212) 555-0123`, `1-800-555-0199`, `00 44 20 7946 0012`, `020 7946 0321 ext. 123`, `12345678902` (after `Tel:`) and the wrapped `020 7946 0777` ticked; `(212) 123 4567` and `12345678901` unticked; no row for `INV-2026-000123`, the dates, the postcodes or the ZIP codes → AC-2, AC-4, AC-10
 - [x] Further down that group → the column `020 7946 0100` to `020 7946 0104` as five rows, `020 7946 0200`, `0201` and `0202` from the "Desk" line as three rows, `020 7946 0300`, `0301` and `0302` from the comma and semicolon list as three rows, `020 7946 0400` from the call log line with neither `30` nor `3` in it, and `(212) 555-0142` whole, all ticked; no row for `90210-1234` or `05.12.1980`, and no row holds a digit of another number → AC-2, AC-27, INV-13, INV-14
 - [x] In `detect-phone.pdf`, leave every row ticked, redact, download, and paste the page's text → each of those numbers is gone, while `12:30`, `3 min`, `CA 90210-1234` and `Born 05.12.1980` are still there, and each number's black box covers it alone → AC-6, AC-27
-- [x] Open `detect-blocked.pdf` → `slanted@example.com`, `image@example.com`, `dave@example.com` and `hidden@example.com` each listed with a disabled checkbox and its reason line (steep angle, image, replacement text, replacement text); clicking one changes nothing; `plain@example.com` is ticked; `gave@example.com` never appears → AC-8, AC-9, AC-13
+- [x] Open `detect-blocked.pdf` → `slanted@example.com`, `image@example.com`, `dave@example.com` and `hidden@example.com` each listed with a disabled checkbox and its reason line (steep angle, image, replacement text, replacement text); clicking one changes nothing; `plain@example.com` is ticked; `gave@example.com` never gets a row → AC-8, AC-9, AC-13
 - [x] In `detect-blocked.pdf`, tick only `wide@example.com` (page 3) and press **Redact** → the run fails with the replacement text message and offers no file (the recorded limit, never a leak) → AC-9
 - [x] Open `detect-wraps.pdf` → `jane.doe@example.com` and `sales@example.org` listed with no space in them, `smith@example.com` listed without "Bob.", nothing from page 2 → AC-4
 - [x] Open `kerning.pdf` → the info note, then "Nothing found to remove" and "RedactNest found no email addresses or phone numbers. Redact still makes a cleaned copy, with metadata and hidden content removed." → AC-14
