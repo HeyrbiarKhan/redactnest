@@ -25,10 +25,10 @@ Several steps open the output in a second reader. Use at least two of: Acrobat R
 - [x] With the same override, press **Redact** on the heavy fixture, then choose the two page fixture while it runs → the two page fixture opens, and no outcome or **Download** from the first file ever appears → AC-20, AC-23
 - [x] After a run, press **Start over** before downloading → the idle drop area, and no **Download** anywhere; choose the same file again and the page shows a fresh review, not the old result → AC-20
 - [x] In devtools, terminate the `redactnest-engine` worker while **Download** is showing → the lost message, and after **Try again** no **Download** appears until a new run completes → AC-20
-- [ ] **(after feature 6)** Tick a match, redact, download, open the output → a black box where the match was, no wider than the match and no taller than its own line; select all text in the reader and paste it somewhere → the match is absent and its neighbours are present → AC-4, AC-6
-- [ ] **(after feature 6)** In a single spaced document, tick a match in the middle of a paragraph and redact → the lines above and below read exactly as before, in the reader and when pasted → AC-4, AC-6
-- [ ] **(after feature 6)** Run a real scan through OCRmyPDF, open it, tick a match that has descenders (a name with a g, j, p, q or y), redact and download → in the output, no ink of the match shows around or below the box when the image is viewed on its own (for example after `mutool extract`), and the lines around it are still readable → AC-5, AC-13
-- [ ] **(after feature 6)** Redact with two ticks, download, untick one, redact and download again → the second file shows the unticked match in plain text → AC-11
+- [x] **(after feature 6)** Tick a match, redact, download, open the output → a black box where the match was, no wider than the match and no taller than its own line; select all text in the reader and paste it somewhere → the match is absent and its neighbours are present → AC-4, AC-6
+- [x] **(after feature 6)** In a single spaced document, tick a match in the middle of a paragraph and redact → the lines above and below read exactly as before, in the reader and when pasted → AC-4, AC-6
+- [ ] **(after feature 7)** Run a real scan through OCRmyPDF, open it, tick a match that has descenders (a name with a g, j, p, q or y), redact and download → in the output, no ink of the match shows around or below the box when the image is viewed on its own (for example after `mutool extract`), and the lines around it are still readable → AC-5, AC-13
+- [x] **(after feature 6)** Redact with two ticks, download, untick one, redact and download again → the second file shows the unticked match in plain text → AC-11
 
 ## Commands
 
@@ -66,7 +66,7 @@ Several steps open the output in a second reader. Use at least two of: Acrobat R
 - [x] `grep -rn "textPass\|paddedPass\|boxPass" src/ --include=*.ts --include=*.tsx` → called only from `src/engine/redact.ts` (declared in `passes.ts`, listed in `index.ts`), so nothing reaches a pass without `validateTargets` → AC-28, AC-29, INV-15
 - [x] `pnpm test -- protocol` → `slanted-text` is the last member of `ENGINE_ERROR_KINDS`, and the ordered list in the test matches → AC-28
 - [x] `pnpm test -- tool-client` → `slanted-text` renders "A ticked item is set at an angle too steep to redact safely, so no file was made." → AC-19, AC-28
-- [ ] **(after feature 6)** Run a real scan fed about a degree crooked through OCRmyPDF without `--deskew`. Tick a name and redact → it is removed and passes. Tick a long address or a whole line on the same scan → refused with the slanted text line, or, once feature 6 marks such matches, shown as not redactable during review → AC-28, AC-29
+- [ ] **(after feature 7)** Run a real scan fed about a degree crooked through OCRmyPDF without `--deskew`. Tick a name and redact → it is removed and passes. Tick a long address or a whole line on the same scan → refused with the slanted text line, or, once feature 6 marks such matches, shown as not redactable during review → AC-28, AC-29
 
 ## Acceptance criteria coverage
 

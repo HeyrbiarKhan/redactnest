@@ -12,10 +12,10 @@ Steps marked **(after feature 5)** become reachable once spec [0004](../0004-red
 - [x] With devtools Network open and the cache disabled, open one PDF, then open a second → the second opens without fetching `/engine/mupdf-wasm.wasm` again, and Sources still lists a single `redactnest-engine` worker → AC-1
 - [x] Open a PDF, then choose a file that is not a PDF → the error appears, and the first document is gone: the worker holds nothing, so pressing **Start over** and reopening behaves like a fresh document → AC-1
 - [x] Open a PDF, press **Start over**, open one again → a new `redactnest-engine` worker appears in Sources, because starting over is still a real release → AC-5b
-- [ ] **(after feature 6)** With a tick changed, choose a second file → a confirm appears; accepting replaces the session, declining leaves the first one untouched → AC-1
+- [x] **(after feature 6)** With a tick changed, choose a second file → a confirm appears; accepting replaces the session, declining leaves the first one untouched → AC-1
 - [x] Open a 4 page PDF as an anonymous visitor → refused with the "more than the 3 page limit" message, not the 50 page one → AC-9
 - [x] In devtools, make `GET /api/entitlement` fail, then open a 4 page PDF → still refused at 3 pages, never allowed through → AC-9
-- [ ] **(after feature 6)** Change a tick, then close the tab → the browser's leave warning appears → AC-13
+- [x] **(after feature 6)** Change a tick, then close the tab → the browser's leave warning appears → AC-13
 - [x] Open a file, touch nothing, close the tab → no warning → AC-13
 - [ ] **(after feature 5)** Download, then close the tab with nothing else changed → no warning → AC-13
 - [x] Navigate away from `/tool` and press Back → the idle drop area, never a checklist pointing at a released session → AC-12
@@ -25,7 +25,7 @@ Steps marked **(after feature 5)** become reachable once spec [0004](../0004-red
 - [x] After choosing a file, inspect the file input in devtools → `files.length` is 0 → AC-2
 - [x] Devtools → Application → Storage: local storage, session storage, IndexedDB and Cache Storage are all empty, and no service worker is registered → AC-2
 - [x] Devtools → Network on the tool route: the only non asset request is `GET /api/entitlement`, and no request body or URL carries the file name or any text from the document → AC-3
-- [ ] **(after feature 6)** Redact, download, then change one tick and run again without touching the file picker → a second file downloads, and it matches the new ticks rather than a mix of both runs → AC-14
+- [x] **(after feature 6)** Redact, download, then change one tick and run again without touching the file picker → a second file downloads, and it matches the new ticks rather than a mix of both runs → AC-14
 - [ ] **(after feature 5)** Cancel a redaction in flight → back on the checklist with the document still open and the ticks intact. Needs a run long enough to catch: override `GET /api/entitlement` in devtools to return a paid snapshot and use spec 0004's 50 page fixture → AC-10
 - [ ] **(after feature 5)** Rename the source file on disk to `  spaced out.pdf  `, open and redact it → the download is offered as `spaced out-redacted.pdf`, not `spaced out.pdf-redacted.pdf` → value sourcing: `outputName`
 - [ ] **(after feature 5)** Redact a file named `.pdf` → the download is offered as `document-redacted.pdf` → value sourcing: `outputName`
