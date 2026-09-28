@@ -128,6 +128,17 @@ async function completeFlagged(page: Page): Promise<void> {
   });
 }
 
+/**
+ * Spec 0006, AC-21 and AC-25. A crooked OCR scan: the note callout, with the
+ * machine read line and the crooked scan line, and a blocked row.
+ */
+async function reviewNotes(page: Page): Promise<void> {
+  await page
+    .getByTestId("file-input")
+    .setInputFiles(resolve("tests/fixtures/read-crooked.pdf"));
+  await expect(page.getByTestId("page-notes")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+}
+
 /** Spec 0006, AC-26. A document with nothing readable, refused at open. */
 async function refuseUnreadable(page: Page): Promise<void> {
   await page
@@ -149,6 +160,7 @@ const TOOL_STATES: readonly (readonly [string, (page: Page) => Promise<void>])[]
   // Spec 0006, AC-27.
   ["reviewing, with pages that cannot be read", reviewFlagged],
   ["complete, partly redacted", completeFlagged],
+  ["reviewing, with notes", reviewNotes],
   ["refused, with nothing readable", refuseUnreadable],
 ];
 
@@ -518,6 +530,18 @@ test.describe("forced colours (AC-17, AC-18)", () => {
       return { style: style.borderTopStyle, width: style.borderTopWidth };
     });
     expect(callout).toEqual({ style: "solid", width: "1px" });
+  });
+
+  /** Spec 0006, AC-27. The notes keep their edge once colour is gone, too. */
+  test("keeps the edge of the page notes", async ({ page }) => {
+    await page.goto("/tool");
+    await reviewNotes(page);
+
+    const edge = await page.getByTestId("page-notes").evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { style: style.borderTopStyle, width: style.borderTopWidth };
+    });
+    expect(edge).toEqual({ style: "solid", width: "1px" });
   });
 
   /** Spec 0006, AC-27. The page warnings keep their edge once colour is gone. */

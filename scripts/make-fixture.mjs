@@ -24,11 +24,14 @@ import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
 import {
   readBlank,
+  readCrooked,
   readMixed,
   readPages,
+  readPictures,
   readPrivate,
   readRefusedMix,
   readScans,
+  readSlides,
   readStamped,
   readUnmapped,
 } from "./lib/reading-fixtures.mjs";
@@ -427,6 +430,13 @@ const FIXTURES = [
   ["read-private.pdf", readPrivate(), "every page in private use code points"],
   ["read-refused-mix.pdf", readRefusedMix(), "a scan, a blank, a stamped scan, unmapped"],
   ["read-mixed.pdf", readMixed(), "a typed page, a scan and a blank page"],
+  ["read-pictures.pdf", readPictures(), "one page per picture rule and near miss"],
+  ["read-slides.pdf", readSlides(), "full bleed photo slides with a title and bullets"],
+  [
+    "read-crooked.pdf",
+    readCrooked(),
+    "a crooked OCR scan and a typed page at the same angle",
+  ],
 ];
 
 const outDir = join(process.cwd(), "tests", "fixtures");

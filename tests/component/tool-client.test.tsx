@@ -1467,4 +1467,82 @@ describe("the page readings (spec 0006)", () => {
     await run.finish();
     await expectNoAxeViolations(container);
   });
+
+  /** Spec 0006, AC-21 and AC-25. What is worth knowing, and changes nothing. */
+  describe("the notes", () => {
+    const SLANTED: ReviewMatch = Object.freeze<ReviewMatch>({
+      id: asMatchId("m-slanted"),
+      type: "email",
+      page: 2,
+      text: "accounts@example.com",
+      before: "Write to ",
+      after: " today",
+      tickedByDefault: false,
+      blocked: "slanted-text",
+    });
+
+    it("sit in an untitled note after the warnings, with the crooked scan line last", async () => {
+      const summary: DocumentSummary = {
+        pageCount: 3,
+        pages: [
+          { findings: ["bare-picture"] },
+          { findings: ["machine-read-text"] },
+          { findings: [] },
+        ],
+      };
+      await openWith({ ...openedSession(), summary, matches: [SLANTED] });
+
+      const notes = screen.getByTestId("page-notes");
+      expect(notes).toHaveTextContent(/^Note:/);
+      expect(within(notes).queryByRole("heading")).not.toBeInTheDocument();
+      const lines = [...notes.querySelectorAll("p")].map((line) => line.textContent);
+      expect(lines).toEqual([
+        "Page 2 is a scan with machine read text. RedactNest reads that text, so it can only find what the text recognition got right.",
+        "Some items on scanned pages can't be removed because the scan is slightly crooked. Straightening the scan before text recognition (OCRmyPDF's --deskew option, for one) usually fixes this.",
+      ]);
+
+      // After the warnings, in the same card, and never among them.
+      const warnings = screen.getByTestId("page-warnings");
+      expect(
+        warnings.compareDocumentPosition(notes) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(warnings).not.toHaveTextContent("machine read");
+      expect(screen.getByRole("region", { name: "Document opened" })).toContainElement(
+        notes,
+      );
+    });
+
+    it("keep the all clear line and the plain name when there are only notes", async () => {
+      const summary: DocumentSummary = {
+        pageCount: 2,
+        pages: [{ findings: ["machine-read-text"] }, { findings: [] }],
+      };
+      await openWith({ ...openedSession(), summary });
+
+      expect(screen.getByTestId("all-clear")).toBeInTheDocument();
+      expect(screen.getByTestId("page-notes")).toHaveTextContent(
+        "Page 1 is a scan with machine read text.",
+      );
+      expect(screen.queryByTestId("page-warnings")).not.toBeInTheDocument();
+      expect(screen.getByTestId("coverage")).not.toHaveTextContent(
+        "on the pages it could read",
+      );
+    });
+
+    it("leave the crooked scan line out when the slanted match is on a typed page", async () => {
+      const summary: DocumentSummary = {
+        pageCount: 2,
+        pages: [{ findings: ["machine-read-text"] }, { findings: [] }],
+      };
+      await openWith({ ...openedSession(), summary, matches: [SLANTED] });
+
+      expect(screen.getByTestId("page-notes")).not.toHaveTextContent("crooked");
+    });
+
+    it("show no note at all when there is nothing to note", async () => {
+      await openWith(openedSession());
+
+      expect(screen.queryByTestId("page-notes")).not.toBeInTheDocument();
+    });
+  });
 });

@@ -296,3 +296,215 @@ export function readMixed() {
     ];
   });
 }
+
+/**
+ * The glyphless font Tesseract writes its text layer in: a Type0 font whose
+ * codes are code points by its identity map, and whose glyphs draw nothing.
+ * The tiny program Tesseract embeds is left out, as `ocrPage` in the
+ * redaction matrix leaves it out, because the text is invisible anyway.
+ */
+function glyphlessFont(add) {
+  const unicode = add(stream("", IDENTITY_UNICODE));
+  const descriptor = add(
+    "<< /Type /FontDescriptor /FontName /GlyphLessFont /FontBBox [0 0 500 1000] " +
+      "/Ascent 1000 /Descent -1 /CapHeight 1000 /StemV 80 /ItalicAngle 0 /Flags 5 >>",
+  );
+  const cidFont = add(
+    "<< /Type /Font /Subtype /CIDFontType2 /BaseFont /GlyphLessFont /CIDToGIDMap /Identity " +
+      "/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> " +
+      `/FontDescriptor ${descriptor} 0 R /DW 500 >>`,
+  );
+  return add(
+    "<< /Type /Font /Subtype /Type0 /BaseFont /GlyphLessFont /Encoding /Identity-H " +
+      `/DescendantFonts [${cidFont} 0 R] /ToUnicode ${unicode} 0 R >>`,
+  );
+}
+
+/** One line of invisible text (render mode 3) in the glyphless font. */
+function invisibleLine(size, x, y, text) {
+  const hex = [...text]
+    .map((letter) => letter.codePointAt(0).toString(16).padStart(4, "0"))
+    .join("");
+  return `BT 3 Tr /Fg ${size} Tf ${x} ${y} Td <${hex}> Tj ET\n`;
+}
+
+/** The text layer of a full page OCR scan: twenty lines of words, 32 pt apart. */
+function ocrLayer() {
+  let layer = "";
+  for (let row = 0; row < 20; row += 1) {
+    layer += invisibleLine(
+      12,
+      60,
+      740 - row * 32,
+      `Line ${row + 1} of the statement reads as words recognised from the scan`,
+    );
+  }
+  return layer;
+}
+
+/**
+ * One page per picture rule and near miss, for slice 2. The findings each
+ * page must give, in the same order, are `READ_PICTURES`.
+ */
+export const READ_PICTURES = Object.freeze([
+  { name: "an ID card pasted on a typed page", findings: ["bare-picture"] },
+  { name: "a small logo on a typed page", findings: [] },
+  { name: "a large photo with a caption", findings: ["bare-picture"] },
+  { name: "a headshot clipped to a small frame", findings: [] },
+  {
+    name: "a scan with its text layer over it (Tesseract)",
+    findings: ["machine-read-text"],
+  },
+  {
+    name: "a scan with its text layer under it (ABBYY)",
+    findings: ["machine-read-text"],
+  },
+  {
+    name: "a sparse scan with one recognised sentence",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  {
+    name: "a sparse scan with a few recognised words",
+    findings: ["scanned", "machine-read-text"],
+  },
+]);
+
+/** Typed words for the pages that are letters, so each is readable. */
+function letterText() {
+  return (
+    line("F1", 14, 72, 720, "Application for a replacement card") +
+    line("F1", 12, 72, 696, "The applicant's details are typed on this page.") +
+    line("F1", 12, 72, 680, "The documents supplied are pasted below.")
+  );
+}
+
+/** Spec 0006, AC-2, AC-4 and AC-5. One page per picture rule and near miss. */
+export function readPictures() {
+  return document(({ add }) => {
+    const card = scanImage(add, { columns: 40, rows: 25 });
+    const logo = scanImage(add, { columns: 8, rows: 8 });
+    const photo = scanImage(add, { columns: 48, rows: 36 });
+    const scan = scanImage(add);
+    const glyphless = glyphlessFont(add);
+    const ocr = `/Font << /Fg ${glyphless} 0 R >>`;
+
+    return [
+      {
+        resources: `/XObject << /Card ${card} 0 R >>`,
+        // 243 by 153 pt, an ID card at full size: 7.7% of the page.
+        content: `${letterText()}q 243 0 0 153 300 420 cm /Card Do Q\n`,
+      },
+      {
+        resources: `/XObject << /Logo ${logo} 0 R >>`,
+        content: `${letterText()}q 40 0 0 40 500 730 cm /Logo Do Q\n`,
+      },
+      {
+        resources: `/XObject << /Photo ${photo} 0 R >>`,
+        // 360 by 270 pt, a fifth of the page, with its caption beneath it.
+        content:
+          `${letterText()}q 360 0 0 270 126 300 cm /Photo Do Q\n` +
+          line("F1", 10, 126, 285, "Figure 1: the site as it stands"),
+      },
+      {
+        resources: `/XObject << /Photo ${photo} 0 R >>`,
+        // A photo placed at full page size and clipped to a 120 pt frame,
+        // 3% of the page: its footprint is the frame, not the photo.
+        content: `${letterText()}q 72 460 120 120 re W n 612 0 0 792 0 0 cm /Photo Do Q\n`,
+      },
+      {
+        resources: `/XObject << /Scan ${scan} 0 R >> ${ocr}`,
+        content: fullPage("Scan") + ocrLayer(),
+      },
+      {
+        resources: `/XObject << /Scan ${scan} 0 R >> ${ocr}`,
+        content: ocrLayer() + fullPage("Scan"),
+      },
+      {
+        resources: `/XObject << /Scan ${scan} 0 R >> ${ocr}`,
+        content:
+          fullPage("Scan") +
+          invisibleLine(
+            12,
+            72,
+            120,
+            "Signed for and on behalf of the company by its director",
+          ),
+      },
+      {
+        resources: `/XObject << /Scan ${scan} 0 R >> ${ocr}`,
+        content: fullPage("Scan") + invisibleLine(12, 72, 120, "Signed John Smith"),
+      },
+    ];
+  });
+}
+
+/**
+ * Spec 0006, AC-2 and AC-4. A slide deck whose every slide is a full bleed
+ * photo with a title and two bullets over it. More than a stamp's readable
+ * characters, so each slide is `bare-picture` and the deck opens, rather than
+ * being refused as a stamped scan.
+ */
+export function readSlides() {
+  return document(({ add }) => {
+    const photo = scanImage(add, { columns: 48, rows: 62 });
+    return [
+      ["Quarterly results", "Revenue grew in every region", "Costs held flat"],
+      ["Next steps", "Open two new offices this year", "Hire a regional lead"],
+    ].map(([title, first, second]) => ({
+      resources: `/XObject << /Photo ${photo} 0 R >>`,
+      content:
+        fullPage("Photo") +
+        line("F1", 24, 72, 700, title) +
+        line("F1", 14, 90, 640, `- ${first}`) +
+        line("F1", 14, 90, 612, `- ${second}`),
+    }));
+  });
+}
+
+/** The addresses on `read-crooked.pdf`, one on each page, both long enough to be blocked. */
+export const CROOKED_EMAILS = Object.freeze({
+  scanned: "accounts.receivable@example.com",
+  typed: "billing.department@example.com",
+});
+
+/** The turn `read-crooked.pdf` sets its lines at: about a degree and a half. */
+const CROOKED_DEGREES = 1.5;
+
+/** `cm` that turns the frame by `CROOKED_DEGREES` about `[x, y]`. */
+function turned([x, y]) {
+  const angle = (CROOKED_DEGREES * Math.PI) / 180;
+  const cos = Math.cos(angle).toFixed(6);
+  const sin = Math.sin(angle).toFixed(6);
+  return `${cos} ${sin} ${-sin} ${cos} ${x} ${y} cm`;
+}
+
+/**
+ * Spec 0006, AC-25. A scan about a degree and a half crooked, its text layer
+ * turned with it, and a typed page turned the same way: a long address on
+ * each is blocked `slanted-text`, and only the scan's page is machine read,
+ * so only it earns the crooked scan line.
+ */
+export function readCrooked() {
+  return document(({ add }) => {
+    const scan = scanImage(add, { columns: 60, rows: 18 });
+    const glyphless = glyphlessFont(add);
+    return [
+      {
+        resources: `/XObject << /Scan ${scan} 0 R >> /Font << /Fg ${glyphless} 0 R >>`,
+        content:
+          `q ${turned([72, 500])}\n` +
+          "q 440 0 0 132 0 0 cm /Scan Do Q\n" +
+          invisibleLine(12, 10, 100, "Payment reminder for the second quarter") +
+          invisibleLine(12, 10, 70, `Write to ${CROOKED_EMAILS.scanned} today`) +
+          invisibleLine(12, 10, 40, "Thank you for settling the balance promptly") +
+          "Q\n",
+      },
+      {
+        content:
+          `q ${turned([72, 600])}\n` +
+          line("F1", 12, 0, 0, `Write to ${CROOKED_EMAILS.typed} today`) +
+          "Q\n",
+      },
+    ];
+  });
+}

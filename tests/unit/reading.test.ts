@@ -16,9 +16,13 @@ import {
   type PageInspection,
 } from "@/engine";
 
+import { showsCrookedLine } from "@/lib/page-findings";
+
 import {
+  CROOKED_EMAILS,
   MIXED_EMAIL,
   READ_PAGES,
+  READ_PICTURES,
   STAMP_EMAIL,
 } from "../../scripts/lib/reading-fixtures.mjs";
 import { fixture } from "../support/bytes";
@@ -26,7 +30,7 @@ import { LIMITS, mupdf } from "../support/mupdf";
 
 /**
  * Reading every page before review, driven with the real MuPDF in Node. Spec
- * 0006, slice 1.
+ * 0006, slices 1 and 2.
  *
  * Each rule is read off a fixture page written for it, with its near misses
  * beside it, through the engine's own inspection on a prepared copy, exactly
@@ -334,5 +338,79 @@ describe("what MuPDF reports (pins)", () => {
     expect(first.glyphs[0].origin[0]).toBeCloseTo(72, 6);
     expect(first.glyphs[0].origin[1]).toBeCloseTo(72, 6);
     expect(first.glyphs[0].em).toBeCloseTo(14, 6);
+  });
+});
+
+/**
+ * Slice 2: AC-2, AC-4 and AC-5. Pictures with no text over them, the stamp
+ * rule against a slide, and text recognition layers in either order.
+ */
+describe("pictures and machine read text", () => {
+  it("reads every page of read-pictures.pdf as the fixture says", async () => {
+    const inspections = await inspect("read-pictures.pdf");
+
+    expect(
+      inspections.map(({ findings }, index) => ({
+        name: READ_PICTURES[index].name,
+        findings,
+      })),
+    ).toEqual(READ_PICTURES.map(({ name, findings }) => ({ name, findings })));
+  });
+
+  it("reads the redaction matrix's OCR scan as machine read, and nothing more", async () => {
+    for (const name of ["ocr-aligned.pdf", "ocr-misaligned.pdf", "ocr-bare.pdf"]) {
+      expect(
+        (await inspect(name)).map(({ findings }) => findings),
+        name,
+      ).toEqual([["machine-read-text"]]);
+    }
+  });
+
+  it("opens a slide deck of full bleed photos, each slide a bare picture, not a scan", async () => {
+    const doc = await openDocumentWith(mupdf, fixture("read-slides.pdf"), LIMITS);
+    try {
+      expect(doc.summary.pages).toEqual([
+        { findings: ["bare-picture"] },
+        { findings: ["bare-picture"] },
+      ]);
+    } finally {
+      doc.close();
+    }
+  });
+
+  it("never calls a machine read glyph covered or hidden, in either order", async () => {
+    const inspections = await inspect("read-pictures.pdf");
+    const ocrPages = READ_PICTURES.flatMap(({ findings }, index) =>
+      findings.includes("machine-read-text") ? [index] : [],
+    );
+    for (const index of ocrPages) {
+      expect(inspections[index].findings).not.toContain("covered-text");
+      expect(inspections[index].findings).not.toContain("hidden-text");
+    }
+  });
+});
+
+/** Slice 2: AC-25. The crooked scan line, from the real engine's readings and blocks. */
+describe("the crooked scan line", () => {
+  it("shows for a slanted match on a machine read page, and not for one on a typed page", async () => {
+    const doc = await openDocumentWith(mupdf, fixture("read-crooked.pdf"), LIMITS);
+    try {
+      expect(doc.summary.pages).toEqual([
+        { findings: ["machine-read-text"] },
+        { findings: [] },
+      ]);
+      const found = await doc.findMatches({ contextChars: 40 });
+      expect(found.map(({ page, text, blocked }) => ({ page, text, blocked }))).toEqual([
+        { page: 0, text: CROOKED_EMAILS.scanned, blocked: "slanted-text" },
+        { page: 1, text: CROOKED_EMAILS.typed, blocked: "slanted-text" },
+      ]);
+
+      // The review rows the worker would send, pages one based.
+      const rows = found.map(({ page, blocked }) => ({ page: page + 1, blocked }));
+      expect(showsCrookedLine(doc.summary, rows)).toBe(true);
+      expect(showsCrookedLine(doc.summary, rows.slice(1))).toBe(false);
+    } finally {
+      doc.close();
+    }
   });
 });

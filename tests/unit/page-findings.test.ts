@@ -3,16 +3,19 @@ import { describe, expect, it } from "vitest";
 import {
   ADVICE,
   ALL_CLEAR,
+  CROOKED_LINE,
   DOWNLOAD_WARNING_TITLE,
   FINDING_TONE,
   findingLine,
   isPartly,
   NOTE_FINDINGS,
+  noteLines,
   OPEN_WARNING_TITLE,
   pageList,
   pagesWith,
   PARTLY_REASON,
   showsAdvice,
+  showsCrookedLine,
   WARNING_FINDINGS,
   warningLines,
 } from "@/lib/page-findings";
@@ -206,5 +209,51 @@ describe("the fixed lines", () => {
     );
     expect(DOWNLOAD_WARNING_TITLE).toBe("Not every page was checked");
     expect(PARTLY_REASON).toBe("That is why the file's name ends in partly redacted.");
+  });
+});
+
+/** AC-25: slanted on a machine read page, and never otherwise. */
+describe("the crooked scan line", () => {
+  const SCAN_AND_TYPED = summaryOf(["machine-read-text"], []);
+
+  it("shows for a match blocked slanted-text on a machine read page", () => {
+    expect(showsCrookedLine(SCAN_AND_TYPED, [{ page: 1, blocked: "slanted-text" }])).toBe(
+      true,
+    );
+  });
+
+  it.each([
+    ["on a born digital page", [{ page: 2, blocked: "slanted-text" }]],
+    [
+      "for another block on a machine read page",
+      [{ page: 1, blocked: "image-overreach" }],
+    ],
+    ["for an unblocked match on a machine read page", [{ page: 1, blocked: null }]],
+    ["with no matches at all", []],
+  ] as const)("does not show %s", (_label, matches) => {
+    expect(showsCrookedLine(SCAN_AND_TYPED, matches)).toBe(false);
+  });
+
+  it("reads as the spec writes it", () => {
+    expect(CROOKED_LINE).toBe(
+      "Some items on scanned pages can't be removed because the scan is slightly crooked. Straightening the scan before text recognition (OCRmyPDF's --deskew option, for one) usually fixes this.",
+    );
+  });
+});
+
+/** AC-21: one line per note present, in order, the crooked line last. */
+describe("the note lines", () => {
+  it("follow PAGE_FINDINGS order, with the crooked scan line last", () => {
+    const summary = summaryOf(["off-page-content"], ["machine-read-text"], ["scanned"]);
+
+    expect(noteLines(summary, [{ page: 2, blocked: "slanted-text" }])).toEqual([
+      findingLine(summary, "machine-read-text"),
+      findingLine(summary, "off-page-content"),
+      CROOKED_LINE,
+    ]);
+  });
+
+  it("never holds a warning, and are empty when there is nothing to note", () => {
+    expect(noteLines(summaryOf(["scanned"], ["blank"]), [])).toEqual([]);
   });
 });

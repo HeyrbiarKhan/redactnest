@@ -10,7 +10,12 @@
  * this is the plain first draft the spec wrote.
  */
 
-import { PAGE_FINDINGS, type DocumentSummary, type PageFinding } from "@/worker/protocol";
+import {
+  PAGE_FINDINGS,
+  type DocumentSummary,
+  type PageFinding,
+  type ReviewMatch,
+} from "@/worker/protocol";
 
 /**
  * How loudly a finding speaks. A warning names the file partly redacted and
@@ -203,6 +208,43 @@ export function warningLines(summary: DocumentSummary): readonly string[] {
 /** Is the advice line shown? When text recognition could help (AC-20). */
 export function showsAdvice(summary: DocumentSummary): boolean {
   return ADVISED.some((finding) => pagesWith(summary, finding).length > 0);
+}
+
+/** The crooked scan line (AC-25). */
+export const CROOKED_LINE =
+  "Some items on scanned pages can't be removed because the scan is slightly crooked. Straightening the scan before text recognition (OCRmyPDF's --deskew option, for one) usually fixes this.";
+
+/**
+ * Is the crooked scan line shown? Spec 0006, AC-25: when some match is
+ * blocked `slanted-text` on a page that is machine read, and never otherwise.
+ * A slanted line on a born digital page is set at an angle on purpose, and
+ * straightening a scan would not help it.
+ */
+export function showsCrookedLine(
+  summary: DocumentSummary,
+  matches: readonly Pick<ReviewMatch, "page" | "blocked">[],
+): boolean {
+  return matches.some(
+    (match) =>
+      match.blocked === "slanted-text" &&
+      (summary.pages[match.page - 1]?.findings.includes("machine-read-text") ?? false),
+  );
+}
+
+/**
+ * The note lines at open. Spec 0006, AC-21: one per note finding present, in
+ * `PAGE_FINDINGS` order, then the crooked scan line last. A note is never
+ * among the warnings.
+ */
+export function noteLines(
+  summary: DocumentSummary,
+  matches: readonly Pick<ReviewMatch, "page" | "blocked">[],
+): readonly string[] {
+  const lines = NOTE_FINDINGS.flatMap((finding) => {
+    const line = findingLine(summary, finding);
+    return line === null ? [] : [line];
+  });
+  return showsCrookedLine(summary, matches) ? [...lines, CROOKED_LINE] : lines;
 }
 
 /** The all clear line, in place of any warning (AC-19). */

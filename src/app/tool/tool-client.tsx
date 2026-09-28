@@ -18,6 +18,7 @@ import {
   ALL_CLEAR,
   DOWNLOAD_WARNING_TITLE,
   isPartly,
+  noteLines,
   OPEN_WARNING_TITLE,
   PARTLY_REASON,
   showsAdvice,
@@ -816,17 +817,20 @@ function SessionAlert({
 }
 
 /**
- * The opened document card. Spec 0006, AC-19 and AC-20: the all clear line
+ * The opened document card. Spec 0006, AC-19 to AC-21: the all clear line
  * when no page carries a warning, otherwise the warning callout naming each
- * page RedactNest cannot fully check. Inside the polite live region, so both
- * are heard once, with the open. The words come from `src/lib/page-findings`,
- * the same helpers the name and the download warning read (INV-5).
+ * page RedactNest cannot fully check; then, after the warnings, an untitled
+ * note callout for what is worth knowing but changes nothing. Inside the
+ * polite live region, so all of it is heard once, with the open. The words
+ * come from `src/lib/page-findings`, the same helpers the name and the
+ * download warning read (INV-5).
  */
 function OpenedDocument({ session }: { session: LiveSession }) {
   const { summary } = session;
   if (!summary) return null;
 
   const partly = isPartly(summary);
+  const notes = noteLines(summary, session.matches);
 
   return (
     <Card title="Document opened">
@@ -852,6 +856,13 @@ function OpenedDocument({ session }: { session: LiveSession }) {
             <p key={line}>{line}</p>
           ))}
           {showsAdvice(summary) && <p data-testid="page-advice">{ADVICE}</p>}
+        </Callout>
+      )}
+      {notes.length > 0 && (
+        <Callout tone="info" data-testid="page-notes">
+          {notes.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
         </Callout>
       )}
     </Card>

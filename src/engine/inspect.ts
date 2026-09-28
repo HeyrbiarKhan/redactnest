@@ -2,7 +2,12 @@ import type { PDFDocument, PDFPage } from "mupdf";
 
 import { PAGE_FINDINGS, type PageFinding } from "@/worker/protocol";
 
-import { EXTRACTION_OPTIONS, walkCharacters, type Character } from "./characters";
+import {
+  EXTRACTION_OPTIONS,
+  POSITION_TOLERANCE,
+  walkCharacters,
+  type Character,
+} from "./characters";
 import {
   intersect,
   transformPoint,
@@ -13,7 +18,7 @@ import {
   type Transform,
 } from "./device";
 import { checkpoint, EngineFailure } from "./failure";
-import { containsPoint, quadBounds } from "./geometry";
+import { containsPoint, quadBounds, quadCentre } from "./geometry";
 import type { MuPdf } from "./load";
 import type { PageInspection, Quad } from "./types";
 
@@ -142,6 +147,11 @@ interface TextReading {
   readonly unreadableRun: boolean;
   /** The boxes of lines holding a readable character, visible or invisible. */
   readonly readableLines: readonly Rect[];
+  /**
+   * The extracted character at a glyph's origin, within `POSITION_TOLERANCE`,
+   * or null. Its quad is the glyph's box (AC-9).
+   */
+  readonly characterAt: (origin: Point) => Character | null;
 }
 
 /** What the drawing reader says about a page. */
@@ -154,6 +164,8 @@ interface DrawingReading {
   readonly footprints: readonly Footprint[];
   /** A path or shading whose colour contrasts with white paper, or cannot be judged. */
   readonly contrasting: boolean;
+  /** The origins of invisible glyphs (render mode 3), in drawing order. */
+  readonly invisible: readonly Point[];
 }
 
 /** An image's placement, cut to the bounds of the clip in force (AC-4). */
@@ -180,6 +192,7 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
   // those have readable text over them.
   const bare = new Uint8Array(grid.count);
   let bareShare = 0;
+  let anyBare = false;
   for (const footprint of drawing.footprints) {
     const held = new Uint8Array(grid.count);
     const count = grid.mark(
@@ -194,6 +207,7 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
       if (held[at] && underText[at]) covered += 1;
     if (covered >= TEXT_OVER_PICTURE_MAX * count) continue;
 
+    anyBare = true;
     for (let at = 0; at < grid.count; at += 1) if (held[at]) bare[at] = 1;
   }
   for (let at = 0; at < grid.count; at += 1) bareShare += bare[at];
@@ -216,6 +230,19 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
   if (text.unreadableRun || (drawing.glyphs > 0 && text.readableCount === 0)) {
     found.add("unreadable-text");
   }
+
+  // AC-4. A picture with next to no readable text over it, on a page that is
+  // not already a scan: a pasted ID card, a photo, a slide's background.
+  if (!scanned && anyBare) found.add("bare-picture");
+
+  // AC-5. Invisible text whose centre lies over an image, whichever the
+  // producer drew first, is a text recognition layer: Tesseract and OCRmyPDF
+  // draw it over the scan, ABBYY under it. A note, never a warning.
+  const machineRead = drawing.invisible.some((origin) => {
+    const centre = glyphCentre(text, origin);
+    return drawing.footprints.some((footprint) => holds(footprint, centre));
+  });
+  if (machineRead) found.add("machine-read-text");
 
   return {
     findings: PAGE_FINDINGS.filter((finding) => found.has(finding)),
@@ -254,8 +281,11 @@ function readText(page: PDFPage): TextReading {
     number,
     { box: [number, number, number, number]; readable: boolean }
   >();
+  // Held for this page only, to match glyphs to (INV-8).
+  const characters: Character[] = [];
 
   walkCharacters(page, EXTRACTION_OPTIONS[0], (character: Character) => {
+    characters.push(character);
     if (character.line !== line) {
       line = character.line;
       run = 0;
@@ -283,7 +313,61 @@ function readText(page: PDFPage): TextReading {
     .filter(({ readable, box }) => readable && box.every(Number.isFinite))
     .map(({ box }): Rect => [box[0], box[1], box[2], box[3]]);
 
-  return { readableCount, unreadableRun, readableLines };
+  return {
+    readableCount,
+    unreadableRun,
+    readableLines,
+    characterAt: indexByOrigin(characters),
+  };
+}
+
+/**
+ * Find a character by its origin. Spec 0006, AC-9: a glyph from the drawing
+ * reader and a character from extraction are the same when their page space
+ * origins lie within `POSITION_TOLERANCE` on each axis, because both come
+ * from MuPDF multiplying the same text matrix by the same transform. Indexed
+ * one `POSITION_TOLERANCE` square per cell, so a lookup probes nine cells, as
+ * the self check's own matching does.
+ */
+function indexByOrigin(
+  characters: readonly Character[],
+): (origin: Point) => Character | null {
+  const cell = (value: number) => Math.floor(value / POSITION_TOLERANCE);
+  const cells = new Map<string, Character[]>();
+  for (const character of characters) {
+    const key = `${cell(character.origin[0])},${cell(character.origin[1])}`;
+    const bucket = cells.get(key);
+    if (bucket) bucket.push(character);
+    else cells.set(key, [character]);
+  }
+
+  return ([x, y]) => {
+    const [cx, cy] = [cell(x), cell(y)];
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (const character of cells.get(`${cx + dx},${cy + dy}`) ?? []) {
+          if (
+            Math.abs(character.origin[0] - x) <= POSITION_TOLERANCE &&
+            Math.abs(character.origin[1] - y) <= POSITION_TOLERANCE
+          ) {
+            return character;
+          }
+        }
+      }
+    }
+    return null;
+  };
+}
+
+/**
+ * Where a glyph sits: the centre of its matched character's quad, which is
+ * its box (AC-9), or its origin when no character matches. The origin is the
+ * cautious fallback for AC-5: an OCR layer with no extracted character there
+ * is still judged by where it was drawn.
+ */
+function glyphCentre(text: TextReading, origin: Point): Point {
+  const character = text.characterAt(origin);
+  return character === null ? origin : quadCentre(character.quad);
 }
 
 /** One pass through the drawing reader, kept to what the rules ask. */
@@ -292,11 +376,15 @@ function readDrawing(mupdf: MuPdf, page: PDFPage): DrawingReading {
   let images = 0;
   let contrasting = false;
   const footprints: Footprint[] = [];
+  const invisible: Point[] = [];
 
   walkDrawing(mupdf, page, (drawing, state) => {
     switch (drawing.kind) {
       case "text":
         glyphs += drawing.glyphs.length;
+        if (drawing.mode === "ignore") {
+          for (const glyph of drawing.glyphs) invisible.push(glyph.origin);
+        }
         break;
       case "image":
         images += 1;
@@ -319,7 +407,7 @@ function readDrawing(mupdf: MuPdf, page: PDFPage): DrawingReading {
     }
   });
 
-  return { glyphs, images, footprints, contrasting };
+  return { glyphs, images, footprints, contrasting, invisible };
 }
 
 /**
