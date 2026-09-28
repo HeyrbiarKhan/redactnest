@@ -123,17 +123,22 @@
     outline: 2px solid var(--color-focus);
     outline-offset: 2px;
   }
+}
 
-  @media (forced-colors: active) {
-    /*
-     * A tinted background is dropped in forced colours, which would leave the
-     * highlighted match as bold text alone. The system's own highlight pair is
-     * the one colour the visitor chose, so it is the one used here (AC-17).
-     */
-    mark {
-      forced-color-adjust: none;
-      background-color: Highlight;
-      color: HighlightText;
-    }
+/*
+ * A tinted background is dropped in forced colours, which would leave the
+ * highlighted match as bold text alone. The system's own highlight pair is the
+ * one colour the visitor chose, so it is the one used here (AC-17).
+ *
+ * Outside every layer on purpose. The mark's own tint and ink are utilities,
+ * and a later layer wins whatever the selector, so inside `@layer base` this
+ * lost and `forced-color-adjust: none` kept the tint. An unlayered rule beats
+ * every layered one.
+ */
+@media (forced-colors: active) {
+  mark {
+    forced-color-adjust: none;
+    background-color: Highlight;
+    color: HighlightText;
   }
 }

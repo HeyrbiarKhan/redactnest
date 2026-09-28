@@ -566,6 +566,48 @@ test.describe("the checklist on the tool page (spec 0005, AC-13)", () => {
     expect(appearance).toBe("auto");
   });
 
+  /**
+   * Spec 0003, AC-17. The mark's own tint and ink are utilities, which beat any
+   * rule in `@layer base`, so a forced colours rule for `mark` placed there lost
+   * and `forced-color-adjust: none` kept the tint. The expected pair is read from
+   * a probe painted with the system colours, because the emulated palette is the
+   * browser's to choose, not ours.
+   */
+  test("the highlighted match takes the system highlight in forced colours", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ forcedColors: "active" });
+    await page.goto("/tool");
+    await openDocument(page);
+
+    const mark = page.getByTestId("checklist").locator("mark").first();
+    const colours = await mark.evaluate((element) => {
+      const probe = document.createElement("span");
+      probe.style.forcedColorAdjust = "none";
+      probe.style.backgroundColor = "Highlight";
+      probe.style.color = "HighlightText";
+      document.body.append(probe);
+      const system = getComputedStyle(probe);
+      const expected = { background: system.backgroundColor, text: system.color };
+      probe.remove();
+
+      const style = getComputedStyle(element);
+      return {
+        expected,
+        actual: { background: style.backgroundColor, text: style.color },
+        tint: getComputedStyle(document.documentElement).getPropertyValue(
+          "--color-accent-soft",
+        ),
+      };
+    });
+
+    // The control: the system highlight is not the tint, so a mark that kept
+    // `accent-soft` cannot pass by the two happening to match.
+    expect(colours.tint.trim()).toBe("#d5eeea");
+    expect(colours.expected.background).not.toBe("rgb(213, 238, 234)");
+    expect(colours.actual).toEqual(colours.expected);
+  });
+
   test("a blocked row is listed with its reason, and cannot be ticked", async ({
     page,
   }) => {
