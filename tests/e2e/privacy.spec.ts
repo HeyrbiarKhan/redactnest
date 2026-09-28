@@ -43,9 +43,16 @@ interface RecordedWrite {
   readonly detail: string;
 }
 
+interface ObjectUrlRecord {
+  readonly url: string;
+  /** The first five bytes, read the moment the URL was made. */
+  head: string | null;
+}
+
 declare global {
   interface Window {
     __redactnestWrites?: RecordedWrite[];
+    __redactnestPdfUrls?: ObjectUrlRecord[];
   }
 }
 
@@ -409,4 +416,74 @@ test("a detected redaction sends, stores and logs no match text or context", asy
       expect(line, `the console printed "${text}"`).not.toContain(text);
     }
   }
+});
+
+/**
+ * Record every object URL the page makes for a PDF, and read each one straight
+ * away, in the same task that made it, before anything could revoke it. That
+ * read is the control: it proves the probe below can see a live URL, and that
+ * this one really carried the file.
+ */
+async function watchPdfUrls(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const made: ObjectUrlRecord[] = [];
+    window.__redactnestPdfUrls = made;
+
+    const original = URL.createObjectURL.bind(URL);
+    URL.createObjectURL = (object: Blob | MediaSource) => {
+      const url = original(object);
+      if (object instanceof Blob && object.type === "application/pdf") {
+        const record: ObjectUrlRecord = { url, head: null };
+        made.push(record);
+        void fetch(url)
+          .then((response) => response.arrayBuffer())
+          .then(
+            (bytes) => {
+              record.head = new TextDecoder().decode(bytes.slice(0, 5));
+            },
+            () => {
+              record.head = "unreadable";
+            },
+          );
+      }
+      return url;
+    };
+  });
+}
+
+/**
+ * Spec 0002, AC-4 and INV-7. Once the browser has the file, the page holds no
+ * way back to it: the object URL it was handed over through resolves nothing.
+ *
+ * The tool route's `connect-src 'self'` refuses any `blob:` fetch, revoked or
+ * not, so under the real policy this probe would pass without proving a thing.
+ * This one test lifts the policy to reach the URL itself; every other test in
+ * the suite runs under it.
+ */
+test.describe("the object URL a download goes through", () => {
+  test.use({ bypassCSP: true });
+
+  test("resolves nothing once the file is handed over", async ({ page }) => {
+    await watchPdfUrls(page);
+    await page.goto("/tool");
+    await redactAndDownload(page);
+
+    const heads = () =>
+      page.evaluate(() => (window.__redactnestPdfUrls ?? []).map(({ head }) => head));
+    await expect.poll(heads).toEqual(["%PDF-"]);
+
+    const [url] = await page.evaluate(() =>
+      (window.__redactnestPdfUrls ?? []).map((record) => record.url),
+    );
+    const now = await page.evaluate(async (target) => {
+      try {
+        await fetch(target);
+        return "resolved";
+      } catch {
+        return "gone";
+      }
+    }, url);
+
+    expect(now).toBe("gone");
+  });
 });

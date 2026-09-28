@@ -6,7 +6,8 @@ import { inspectInNode } from "./node-inspect";
 
 /**
  * The steps spec 0002 left marked "after feature 6", which a changed tick makes
- * reachable. Spec 0005, AC-18, in a real browser with the real engine.
+ * reachable. Spec 0005, AC-18, in a real browser with the real engine. And one
+ * it left for after feature 5: leaving once the file is downloaded.
  *
  * `text-page.pdf` holds one address and one number on the same line, both
  * found and both ticked by default, so each case starts from a known tick set.
@@ -30,14 +31,23 @@ async function openTextPage(page: Page): Promise<void> {
   await expect(page.getByRole("checkbox", { name: EMAIL })).toBeChecked();
 }
 
-/** Redact the current ticks, download, and read the file back in Node. */
-async function redactAndRead(page: Page): Promise<string> {
+/** Redact the current ticks and wait for the finished file to be offered. */
+async function redact(page: Page): Promise<void> {
   await page.getByTestId("redact").click();
   await expect(page.getByTestId("download")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+}
 
+/** Download the finished file, and resolve with where the browser saved it. */
+async function download(page: Page): Promise<string> {
   const downloading = page.waitForEvent("download");
   await page.getByTestId("download").click();
-  return inspectInNode(await (await downloading).path()).text;
+  return (await downloading).path();
+}
+
+/** Redact the current ticks, download, and read the file back in Node. */
+async function redactAndRead(page: Page): Promise<string> {
+  await redact(page);
+  return inspectInNode(await download(page)).text;
 }
 
 /**
@@ -144,6 +154,47 @@ test.describe("leaving with a tick changed", () => {
       await dialog.dismiss();
     });
     await page.close({ runBeforeUnload: true });
+
+    expect(asked).toEqual([]);
+  });
+});
+
+/**
+ * Spec 0002, AC-13. A finished file is work until it is downloaded, and then it
+ * is not: the download is what the run was for, and the ticks that made it are
+ * still the ones on screen.
+ */
+test.describe("leaving after a run", () => {
+  test("brings the leave warning while the finished file waits", async ({ page }) => {
+    await openTextPage(page);
+    await redact(page);
+
+    const asked: string[] = [];
+    page.on("dialog", async (dialog) => {
+      asked.push(dialog.type());
+      await dialog.dismiss();
+    });
+    await page.close({ runBeforeUnload: true });
+
+    await expect.poll(() => asked).toEqual(["beforeunload"]);
+  });
+
+  test("stays quiet once the file is downloaded", async ({ page }) => {
+    await openTextPage(page);
+    await redact(page);
+    await download(page);
+    await expect(page.getByTestId("download")).toHaveCount(0);
+
+    // Accepted rather than dismissed, so a warning that did appear still lets
+    // the page close and fails on the list below rather than on a timeout.
+    const asked: string[] = [];
+    page.on("dialog", async (dialog) => {
+      asked.push(dialog.type());
+      await dialog.accept();
+    });
+    const closed = page.waitForEvent("close");
+    await page.close({ runBeforeUnload: true });
+    await closed;
 
     expect(asked).toEqual([]);
   });

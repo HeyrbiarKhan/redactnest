@@ -311,6 +311,29 @@ describe("redacting", () => {
     expect(session.phase).toBeNull();
   });
 
+  /**
+   * AC-10. A cancel undoes the run, never the review that went into it. Both
+   * seeded ticks are flipped, one on and one off, so a cancel that fell back to
+   * the seeded set fails here whichever way it went wrong.
+   */
+  it("keeps the ticks changed before the run through its cancel", () => {
+    const session = live(
+      drive(
+        CHOOSE,
+        { type: "opened", summary: SUMMARY, matches: MATCHES },
+        { type: "tick-toggled", id: ON },
+        { type: "tick-toggled", id: OFF },
+        { type: "redact-started" },
+        { type: "cancelled" },
+      ),
+    );
+
+    expect(session.state).toBe("reviewing");
+    expect([...session.ticked]).toEqual([OFF]);
+    // Still work worth warning about on the way out (AC-13).
+    expect(hasUnsavedWork(session)).toBe(true);
+  });
+
   it("fails with a kind from the closed set and nothing else", () => {
     const session = live(
       sessionReducer(AT.redacting(), { type: "failed", failure: "unsupported" }),
