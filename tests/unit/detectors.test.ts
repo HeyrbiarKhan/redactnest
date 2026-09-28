@@ -29,6 +29,7 @@ function match(
     after: "private after",
     tickedByDefault: blocked === null,
     blocked,
+    concealed: null,
   };
 }
 

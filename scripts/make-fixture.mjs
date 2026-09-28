@@ -24,7 +24,10 @@ import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
 import {
   readBlank,
+  readConcealed,
+  readCovered,
   readCrooked,
+  readHidden,
   readMixed,
   readPages,
   readPictures,
@@ -436,6 +439,13 @@ const FIXTURES = [
     "read-crooked.pdf",
     readCrooked(),
     "a crooked OCR scan and a typed page at the same angle",
+  ],
+  ["read-covered.pdf", readCovered(), "one page per covering rule and near miss"],
+  ["read-hidden.pdf", readHidden(), "one page per hiding rule and near miss"],
+  [
+    "read-concealed.pdf",
+    readConcealed(),
+    "a covered email and phone, and a hidden email",
   ],
 ];
 

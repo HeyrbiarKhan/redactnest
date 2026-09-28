@@ -38,6 +38,7 @@ function match(
     after: " today",
     tickedByDefault: true,
     blocked: null,
+    concealed: null,
     ...overrides,
   };
 }
@@ -270,5 +271,29 @@ describe("accessibility", () => {
     const { container } = show({ matches: [] });
 
     await expectNoAxeViolations(container);
+  });
+});
+
+/** Spec 0006, AC-24. The rows a fake redaction or hidden text keeps from view. */
+describe("concealed rows", () => {
+  it("says a covered row is under a box, and a hidden one is not visible, and both can be ticked", () => {
+    show({
+      matches: [
+        match("c1", "email", "board.minutes@example.com", { concealed: "covered" }),
+        match("h1", "email", "white.ink@example.com", { concealed: "hidden" }),
+        match("p1", "email", "plain@example.com"),
+      ],
+      ticked: [],
+    });
+
+    const covered = screen.getByRole("checkbox", { name: "board.minutes@example.com" });
+    const hidden = screen.getByRole("checkbox", { name: "white.ink@example.com" });
+    const plain = screen.getByRole("checkbox", { name: "plain@example.com" });
+
+    expect(covered).toHaveAccessibleDescription(/Hidden under a box on the page\.$/);
+    expect(hidden).toHaveAccessibleDescription(/Not visible on the page\.$/);
+    expect(plain).not.toHaveAccessibleDescription(/on the page\.$/);
+    expect(covered).toBeEnabled();
+    expect(hidden).toBeEnabled();
   });
 });

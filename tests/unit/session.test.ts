@@ -73,6 +73,7 @@ const MATCHES: readonly ReviewMatch[] = [
     after: " for details",
     tickedByDefault: true,
     blocked: null,
+    concealed: null,
   },
   {
     id: OFF,
@@ -83,6 +84,7 @@ const MATCHES: readonly ReviewMatch[] = [
     after: " any time",
     tickedByDefault: false,
     blocked: null,
+    concealed: null,
   },
 ];
 
@@ -96,6 +98,7 @@ const BLOCKED: ReviewMatch = {
   after: " today",
   tickedByDefault: false,
   blocked: "slanted-text",
+  concealed: null,
 };
 
 /** The same, as if a detector had recommended it anyway. */

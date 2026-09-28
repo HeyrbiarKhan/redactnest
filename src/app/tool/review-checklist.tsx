@@ -8,6 +8,7 @@ import {
   NOTHING_FOUND,
   NOTHING_FOUND_PARTLY,
 } from "@/lib/detectors";
+import { CONCEALED_TEXT } from "@/lib/page-findings";
 import { DETECTOR_KINDS, type MatchId, type ReviewMatch } from "@/worker/protocol";
 import { Callout } from "@/ui/callout";
 import { Card } from "@/ui/card";
@@ -95,6 +96,11 @@ export function ReviewChecklist({
                         match.blocked === null
                           ? undefined
                           : BLOCKED_REASON_TEXT[match.blocked]
+                      }
+                      concealedNote={
+                        match.concealed === null
+                          ? undefined
+                          : CONCEALED_TEXT[match.concealed]
                       }
                       onCheckedChange={() => onToggle(match.id)}
                     />

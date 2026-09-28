@@ -1,14 +1,20 @@
 import type { PDFDocument, PDFPage } from "mupdf";
 
 import { detect, readsJoinAsNothing, type Span } from "@/detect";
-import type { BlockedReason } from "@/worker/protocol";
+import type { BlockedReason, Concealment } from "@/worker/protocol";
 
-import { EXTRACTION_OPTIONS, walkCharacters, type Character } from "./characters";
+import {
+  EXTRACTION_OPTIONS,
+  originIndex,
+  walkCharacters,
+  type Character,
+} from "./characters";
 import { checkpoint, EngineFailure } from "./failure";
 import { containsPoint, isSoundQuad, quadBounds, quadCentre } from "./geometry";
 import { imageReachVerdicts } from "./pixels";
 import { slantedTargets, unsoundTargetsIn } from "./targets";
 import type {
+  ConcealedGlyph,
   FindOptions,
   FoundMatch,
   PageInspection,
@@ -70,15 +76,37 @@ const WHITESPACE = /^\s$/u;
  */
 export async function findMatchesIn(
   doc: PDFDocument,
-  pages: readonly Pick<PageInspection, "readable">[],
+  pages: readonly Pick<PageInspection, "readable" | "concealed">[],
   options: FindOptions,
 ): Promise<readonly FoundMatch[]> {
   const found: FoundMatch[] = [];
   for (let index = 0; index < pages.length; index += 1) {
     if (!pages[index].readable) continue;
-    found.push(...(await findOnPage(doc, index, options)));
+    found.push(...(await findOnPage(doc, index, options, pages[index].concealed)));
   }
   return found;
+}
+
+/**
+ * How a match is kept from view, from the page's concealed glyphs. Spec 0006,
+ * AC-13: a character of the match whose origin lies within
+ * `POSITION_TOLERANCE` of a covered glyph makes it covered; otherwise one near
+ * a hidden glyph makes it hidden; otherwise it is in plain sight.
+ */
+function concealmentOf(
+  concealed: readonly ConcealedGlyph[],
+): (characters: readonly Character[]) => Concealment | null {
+  if (concealed.length === 0) return () => null;
+  const index = originIndex<Concealment>();
+  // Covered first, so a lookup that meets both finds the covered one.
+  for (const kind of ["covered", "hidden"] as const) {
+    for (const glyph of concealed) if (glyph.kind === kind) index.add(glyph.origin, kind);
+  }
+  return (characters) => {
+    const kinds = characters.map(({ origin }) => index.find(origin));
+    if (kinds.includes("covered")) return "covered";
+    return kinds.includes("hidden") ? "hidden" : null;
+  };
 }
 
 /**
@@ -94,7 +122,9 @@ async function findOnPage(
   doc: PDFDocument,
   index: number,
   { contextChars, isCancelled }: FindOptions,
+  concealed: readonly ConcealedGlyph[],
 ): Promise<readonly FoundMatch[]> {
+  const concealedIn = concealmentOf(concealed);
   const page = readable(() => doc.loadPage(index));
 
   try {
@@ -125,8 +155,14 @@ async function findOnPage(
     ];
 
     const context = contextReader(ordinary.points, contextChars);
-    const listed = found.map(({ span, text, target }, at): FoundMatch => {
-      const around = { page: index, kind: span.kind, text, ...context(target) };
+    const listed = found.map(({ span, text, target, characters }, at): FoundMatch => {
+      const around = {
+        page: index,
+        kind: span.kind,
+        text,
+        ...context(target),
+        concealed: concealedIn(characters),
+      };
       const blocked = checks.find(([, failed]) => failed[at])?.[0] ?? null;
       return blocked === null
         ? { ...around, tickedByDefault: span.tickedByDefault, blocked, target }
@@ -147,11 +183,12 @@ async function findOnPage(
             !covering.some((quad) => containsPoint(quad, quadCentre(character.quad))),
         ),
       )
-      .map(({ span, text, target }): FoundMatch => ({
+      .map(({ span, text, target, characters }): FoundMatch => ({
         page: index,
         kind: span.kind,
         text,
         ...hiddenContext(target),
+        concealed: concealedIn(characters),
         tickedByDefault: false,
         blocked: "replacement-text",
         target: null,

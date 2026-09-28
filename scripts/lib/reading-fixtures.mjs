@@ -508,3 +508,229 @@ export function readCrooked() {
     ];
   });
 }
+
+/** Helvetica's advance widths, in thousandths of an em, for the letters placed by hand. */
+const HELVETICA_WIDTHS = Object.freeze({
+  " ": 278,
+  O: 778,
+  a: 556,
+  b: 556,
+  c: 500,
+  e: 556,
+  f: 278,
+  g: 556,
+  i: 222,
+  l: 222,
+  n: 556,
+  o: 556,
+  r: 333,
+  t: 278,
+  v: 500,
+  w: 722,
+  x: 500,
+});
+
+/** Where each glyph of `text` starts, set in Helvetica at `size` from `x`. */
+function glyphStarts(text, size, x) {
+  let at = x;
+  return [...text].map((letter) => {
+    const start = at;
+    at += (HELVETICA_WIDTHS[letter] * size) / 1000;
+    return start;
+  });
+}
+
+/** The values the covered and hidden fixtures hold, for the tests to name. */
+export const CONCEALED = Object.freeze({
+  coveredEmail: "board.minutes@example.com",
+  coveredPhone: "020 7946 0321",
+  hiddenEmail: "white.ink@example.com",
+});
+
+/**
+ * One page per covering rule and near miss (AC-6). The findings each page must
+ * give, in the same order, are `READ_COVERED`. Each value sits at x 130 on a
+ * baseline at 700, so a cover from 125 to 425 and from 695 to 713 holds all of
+ * it, and nothing of the label to its left.
+ */
+export const READ_COVERED = Object.freeze([
+  { name: "a black box over an email", findings: ["covered-text"] },
+  { name: "a white box over a phone number", findings: ["covered-text"] },
+  { name: "a black box inside a plain group", findings: ["covered-text"] },
+  { name: "a black Square annotation, baked in", findings: ["covered-text"] },
+  { name: "a strikethrough bar", findings: [] },
+  { name: "an underline", findings: [] },
+  { name: "a translucent highlight", findings: [] },
+  { name: "a box turned 10 degrees (a recorded limit)", findings: [] },
+  { name: "a box inside a group at half alpha", findings: [] },
+  { name: "a table cell background drawn before its text", findings: [] },
+]);
+
+/** A labelled value on the covered pages' one line. */
+function labelled(label, value) {
+  return line("F1", 12, 72, 700, label) + line("F1", 12, 130, 700, value);
+}
+
+const COVER = "125 695 300 18 re f";
+
+/** Spec 0006, AC-6. Covers drawn over text, and the things that are not covers. */
+export function readCovered() {
+  return document(({ add }) => {
+    const box = add(
+      stream(
+        "/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Group << /S /Transparency >>",
+        `0 0 0 rg ${COVER}\n`,
+      ),
+    );
+    const boxAppearance = add(
+      stream(
+        "/Type /XObject /Subtype /Form /BBox [0 0 300 18]",
+        "0 0 0 rg 0 0 300 18 re f\n",
+      ),
+    );
+    const square = add(
+      "<< /Type /Annot /Subtype /Square /Rect [125 695 425 713] /IC [0 0 0] /C [0 0 0] /F 4 " +
+        `/AP << /N ${boxAppearance} 0 R >> >>`,
+    );
+    const turn = (10 * Math.PI) / 180;
+    const cos = Math.cos(turn).toFixed(6);
+    const sin = Math.sin(turn).toFixed(6);
+    const states = "/ExtGState << /Hl << /ca 0.4 >> /Half << /ca 0.5 /CA 0.5 >> >>";
+    const name = labelled("Name:", "Jeremy Quigley");
+
+    return [
+      { content: `${labelled("Email:", CONCEALED.coveredEmail)}0 0 0 rg ${COVER}\n` },
+      { content: `${labelled("Phone:", CONCEALED.coveredPhone)}1 1 1 rg ${COVER}\n` },
+      { resources: `/XObject << /Box ${box} 0 R >>`, content: `${name}q /Box Do Q\n` },
+      { keys: `/Annots [${square} 0 R]`, content: name },
+      { content: `${name}0 0 0 rg 125 703 300 1.2 re f\n` },
+      { content: `${name}0 0 0 rg 125 697 300 0.8 re f\n` },
+      { resources: states, content: `${name}q /Hl gs 1 1 0 rg ${COVER} Q\n` },
+      {
+        content: `${name}q ${cos} ${sin} -${sin} ${cos} 125 695 cm 0 0 0 rg 0 0 300 18 re f Q\n`,
+      },
+      {
+        resources: `/XObject << /Box ${box} 0 R >> ${states}`,
+        content: `${name}q /Half gs /Box Do Q\n`,
+      },
+      { content: `q 0.9 0.9 0.9 rg ${COVER} Q\n${name}` },
+    ];
+  });
+}
+
+/** The words of the cell that overflows its clip. */
+const OVERFLOW = "Overflowing text in a narrow table cell";
+
+/**
+ * The right edge of the overflowing cell's clip: a tenth of the way into the
+ * `w` of "Overflowing", so that glyph straddles the edge with its centre
+ * outside, and every glyph after it lies wholly outside. MuPDF extracts a
+ * glyph partly inside a clip and drops one wholly outside it (measured), so
+ * the straddling glyph is the one the clip rule can judge (AC-7, AC-9).
+ */
+function overflowEdge() {
+  const starts = glyphStarts(OVERFLOW, 12, 72);
+  const w = OVERFLOW.indexOf("w");
+  return starts[w] + 0.1 * (starts[w + 1] - starts[w]);
+}
+
+/**
+ * One page per hiding rule and near miss (AC-7). The findings each page must
+ * give, in the same order, are `READ_HIDDEN`; the slug line's page is left to
+ * the trim (slice 4), so only its lack of `hidden-text` is fixed here.
+ */
+export const READ_HIDDEN = Object.freeze([
+  { name: "white text on a white page", findings: ["hidden-text"] },
+  { name: "invisible text with no image", findings: ["hidden-text"] },
+  { name: "text at zero opacity", findings: ["hidden-text"] },
+  { name: "text used only as a clip, with nothing inside", findings: ["hidden-text"] },
+  { name: "text overflowing a table cell clip", findings: ["hidden-text"] },
+  { name: "text half a point tall", findings: ["hidden-text"] },
+  { name: "white text on a dark box drawn first", findings: [] },
+  { name: "a heading clipped and filled with a gradient", findings: [] },
+  { name: "pale text in a spot colour (not judged)", findings: [] },
+  { name: "a scan with its text layer over it", findings: ["machine-read-text"] },
+  { name: "a slug line outside the crop box", findings: null },
+]);
+
+/** Spec 0006, AC-7. Text a viewer does not show, and the near misses. */
+export function readHidden() {
+  return document(({ add }) => {
+    const scan = scanImage(add, { columns: 60, rows: 18 });
+    const glyphless = glyphlessFont(add);
+    const tint = add(
+      "<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 0 0 1] /N 1 >>",
+    );
+    const shading = add(
+      "<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [72 690 400 690] " +
+        "/Function << /FunctionType 2 /Domain [0 1] /C0 [0.8 0.1 0.1] /C1 [0.1 0.1 0.8] /N 1 >> >>",
+    );
+    const visible = line("F1", 12, 72, 740, "This page also holds visible words.");
+
+    return [
+      {
+        content: `${visible}1 1 1 rg ${line("F1", 12, 72, 700, `Write to ${CONCEALED.hiddenEmail}`)}`,
+      },
+      {
+        content: `${visible}BT 3 Tr /F1 12 Tf 72 700 Td (Invisible words stay in the file) Tj ET\n`,
+      },
+      {
+        resources: "/ExtGState << /Zero << /ca 0 >> >>",
+        content: `${visible}q /Zero gs ${line("F1", 12, 72, 700, "Text at zero opacity")}Q\n`,
+      },
+      { content: `${visible}q BT 7 Tr /F1 12 Tf 72 700 Td (Clip only words) Tj ET Q\n` },
+      {
+        content:
+          `${visible}q 72 690 ${(overflowEdge() - 72).toFixed(3)} 30 re W n ` +
+          `${line("F1", 12, 72, 700, OVERFLOW)}Q\n`,
+      },
+      { content: `${visible}${line("F1", 0.5, 72, 700, "Tiny print")}` },
+      {
+        content:
+          `${visible}q 0.1 0.1 0.1 rg 60 690 320 24 re f Q ` +
+          `1 1 1 rg ${line("F1", 12, 72, 700, "White words on a dark box")}`,
+      },
+      {
+        resources: `/Shading << /Sh0 ${shading} 0 R >>`,
+        content: `${visible}q BT 7 Tr /F1 24 Tf 72 700 Td (Gradient heading) Tj ET /Sh0 sh Q\n`,
+      },
+      {
+        resources: `/ColorSpace << /Spot [/Separation /Brand /DeviceCMYK ${tint} 0 R] >>`,
+        content: `${visible}q /Spot cs 0.02 scn ${line("F1", 12, 72, 700, "Pale spot colour")}Q\n`,
+      },
+      {
+        resources: `/XObject << /Scan ${scan} 0 R >> /Font << /Fg ${glyphless} 0 R >>`,
+        // A text layer over the whole scan, as recognition leaves one, so the
+        // scan is machine read and not a bare picture.
+        content:
+          "q 440 0 0 132 72 600 cm /Scan Do Q\n" +
+          [700, 680, 660, 640, 620]
+            .map((y) =>
+              invisibleLine(12, 82, y, "Recognised words over the scanned image"),
+            )
+            .join(""),
+      },
+      {
+        keys: "/CropBox [0 100 612 792]",
+        content: `${visible}${line("F1", 8, 72, 60, "Slug: proof 3, printed in the bleed")}`,
+      },
+    ];
+  });
+}
+
+/**
+ * Spec 0006, AC-24 and AC-27, for the browser: three pages, within the free
+ * page cap, each holding one value a viewer never sees. An email under a black
+ * box, a phone number under a white one, and an email in white.
+ */
+export function readConcealed() {
+  return document(() => [
+    { content: `${labelled("Email:", CONCEALED.coveredEmail)}0 0 0 rg ${COVER}\n` },
+    { content: `${labelled("Phone:", CONCEALED.coveredPhone)}1 1 1 rg ${COVER}\n` },
+    {
+      content:
+        line("F1", 12, 72, 740, "This page also holds visible words.") +
+        `1 1 1 rg ${line("F1", 12, 72, 700, `Write to ${CONCEALED.hiddenEmail}`)}`,
+    },
+  ]);
+}

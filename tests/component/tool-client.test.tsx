@@ -787,6 +787,7 @@ describe("the redaction path (spec 0004)", () => {
       after: " today",
       tickedByDefault: true,
       blocked: null,
+      concealed: null,
     },
     {
       id: asMatchId("m2"),
@@ -797,6 +798,7 @@ describe("the redaction path (spec 0004)", () => {
       after: ".",
       tickedByDefault: false,
       blocked: null,
+      concealed: null,
     },
   ]);
 
@@ -1117,6 +1119,7 @@ describe("the checklist (spec 0005)", () => {
       after: " today",
       tickedByDefault: true,
       blocked: null,
+      concealed: null,
     },
     {
       id: PHONE,
@@ -1127,6 +1130,7 @@ describe("the checklist (spec 0005)", () => {
       after: " retired",
       tickedByDefault: false,
       blocked: null,
+      concealed: null,
     },
     {
       id: BLOCKED,
@@ -1137,6 +1141,7 @@ describe("the checklist (spec 0005)", () => {
       after: "",
       tickedByDefault: false,
       blocked: "slanted-text",
+      concealed: null,
     },
   ]);
 
@@ -1479,6 +1484,7 @@ describe("the page readings (spec 0006)", () => {
       after: " today",
       tickedByDefault: false,
       blocked: "slanted-text",
+      concealed: null,
     });
 
     it("sit in an untitled note after the warnings, with the crooked scan line last", async () => {

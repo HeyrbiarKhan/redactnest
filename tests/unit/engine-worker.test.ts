@@ -296,6 +296,7 @@ describe("detecting", () => {
       after: " or call",
       tickedByDefault: true,
       blocked: null,
+      concealed: null,
       target: TARGET,
     },
     {
@@ -306,6 +307,7 @@ describe("detecting", () => {
       after: ".",
       tickedByDefault: true,
       blocked: "slanted-text",
+      concealed: null,
       target: null,
     },
   ]);
@@ -342,6 +344,7 @@ describe("detecting", () => {
       "after",
       "before",
       "blocked",
+      "concealed",
       "id",
       "page",
       "text",

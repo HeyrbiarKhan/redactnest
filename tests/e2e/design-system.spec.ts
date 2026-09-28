@@ -139,6 +139,19 @@ async function reviewNotes(page: Page): Promise<void> {
   await expect(page.getByTestId("page-notes")).toBeVisible({ timeout: ENGINE_TIMEOUT });
 }
 
+/**
+ * Spec 0006, AC-24 and AC-27. Fake redactions: rows under a box, each with its
+ * line, beside the covered text warning.
+ */
+async function reviewConcealed(page: Page): Promise<void> {
+  await page
+    .getByTestId("file-input")
+    .setInputFiles(resolve("tests/fixtures/read-concealed.pdf"));
+  await expect(page.getByText("Hidden under a box on the page.").first()).toBeVisible({
+    timeout: ENGINE_TIMEOUT,
+  });
+}
+
 /** Spec 0006, AC-26. A document with nothing readable, refused at open. */
 async function refuseUnreadable(page: Page): Promise<void> {
   await page
@@ -161,6 +174,7 @@ const TOOL_STATES: readonly (readonly [string, (page: Page) => Promise<void>])[]
   ["reviewing, with pages that cannot be read", reviewFlagged],
   ["complete, partly redacted", completeFlagged],
   ["reviewing, with notes", reviewNotes],
+  ["reviewing, with concealed rows", reviewConcealed],
   ["refused, with nothing readable", refuseUnreadable],
 ];
 

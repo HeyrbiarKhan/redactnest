@@ -124,6 +124,18 @@ export const BLOCKED_REASONS = Object.freeze([
 export type BlockedReason = (typeof BLOCKED_REASONS)[number];
 
 /**
+ * How a found match is kept from view on the page. Spec 0006, AC-13.
+ *
+ * `covered`: under a box or picture drawn over it, often a fake redaction a
+ * visitor received. `hidden`: drawn so that a viewer does not show it, such as
+ * text the colour of the page. A closed set of kinds, so it says which rule
+ * held and nothing about where.
+ */
+export const CONCEALMENTS = Object.freeze(["covered", "hidden"] as const);
+
+export type Concealment = (typeof CONCEALMENTS)[number];
+
+/**
  * The things a redaction strips besides the targeted text.
  *
  * The list comes from feature 5's contract in the scope: no document info or XMP
@@ -201,6 +213,12 @@ export interface ReviewMatch {
    * the worker holds no target for it, so a `redact` naming it is `unsupported`.
    */
   readonly blocked: BlockedReason | null;
+  /**
+   * Whether the page keeps this match from view, and how, or `null`. Spec
+   * 0006, AC-13. Listed and tickable like any other match, so the text a
+   * fake redaction hides can still be removed, and its row says so (AC-24).
+   */
+  readonly concealed: Concealment | null;
 }
 
 /**

@@ -488,7 +488,7 @@ describe("reading pages", () => {
     } as unknown as PDFDocument;
 
     await expect(
-      findMatchesIn(broken, [{ readable: true }], { contextChars: 40 }),
+      findMatchesIn(broken, [{ readable: true, concealed: [] }], { contextChars: 40 }),
     ).rejects.toEqual(new EngineFailure("unsupported"));
   });
 
@@ -497,9 +497,16 @@ describe("reading pages", () => {
     const blank = { loadPage } as unknown as PDFDocument;
 
     await expect(
-      findMatchesIn(blank, [{ readable: false }, { readable: false }], {
-        contextChars: 40,
-      }),
+      findMatchesIn(
+        blank,
+        [
+          { readable: false, concealed: [] },
+          { readable: false, concealed: [] },
+        ],
+        {
+          contextChars: 40,
+        },
+      ),
     ).resolves.toEqual([]);
     expect(loadPage).not.toHaveBeenCalled();
   });

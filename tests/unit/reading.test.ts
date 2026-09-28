@@ -6,7 +6,9 @@ import {
   EXTRACTION_OPTIONS,
   inspectPages,
   openDocumentWith,
+  POSITION_TOLERANCE,
   prepareDocument,
+  redactDocumentWith,
   readsAsNothing,
   RunCancelled,
   silenceEngineLog,
@@ -18,19 +20,23 @@ import {
 
 import { showsCrookedLine } from "@/lib/page-findings";
 
+import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
 import {
+  CONCEALED,
   CROOKED_EMAILS,
   MIXED_EMAIL,
   READ_PAGES,
+  READ_COVERED,
+  READ_HIDDEN,
   READ_PICTURES,
   STAMP_EMAIL,
 } from "../../scripts/lib/reading-fixtures.mjs";
 import { fixture } from "../support/bytes";
-import { LIMITS, mupdf } from "../support/mupdf";
+import { documentText, LIMITS, mupdf } from "../support/mupdf";
 
 /**
  * Reading every page before review, driven with the real MuPDF in Node. Spec
- * 0006, slices 1 and 2.
+ * 0006, slices 1 to 3.
  *
  * Each rule is read off a fixture page written for it, with its near misses
  * beside it, through the engine's own inspection on a prepared copy, exactly
@@ -51,6 +57,16 @@ async function inspect(name: string): Promise<readonly PageInspection[]> {
     return await inspectPages(mupdf, pdf);
   } finally {
     doc.destroy();
+  }
+}
+
+/** Every match in a fixture, found as the worker finds them. */
+async function find(name: string) {
+  const doc = await openDocumentWith(mupdf, fixture(name), LIMITS);
+  try {
+    return await doc.findMatches({ contextChars: 40 });
+  } finally {
+    doc.close();
   }
 }
 
@@ -98,9 +114,22 @@ describe("the findings of each page", () => {
     }
   });
 
-  it("carries nothing but closed findings and a flag (INV-1)", async () => {
+  it("carries closed findings, a flag and concealed glyphs, and only the findings reach the summary (INV-1)", async () => {
     for (const inspection of await inspect("read-pages.pdf")) {
-      expect(Object.keys(inspection).sort()).toEqual(["findings", "readable"]);
+      expect(Object.keys(inspection).sort()).toEqual([
+        "concealed",
+        "findings",
+        "readable",
+      ]);
+    }
+
+    const doc = await openDocumentWith(mupdf, fixture("read-pages.pdf"), LIMITS);
+    try {
+      for (const reading of doc.summary.pages) {
+        expect(Object.keys(reading)).toEqual(["findings"]);
+      }
+    } finally {
+      doc.close();
     }
   });
 });
@@ -411,6 +440,197 @@ describe("the crooked scan line", () => {
       expect(showsCrookedLine(doc.summary, rows.slice(1))).toBe(false);
     } finally {
       doc.close();
+    }
+  });
+});
+
+/**
+ * Slice 3: AC-6, AC-7 and AC-13. Text a viewer never shows: under a cover
+ * drawn after it, or drawn so a viewer does not show it, and the near misses
+ * beside each rule.
+ */
+describe("text a viewer never shows", () => {
+  it("reads every page of read-covered.pdf as the fixture says", async () => {
+    const inspections = await inspect("read-covered.pdf");
+
+    expect(
+      inspections.map(({ findings }, index) => ({
+        name: READ_COVERED[index].name,
+        findings,
+      })),
+    ).toEqual(READ_COVERED.map(({ name, findings }) => ({ name, findings })));
+  });
+
+  it("reads every page of read-hidden.pdf as the fixture says", async () => {
+    const inspections = await inspect("read-hidden.pdf");
+
+    READ_HIDDEN.forEach(({ name, findings }, index) => {
+      if (findings === null) {
+        // Outside the visible area: the trim's business, never a warning.
+        expect(inspections[index].findings, name).not.toContain("hidden-text");
+      } else {
+        expect({ name, findings: inspections[index].findings }).toEqual({
+          name,
+          findings,
+        });
+      }
+    });
+  });
+
+  it("keeps the concealed glyphs' origins with the page, and no other detail", async () => {
+    const [covered] = await inspect("read-covered.pdf");
+    expect(covered.concealed.length).toBeGreaterThan(0);
+    for (const glyph of covered.concealed) {
+      expect(Object.keys(glyph).sort()).toEqual(["kind", "origin"]);
+      expect(glyph.kind).toBe("covered");
+    }
+  });
+
+  it("marks the matches under a box as covered, and the white one as hidden", async () => {
+    const covered = await find("read-covered.pdf");
+    expect(
+      covered.map(({ page, text, concealed }) => ({ page, text, concealed })),
+    ).toEqual([
+      { page: 0, text: CONCEALED.coveredEmail, concealed: "covered" },
+      { page: 1, text: CONCEALED.coveredPhone, concealed: "covered" },
+    ]);
+
+    const hidden = await find("read-hidden.pdf");
+    expect(
+      hidden.map(({ page, text, concealed }) => ({ page, text, concealed })),
+    ).toEqual([{ page: 0, text: CONCEALED.hiddenEmail, concealed: "hidden" }]);
+  });
+
+  it("reads the browser sample as two covered pages and a hidden one, each value marked", async () => {
+    expect((await inspect("read-concealed.pdf")).map(({ findings }) => findings)).toEqual(
+      [["covered-text"], ["covered-text"], ["hidden-text"]],
+    );
+    expect(
+      (await find("read-concealed.pdf")).map(({ page, text, concealed }) => ({
+        page,
+        text,
+        concealed,
+      })),
+    ).toEqual([
+      { page: 0, text: CONCEALED.coveredEmail, concealed: "covered" },
+      { page: 1, text: CONCEALED.coveredPhone, concealed: "covered" },
+      { page: 2, text: CONCEALED.hiddenEmail, concealed: "hidden" },
+    ]);
+  });
+
+  it("leaves a match in plain sight unmarked", async () => {
+    for (const match of await find("detect-email.pdf")) {
+      expect(match.concealed).toBeNull();
+    }
+  });
+
+  /**
+   * AC-13: a concealed match is listed and tickable like any other. Ticked, it
+   * is removed, and the run's self check passes on the output.
+   */
+  it("redacts a covered and a hidden match, and the run passes its self check", async () => {
+    for (const [name, value] of [
+      ["read-covered.pdf", CONCEALED.coveredEmail],
+      ["read-hidden.pdf", CONCEALED.hiddenEmail],
+    ] as const) {
+      const found = await find(name);
+      const match = found.find(({ text }) => text === value);
+      if (!match?.target) throw new Error(`expected a tickable match for ${value}`);
+      expect(match.blocked).toBeNull();
+
+      const { output } = await redactDocumentWith(mupdf, fixture(name), [match.target]);
+      expect(documentText(output)).not.toContain(value);
+    }
+  });
+
+  /**
+   * AC-9. A glyph from the drawing reader and a character from extraction meet
+   * by origin: every glyph filled, stroked or invisible on these pages meets
+   * one within `POSITION_TOLERANCE`, bar those wholly outside the visible area
+   * or wholly clipped away, which extraction drops.
+   */
+  it("finds an extracted character at the origin of every glyph it can judge (pin)", () => {
+    const cases: readonly (readonly [string, number])[] = [
+      ["text-page.pdf", 0],
+      ["carlito.pdf", 0],
+      ["detect-email.pdf", 1],
+      ["ocr-aligned.pdf", 0],
+      ["read-covered.pdf", 0],
+      ["read-hidden.pdf", 0],
+      ["read-hidden.pdf", 1],
+    ];
+    for (const [name, index] of cases) {
+      const { glyphs, origins } = onPage(name, index, (page) => {
+        const drawn: [number, number][] = [];
+        walkDrawing(mupdf, page, (drawing) => {
+          if (drawing.kind === "text" && drawing.mode !== "clip") {
+            for (const glyph of drawing.glyphs) {
+              if (glyph.unicode !== 0x20) drawn.push([...glyph.origin]);
+            }
+          }
+        });
+        const extracted: [number, number][] = [];
+        walkCharacters(page, EXTRACTION_OPTIONS[0], ({ origin }) =>
+          extracted.push([...origin]),
+        );
+        return { glyphs: drawn, origins: extracted };
+      });
+
+      expect(glyphs.length, name).toBeGreaterThan(0);
+      for (const [x, y] of glyphs) {
+        const met = origins.some(
+          ([ox, oy]) =>
+            Math.abs(ox - x) <= POSITION_TOLERANCE &&
+            Math.abs(oy - y) <= POSITION_TOLERANCE,
+        );
+        expect(met, `${name}: a glyph at ${x}, ${y} met no character`).toBe(true);
+      }
+    }
+  });
+
+  /**
+   * AC-9's other pin: a glyph whose character map gives it two code points is
+   * reported as two walker calls at the same origin, the second with no
+   * glyph of its own. Built here, because it is one line of one font.
+   */
+  it("reports a glyph mapped to two code points as two calls at one origin (pin)", () => {
+    const toUnicode =
+      "/CIDInit /ProcSet findresource begin 12 dict begin begincmap " +
+      "/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def " +
+      "/CMapName /Ligature def /CMapType 2 def 1 begincodespacerange <00> <FF> endcodespacerange " +
+      "1 beginbfchar <41> <00660069> endbfchar endcmap " +
+      "CMapName currentdict /CMap defineresource pop end end";
+    const bytes = writePdf({
+      objects: [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+          "/Resources << /Font << /L 4 0 R >> >> /Contents 5 0 R >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /ToUnicode 6 0 R >>",
+        stream("", "BT /L 12 Tf 72 700 Td (A) Tj ET\n"),
+        stream("", toUnicode),
+      ],
+      trailer: "/Root 1 0 R",
+    }).bytes;
+
+    const doc = mupdf.Document.openDocument(bytes, "application/pdf");
+    try {
+      const page = doc.loadPage(0) as PDFPage;
+      try {
+        const glyphs: { origin: readonly [number, number]; unicode: number }[] = [];
+        walkDrawing(mupdf, page, (drawing) => {
+          if (drawing.kind === "text") glyphs.push(...drawing.glyphs);
+        });
+        expect(glyphs.map(({ unicode }) => String.fromCodePoint(unicode))).toEqual([
+          "f",
+          "i",
+        ]);
+        expect(glyphs[1].origin).toEqual(glyphs[0].origin);
+      } finally {
+        page.destroy();
+      }
+    } finally {
+      doc.destroy();
     }
   });
 });

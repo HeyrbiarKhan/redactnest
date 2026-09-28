@@ -1,5 +1,6 @@
 import type {
   BlockedReason,
+  Concealment,
   DetectorKind,
   DocumentSummary,
   MatchId,
@@ -20,6 +21,19 @@ export interface PageInspection {
   readonly findings: readonly PageFinding[];
   /** The page holds a readable character (AC-3), so detection reads it (AC-12). */
   readonly readable: boolean;
+  /**
+   * Every glyph counted as covered (AC-6) or hidden (AC-7), by its origin, so
+   * detection can mark the matches that hold one (AC-13). Positions, so they
+   * never leave the engine, and are dropped with the review document (INV-8).
+   */
+  readonly concealed: readonly ConcealedGlyph[];
+}
+
+/** One glyph a viewer does not see, and why. Spec 0006, *Data model sketch*. */
+export interface ConcealedGlyph {
+  /** In the page space structured text uses. */
+  readonly origin: readonly [number, number];
+  readonly kind: Concealment;
 }
 
 /**
@@ -107,6 +121,11 @@ export type FoundMatch = {
   readonly after: string;
   /** The detector's rule (AC-10), and false whenever blocked. */
   readonly tickedByDefault: boolean;
+  /**
+   * Whether a character of the match sits where the page keeps a glyph from
+   * view, and how (spec 0006, AC-13). Covered takes precedence over hidden.
+   */
+  readonly concealed: Concealment | null;
 } & (
   | { readonly blocked: null; readonly target: RedactionTarget }
   | { readonly blocked: BlockedReason; readonly target: null }

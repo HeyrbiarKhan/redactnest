@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ADVICE,
   ALL_CLEAR,
+  CONCEALED_TEXT,
   CROOKED_LINE,
   DOWNLOAD_WARNING_TITLE,
   FINDING_TONE,
@@ -255,5 +256,15 @@ describe("the note lines", () => {
 
   it("never holds a warning, and are empty when there is nothing to note", () => {
     expect(noteLines(summaryOf(["scanned"], ["blank"]), [])).toEqual([]);
+  });
+});
+
+/** AC-24. A concealed row's line, one per concealment. */
+describe("the concealed row lines", () => {
+  it("read as the spec writes them", () => {
+    expect(CONCEALED_TEXT).toEqual({
+      covered: "Hidden under a box on the page.",
+      hidden: "Not visible on the page.",
+    });
   });
 });

@@ -4,7 +4,7 @@ import { PAGE_FINDINGS, type PageFinding } from "@/worker/protocol";
 
 import {
   EXTRACTION_OPTIONS,
-  POSITION_TOLERANCE,
+  originIndex,
   walkCharacters,
   type Character,
 } from "./characters";
@@ -18,9 +18,16 @@ import {
   type Transform,
 } from "./device";
 import { checkpoint, EngineFailure } from "./failure";
-import { containsPoint, quadBounds, quadCentre } from "./geometry";
+import {
+  clipToConvex,
+  containsPoint,
+  outline,
+  polygonArea,
+  quadBounds,
+  quadCentre,
+} from "./geometry";
 import type { MuPdf } from "./load";
-import type { PageInspection, Quad } from "./types";
+import type { ConcealedGlyph, PageInspection, Quad } from "./types";
 
 /**
  * Reading every page before review. Spec 0006, *Page findings*.
@@ -78,11 +85,26 @@ export const STAMP_MAX_CHARS = 40;
 export const UNREADABLE_RUN = 3;
 
 /**
- * The contrast ratio, by the WCAG formula, a colour must exceed against white
- * paper to count as drawing something. Below it, a viewer sees nothing: the
- * white rectangle Word and Chrome paint on every page (AC-2).
+ * The contrast ratio, by the WCAG formula, a colour must exceed to be seen
+ * against what it is drawn on. Below it, a viewer sees nothing: the white
+ * rectangle Word and Chrome paint on every page is not drawing (AC-2), and
+ * text that close to the colour under it is hidden (AC-7).
  */
 export const HIDDEN_CONTRAST_MAX = 1.1;
+
+/**
+ * The share of a glyph's box an opaque cover drawn after it must hold for the
+ * glyph to count as covered (AC-6). A black box over a word holds all of it; a
+ * strikethrough bar or an underline holds far less.
+ */
+export const COVER_MIN_OVERLAP = 0.8;
+
+/**
+ * Text whose em is shorter than this on the page, in points, cannot be read
+ * by anybody (AC-7): the height of the text matrix times the transform
+ * applied to the unit upright vector.
+ */
+export const TINY_TEXT_MAX = 1;
 
 /** The findings that count toward "nothing readable" (AC-10). */
 const NOTHING_READABLE: readonly PageFinding[] = Object.freeze([
@@ -166,6 +188,55 @@ interface DrawingReading {
   readonly contrasting: boolean;
   /** The origins of invisible glyphs (render mode 3), in drawing order. */
   readonly invisible: readonly Point[];
+  /** Every fill and stroke of a glyph, in drawing order (AC-7). */
+  readonly paints: readonly GlyphPaint[];
+  /** Every opaque cover, in drawing order (AC-6). */
+  readonly covers: readonly Cover[];
+  /** Everything text can be drawn on, in drawing order (AC-7). */
+  readonly backdrops: readonly Backdrop[];
+  /** Glyphs used only as a clip that nothing was painted inside (AC-7). */
+  readonly clipOnly: readonly Point[];
+}
+
+/** One fill or one stroke of a glyph, as the hidden rules read it (AC-7). */
+interface GlyphPaint {
+  /** Its place in drawing order. */
+  readonly order: number;
+  readonly origin: Point;
+  readonly em: number;
+  readonly paint: Paint;
+  /** The bounds of the clip in force as it was drawn. */
+  readonly clip: Rect | null;
+  /**
+   * What it is drawn in is what shows: not under a soft mask, not in a group
+   * that is translucent or blends, not in a tile, not a mask's own content.
+   */
+  readonly plain: boolean;
+}
+
+/**
+ * Something opaque drawn over the page (AC-6): a filled path that is one
+ * level rectangle, or an image with no mask of its own, as a convex outline
+ * already cut to the bounds of the clip in force.
+ */
+interface Cover {
+  readonly order: number;
+  readonly outline: readonly Point[];
+  readonly bounds: Rect;
+}
+
+/**
+ * Something drawn that text can sit on, as the colour rule reads it (AC-7).
+ * Only an opaque level rectangle in a colour that is judged carries a colour;
+ * an image, a shading, a tile, a translucent or restricted fill, a curve or a
+ * rectangle in another colour space is drawn there and cannot be judged.
+ */
+interface Backdrop {
+  readonly order: number;
+  /** Null when it has no finite bounds, as an extended shading does. */
+  readonly bounds: Rect | null;
+  readonly under: (point: Point) => boolean;
+  readonly colour: Paint | null;
 }
 
 /** An image's placement, cut to the bounds of the clip in force (AC-4). */
@@ -238,16 +309,196 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
   // AC-5. Invisible text whose centre lies over an image, whichever the
   // producer drew first, is a text recognition layer: Tesseract and OCRmyPDF
   // draw it over the scan, ABBYY under it. A note, never a warning.
-  const machineRead = drawing.invisible.some((origin) => {
+  const overImage = (origin: Point) => {
     const centre = glyphCentre(text, origin);
     return drawing.footprints.some((footprint) => holds(footprint, centre));
-  });
-  if (machineRead) found.add("machine-read-text");
+  };
+  if (drawing.invisible.some(overImage)) found.add("machine-read-text");
+
+  // AC-6 and AC-7: text a viewer never shows.
+  const concealed = concealedGlyphs(text, drawing, area, overImage);
+  if (concealed.some(({ kind }) => kind === "covered")) found.add("covered-text");
+  if (concealed.some(({ kind }) => kind === "hidden")) found.add("hidden-text");
 
   return {
     findings: PAGE_FINDINGS.filter((finding) => found.has(finding)),
     readable: text.readableCount > 0,
+    concealed,
   };
+}
+
+/** A glyph as the drawing reader drew it: every fill and stroke at one origin. */
+interface DrawnGlyph {
+  readonly origin: Point;
+  readonly em: number;
+  readonly paints: GlyphPaint[];
+}
+
+/**
+ * Which glyphs a viewer never sees, and why. Spec 0006, AC-6, AC-7 and AC-9.
+ *
+ * Only a glyph that meets an extracted character is judged, with that
+ * character's quad as its box, and only when the box's centre lies inside the
+ * visible area: a glyph outside it is the trim's business, not a warning. A
+ * machine read glyph is never judged (AC-5).
+ *
+ * Covered comes first (AC-6): a filled or stroked glyph with at least
+ * `COVER_MIN_OVERLAP` of its box under one opaque cover drawn after its last
+ * paint. Otherwise it is hidden (AC-7) when no paint of it shows; an
+ * invisible glyph with no image under or over it is hidden; and a glyph used
+ * only as a clip is hidden when nothing was painted inside that clip.
+ */
+function concealedGlyphs(
+  text: TextReading,
+  drawing: DrawingReading,
+  area: Rect,
+  overImage: (origin: Point) => boolean,
+): readonly ConcealedGlyph[] {
+  const concealed: ConcealedGlyph[] = [];
+  const glyphs = byOrigin(drawing.paints);
+
+  /** The glyph's box and its centre, when it is judged at all. */
+  const judged = (origin: Point): { box: readonly Point[]; centre: Point } | null => {
+    const character = text.characterAt(origin);
+    if (character === null) return null;
+    const centre = quadCentre(character.quad);
+    return inRect(area, centre) ? { box: outline(character.quad), centre } : null;
+  };
+
+  for (const glyph of glyphs.all) {
+    const seen = judged(glyph.origin);
+    if (seen === null) continue;
+
+    const last = Math.max(...glyph.paints.map(({ order }) => order));
+    if (isCovered(seen.box, last, drawing.covers)) {
+      concealed.push({ origin: glyph.origin, kind: "covered" });
+    } else if (
+      glyph.paints.every((paint) => !shows(paint, glyph.em, seen.centre, drawing))
+    ) {
+      concealed.push({ origin: glyph.origin, kind: "hidden" });
+    }
+  }
+
+  // Invisible text with no image under or over it (AC-7), never machine read.
+  for (const origin of drawing.invisible) {
+    if (overImage(origin) || judged(origin) === null) continue;
+    concealed.push({ origin, kind: "hidden" });
+  }
+
+  // Text used only as a clip, with nothing painted inside it (AC-7). A glyph
+  // that is also filled or stroked is judged by its paints above.
+  for (const origin of drawing.clipOnly) {
+    if (glyphs.at(origin) !== null || judged(origin) === null) continue;
+    concealed.push({ origin, kind: "hidden" });
+  }
+
+  return concealed;
+}
+
+/** Group paints by origin, within `POSITION_TOLERANCE`, into glyphs. */
+function byOrigin(paints: readonly GlyphPaint[]): {
+  readonly all: readonly DrawnGlyph[];
+  at(origin: Point): DrawnGlyph | null;
+} {
+  const all: DrawnGlyph[] = [];
+  const index = originIndex<DrawnGlyph>();
+  for (const paint of paints) {
+    const glyph = index.find(paint.origin);
+    if (glyph !== null) {
+      glyph.paints.push(paint);
+    } else {
+      const drawn: DrawnGlyph = { origin: paint.origin, em: paint.em, paints: [paint] };
+      all.push(drawn);
+      index.add(paint.origin, drawn);
+    }
+  }
+  return { all, at: (origin) => index.find(origin) };
+}
+
+/**
+ * Does one opaque cover drawn after `last` hold at least
+ * `COVER_MIN_OVERLAP` of the box? The overlap is the exact area of the box
+ * clipped to the cover's outline, which is already cut to its clip.
+ */
+function isCovered(
+  box: readonly Point[],
+  last: number,
+  covers: readonly Cover[],
+): boolean {
+  const boxArea = polygonArea(box);
+  if (!(boxArea > 0)) return false;
+  const [x0, y0, x1, y1] = boundsOf(box);
+
+  return covers.some(
+    (cover) =>
+      cover.order > last &&
+      cover.bounds[0] <= x1 &&
+      x0 <= cover.bounds[2] &&
+      cover.bounds[1] <= y1 &&
+      y0 <= cover.bounds[3] &&
+      polygonArea(clipToConvex(box, cover.outline)) >= COVER_MIN_OVERLAP * boxArea,
+  );
+}
+
+function boundsOf(points: readonly Point[]): Rect {
+  const xs = points.map(([x]) => x);
+  const ys = points.map(([, y]) => y);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+}
+
+/**
+ * Does this paint of a glyph show? Spec 0006, AC-7. Not at zero opacity, not
+ * with its centre outside the bounds of the clip in force, not under
+ * `TINY_TEXT_MAX` of em height, and not so close in colour to what is under
+ * it that the contrast is below `HIDDEN_CONTRAST_MAX`.
+ */
+function shows(
+  paint: GlyphPaint,
+  em: number,
+  centre: Point,
+  drawing: DrawingReading,
+): boolean {
+  if (!(paint.paint.alpha > 0)) return false;
+  if (paint.clip !== null && !inRect(paint.clip, centre)) return false;
+  if (!(em >= TINY_TEXT_MAX)) return false;
+  return !blendsIn(paint, centre, drawing.backdrops);
+}
+
+/**
+ * Is this paint within `HIDDEN_CONTRAST_MAX` of what is directly under its
+ * centre? Judged only for a plain paint in Gray, RGB or CMYK. What is under it
+ * is the last thing drawn before it under its centre: an opaque level
+ * rectangle whose own colour is judged gives its colour; anything else drawn
+ * there cannot be judged; and nothing at all is white paper.
+ */
+function blendsIn(
+  paint: GlyphPaint,
+  centre: Point,
+  backdrops: readonly Backdrop[],
+): boolean {
+  if (!paint.plain) return false;
+  const luminance = relativeLuminance(paint.paint);
+  if (!Number.isFinite(luminance)) return false;
+
+  let under = WHITE_PAPER;
+  for (let at = backdrops.length - 1; at >= 0; at -= 1) {
+    const backdrop = backdrops[at];
+    if (backdrop.order >= paint.order) continue;
+    if (backdrop.bounds !== null && !inRect(backdrop.bounds, centre)) continue;
+    if (!backdrop.under(centre)) continue;
+    if (backdrop.colour === null) return false;
+    under = relativeLuminance(backdrop.colour);
+    break;
+  }
+  return contrastRatio(luminance, under) < HIDDEN_CONTRAST_MAX;
+}
+
+/** White paper's relative luminance. */
+const WHITE_PAPER = 1;
+
+/** The WCAG contrast ratio of two relative luminances. */
+function contrastRatio(a: number, b: number): number {
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
 /**
@@ -332,31 +583,9 @@ function readText(page: PDFPage): TextReading {
 function indexByOrigin(
   characters: readonly Character[],
 ): (origin: Point) => Character | null {
-  const cell = (value: number) => Math.floor(value / POSITION_TOLERANCE);
-  const cells = new Map<string, Character[]>();
-  for (const character of characters) {
-    const key = `${cell(character.origin[0])},${cell(character.origin[1])}`;
-    const bucket = cells.get(key);
-    if (bucket) bucket.push(character);
-    else cells.set(key, [character]);
-  }
-
-  return ([x, y]) => {
-    const [cx, cy] = [cell(x), cell(y)];
-    for (let dx = -1; dx <= 1; dx += 1) {
-      for (let dy = -1; dy <= 1; dy += 1) {
-        for (const character of cells.get(`${cx + dx},${cy + dy}`) ?? []) {
-          if (
-            Math.abs(character.origin[0] - x) <= POSITION_TOLERANCE &&
-            Math.abs(character.origin[1] - y) <= POSITION_TOLERANCE
-          ) {
-            return character;
-          }
-        }
-      }
-    }
-    return null;
-  };
+  const index = originIndex<Character>();
+  for (const character of characters) index.add(character.origin, character);
+  return (origin) => index.find(origin);
 }
 
 /**
@@ -375,39 +604,187 @@ function readDrawing(mupdf: MuPdf, page: PDFPage): DrawingReading {
   let glyphs = 0;
   let images = 0;
   let contrasting = false;
+  let order = 0;
   const footprints: Footprint[] = [];
   const invisible: Point[] = [];
+  const paints: GlyphPaint[] = [];
+  const covers: Cover[] = [];
+  const backdrops: Backdrop[] = [];
+  const clipOnly: Point[] = [];
+
+  // The clips open as the page draws, mirroring the reader's own stack: a
+  // clip of text keeps its glyphs, so its pop can tell whether anything was
+  // painted inside it (AC-7).
+  const open: { glyphs: readonly Point[] | null; painted: boolean }[] = [];
+  const paintInside = () => {
+    for (const clip of open) clip.painted = true;
+  };
 
   walkDrawing(mupdf, page, (drawing, state) => {
+    order += 1;
+    const plain =
+      !state.softMasked && !state.restricted && !state.tiled && !state.defining;
+    const opaque = (alpha: number) => alpha >= 1 && plain;
+
     switch (drawing.kind) {
-      case "text":
+      case "text": {
         glyphs += drawing.glyphs.length;
         if (drawing.mode === "ignore") {
           for (const glyph of drawing.glyphs) invisible.push(glyph.origin);
+        } else if (drawing.mode === "clip" || drawing.mode === "clip-stroke") {
+          open.push({
+            glyphs: drawing.glyphs.map(({ origin }) => origin),
+            painted: false,
+          });
+        } else if (drawing.paint !== null && !state.defining) {
+          paintInside();
+          for (const { origin, em } of drawing.glyphs) {
+            paints.push({
+              order,
+              origin,
+              em,
+              paint: drawing.paint,
+              clip: state.clip,
+              plain,
+            });
+          }
         }
         break;
-      case "image":
+      }
+      case "clip":
+      case "begin-mask":
+        open.push({ glyphs: null, painted: false });
+        break;
+      case "pop-clip": {
+        const closed = open.pop();
+        if (closed?.glyphs && !closed.painted) clipOnly.push(...closed.glyphs);
+        break;
+      }
+      case "image": {
         images += 1;
         // A soft mask's own content is never seen as paint, so it is no
         // picture, though the page still draws it.
-        if (!state.defining) {
-          footprints.push({ quad: unitSquare(drawing.transform), clip: state.clip });
+        if (state.defining) break;
+        paintInside();
+        const footprint: Footprint = {
+          quad: unitSquare(drawing.transform),
+          clip: state.clip,
+        };
+        const bounds = footprintBounds(footprint);
+        footprints.push(footprint);
+        backdrops.push({
+          order,
+          bounds,
+          under: (point) => holds(footprint, point),
+          colour: null,
+        });
+        if (
+          !drawing.stencil &&
+          !drawing.masked &&
+          opaque(drawing.alpha) &&
+          bounds !== null
+        ) {
+          const shape = clipOutline(outline(footprint.quad), state.clip);
+          if (shape.length > 2) covers.push({ order, outline: shape, bounds });
         }
         break;
-      case "path":
+      }
+      case "path": {
         if (!(contrastWithWhite(drawing.paint) <= HIDDEN_CONTRAST_MAX))
           contrasting = true;
+        if (state.defining) break;
+        paintInside();
+        // A stroke draws lines, not an area text sits on.
+        if (drawing.stroked) break;
+        if (drawing.rectangle !== null) {
+          const rect = cut(drawing.rectangle, state.clip);
+          if (rect === null) break;
+          const isOpaque = opaque(drawing.paint.alpha);
+          const judged = isOpaque && Number.isFinite(relativeLuminance(drawing.paint));
+          backdrops.push({
+            order,
+            bounds: rect,
+            under: (point) => inRect(rect, point),
+            colour: judged ? drawing.paint : null,
+          });
+          // Any colour counts as a cover (AC-6).
+          if (isOpaque) covers.push({ order, outline: rectOutline(rect), bounds: rect });
+        } else {
+          const bounds = cut(drawing.bounds, state.clip);
+          if (bounds !== null) {
+            backdrops.push({
+              order,
+              bounds,
+              under: (point) => inRect(bounds, point),
+              colour: null,
+            });
+          }
+        }
         break;
-      case "shade":
+      }
+      case "shade": {
         // A shading's colour is never judged, so it always counts as drawn.
         contrasting = true;
+        if (state.defining) break;
+        paintInside();
+        const bounds =
+          drawing.bounds === null ? state.clip : cut(drawing.bounds, state.clip);
+        backdrops.push({
+          order,
+          bounds,
+          under: (point) => bounds === null || inRect(bounds, point),
+          colour: null,
+        });
         break;
+      }
+      case "begin-tile": {
+        const { area } = drawing;
+        if (!state.defining && area !== null) {
+          backdrops.push({
+            order,
+            bounds: area,
+            under: (point) => inRect(area, point),
+            colour: null,
+          });
+        }
+        break;
+      }
       default:
         break;
     }
   });
 
-  return { glyphs, images, footprints, contrasting, invisible };
+  return {
+    glyphs,
+    images,
+    footprints,
+    contrasting,
+    invisible,
+    paints,
+    covers,
+    backdrops,
+    clipOnly,
+  };
+}
+
+/** Bounds cut to the clip in force, or null when nothing of them is left. */
+function cut(bounds: Rect | null, clip: Rect | null): Rect | null {
+  if (bounds === null) return null;
+  return clip === null ? bounds : intersect(bounds, clip);
+}
+
+function rectOutline([x0, y0, x1, y1]: Rect): readonly Point[] {
+  return [
+    [x0, y0],
+    [x1, y0],
+    [x1, y1],
+    [x0, y1],
+  ];
+}
+
+/** A convex outline cut to the bounds of the clip in force. */
+function clipOutline(shape: readonly Point[], clip: Rect | null): readonly Point[] {
+  return clip === null ? shape : clipToConvex(shape, rectOutline(clip));
 }
 
 /**

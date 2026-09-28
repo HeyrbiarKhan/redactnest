@@ -360,6 +360,54 @@ function compareMode(
   return { extra, missing: used.includes(0), hidden };
 }
 
+/**
+ * Values kept by a page space point, found again within
+ * `POSITION_TOLERANCE` on each axis: one tolerance square per cell, so a
+ * lookup probes the nine cells around a point. The key packs both cells into
+ * one number, which a `Map` looks up faster than a string.
+ */
+export function originIndex<T>(): {
+  add(origin: readonly [number, number], value: T): void;
+  find(origin: readonly [number, number]): T | null;
+} {
+  const cells = new Map<number, { origin: readonly [number, number]; value: T }[]>();
+  const cell = (value: number) => Math.floor(value / POSITION_TOLERANCE);
+  // Cells from about -2^21 to 2^21 on each axis keep the key exact; a point
+  // further out shares a key with another, which costs a comparison, never a
+  // wrong match, since every candidate's own coordinates are compared.
+  const key = (cx: number, cy: number) =>
+    (cx + CELL_OFFSET) * CELL_STRIDE + (cy + CELL_OFFSET);
+
+  return {
+    add(origin, value) {
+      const at = key(cell(origin[0]), cell(origin[1]));
+      const bucket = cells.get(at);
+      if (bucket) bucket.push({ origin, value });
+      else cells.set(at, [{ origin, value }]);
+    },
+    find([x, y]) {
+      const cx = cell(x);
+      const cy = cell(y);
+      for (let dx = -1; dx <= 1; dx += 1) {
+        for (let dy = -1; dy <= 1; dy += 1) {
+          for (const entry of cells.get(key(cx + dx, cy + dy)) ?? []) {
+            if (
+              Math.abs(entry.origin[0] - x) <= POSITION_TOLERANCE &&
+              Math.abs(entry.origin[1] - y) <= POSITION_TOLERANCE
+            ) {
+              return entry.value;
+            }
+          }
+        }
+      }
+      return null;
+    },
+  };
+}
+
+const CELL_OFFSET = 2 ** 21;
+const CELL_STRIDE = 2 ** 22;
+
 /** The cell a position falls in, one `POSITION_TOLERANCE` square per cell. */
 function cellOf(x: number, y: number): readonly [number, number] {
   return [Math.floor(x / POSITION_TOLERANCE), Math.floor(y / POSITION_TOLERANCE)];

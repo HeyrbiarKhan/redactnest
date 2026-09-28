@@ -210,6 +210,8 @@ async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
           after: match.after,
           tickedByDefault: match.blocked === null && match.tickedByDefault,
           blocked: match.blocked,
+          // Spec 0006, AC-13: a closed kind, so the row can say so (AC-24).
+          concealed: match.concealed,
         };
       });
 

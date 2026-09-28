@@ -438,3 +438,79 @@ describe("ChecklistItem, blocked or disabled", () => {
     await expectNoAxeViolations(container);
   });
 });
+
+/**
+ * Spec 0006, AC-24. A row the page keeps from view says so, and stays
+ * tickable: the text a fake redaction hides can still be removed.
+ */
+describe("ChecklistItem, concealed", () => {
+  const COVERED = "Hidden under a box on the page.";
+  const REASON =
+    "This is set at too steep an angle to remove safely, so it will stay in the file.";
+
+  function Concealed(props: {
+    blockedReason?: string;
+    onCheckedChange?: (checked: boolean) => void;
+  }) {
+    return (
+      <ul>
+        <ChecklistItem
+          id="match-4"
+          text="board.minutes@example.com"
+          before="Email: "
+          after=""
+          page={1}
+          checked={false}
+          blockedReason={props.blockedReason}
+          concealedNote={COVERED}
+          onCheckedChange={props.onCheckedChange ?? (() => {})}
+        />
+      </ul>
+    );
+  }
+
+  it("shows its note, adds it to the description, and can still be ticked", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<Concealed onCheckedChange={onChange} />);
+
+    expect(screen.getByText(COVERED)).toBeVisible();
+    const box = screen.getByRole("checkbox", { name: "board.minutes@example.com" });
+    expect(box).toBeEnabled();
+    expect(box).toHaveAccessibleDescription(
+      `Page 1 …Email: board.minutes@example.com ${COVERED}`,
+    );
+
+    await user.click(box);
+    expect(onChange).toHaveBeenCalledWith(true);
+  });
+
+  it("shows the blocked reason first when a row is both blocked and concealed", () => {
+    render(<Concealed blockedReason={REASON} />);
+
+    const reason = screen.getByText(REASON);
+    const note = screen.getByText(COVERED);
+    expect(
+      reason.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByRole("checkbox")).toHaveAccessibleDescription(
+      `Page 1 …Email: board.minutes@example.com ${REASON} ${COVERED}`,
+    );
+  });
+
+  it("marks the note with a shape, hidden from assistive technology", () => {
+    render(<Concealed />);
+
+    const icon = screen.getByText(COVERED).parentElement?.querySelector("svg");
+    expect(icon).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("passes axe, alone and beside a blocked reason", async () => {
+    const { container, unmount } = render(<Concealed />);
+    await expectNoAxeViolations(container);
+    unmount();
+
+    const both = render(<Concealed blockedReason={REASON} />);
+    await expectNoAxeViolations(both.container);
+  });
+});

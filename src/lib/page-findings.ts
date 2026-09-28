@@ -12,6 +12,7 @@
 
 import {
   PAGE_FINDINGS,
+  type Concealment,
   type DocumentSummary,
   type PageFinding,
   type ReviewMatch,
@@ -262,3 +263,12 @@ export const DOWNLOAD_WARNING_TITLE = "Not every page was checked";
 
 /** The download warning's last line, saying why the name reads as it does (AC-22). */
 export const PARTLY_REASON = "That is why the file's name ends in partly redacted.";
+
+/**
+ * A concealed row's line (AC-24), in its description after any blocked
+ * reason. The match is still tickable; the line says why nobody saw it.
+ */
+export const CONCEALED_TEXT: Readonly<Record<Concealment, string>> = Object.freeze({
+  covered: "Hidden under a box on the page.",
+  hidden: "Not visible on the page.",
+});
