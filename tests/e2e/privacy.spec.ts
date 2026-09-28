@@ -363,6 +363,10 @@ test("a full run sends no document, text, match or name anywhere", async ({ page
 test("a detected redaction sends, stores and logs no match text or context", async ({
   page,
 }) => {
+  // Two waits of up to `ENGINE_TIMEOUT` each, the open and the run, which the
+  // default 30 seconds cannot hold when the suite is busy in parallel.
+  test.setTimeout(180_000);
+
   await watchStorage(page);
   const requests = recordRequests(page);
   const logged: string[] = [];

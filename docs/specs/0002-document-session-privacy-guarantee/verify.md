@@ -33,7 +33,7 @@ Steps marked **(after feature 5)** needed spec [0004](../0004-redaction-engine/i
 
 ## Commands
 
-- [x] `pnpm test:e2e privacy.spec.ts` → 6 pass, including the canary proving the recording proxies are really installed → AC-2, AC-3
+- [x] `pnpm test:e2e privacy.spec.ts` → 12 pass, including the canary proving the recording proxies are really installed → AC-2, AC-3
 - [x] **(after feature 5)** `pnpm test:e2e privacy.spec.ts` → the redaction leg passes too: open, redact and download with the recording proxies installed, nothing ever written, no request carrying document bytes, extracted text, match text or the file name, and `GET /api/entitlement` still the only request → AC-2, AC-3. _Proven by "a full run, open to download, writes nothing down" and "a full run sends no document, text, match or name anywhere", which cover every part of this step; ticked in spec 0004's `verify.md` (its AC-21)._
 - [x] **(after feature 5)** `pnpm test:e2e cancel.spec.ts` → the cancel test asserts its cancel landed during `redacting` and the session went back to review with the document open (Redact and the page count showing, no Download) → AC-10. _Proven by "a run can be cancelled while it is under way, and the tool carries on". The test lives in `cancel.spec.ts`, not `engine.spec.ts`; ticked in spec 0004's `verify.md`._
 - [x] `pnpm test:e2e` → the whole browser suite passes under the enforced policy → AC-2, AC-3, AC-12
