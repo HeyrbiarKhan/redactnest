@@ -232,6 +232,11 @@ describe("the crooked scan line", () => {
     ],
     ["for an unblocked match on a machine read page", [{ page: 1, blocked: null }]],
     ["with no matches at all", []],
+    [
+      "for a match naming a page the summary does not hold",
+      [{ page: 3, blocked: "slanted-text" }],
+    ],
+    ["for a match naming page 0", [{ page: 0, blocked: "slanted-text" }]],
   ] as const)("does not show %s", (_label, matches) => {
     expect(showsCrookedLine(SCAN_AND_TYPED, matches)).toBe(false);
   });
