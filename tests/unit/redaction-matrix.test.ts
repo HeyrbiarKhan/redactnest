@@ -1009,7 +1009,7 @@ describe("text off the page", () => {
       expect(removedByType).toEqual({});
       expect(unclipped(output)).not.toContain(OFF_PAGE_TEXT);
       expect(unclipped(output)).toContain("Name:");
-      expect(trim).toEqual([{ removed: true, picturesKept: false, pixelMode: true }]);
+      expect(trim).toEqual([{ removed: true, pictureOutside: false }]);
     });
 
     it("redacts the match on the page and removes the line off it", async () => {

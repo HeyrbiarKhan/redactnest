@@ -37,7 +37,9 @@ import {
   readSlides,
   readStamped,
   readUnmapped,
+  trimEdge,
   trimKept,
+  trimOcr,
   trimQuote,
   trimRefused,
   trimScan,
@@ -464,11 +466,21 @@ const FIXTURES = [
   ],
   ["trim-kept.pdf", trimKept(), "a stretched band and a turned picture across the edge"],
   [
+    "trim-edge.pdf",
+    trimEdge(),
+    "a scan 0.28 pt past an A4 page, a picture beside an address, a mask's image",
+  ],
+  [
     "trim-refused.pdf",
     trimRefused(),
     "a size change between glyphs outside and inside the crop",
   ],
   ["trim-quote.pdf", trimQuote(), "a trimmed page that shows a line with a quote"],
+  [
+    "trim-ocr.pdf",
+    trimOcr(),
+    "a scan with Tesseract's text layer, cropped through its lines",
+  ],
 ];
 
 const outDir = join(process.cwd(), "tests", "fixtures");

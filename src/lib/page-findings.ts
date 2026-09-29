@@ -161,9 +161,9 @@ const FINDING_TEXT: Readonly<Record<Exclude<PageFinding, "blank">, Worded>> =
     },
     "off-page-picture": {
       one: (pages) =>
-        `Part of a picture on ${pages} lies outside the visible page and couldn't be cleared, so it is still in the file.`,
+        `${pages} has a picture that reaches outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.`,
       many: (pages) =>
-        `Part of a picture on ${pages} lies outside the visible page and couldn't be cleared, so it is still in the file.`,
+        `${pages} have pictures that reach outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.`,
     },
     "machine-read-text": {
       one: (pages) =>
@@ -173,14 +173,11 @@ const FINDING_TEXT: Readonly<Record<Exclude<PageFinding, "blank">, Worded>> =
     },
     "off-page-content": {
       one: (pages) =>
-        `${pages} has content outside its visible area. RedactNest removes it when you redact, since nobody can see it.`,
+        `${pages} has text or drawings outside its visible area. RedactNest removes them when you redact, since nobody can see them.`,
       many: (pages) =>
-        `${pages} have content outside their visible area. RedactNest removes it when you redact, since nobody can see it.`,
+        `${pages} have text or drawings outside their visible area. RedactNest removes them when you redact, since nobody can see them.`,
     },
   });
-
-/** The findings whose line names its pages after a word, in lower case. */
-const LOWER_LIST: readonly PageFinding[] = Object.freeze(["off-page-picture"]);
 
 /** One finding's line, naming the pages that carry it, or null when none do. */
 export function findingLine(
@@ -191,7 +188,7 @@ export function findingLine(
   const pages = pagesWith(summary, finding);
   if (pages.length === 0) return null;
   const worded = FINDING_TEXT[finding];
-  const list = pageList(pages, { lower: LOWER_LIST.includes(finding) });
+  const list = pageList(pages);
   return pages.length === 1 ? worded.one(list) : worded.many(list);
 }
 
@@ -274,12 +271,12 @@ export const CONCEALED_TEXT: Readonly<Record<Concealment, string>> = Object.free
 });
 
 /**
- * The line at `complete` naming the pages the trim removed content from
- * (AC-22), in an untitled note before the download warning, or null when it
- * removed nothing.
+ * The line at `complete` naming the pages the trim removed text or drawings
+ * from (AC-22), in an untitled note before the download warning, or null when
+ * it removed nothing.
  */
 export function removedOffPageLine(summary: DocumentSummary): string | null {
   const pages = pagesWith(summary, "off-page-content");
   if (pages.length === 0) return null;
-  return `Content outside the visible area of ${pageList(pages, { lower: true })} was removed.`;
+  return `Text and drawings outside the visible area of ${pageList(pages, { lower: true })} were removed.`;
 }

@@ -38,8 +38,8 @@ export function line(font, size, x, y, text) {
  * Courier and, when asked for, `/F3` Carlito. It returns one spec per page:
  * `content`, and optionally `fonts` (more entries for the page's one `/Font`
  * dictionary), `resources` (more resource entries), `resourcesRef` (a shared
- * resource dictionary's number, used instead), and `keys` (more page keys,
- * such as `/Rotate 90`).
+ * resource dictionary's number, used instead), `keys` (more page keys,
+ * such as `/Rotate 90`), and `mediaBox` (in place of US Letter's).
  */
 export function document(build, { carlito = false } = {}) {
   const objects = [];
@@ -63,7 +63,7 @@ export function document(build, { carlito = false } = {}) {
         ? `<< /Font << ${pageFonts} >> ${spec.resources ?? ""} >>`
         : `${spec.resourcesRef} 0 R`;
     return add(
-      `<< /Type /Page /Parent ${pages} 0 R /MediaBox [0 0 612 792] ${spec.keys ?? ""} ` +
+      `<< /Type /Page /Parent ${pages} 0 R /MediaBox ${spec.mediaBox ?? "[0 0 612 792]"} ${spec.keys ?? ""} ` +
         `/Resources ${resources} /Contents ${content} 0 R >>`,
     );
   });

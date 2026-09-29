@@ -3,23 +3,30 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   inspectPages,
+  openDocumentWith,
   prepareDocument,
+  redactDocumentWith,
   RunCancelled,
   silenceEngineLog,
   trimToVisibleArea,
 } from "@/engine";
 
 import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
-import { mupdf } from "../support/mupdf";
+import { scanPages } from "../../scripts/lib/reading-fixtures.mjs";
+import { documentImages, LIMITS, mupdf } from "../support/mupdf";
 
 /**
  * What reading and trimming every page costs, and how soon it stops. Spec
- * 0006, AC-29.
+ * 0006, AC-29 and INV-11.
  *
- * The 50 page text heavy document is built here rather than committed, as the
- * browser suite builds its own: fifty pages of sixty dense lines, every glyph
- * inside a clip, so every glyph is looked up. On it, inspection plus the trim
- * may add at most 2 seconds of CPU time to the open.
+ * The 50 page documents are built here rather than committed, as the browser
+ * suite builds its own. The text heavy one is fifty pages of sixty dense
+ * lines, every glyph inside a clip, so every glyph is looked up; on it,
+ * inspection plus the trim may add at most 2 seconds of CPU time to the open.
+ * The scan is fifty pages at 300 pixels per inch, cropped half an inch on
+ * every side; on it, a run must leave every page image exactly as the source
+ * stored it, which proves the trim decoded and rewrote nothing. Its memory
+ * was measured once, by hand, and is recorded in spec 0006's `rationale.md`.
  */
 
 const PAGES = 50;
@@ -51,6 +58,39 @@ function densePdf(): Uint8Array {
     ],
     trailer: "/Root 1 0 R",
   }).bytes;
+}
+
+/**
+ * One US Letter page scanned at 300 pixels per inch, as a JPEG MuPDF made
+ * itself: pale grey paper with dark bands where lines of type would be. One is
+ * shared by every page here, which keeps the test quick; the heap measurement
+ * gives each page its own, since a shared image hides growth page by page.
+ */
+function scanJpeg(): { jpeg: Uint8Array; columns: number; rows: number } {
+  const columns = 2550;
+  const rows = 3300;
+  const pixmap = new mupdf.Pixmap(
+    mupdf.ColorSpace.DeviceGray,
+    [0, 0, columns, rows],
+    false,
+  );
+  try {
+    pixmap.clear(235);
+    const pixels = pixmap.getPixels();
+    const stride = pixmap.getStride();
+    for (let row = 150; row < rows - 150; row += 50) {
+      for (let line = row; line < row + 14; line += 1) {
+        pixels.fill(40, line * stride + 150, line * stride + columns - 150);
+      }
+    }
+    return { jpeg: pixmap.asJPEG(75), columns, rows };
+  } finally {
+    pixmap.destroy();
+  }
+}
+
+function toBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.slice().buffer as ArrayBuffer;
 }
 
 function withPrepared<T>(work: (pdf: PDFDocument) => Promise<T>): Promise<T> {
@@ -87,6 +127,36 @@ describe("the cost of reading every page", () => {
         2000,
       );
     });
+  }, 120_000);
+
+  it("leaves every page image of a cropped 300 ppi scan as the source stored it", async () => {
+    const { jpeg, columns, rows } = scanJpeg();
+    const source = toBuffer(
+      scanPages({ jpegs: [jpeg], columns, rows, pages: PAGES, cropped: true }),
+    );
+
+    const doc = await openDocumentWith(mupdf, source, LIMITS);
+    try {
+      // Each page trimmed for its header, and named for its scan.
+      for (const page of doc.summary.pages) {
+        expect(page.findings).toEqual(
+          expect.arrayContaining(["off-page-picture", "off-page-content"]),
+        );
+      }
+    } finally {
+      doc.close();
+    }
+
+    const { output, trim } = await redactDocumentWith(mupdf, source, []);
+    expect(trim).toEqual(
+      Array.from({ length: PAGES }, () => ({ removed: true, pictureOutside: true })),
+    );
+
+    const before = documentImages(source);
+    expect(before).toHaveLength(PAGES);
+    for (const page of before)
+      expect(page).toEqual([expect.objectContaining({ filter: "DCTDecode" })]);
+    expect(documentImages(output)).toEqual(before);
   }, 120_000);
 
   it("notices a cancel within one page of the 50", async () => {

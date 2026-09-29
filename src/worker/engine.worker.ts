@@ -365,16 +365,17 @@ async function runRedaction(
 
 /**
  * Did a run's trim reach the open's decisions, page by page? Which pages had
- * something removed, and which kept their pictures, are exactly what the
- * summary's `off-page-content` and `off-page-picture` say (AC-18).
+ * something removed, and which draw a picture reaching outside the visible
+ * area, are exactly what the summary's `off-page-content` and
+ * `off-page-picture` say (AC-18).
  */
 function trimAgrees(trim: readonly TrimOutcome[], summary: DocumentSummary): boolean {
   return (
     trim.length === summary.pages.length &&
     trim.every(
-      ({ removed, picturesKept }, index) =>
+      ({ removed, pictureOutside }, index) =>
         removed === summary.pages[index].findings.includes("off-page-content") &&
-        picturesKept === summary.pages[index].findings.includes("off-page-picture"),
+        pictureOutside === summary.pages[index].findings.includes("off-page-picture"),
     )
   );
 }

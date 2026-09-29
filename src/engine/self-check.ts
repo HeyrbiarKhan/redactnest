@@ -6,9 +6,9 @@ import { comparePage, type PageRecord } from "./characters";
 import { lineBox } from "./geometry";
 import type { MuPdf } from "./load";
 import { forEachDictionary, hasKey, keysOf } from "./objects";
-import { imagesAreBlank, outsidePixelsAreBlank } from "./pixels";
+import { imagesAreBlank } from "./pixels";
 import { CARRIER_KEYS, CATALOG_KEYS, PAGE_KEYS } from "./rebuild";
-import type { RedactionTarget, TrimOutcome } from "./types";
+import type { RedactionTarget } from "./types";
 
 /**
  * The engine checking its own work before anything leaves. Spec 0004, AC-13,
@@ -41,19 +41,18 @@ import type { RedactionTarget, TrimOutcome } from "./types";
  * On a run with nothing ticked, any character difference is `unsupported`
  * instead, since nothing ticked can have leaked or reached too far.
  *
- * Spec 0006, AC-17, adds two rules that are `redaction-incomplete` whatever
- * is ticked, because a leak is a leak: no character centred outside a page's
- * visible area survives, in either extraction mode, and on a page the run's
- * trim blanked in pixel mode, no image pixel wholly outside it shows ink. The
- * record is taken after the trim, so a trimmed character is never expected
- * back, and a trim that silently did nothing is caught by the first rule.
+ * Spec 0006, AC-17, adds one rule that is `redaction-incomplete` whatever is
+ * ticked, because a leak is a leak: no character centred outside a page's
+ * visible area survives, in either extraction mode. The record is taken after
+ * the trim, so a trimmed character is never expected back, and a trim that
+ * silently did nothing is caught here. The trim changes no pixel (INV-11), so
+ * there is no pixel outside to check.
  */
 export function checkOutput(
   mupdf: MuPdf,
   output: ArrayBuffer,
   record: readonly PageRecord[],
   targets: ReadonlyMap<number, readonly RedactionTarget[]>,
-  trim: readonly TrimOutcome[],
 ): EngineErrorKind | null {
   const ticked = targets.size > 0;
   let leaked = false;
@@ -81,9 +80,6 @@ export function checkOutput(
           visible,
         );
         if (ordinary.outside || ignoring.outside) escaped = true;
-        if (trim[index]?.pixelMode && !outsidePixelsAreBlank(mupdf, page, visible)) {
-          escaped = true;
-        }
         if (ignoring.extra) leaked = true;
         if (ordinary.extra) replaced = true;
         if (ordinary.missing || ignoring.missing || ordinary.hidden || ignoring.hidden) {

@@ -136,14 +136,13 @@ function redactRequest(overrides: { id?: string; jobId?: string } = {}): Request
   };
 }
 
-/** What the engine hands back from a run that passed its self check. */
 /** What the trim does on a page with nothing outside its visible area. */
 const UNTRIMMED = Object.freeze({
   removed: false,
-  picturesKept: false,
-  pixelMode: false,
+  pictureOutside: false,
 });
 
+/** What the engine hands back from a run that passed its self check. */
 function engineResult() {
   return {
     output: new ArrayBuffer(128),
@@ -788,11 +787,11 @@ describe("a redaction run", () => {
    * page hands back no file.
    */
   it.each([
+    ["removed something the open did not", [{ ...UNTRIMMED, removed: true }, UNTRIMMED]],
     [
-      "removed something the open did not",
-      [{ ...UNTRIMMED, removed: true, pixelMode: true }, UNTRIMMED],
+      "found a picture outside the open did not",
+      [UNTRIMMED, { ...UNTRIMMED, pictureOutside: true }],
     ],
-    ["kept pictures the open did not", [UNTRIMMED, { ...UNTRIMMED, picturesKept: true }]],
     ["read a different number of pages", [UNTRIMMED]],
   ])(
     "posts unsupported, and no output, for a run whose trim %s",
@@ -824,8 +823,8 @@ describe("a redaction run", () => {
     redactDocument.mockResolvedValue({
       ...engineResult(),
       trim: [
-        { removed: true, picturesKept: false, pixelMode: true },
-        { removed: false, picturesKept: true, pixelMode: false },
+        { removed: true, pictureOutside: false },
+        { removed: false, pictureOutside: true },
       ],
     });
     await startWorker();

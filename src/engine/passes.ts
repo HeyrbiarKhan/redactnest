@@ -69,16 +69,10 @@ export const boxPass: Pass = (mupdf, page, areas) => {
 /**
  * The trim's pass (spec 0006, AC-14): the strips outside the visible area,
  * each its own `Redact` mark, applied with no box, text removed, line art
- * removed when one strip covers it, and pixels blanked only when `blankPixels`
- * says the page is in pixel mode (AC-15). All four settings written out, as
- * every pass here writes them (INV-5).
+ * removed when one strip covers it, and no image touched (AC-15, INV-11). All
+ * four settings written out, as every pass here writes them (INV-5).
  */
-export function trimPass(
-  mupdf: MuPdf,
-  page: PDFPage,
-  strips: readonly Quad[],
-  blankPixels: boolean,
-): void {
+export function trimPass(mupdf: MuPdf, page: PDFPage, strips: readonly Quad[]): void {
   const { PDFPage: Settings } = mupdf;
   markThenApply(
     page,
@@ -86,7 +80,7 @@ export function trimPass(
     () =>
       page.applyRedactions(
         false,
-        blankPixels ? Settings.REDACT_IMAGE_PIXELS : Settings.REDACT_IMAGE_NONE,
+        Settings.REDACT_IMAGE_NONE,
         Settings.REDACT_LINE_ART_REMOVE_IF_COVERED,
         Settings.REDACT_TEXT_REMOVE,
       ),

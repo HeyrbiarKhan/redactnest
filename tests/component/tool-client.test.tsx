@@ -1475,8 +1475,9 @@ describe("the page readings (spec 0006)", () => {
 
   /**
    * Spec 0006, AC-8, AC-21 and AC-22. What lies outside a page's visible
-   * area: a note at open and a note at complete when the trim removed it, and
-   * a warning with the partly name when it had to keep a picture.
+   * area: a note at open and a note at complete when the trim removed text or
+   * drawings there, and a warning with the partly name for a picture reaching
+   * outside, which is always kept.
    */
   describe("content outside the visible area", () => {
     const OFF_PAGE: DocumentSummary = Object.freeze({
@@ -1488,15 +1489,15 @@ describe("the page readings (spec 0006)", () => {
       ]) as DocumentSummary["pages"],
     });
 
-    it("notes the removal at open, warns of the kept picture, and names the file partly", async () => {
+    it("notes the removal at open, warns of the picture outside, and names the file partly", async () => {
       const run = flagged(OFF_PAGE);
       await openWith(run.session);
 
       expect(screen.getByTestId("page-notes")).toHaveTextContent(
-        "Page 1 has content outside its visible area. RedactNest removes it when you redact, since nobody can see it.",
+        "Page 1 has text or drawings outside its visible area. RedactNest removes them when you redact, since nobody can see them.",
       );
       expect(screen.getByTestId("page-warnings")).toHaveTextContent(
-        "Part of a picture on page 2 lies outside the visible page and couldn't be cleared, so it is still in the file.",
+        "Page 2 has a picture that reaches outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.",
       );
 
       const user = userEvent.setup();
@@ -1506,7 +1507,7 @@ describe("the page readings (spec 0006)", () => {
       const card = screen.getByRole("region", { name: "Your clean file is ready" });
       const removed = within(card).getByTestId("off-page-removed");
       expect(removed).toHaveTextContent(
-        "Content outside the visible area of page 1 was removed.",
+        "Text and drawings outside the visible area of page 1 were removed.",
       );
       expect(removed).toHaveTextContent(/^Note:/);
       // Before the download warning, which stays the last thing in the card.

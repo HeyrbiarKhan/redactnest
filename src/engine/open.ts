@@ -173,8 +173,9 @@ export async function openDocumentWith(
 
 /**
  * A page's findings with the trim's two added (spec 0006, AC-8), still in
- * `PAGE_FINDINGS` order: `off-page-content` when the trim removed something,
- * `off-page-picture` when it kept the page's pictures.
+ * `PAGE_FINDINGS` order: `off-page-content` when the trim removed text or a
+ * drawn shape, `off-page-picture` when a picture reaches outside the visible
+ * area, kept whole.
  */
 function withTrim(
   findings: readonly PageFinding[],
@@ -182,7 +183,7 @@ function withTrim(
 ): readonly PageFinding[] {
   const found = new Set(findings);
   if (trim?.removed) found.add("off-page-content");
-  if (trim?.picturesKept) found.add("off-page-picture");
+  if (trim?.pictureOutside) found.add("off-page-picture");
   return PAGE_FINDINGS.filter((finding) => found.has(finding));
 }
 

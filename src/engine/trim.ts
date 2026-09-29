@@ -18,41 +18,47 @@ import {
   type Transform,
 } from "./device";
 import { checkpoint, EngineFailure } from "./failure";
-import { imageReach, quadBounds, quadCentre } from "./geometry";
+import { quadBounds, quadCentre } from "./geometry";
 import type { MuPdf } from "./load";
 import { trimPass } from "./passes";
 import type { Quad, TrimOutcome } from "./types";
 
 /**
  * Removing what lies outside each page's visible area. Spec 0006, AC-14 to
- * AC-16, INV-3 and INV-4.
+ * AC-16, INV-3, INV-4 and INV-11.
  *
- * Nobody can see text or pixels outside a page's crop box, and they have no
- * reason to stay in a redacted file. So wherever `prepareDocument` runs, on
+ * Nobody can see text or drawn shapes outside a page's crop box, and they have
+ * no reason to stay in a redacted file. So wherever `prepareDocument` runs, on
  * the review copy at open and on every working copy, this runs right after
  * it, through this one function, so detection, target validation and the
  * character record all read the same trimmed page (INV-3, spec 0004's INV-9).
+ *
+ * A picture is never decoded, blanked or removed here (INV-11). One that
+ * reaches outside the visible area is kept whole and named instead, because
+ * MuPDF writes every image it blanks again as Flate: a run on a 50 page cropped
+ * scan at 300 pixels per inch went past 800 MB and grew the file about five
+ * times (spec 0006, `rationale.md`).
  *
  * Each page is read on its own terms, never from the inspection (which runs on
  * the review copy only), so a working copy decides exactly as the review copy
  * did (AC-18): its own drawing pass for image placements, paths and the
  * extent of what the page draws, and its own unclipped character read. A page
- * whose reads find nothing outside is left untouched.
+ * whose reads find no text and no shape outside is left untouched.
  */
 
 /**
- * How far into the visible area the pixels blanked for a picture that crosses
- * the edge may reach, in points (AC-15). Within it, a cropped upright scan at
- * 150 pixels per inch or finer is blanked outside the crop. Past it, blanking
- * would take ink the visitor can see, so every picture on the page is kept and
- * the page is named instead. A rule about pixels, not a cap on the visitor:
- * an engine constant, never config (INV-7).
+ * How far past the visible area, in points, a picture must reach on some side
+ * before its page is named for it (AC-15). An uncropped scan whose image sits a
+ * fraction of a point past a rounded media box (an A4 scan at 595.28 pt on a
+ * 595 pt page) is not named for a sliver too thin to hold anything readable. A
+ * rule about pages, not a cap on the visitor: an engine constant, never config
+ * (INV-7).
  */
-export const TRIM_PIXEL_REACH = 1;
+export const PICTURE_REACH_MIN = 1;
 
 /**
  * How far past everything the page draws the strips reach, in points, so the
- * outermost glyph or pixel lies inside a strip rather than on its edge (AC-14).
+ * outermost glyph or shape lies inside a strip rather than on its edge (AC-14).
  */
 const STRIP_MARGIN = 1;
 
@@ -81,30 +87,20 @@ export async function trimToVisibleArea(
 /** What the trim's reads decided for one page, before anything is removed. */
 interface Plan {
   readonly visible: Rect;
+  /** Empty when no pass runs. */
   readonly strips: readonly Quad[];
+  /** `removed` says whether a pass runs at all. */
   readonly outcome: TrimOutcome;
-  /** Whether a pass runs at all. */
-  readonly trims: boolean;
 }
-
-const UNTOUCHED: TrimOutcome = Object.freeze({
-  removed: false,
-  picturesKept: false,
-  pixelMode: false,
-});
 
 function trimPage(mupdf: MuPdf, pdf: PDFDocument, index: number): TrimOutcome {
   const plan = readable(() => onPage(pdf, index, (page) => planTrim(mupdf, page)));
-  if (!plan.trims) return plan.outcome;
+  if (!plan.outcome.removed) return plan.outcome;
 
   // AC-16: both unclipped modes before the pass, and again on the page
   // loaded afresh after it.
   const before = readable(() => onPage(pdf, index, readBoth));
-  readable(() =>
-    onPage(pdf, index, (page) =>
-      trimPass(mupdf, page, plan.strips, plan.outcome.pixelMode),
-    ),
-  );
+  readable(() => onPage(pdf, index, (page) => trimPass(mupdf, page, plan.strips)));
   const after = readable(() => onPage(pdf, index, readBoth));
 
   const verdict = prove(before, after, plan.visible);
@@ -116,10 +112,11 @@ function trimPage(mupdf: MuPdf, pdf: PDFDocument, index: number): TrimOutcome {
  * Read a page and decide. Spec 0006, AC-14 and AC-15.
  *
  * A page is trimmed for a character whose quad reaches outside the visible
- * area, a path wholly outside it, or an image whose footprint reaches outside
- * it, when its pixels can be blanked. "Reaches outside" allows
- * `POSITION_TOLERANCE`, so a glyph or a scan laid exactly on the edge, to a
- * rounding error, does not trim a page for nothing.
+ * area, or a path wholly outside it. "Reaches outside" allows
+ * `POSITION_TOLERANCE`, so a glyph laid exactly on the edge, to a rounding
+ * error, does not trim a page for nothing. A picture never starts a pass: one
+ * reaching past the visible area by more than `PICTURE_REACH_MIN` names the
+ * page and is kept whole, like every other picture on it.
  */
 function planTrim(mupdf: MuPdf, page: PDFPage): Plan {
   const visible = toRect(page.getBounds());
@@ -131,7 +128,7 @@ function planTrim(mupdf: MuPdf, page: PDFPage): Plan {
   };
 
   let pathOutside = false;
-  const placements: Placement[] = [];
+  let pictureOutside = false;
 
   walkDrawing(
     mupdf,
@@ -139,16 +136,14 @@ function planTrim(mupdf: MuPdf, page: PDFPage): Plan {
     (drawing, state) => {
       switch (drawing.kind) {
         case "image": {
-          const quad = unitSquare(drawing.transform);
-          const bounds = cut(quadBounds(quad), state.clip);
+          const bounds = cut(quadBounds(unitSquare(drawing.transform)), state.clip);
           if (bounds === null) break;
           reach(bounds);
-          placements.push({
-            transform: drawing.transform,
-            width: drawing.width,
-            height: drawing.height,
-            bounds,
-          });
+          // A soft mask's own content is never seen as paint, so it is no
+          // picture, here as in the inspection (AC-15).
+          if (!state.defining && reachesPast(bounds, visible, PICTURE_REACH_MIN)) {
+            pictureOutside = true;
+          }
           break;
         }
         case "path":
@@ -182,49 +177,15 @@ function planTrim(mupdf: MuPdf, page: PDFPage): Plan {
   walkLines(page, CHECK_EXTRACTION_OPTIONS[0], (bounds) => {
     if (!bounds.every(Number.isFinite)) return;
     reach(bounds);
-    if (reachesOutside(bounds, visible)) characterOutside = true;
+    if (reachesPast(bounds, visible, POSITION_TOLERANCE)) characterOutside = true;
   });
 
-  const imageOutside = placements.some(({ bounds }) => reachesOutside(bounds, visible));
-  const strips = stripsAround(visible, grow(extent, STRIP_MARGIN));
-
-  // AC-15: every placement across the edge, measured against every strip it
-  // meets, before anything is removed. Written as "within the limit" so a
-  // reach that is not a number keeps the pictures.
-  const crossing = placements.filter(
-    ({ bounds }) =>
-      reachesOutside(bounds, visible) && intersect(bounds, visible) !== null,
-  );
-  const picturesKept = crossing.some((placement) =>
-    strips.some((strip) => {
-      const [x0, y0, x1, y1] = quadBounds(strip);
-      if (intersect(placement.bounds, [x0, y0, x1, y1]) === null) return false;
-      return !(
-        imageReach(placement.transform, placement.width, placement.height, strip) <=
-        TRIM_PIXEL_REACH
-      );
-    }),
-  );
-
-  const removed = characterOutside || pathOutside || (imageOutside && !picturesKept);
-  if (!removed)
-    return { visible, strips, outcome: { ...UNTOUCHED, picturesKept }, trims: false };
-
+  const removed = characterOutside || pathOutside;
   return {
     visible,
-    strips,
-    outcome: { removed: true, picturesKept, pixelMode: !picturesKept },
-    trims: true,
+    strips: removed ? stripsAround(visible, grow(extent, STRIP_MARGIN)) : [],
+    outcome: { removed, pictureOutside },
   };
-}
-
-/** One image placement from the drawing pass. */
-interface Placement {
-  readonly transform: Transform;
-  readonly width: number;
-  readonly height: number;
-  /** Its footprint's bounds, cut to the clip in force. */
-  readonly bounds: Rect;
 }
 
 /**
@@ -339,7 +300,7 @@ function crossingLines(placed: readonly Placed[], visible: Rect): ReadonlySet<nu
   const outside = new Set<number>();
   const inside = new Set<number>();
   for (const { character, bounds } of placed) {
-    if (reachesOutside(bounds, visible)) outside.add(character.line);
+    if (reachesPast(bounds, visible, POSITION_TOLERANCE)) outside.add(character.line);
     if (intersect(bounds, visible) !== null) inside.add(character.line);
   }
   return new Set([...outside].filter((line) => inside.has(line)));
@@ -394,14 +355,13 @@ function cut(bounds: Rect, clip: Rect | null): Rect | null {
   return clip === null ? bounds : intersect(bounds, clip);
 }
 
-/** Does any part of `bounds` lie outside `visible`, past `POSITION_TOLERANCE`? */
-function reachesOutside([x0, y0, x1, y1]: Rect, [vx0, vy0, vx1, vy1]: Rect): boolean {
-  return (
-    x0 < vx0 - POSITION_TOLERANCE ||
-    y0 < vy0 - POSITION_TOLERANCE ||
-    x1 > vx1 + POSITION_TOLERANCE ||
-    y1 > vy1 + POSITION_TOLERANCE
-  );
+/** Does any part of `bounds` lie outside `visible` by more than `by` on some side? */
+function reachesPast(
+  [x0, y0, x1, y1]: Rect,
+  [vx0, vy0, vx1, vy1]: Rect,
+  by: number,
+): boolean {
+  return x0 < vx0 - by || y0 < vy0 - by || x1 > vx1 + by || y1 > vy1 + by;
 }
 
 /**

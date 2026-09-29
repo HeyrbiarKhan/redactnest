@@ -174,7 +174,7 @@ export async function redactDocumentWith(
     const output = takeOutput(written);
 
     onPhase?.("verifying");
-    const failure = checkOutput(mupdf, output, record, pages, trim);
+    const failure = checkOutput(mupdf, output, record, pages);
     if (failure !== null) {
       throw new EngineFailure(failure);
     }

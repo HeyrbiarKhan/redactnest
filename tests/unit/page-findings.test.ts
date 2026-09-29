@@ -133,8 +133,8 @@ describe("the line for each finding", () => {
     ],
     [
       "off-page-picture",
-      "Part of a picture on page 1 lies outside the visible page and couldn't be cleared, so it is still in the file.",
-      "Part of a picture on pages 1 and 2 lies outside the visible page and couldn't be cleared, so it is still in the file.",
+      "Page 1 has a picture that reaches outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.",
+      "Pages 1 and 2 have pictures that reach outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.",
     ],
     [
       "machine-read-text",
@@ -143,8 +143,8 @@ describe("the line for each finding", () => {
     ],
     [
       "off-page-content",
-      "Page 1 has content outside its visible area. RedactNest removes it when you redact, since nobody can see it.",
-      "Pages 1 and 2 have content outside their visible area. RedactNest removes it when you redact, since nobody can see it.",
+      "Page 1 has text or drawings outside its visible area. RedactNest removes them when you redact, since nobody can see them.",
+      "Pages 1 and 2 have text or drawings outside their visible area. RedactNest removes them when you redact, since nobody can see them.",
     ],
   ] as const)("words %s for one page and for several", (finding, one, many) => {
     expect(findingLine(summaryOf([finding], []), finding)).toBe(one);
@@ -271,17 +271,17 @@ describe("the concealed row lines", () => {
 });
 
 /** AC-22: what the trim removed, named at complete. */
-describe("the removed content line", () => {
-  it("names the pages the trim removed content from", () => {
+describe("the removed off page line", () => {
+  it("names the pages the trim removed text or drawings from", () => {
     expect(
       removedOffPageLine(summaryOf(["off-page-content"], [], ["off-page-content"])),
-    ).toBe("Content outside the visible area of pages 1 and 3 was removed.");
+    ).toBe("Text and drawings outside the visible area of pages 1 and 3 were removed.");
     expect(removedOffPageLine(summaryOf([], ["off-page-content"]))).toBe(
-      "Content outside the visible area of page 2 was removed.",
+      "Text and drawings outside the visible area of page 2 were removed.",
     );
   });
 
-  it("is absent when the trim removed nothing, pictures kept included", () => {
+  it("is absent when the trim removed nothing, a picture outside included", () => {
     expect(removedOffPageLine(summaryOf(["off-page-picture"], []))).toBeNull();
   });
 });

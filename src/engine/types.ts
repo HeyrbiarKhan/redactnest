@@ -37,21 +37,16 @@ export interface PageInspection {
  */
 export interface TrimOutcome {
   /**
-   * The trim ran here for a character or a path, or for an image on a page
-   * blanked in pixel mode: something outside the visible area was removed.
+   * The trim ran here for a character or a path: text or drawn shapes outside
+   * the visible area were removed. A picture never starts a pass (AC-15).
    */
   readonly removed: boolean;
   /**
-   * A picture across the edge would have been blanked more than
-   * `TRIM_PIXEL_REACH` into the visible area, so every picture on the page
-   * was left as it was (AC-15).
+   * The page draws a picture reaching outside the visible area by more than
+   * `PICTURE_REACH_MIN`, which the trim keeps whole, as every picture (AC-15,
+   * INV-11).
    */
-  readonly picturesKept: boolean;
-  /**
-   * This page was trimmed with its pixels outside the visible area blanked,
-   * which the self check's outside pixel rule then reads (AC-17).
-   */
-  readonly pixelMode: boolean;
+  readonly pictureOutside: boolean;
 }
 
 /** One glyph a viewer does not see, and why. Spec 0006, *Data model sketch*. */

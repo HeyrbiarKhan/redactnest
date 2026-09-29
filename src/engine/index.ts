@@ -45,8 +45,9 @@
  *     every object MuPDF passed it let go before its callback returns.
  *   - `inspect.ts` turns each page's drawing and text into closed findings,
  *     and the open refuses a document with no page it can read.
- *   - `trim.ts` removes what lies outside each page's visible area, on both
- *     copies, right after `prepareDocument`, and proves its text work.
+ *   - `trim.ts` removes the text and drawn shapes outside each page's visible
+ *     area, on both copies, right after `prepareDocument`, proves its text
+ *     work, and names a page whose picture reaches outside, never touching it.
  *
  * Nothing in this folder calls `search()` (spec 0005, INV-11); lint holds it.
  *
@@ -123,7 +124,7 @@ export {
 export { loadEngine, silenceEngineLog, type MuPdf } from "./load";
 export { openDocument, openDocumentWith, type OpenHooks } from "./open";
 export { boxPass, paddedPass, textPass, trimPass, type Pass } from "./passes";
-export { IMAGE_CHECK_OPTIONS, imageReachVerdicts, outsidePixelsAreBlank } from "./pixels";
+export { imageReachVerdicts } from "./pixels";
 export { prepareDocument } from "./prepare";
 export { PIPELINE, redactDocument, redactDocumentWith, type Pipeline } from "./redact";
 export {
@@ -132,7 +133,7 @@ export {
   unsoundTargetsIn,
   type OutlinedText,
 } from "./targets";
-export { TRIM_PIXEL_REACH, trimToVisibleArea } from "./trim";
+export { PICTURE_REACH_MIN, trimToVisibleArea } from "./trim";
 export {
   CARRIER_KEYS,
   CATALOG_KEYS,

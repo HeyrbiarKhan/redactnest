@@ -1,4 +1,4 @@
-import type { Matrix, PDFDocument, PDFPage } from "mupdf";
+import type { PDFDocument, PDFPage } from "mupdf";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
@@ -14,10 +14,12 @@ import {
   type TrimOutcome,
 } from "@/engine";
 
-import { TRIM_TEXT } from "../../scripts/lib/reading-fixtures.mjs";
+import { isPartly } from "@/lib/page-findings";
+
+import { TRIM_EDGE, TRIM_TEXT } from "../../scripts/lib/reading-fixtures.mjs";
 import { document, line } from "../../scripts/lib/redaction-fixtures.mjs";
 import { fixture } from "../support/bytes";
-import { inspect, LIMITS, mupdf, pageText } from "../support/mupdf";
+import { documentImages, inspect, LIMITS, mupdf, pageText } from "../support/mupdf";
 import { findTargets } from "../support/targets";
 
 /**
@@ -35,8 +37,7 @@ beforeAll(() => {
 
 const UNTOUCHED: TrimOutcome = Object.freeze({
   removed: false,
-  picturesKept: false,
-  pixelMode: false,
+  pictureOutside: false,
 });
 
 /** Every character of a page, unclipped, with its origin. */
@@ -223,7 +224,7 @@ describe("the trim's foundation (pins)", () => {
           Math.abs(other.origin[1] - origin[1]) <= 0.01,
       );
 
-    expect(outcomes).toEqual([{ removed: true, picturesKept: false, pixelMode: true }]);
+    expect(outcomes).toEqual([{ removed: true, pictureOutside: false }]);
     const ws = before.filter(({ code }) => code === "W");
     expect(ws).toHaveLength(cases.length);
     ws.forEach((glyph, at) => {
@@ -239,6 +240,55 @@ describe("the trim's foundation (pins)", () => {
     expect(text).not.toContain("Leftofthepage");
     // The word across the right edge: its glyphs past the edge go, whole.
     expect(text).not.toContain("Straddle");
+  });
+});
+
+/**
+ * The cropped OCR scan (task 19), pinned first because it could send the
+ * design back: spec 0004 records that MuPDF moves kept text after removed
+ * glyphs when a `Tf` or `Tz` sits between them in one text object, and
+ * Tesseract writes a `Tf` and a `Tz` before every word. It must open named,
+ * never refused with `edge-text`, and a run with nothing ticked must pass.
+ */
+describe("a cropped OCR scan (pin)", () => {
+  it("opens named, with the lines across the edge trimmed and every word inside kept", async () => {
+    const source = fixture("trim-ocr.pdf");
+    const doc = await openDocumentWith(mupdf, source, LIMITS);
+    try {
+      expect(doc.summary.pages).toEqual([
+        { findings: ["off-page-picture", "machine-read-text", "off-page-content"] },
+      ]);
+    } finally {
+      doc.close();
+    }
+
+    const { output } = await redactDocumentWith(mupdf, source, []);
+    // Page space runs from the crop's top left, so a character whose origin is
+    // 20 pt right of 0 and 20 pt below 0 lies wholly inside the visible area.
+    const inside = characters(source, 0).filter(
+      ({ origin }) => origin[0] >= 20 && origin[1] >= 20,
+    );
+    const kept = characters(output, 0);
+    expect(inside.length).toBeGreaterThan(500);
+    for (const { code, origin } of inside) {
+      expect(
+        kept.some(
+          (other) =>
+            other.code === code &&
+            Math.abs(other.origin[0] - origin[0]) <= 0.01 &&
+            Math.abs(other.origin[1] - origin[1]) <= 0.01,
+        ),
+      ).toBe(true);
+    }
+    // Line 1 straddles the top edge whole, and every line's first word lies
+    // wholly left of the crop: both go.
+    expect(unclipped(source)).toContain("Line 1 of");
+    expect(unclipped(source)).toMatch(/^Line 2 of/m);
+    const text = unclipped(output);
+    expect(text).not.toContain("Line 1 of");
+    expect(text).not.toMatch(/^Line/m);
+    // The scan itself, stored as it was (INV-11).
+    expect(documentImages(output)).toEqual(documentImages(source));
   });
 });
 
@@ -356,7 +406,7 @@ describe("trimming text", () => {
     expect(text).not.toContain(TRIM_TEXT.belowCrop);
     expect(text).not.toContain(TRIM_TEXT.belowMedia);
     expect(text).not.toContain(TRIM_TEXT.straddling);
-    expect(trim).toEqual([{ removed: true, picturesKept: false, pixelMode: true }]);
+    expect(trim).toEqual([{ removed: true, pictureOutside: false }]);
 
     // Every character of the two lines inside the crop, at its place.
     const inside = characters(source, 0).filter(({ origin }) => origin[1] < 150);
@@ -391,113 +441,79 @@ describe("trimming text", () => {
 });
 
 /**
- * The decoded pixels of the first image on a page, and where each lands: a
- * check written apart from the engine, from MuPDF's own structured text.
+ * Open a fixture, run it with nothing ticked, and hand back each page's
+ * findings, the run's trim, and the output.
  */
-function outsideInk(
-  bytes: ArrayBuffer,
-  index: number,
-): { outside: number; inside: number } {
-  return inspect(bytes, (doc) => {
-    const page = doc.loadPage(index);
-    const visible = page.getBounds();
-    const stext = page.toStructuredText("preserve-images,clip=no");
-    const counts = { outside: 0, inside: 0 };
-    try {
-      stext.walk({
-        onImageBlock(_bbox, transform: Matrix, image) {
-          const pixmap = image.toPixmap();
-          try {
-            const width = pixmap.getWidth();
-            const height = pixmap.getHeight();
-            const stride = pixmap.getStride();
-            const step = pixmap.getNumberOfComponents();
-            const pixels = pixmap.getPixels();
-            const [a, b, c, d, e, f] = transform;
-            for (let row = 0; row < height; row += 1) {
-              for (let column = 0; column < width; column += 1) {
-                const corners = [
-                  [column / width, row / height],
-                  [(column + 1) / width, (row + 1) / height],
-                ].map(([u, v]) => [a * u + c * v + e, b * u + d * v + f]);
-                const [x0, x1] = [corners[0][0], corners[1][0]].sort((p, q) => p - q);
-                const [y0, y1] = [corners[0][1], corners[1][1]].sort((p, q) => p - q);
-                const whollyOutside =
-                  x1 <= visible[0] ||
-                  x0 >= visible[2] ||
-                  y1 <= visible[1] ||
-                  y0 >= visible[3];
-                const whollyInside =
-                  x0 >= visible[0] &&
-                  x1 <= visible[2] &&
-                  y0 >= visible[1] &&
-                  y1 <= visible[3];
-                const inked = pixels[row * stride + column * step] < 250;
-                if (inked && whollyOutside) counts.outside += 1;
-                if (inked && whollyInside) counts.inside += 1;
-              }
-            }
-          } finally {
-            pixmap.destroy();
-            image.destroy();
-          }
-        },
-      });
-    } finally {
-      stext.destroy();
-      page.destroy();
-    }
-    return counts;
-  });
+async function openAndRun(name: string) {
+  const source = fixture(name);
+  const doc = await openDocumentWith(mupdf, source, LIMITS);
+  try {
+    const { output, trim } = await redactDocumentWith(mupdf, source, []);
+    return { source, summary: doc.summary, output, trim };
+  } finally {
+    doc.close();
+  }
 }
 
-/** AC-15 and AC-17 on pictures: blanked within a pixel's reach, else kept and named. */
-describe("trimming pictures", () => {
-  it("blanks a cropped 150 ppi scan outside its crop, and a picture wholly off the page", async () => {
-    const source = fixture("trim-scan.pdf");
-    expect(outsideInk(source, 0).outside).toBeGreaterThan(0);
-    expect(outsideInk(source, 1).outside).toBeGreaterThan(0);
-
-    const doc = await openDocumentWith(mupdf, source, LIMITS);
-    try {
-      for (const page of doc.summary.pages)
-        expect(page.findings).toContain("off-page-content");
-      for (const page of doc.summary.pages)
-        expect(page.findings).not.toContain("off-page-picture");
-    } finally {
-      doc.close();
+/**
+ * AC-15, AC-23 and INV-11 on pictures: a picture reaching outside the visible
+ * area names its page, is never a reason to trim, and leaves the run exactly
+ * as the source stored it.
+ */
+describe("pictures outside the visible area", () => {
+  it("names a cropped 150 ppi scan and a picture wholly off the page, and keeps both byte for byte", async () => {
+    const { source, summary, output, trim } = await openAndRun("trim-scan.pdf");
+    for (const page of summary.pages) {
+      expect(page.findings).toContain("off-page-picture");
+      expect(page.findings).not.toContain("off-page-content");
     }
-
-    const { output, trim } = await redactDocumentWith(mupdf, source, []);
+    expect(isPartly(summary)).toBe(true);
     expect(trim).toEqual([
-      { removed: true, picturesKept: false, pixelMode: true },
-      { removed: true, picturesKept: false, pixelMode: true },
+      { removed: false, pictureOutside: true },
+      { removed: false, pictureOutside: true },
     ]);
-    const scan = outsideInk(output, 0);
-    expect(scan.outside).toBe(0);
-    expect(scan.inside).toBeGreaterThan(0);
-    expect(outsideInk(output, 1).outside).toBe(0);
+
+    const before = documentImages(source);
+    expect(before.every((page) => Object.keys(page).length > 0)).toBe(true);
+    expect(documentImages(output)).toEqual(before);
   });
 
-  it("keeps a stretched band and a turned picture across the edge, and names the pages", async () => {
-    const source = fixture("trim-kept.pdf");
-    const doc = await openDocumentWith(mupdf, source, LIMITS);
-    try {
-      for (const page of doc.summary.pages) {
-        expect(page.findings).toContain("off-page-picture");
-        expect(page.findings).not.toContain("off-page-content");
-      }
-    } finally {
-      doc.close();
+  it("names a stretched band and a turned picture across the edge, and keeps both byte for byte", async () => {
+    const { source, summary, output, trim } = await openAndRun("trim-kept.pdf");
+    for (const page of summary.pages) {
+      expect(page.findings).toContain("off-page-picture");
+      expect(page.findings).not.toContain("off-page-content");
     }
-
-    const { output, trim } = await redactDocumentWith(mupdf, source, []);
+    expect(isPartly(summary)).toBe(true);
     expect(trim).toEqual([
-      { removed: false, picturesKept: true, pixelMode: false },
-      { removed: false, picturesKept: true, pixelMode: false },
+      { removed: false, pictureOutside: true },
+      { removed: false, pictureOutside: true },
     ]);
-    expect(outsideInk(output, 0).outside).toBeGreaterThan(0);
-    expect(outsideInk(output, 1).outside).toBeGreaterThan(0);
+    expect(documentImages(output)).toEqual(documentImages(source));
+  });
+
+  it("does not name a scan a quarter of a point past a rounded A4 page", async () => {
+    const { summary, trim } = await openAndRun("trim-edge.pdf");
+    expect(summary.pages[0]).toEqual({ findings: ["machine-read-text"] });
+    expect(trim[0]).toEqual(UNTOUCHED);
+  });
+
+  it("names a picture across the edge and removes an address below it, touching only the text", async () => {
+    const { source, summary, output, trim } = await openAndRun("trim-edge.pdf");
+    expect(summary.pages[1].findings).toEqual(
+      expect.arrayContaining(["off-page-picture", "off-page-content"]),
+    );
+    expect(trim[1]).toEqual({ removed: true, pictureOutside: true });
+
+    expect(unclipped(source, 1)).toContain(TRIM_EDGE.belowCrop);
+    expect(unclipped(output, 1)).not.toContain(TRIM_EDGE.belowCrop);
+    expect(documentImages(output)).toEqual(documentImages(source));
+  });
+
+  it("does not count an image drawn only as a soft mask's content", async () => {
+    const { summary, trim } = await openAndRun("trim-edge.pdf");
+    expect(summary.pages[2]).toEqual({ findings: [] });
+    expect(trim[2]).toEqual(UNTOUCHED);
   });
 });
 
@@ -535,7 +551,7 @@ describe("the trim's proof", () => {
 });
 
 /** AC-17: the self check sees a trim that did nothing, whatever is ticked. */
-describe("the self check's outside rules", () => {
+describe("the self check's outside rule", () => {
   const skipped: Pipeline = Object.freeze({
     ...PIPELINE,
     trim: async (_mupdf: unknown, pdf: PDFDocument) =>
@@ -552,24 +568,6 @@ describe("the self check's outside rules", () => {
       const targets = ticked ? findTargets(source, 0, TRIM_TEXT.visibleEmail) : [];
       await expect(
         redactDocumentWith(mupdf, source, targets, {}, skipped),
-      ).rejects.toEqual(new EngineFailure("redaction-incomplete"));
-    },
-  );
-
-  it.each([0, 1])(
-    "refuses ink left outside on page %i of a page claimed as blanked in pixel mode",
-    async (claimed) => {
-      const pretends: Pipeline = Object.freeze({
-        ...PIPELINE,
-        trim: async (_mupdf: unknown, pdf: PDFDocument) =>
-          Array.from({ length: pdf.countPages() }, (_, index) =>
-            index === claimed
-              ? { removed: true, picturesKept: false, pixelMode: true }
-              : UNTOUCHED,
-          ),
-      });
-      await expect(
-        redactDocumentWith(mupdf, fixture("trim-scan.pdf"), [], {}, pretends),
       ).rejects.toEqual(new EngineFailure("redaction-incomplete"));
     },
   );

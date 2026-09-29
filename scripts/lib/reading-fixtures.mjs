@@ -1,6 +1,6 @@
 /**
- * The fixtures for reading pages. Spec 0006, *Build plan*, tasks 7, 11, 14
- * and 18.
+ * The fixtures for reading pages. Spec 0006, *Build plan*, tasks 7, 11, 14,
+ * 18, 19 and 20.
  *
  * Written object by object like the redaction matrix, from the same page
  * builders, so a reviewer can read exactly what each page draws. None is made
@@ -766,8 +766,8 @@ export function trimText() {
 
 /**
  * A scan as a picture at `ppi` pixels per inch over `width` by `height`
- * points: grey, with dark bands across it, margins included, so pixels
- * blanked outside a crop can be told from pixels kept.
+ * points: grey, with dark bands across it, margins included, so its margins
+ * hold ink a crop hides.
  */
 function bandedScan(add, width, height, ppi) {
   const columns = Math.round((width * ppi) / 72);
@@ -790,10 +790,10 @@ const TYPED =
   line("F1", 12, 72, 684, "They keep it a page of text rather than a scan.");
 
 /**
- * Spec 0006, AC-15 and AC-17. Page 1: an upright scan at 150 pixels per inch
- * over the whole media box, cropped by half an inch on every side, so its
- * margins lie outside the visible area. Page 2: a picture placed wholly
- * outside the page, left of the media box.
+ * Spec 0006, AC-15. Page 1: an upright scan at 150 pixels per inch over the
+ * whole media box, cropped by half an inch on every side, so its margins lie
+ * outside the visible area. Page 2: a picture placed wholly outside the page,
+ * left of the media box. Both are kept whole and named.
  */
 export function trimScan() {
   return document(({ add }) => {
@@ -813,7 +813,12 @@ export function trimScan() {
   });
 }
 
-/** A 4 by 4 pixel picture of four colour bands, to stretch into a bleed. */
+/**
+ * A 4 by 4 pixel picture of four colour bands, to stretch into a bleed.
+ * Compressed, as every producer stores a picture: the engine's write
+ * (`compress`, spec 0004) deflates a stream stored with no filter on every run,
+ * cropped or not, so a raw one could not show that the trim rewrote nothing.
+ */
 function colourBand(add) {
   const pixels = new Uint8Array(4 * 4 * 3);
   const colours = [
@@ -830,18 +835,17 @@ function colourBand(add) {
   return add(
     stream(
       "/Type /XObject /Subtype /Image /Width 4 /Height 4 /ColorSpace /DeviceRGB " +
-        "/BitsPerComponent 8",
-      pixels,
+        "/BitsPerComponent 8 /Filter /FlateDecode",
+      deflateSync(pixels),
     ),
   );
 }
 
 /**
- * Spec 0006, AC-15. Pictures across the edge that would be blanked far into
- * the visible area, so every picture on the page is kept and the page is
- * named instead. Page 1: a 4 by 4 pixel band stretched 100 pt tall across the
- * crop's top edge into the bleed. Page 2: a picture turned 30 degrees across
- * the crop's right edge.
+ * Spec 0006, AC-15. Pictures across the edge, each kept whole and its page
+ * named. Page 1: a 4 by 4 pixel band stretched 100 pt tall across the crop's
+ * top edge into the bleed. Page 2: a picture turned 30 degrees across the
+ * crop's right edge.
  */
 export function trimKept() {
   return document(({ add }) => {
@@ -866,6 +870,152 @@ export function trimKept() {
         content:
           `q ${num(size * cos)} ${num(size * sin)} ${num(-size * sin)} ${num(size * cos)} ` +
           `${num(tx)} ${num(ty)} cm /Photo Do Q\n${TYPED}`,
+      },
+    ];
+  });
+}
+
+/**
+ * Spec 0006, AC-29 (task 21). A US Letter scan of `pages` pages, built by the
+ * cost test and the heap measurement and never committed. Each page draws a
+ * JPEG over the whole page, taken from `jpegs` in turn (one shared by every
+ * page, or one each), with a text layer over it so the document opens, and a
+ * header line the scanner stamped in the top margin. `cropped` crops half an
+ * inch off every side, which puts the header, and each scan's margins, outside
+ * the visible area, so every page is trimmed and every page's picture reaches
+ * outside.
+ */
+export function scanPages({ jpegs, columns, rows, colour = false, pages, cropped }) {
+  return document(({ add }) => {
+    const glyphless = glyphlessFont(add);
+    const images = jpegs.map((jpeg) =>
+      add(
+        stream(
+          `/Type /XObject /Subtype /Image /Width ${columns} /Height ${rows} ` +
+            `/ColorSpace /Device${colour ? "RGB" : "Gray"} /BitsPerComponent 8 /Filter /DCTDecode`,
+          jpeg,
+        ),
+      ),
+    );
+    return Array.from({ length: pages }, (_, index) => ({
+      keys: cropped ? "/CropBox [36 36 576 756]" : "",
+      resources:
+        `/XObject << /Scan ${images[index % images.length]} 0 R >> ` +
+        `/Font << /Fg ${glyphless} 0 R >>`,
+      content:
+        fullPage("Scan") +
+        invisibleLine(9, 60, 770, `Scanned on the office copier, page ${index + 1}`) +
+        ocrLayer(),
+    }));
+  });
+}
+
+/** What `trim-edge.pdf` holds, for the tests to name. */
+export const TRIM_EDGE = Object.freeze({ belowCrop: "under.the.crop@example.com" });
+
+/**
+ * Spec 0006, AC-15, the edges of the picture rule (task 20). Page 1: an A4
+ * scan, 595.28 by 841.89 pt, on a media box rounded to 595 by 842, so it sits
+ * 0.28 pt past the right edge with no crop at all, with its text layer: no
+ * finding but the machine read note. Page 2: a picture across the crop's
+ * bottom edge beside an address wholly below it: both findings, and the
+ * address goes. Page 3: an image drawn only as a soft mask's content,
+ * reaching far past the page, which nobody sees as paint: no finding.
+ */
+export function trimEdge() {
+  return document(({ add }) => {
+    const scan = scanImage(add);
+    const photo = scanImage(add, { columns: 40, rows: 40 });
+    const glyphless = glyphlessFont(add);
+    const mask = add(
+      stream(
+        "/Type /XObject /Subtype /Form /BBox [-200 -200 812 992] " +
+          "/Group << /S /Transparency /CS /DeviceGray >> " +
+          `/Resources << /XObject << /Photo ${photo} 0 R >> >>`,
+        "q 1012 0 0 1192 -200 -200 cm /Photo Do Q\n",
+      ),
+    );
+    return [
+      {
+        mediaBox: "[0 0 595 842]",
+        resources: `/XObject << /Scan ${scan} 0 R >> /Font << /Fg ${glyphless} 0 R >>`,
+        content: `q 595.28 0 0 841.89 0 0 cm /Scan Do Q\n${ocrLayer()}`,
+      },
+      {
+        keys: "/CropBox [0 396 612 792]",
+        resources: `/XObject << /Photo ${photo} 0 R >>`,
+        content:
+          `q 200 0 0 150 300 330 cm /Photo Do Q\n${TYPED}` +
+          line("F1", 12, 72, 200, `Below the crop: ${TRIM_EDGE.belowCrop}`),
+      },
+      {
+        resources:
+          "/ExtGState << /Masked << /Type /ExtGState " +
+          `/SMask << /Type /Mask /S /Luminosity /G ${mask} 0 R >> >> >>`,
+        content: `q /Masked gs 0.2 0.2 0.2 rg 72 400 300 100 re f Q\n${TYPED}`,
+      },
+    ];
+  });
+}
+
+/** Where `trim-ocr.pdf` is cropped: through every line on the left, and through line 1 at the top. */
+export const TRIM_OCR = Object.freeze({ cropLeft: 80, cropTop: 746 });
+
+/**
+ * A page's text layer the way Tesseract writes one (its `pdfrenderer.cpp`):
+ * one text object for the whole page, invisible (`3 Tr`), the first word
+ * placed with `Tm` and each after it with `Td` from the word before, and every
+ * word with a `Tf` and a `Tz` of its own, the stretch that fits the word to
+ * its box. The size steps by half a point from word to word, so no `Tf` is
+ * ever redundant: the worst case for spec 0004's quirk, where a `Tf` or a `Tz`
+ * between removed glyphs and the next kept one moves the text after them.
+ */
+function tesseractLayer() {
+  let layer = "BT 3 Tr ";
+  let previous = null;
+  let count = 0;
+  for (let row = 0; row < 20; row += 1) {
+    const baseline = 740 - row * 32;
+    const words =
+      `Line ${row + 1} of the statement reads as words recognised from the scan`.split(
+        " ",
+      );
+    let x = 60;
+    words.forEach((word, at) => {
+      const size = 11.5 + (count % 3) * 0.5;
+      count += 1;
+      const width = word.length * 0.55 * size;
+      const last = at === words.length - 1;
+      const hex = [...(last ? word : `${word} `)]
+        .map((letter) => letter.codePointAt(0).toString(16).padStart(4, "0"))
+        .join("");
+      layer +=
+        previous === null
+          ? `1 0 0 1 ${num(x)} ${baseline} Tm `
+          : `${num(x - previous[0])} ${baseline - previous[1]} Td `;
+      layer += `/Fg ${size} Tf ${num((100 * width) / (word.length * 0.5 * size))} Tz [ <${hex}> ] TJ\n`;
+      previous = [x, baseline];
+      x += width + 0.35 * size;
+    });
+  }
+  return `${layer}ET\n`;
+}
+
+/**
+ * Spec 0006, AC-14 to AC-16, the cropped OCR scan (task 19). A full page scan
+ * with Tesseract's text layer over it, cropped on the left through the first
+ * word or two of every line, and at the top through line 1, whose every glyph
+ * straddles the edge. It must open named, never refused with `edge-text`.
+ */
+export function trimOcr() {
+  return document(({ add }) => {
+    const scan = scanImage(add);
+    const glyphless = glyphlessFont(add);
+    return [
+      {
+        keys: `/CropBox [${TRIM_OCR.cropLeft} 0 612 ${TRIM_OCR.cropTop}]`,
+        resources: `/XObject << /Scan ${scan} 0 R >> /Font << /Fg ${glyphless} 0 R >>`,
+        content: fullPage("Scan") + tesseractLayer(),
       },
     ];
   });
