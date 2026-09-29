@@ -2,7 +2,7 @@
 
 **Date**: 2026-09-28
 **Updated**: 2026-09-29, after the build sent back three questions. Pictures that reach outside the visible area are now kept whole and named, never blanked, because blanking a real cropped scan at the cap took a run past 800 MB and grew the file about five times (AC-15, AC-29). Text a clip hides wholly is named as hidden text (AC-7), and a page with text under an empty clip is refused at open (AC-11). Wording brought in line with the build: which callback objects are destroyed, MuPDF's own crop clip, British page lists, the outcome card's place, and the measured constants. The amends below are applied to specs 0002 to 0005. Later the same day, after slice 4b was built: its heap figures recorded (a cropped scan costs what the same scan uncropped costs), and four wordings brought in line with the build, with no behaviour change: whitespace under both clip rules (AC-7), only path clips as empty clips (AC-11), and what "the same bytes" means for a picture (AC-15, AC-29).
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 

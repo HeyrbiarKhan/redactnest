@@ -17,7 +17,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 4 | Design system & UI foundation | Foundation | done |
 | 5 | Redaction engine | Release 1 | done |
 | 6 | Pattern detection | Release 1 | done |
-| 7 | Scanned page detection & warnings | Release 1 | in-progress |
+| 7 | Scanned page detection & warnings | Release 1 | done |
 | 8 | Redact flow | Release 1 | planned |
 | 9 | Privacy policy & terms | Release 2 | planned |
 | 10 | Billing & paid plan | Release 2 | planned |
@@ -115,7 +115,7 @@ spec [0005](../specs/0005-pattern-detection/index.md) · code in `src/detect`, `
 - [x] Verify it: `/check verify pattern detection`
 - [x] Test it: `/test pattern detection`
 
-### 7. Scanned page detection & warnings · in-progress · GA
+### 7. Scanned page detection & warnings · done · GA
 Detect per page whether a text layer exists, and never let somebody leave with a file that looks redacted and is not. Besides scanned pages, that covers three kinds of text a viewer never shows: text under a box drawn over it (a fake redaction already in the source), white or otherwise invisible text that is not OCR, and text outside the crop box, which is now removed in every run.
 **Done when:** pages with no text layer are identified at upload and named plainly, the warning is repeated at download, and a document whose every page lacks a text layer produces no file at all, with a clear explanation of why instead. Text under a box and white or invisible text are named the same way, and text outside the crop box never reaches the output.
 spec [0006](../specs/0006-scanned-page-detection-warnings/index.md) · code in `src/engine` (`device.ts`, `inspect.ts`, `trim.ts`, `open.ts`, `redact.ts`, `passes.ts`, `self-check.ts`, `pixels.ts`, `find.ts`, `characters.ts`), `src/worker` (`protocol.ts`, `engine.worker.ts`), `src/lib` (`page-findings.ts`, `session.ts`, `detectors.ts`), `src/app/tool` (`tool-client.tsx`, `review-checklist.tsx`), `src/ui/checklist-item.tsx`, `scripts/lib/reading-fixtures.mjs`
