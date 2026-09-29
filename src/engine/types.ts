@@ -27,6 +27,13 @@ export interface PageInspection {
    * never leave the engine, and are dropped with the review document (INV-8).
    */
   readonly concealed: readonly ConcealedGlyph[];
+  /**
+   * The page draws a glyph, in any render mode, while the clip in force holds
+   * no area (AC-11). MuPDF's `sanitize` write drops that text, so every run on
+   * the file would fail its self check; the open refuses it instead, after the
+   * `no-readable-text` check.
+   */
+  readonly emptyClip: boolean;
 }
 
 /**

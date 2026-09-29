@@ -148,9 +148,18 @@ export interface DrawState {
   /**
    * The bounds of the clip in force: the intersection of the bounds of every
    * open clip and soft mask that has finite bounds, leaving out MuPDF's own
-   * clip to a cropped page's crop box. Null when none is left.
+   * clip to a cropped page's crop box. Null when none is left. When the clip
+   * holds no area it is a rect that holds no point, so anything cut to it is
+   * gone, and `emptyClip` says so.
    */
   readonly clip: Rect | null;
+  /**
+   * The clip in force holds no area (spec 0006, AC-11): an open clip's bounds
+   * have no width or no height, or are inverted, as MuPDF reports an empty
+   * path's, or the open clips do not meet. MuPDF's `sanitize` write drops text
+   * drawn under such a clip (measured, and pinned in `tests/unit/reading.test.ts`).
+   */
+  readonly emptyClip: boolean;
   /** A soft mask is in force (spec 0006, AC-6). */
   readonly softMasked: boolean;
   /**
@@ -219,6 +228,33 @@ function isUnbounded(rect: MuRect | Rect): boolean {
   );
 }
 
+/**
+ * Does this rect hold no area? Spec 0006, AC-11: no width, no height, or
+ * inverted, however far out, since MuPDF writes its empty rect inverted at
+ * about 2^31 (an empty path's bounds, measured). Bounds that are not numbers
+ * say nothing, so they are not empty.
+ */
+function holdsNoArea(rect: MuRect | Rect): boolean {
+  return rect.every(Number.isFinite) && (rect[0] >= rect[2] || rect[1] >= rect[3]);
+}
+
+/**
+ * A clip's own bounds, as the clip in force reads them: null when they say
+ * nothing (not numbers, or MuPDF's infinite rect in the right order), and
+ * flagged `empty` when they hold no area. An inverted rect is empty, never
+ * unbounded (AC-11).
+ */
+function clipBounds(rect: MuRect | Rect | null): OpenBounds {
+  if (rect === null) return { bounds: null, empty: false };
+  if (holdsNoArea(rect)) return { bounds: null, empty: true };
+  return { bounds: isUnbounded(rect) ? null : toRect(rect), empty: false };
+}
+
+interface OpenBounds {
+  readonly bounds: Rect | null;
+  readonly empty: boolean;
+}
+
 /** How a walk is asked to run. */
 export interface WalkOptions {
   /**
@@ -233,6 +269,15 @@ export interface WalkOptions {
 interface OpenClip {
   readonly bounds: Rect | null;
   readonly mask: boolean;
+  /**
+   * A path clip whose own bounds hold no area (AC-11). Only path clips are
+   * judged: a zero area rectangle, a zero width one and an empty path are the
+   * cases pinned as both reported by the drawing pass and dropped by MuPDF's
+   * `sanitize` write, so the refusal covers exactly those.
+   */
+  readonly empty: boolean;
+  /** Opened by `clipPath`, so it counts toward `emptyClip`. */
+  readonly path: boolean;
   /**
    * MuPDF's own clip to the crop box, which it opens before a cropped page's
    * content. Not a clip the document draws, so never part of the clip in
@@ -294,12 +339,30 @@ export function walkDrawing(
     // A clip with no finite bounds says nothing a bound can, so it is left out
     // of the intersection rather than treated as clipping everything away.
     let clip: Rect | null = null;
+    let missed = false;
+    // The path clips alone, which decide whether the clip holds no area.
+    let paths: Rect | null = null;
+    let emptyClip = false;
     for (const open of clips) {
-      if (open.bounds === null || open.page) continue;
-      clip = clip === null ? open.bounds : (intersect(clip, open.bounds) ?? EMPTY);
+      if (open.page) continue;
+      if (open.empty) {
+        emptyClip = true;
+        continue;
+      }
+      if (open.bounds === null) continue;
+      const met: Rect | null = clip === null ? open.bounds : intersect(clip, open.bounds);
+      if (met === null) missed = true;
+      else clip = met;
+      if (open.path) {
+        const shared: Rect | null =
+          paths === null ? open.bounds : intersect(paths, open.bounds);
+        if (shared === null || holdsNoArea(shared)) emptyClip = true;
+        else paths = shared;
+      }
     }
     return {
-      clip,
+      clip: missed || emptyClip ? EMPTY : clip,
+      emptyClip,
       softMasked: clips.some((open) => open.mask),
       restricted: groups.some(Boolean),
       defining: defining > 0,
@@ -344,7 +407,7 @@ export function walkDrawing(
     const bounds = transformRectOrNull(shown.getBounds(stroke as StrokeState, ctm));
     emit({ kind: "text", mode, glyphs, paint, bounds });
     if (mode === "clip" || mode === "clip-stroke") {
-      clips.push({ bounds, mask: false, page: false });
+      clips.push({ bounds, mask: false, page: false, empty: false, path: false });
     }
   };
 
@@ -380,12 +443,12 @@ export function walkDrawing(
     clipPath(path, _evenOdd, ctm) {
       guard(
         () => {
-          const bounds = transformRectOrNull(
+          const { bounds, empty } = clipBounds(
             path.getBounds(null as unknown as StrokeState, ctm),
           );
           const page = isPageClip(bounds, visible, drawn, clips.length);
           emit({ kind: "clip", bounds });
-          clips.push({ bounds, mask: false, page });
+          clips.push({ bounds, mask: false, page, empty, path: true });
         },
         () => free(path),
       );
@@ -395,7 +458,7 @@ export function walkDrawing(
         () => {
           const bounds = transformRectOrNull(path.getBounds(stroke, ctm));
           emit({ kind: "clip", bounds });
-          clips.push({ bounds, mask: false, page: false });
+          clips.push({ bounds, mask: false, page: false, empty: false, path: false });
         },
         () => free(path, stroke),
       );
@@ -478,7 +541,7 @@ export function walkDrawing(
         () => {
           const bounds = transformRectOrNull(UNIT_SQUARE, ctm);
           emit({ kind: "clip", bounds });
-          clips.push({ bounds, mask: false, page: false });
+          clips.push({ bounds, mask: false, page: false, empty: false, path: false });
         },
         () => free(image),
       );
@@ -498,7 +561,13 @@ export function walkDrawing(
           emit({ kind: "begin-mask" });
           defining += 1;
           // In force from its end until the matching pop, like a clip.
-          clips.push({ bounds: transformRectOrNull(bbox), mask: true, page: false });
+          clips.push({
+            bounds: transformRectOrNull(bbox),
+            mask: true,
+            page: false,
+            empty: false,
+            path: false,
+          });
         },
         () => free(colorspace),
       );
@@ -566,7 +635,7 @@ function toRect(rect: readonly number[]): Rect {
   return [rect[0], rect[1], rect[2], rect[3]];
 }
 
-/** A rect that holds nothing, for a clip whose parts do not meet. */
+/** A rect that holds nothing, for a clip that holds no area or whose parts do not meet. */
 const EMPTY: Rect = [0, 0, -1, -1];
 
 const UNIT_SQUARE: Rect = [0, 0, 1, 1];

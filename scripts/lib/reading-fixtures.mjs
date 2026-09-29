@@ -545,6 +545,8 @@ export const CONCEALED = Object.freeze({
   coveredEmail: "board.minutes@example.com",
   coveredPhone: "020 7946 0321",
   hiddenEmail: "white.ink@example.com",
+  clippedEmail: "clipped.away@example.com",
+  boxedEmail: "outside.the.box@example.com",
 });
 
 /**
@@ -651,11 +653,30 @@ export const READ_HIDDEN = Object.freeze([
   { name: "pale text in a spot colour (not judged)", findings: [] },
   { name: "a scan with its text layer over it", findings: ["machine-read-text"] },
   { name: "a slug line outside the crop box", findings: null },
+  { name: "an email a rectangle clip hides wholly", findings: ["hidden-text"] },
+  { name: "an email a form's /BBox hides wholly", findings: ["hidden-text"] },
+  {
+    name: "invisible text a clip hides wholly, with no image",
+    findings: ["hidden-text"],
+  },
+  { name: "text drawn wholly inside its clip", findings: [] },
+  { name: "trailing spaces drawn past a cell's clip", findings: [] },
 ]);
+
+/**
+ * Where the cell's clip ends on the trailing spaces page: half a point past
+ * the last letter of `cell text`, so every letter lies inside it and the
+ * spaces after them run past it.
+ */
+function cellEdge() {
+  const text = "cell text";
+  const starts = glyphStarts(text, 12, 72);
+  return starts[text.length - 1] + (HELVETICA_WIDTHS.t * 12) / 1000 + 0.5;
+}
 
 /** Spec 0006, AC-7. Text a viewer does not show, and the near misses. */
 export function readHidden() {
-  return document(({ add }) => {
+  return document(({ add, fonts }) => {
     const scan = scanImage(add, { columns: 60, rows: 18 });
     const glyphless = glyphlessFont(add);
     const tint = add(
@@ -666,6 +687,14 @@ export function readHidden() {
         "/Function << /FunctionType 2 /Domain [0 1] /C0 [0.8 0.1 0.1] /C1 [0.1 0.1 0.8] /N 1 >> >>",
     );
     const visible = line("F1", 12, 72, 740, "This page also holds visible words.");
+    // A form whose /BBox is a 10 pt square at the page's corner, drawing an
+    // address far outside it (AC-7's clipped away rule, task 22).
+    const boxed = add(
+      stream(
+        `/Type /XObject /Subtype /Form /BBox [0 0 10 10] /Resources << /Font << ${fonts} >> >>`,
+        line("F1", 12, 72, 700, `Write to ${CONCEALED.boxedEmail}`),
+      ),
+    );
 
     return [
       {
@@ -713,6 +742,82 @@ export function readHidden() {
       {
         keys: "/CropBox [0 100 612 792]",
         content: `${visible}${line("F1", 8, 72, 60, "Slug: proof 3, printed in the bleed")}`,
+      },
+      {
+        // A 10 pt clip far from the address, which it hides wholly.
+        content:
+          `${visible}q 400 100 10 10 re W n ` +
+          `${line("F1", 12, 72, 700, `Write to ${CONCEALED.clippedEmail}`)}Q\n`,
+      },
+      {
+        resources: `/XObject << /Boxed ${boxed} 0 R >>`,
+        content: `${visible}q /Boxed Do Q\n`,
+      },
+      {
+        content:
+          `${visible}q 400 100 10 10 re W n ` +
+          "BT 3 Tr /F1 12 Tf 72 700 Td (Invisible words behind a clip) Tj ET Q\n",
+      },
+      {
+        content:
+          `${visible}q 60 690 400 30 re W n ` +
+          `${line("F1", 12, 72, 700, "Words drawn wholly inside their clip")}Q\n`,
+      },
+      {
+        content:
+          `${visible}q 72 690 ${(cellEdge() - 72).toFixed(3)} 30 re W n ` +
+          `${line("F1", 12, 72, 700, "cell text    ")}Q\n`,
+      },
+    ];
+  });
+}
+
+/** The address each empty clip fixture draws where nothing can show it. */
+export const EMPTY_CLIP_EMAIL = "under.nothing@example.com";
+
+/**
+ * The clips that hold no area, one per `read-empty-clip-N.pdf` (AC-11, task
+ * 23): a zero area rectangle, a zero width one over the address, two nested
+ * rectangles that do not meet, and a clip whose path is empty.
+ */
+export const EMPTY_CLIPS = Object.freeze([
+  "0 0 0 0 re W n",
+  "72 690 0 30 re W n",
+  "72 690 100 30 re W n 300 690 100 30 re W n",
+  "W n",
+]);
+
+/**
+ * Spec 0006, AC-11. One file per empty clip, since an open stops at the first
+ * page it refuses: a typed line a viewer can read, and the address under the
+ * clip.
+ */
+export function readEmptyClip() {
+  return EMPTY_CLIPS.map((clip) =>
+    document(() => [
+      {
+        content:
+          line("F1", 12, 72, 740, "This page holds typed words a viewer can read.") +
+          `q ${clip} ${line("F1", 12, 72, 700, `Write to ${EMPTY_CLIP_EMAIL}`)}Q\n`,
+      },
+    ]),
+  );
+}
+
+/**
+ * Spec 0006, AC-10 before AC-11: a scan with nothing readable that also draws
+ * the address under a zero area clip. Refused as `no-readable-text`, whose
+ * advice helps, not as `unsupported`.
+ */
+export function readEmptyClipScan() {
+  return document(({ add }) => {
+    const scan = scanImage(add);
+    return [
+      {
+        resources: `/XObject << /Scan ${scan} 0 R >>`,
+        content:
+          fullPage("Scan") +
+          `q ${EMPTY_CLIPS[0]} ${line("F1", 12, 72, 700, `Write to ${EMPTY_CLIP_EMAIL}`)}Q\n`,
       },
     ];
   });

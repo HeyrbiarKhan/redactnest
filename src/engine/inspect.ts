@@ -186,8 +186,8 @@ interface DrawingReading {
   readonly footprints: readonly Footprint[];
   /** A path or shading whose colour contrasts with white paper, or cannot be judged. */
   readonly contrasting: boolean;
-  /** The origins of invisible glyphs (render mode 3), in drawing order. */
-  readonly invisible: readonly Point[];
+  /** Invisible glyphs (render mode 3), in drawing order. */
+  readonly invisible: readonly Placed[];
   /** Every fill and stroke of a glyph, in drawing order (AC-7). */
   readonly paints: readonly GlyphPaint[];
   /** Every opaque cover, in drawing order (AC-6). */
@@ -196,19 +196,30 @@ interface DrawingReading {
   readonly backdrops: readonly Backdrop[];
   /** Glyphs used only as a clip that nothing was painted inside (AC-7). */
   readonly clipOnly: readonly Point[];
+  /** A glyph, in any render mode, drawn while the clip in force holds no area (AC-11). */
+  readonly emptyClip: boolean;
+}
+
+/**
+ * Where a glyph was drawn and what clipped it: all the clipped away rule reads
+ * of a glyph the ordinary read dropped (AC-7).
+ */
+interface Placed {
+  readonly origin: Point;
+  /** The code point MuPDF maps it to, so whitespace can be skipped. */
+  readonly unicode: number;
+  /** The bounds of the clip in force as it was drawn. */
+  readonly clip: Rect | null;
 }
 
 /** One fill or one stroke of a glyph, as the hidden rules read it (AC-7). */
-interface GlyphPaint {
+interface GlyphPaint extends Placed {
   /** Its place in drawing order. */
   readonly order: number;
-  readonly origin: Point;
   readonly em: number;
   readonly paint: Paint;
   /** The paint's relative luminance, `NaN` when its colour is not judged. */
   readonly luminance: number;
-  /** The bounds of the clip in force as it was drawn. */
-  readonly clip: Rect | null;
   /**
    * What it is drawn in is what shows: not under a soft mask, not in a group
    * that is translucent or blends, not in a tile, not a mask's own content.
@@ -315,7 +326,8 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
     const centre = glyphCentre(text, origin);
     return drawing.footprints.some((footprint) => holds(footprint, centre));
   };
-  if (drawing.invisible.some(overImage)) found.add("machine-read-text");
+  if (drawing.invisible.some(({ origin }) => overImage(origin)))
+    found.add("machine-read-text");
 
   // AC-6 and AC-7: text a viewer never shows.
   const concealed = concealedGlyphs(text, drawing, area, overImage);
@@ -326,6 +338,7 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
     findings: PAGE_FINDINGS.filter((finding) => found.has(finding)),
     readable: text.readableCount > 0,
     concealed,
+    emptyClip: drawing.emptyClip,
   };
 }
 
@@ -341,10 +354,11 @@ interface DrawnGlyph {
 /**
  * Which glyphs a viewer never sees, and why. Spec 0006, AC-6, AC-7 and AC-9.
  *
- * Only a glyph that meets an extracted character is judged, with that
- * character's quad as its box, and only when the box's centre lies inside the
- * visible area: a glyph outside it is the trim's business, not a warning. A
- * machine read glyph is never judged (AC-5).
+ * A glyph that meets an extracted character is judged with that character's
+ * quad as its box, and only when the box's centre lies inside the visible
+ * area: a glyph outside it is the trim's business, not a warning. A glyph the
+ * ordinary read dropped has no box, so it is judged by AC-7's clipped away
+ * rule alone (`clippedAway`). A machine read glyph is never judged (AC-5).
  *
  * Covered comes first (AC-6): a filled or stroked glyph with at least
  * `COVER_MIN_OVERLAP` of its box under one opaque cover drawn after its last
@@ -367,21 +381,27 @@ function concealedGlyphs(
   const firstBackdrop =
     drawing.backdrops.length === 0 ? Infinity : drawing.backdrops[0].order;
 
-  /** The glyph's box and its centre, when it is judged at all. */
-  const judged = (origin: Point): { box: readonly Point[]; centre: Point } | null => {
+  /** The glyph's box and its centre, or null when the ordinary read dropped it. */
+  const read = (origin: Point): { box: readonly Point[]; centre: Point } | null => {
     const character = text.characterAt(origin);
     if (character === null) return null;
-    const centre = quadCentre(character.quad);
-    return inRect(area, centre) ? { box: outline(character.quad), centre } : null;
+    return { box: outline(character.quad), centre: quadCentre(character.quad) };
   };
 
   for (const glyph of glyphs.all) {
     // Most glyphs on most pages can be neither covered nor hidden, and are
-    // settled without looking up their character (AC-29's budget).
+    // settled without looking up their character (AC-29's budget). A glyph a
+    // clip hides wholly is never passed over: its clip's edge is in reach.
     if (!mayBeConcealed(glyph, lastCover, firstBackdrop)) continue;
 
-    const seen = judged(glyph.origin);
-    if (seen === null) continue;
+    const seen = read(glyph.origin);
+    if (seen === null) {
+      if (clippedAway(glyph.paints, area)) {
+        concealed.push({ origin: glyph.origin, kind: "hidden" });
+      }
+      continue;
+    }
+    if (!inRect(area, seen.centre)) continue;
 
     const last = glyph.lastOrder;
     if (last < lastCover && isCovered(seen.box, last, drawing.covers)) {
@@ -394,20 +414,52 @@ function concealedGlyphs(
   }
 
   // Invisible text with no image under or over it (AC-7), never machine read.
-  for (const origin of drawing.invisible) {
-    if (overImage(origin) || judged(origin) === null) continue;
-    concealed.push({ origin, kind: "hidden" });
+  // One the ordinary read dropped is judged by the clipped away rule alone.
+  for (const glyph of drawing.invisible) {
+    if (overImage(glyph.origin)) continue;
+    const seen = read(glyph.origin);
+    if (seen === null ? clippedAway([glyph], area) : inRect(area, seen.centre)) {
+      concealed.push({ origin: glyph.origin, kind: "hidden" });
+    }
   }
 
   // Text used only as a clip, with nothing painted inside it (AC-7). A glyph
   // that is also filled or stroked is judged by its paints above.
   for (const origin of drawing.clipOnly) {
-    if (glyphs.at(origin) !== null || judged(origin) === null) continue;
+    if (glyphs.at(origin) !== null) continue;
+    const seen = read(origin);
+    if (seen === null || !inRect(area, seen.centre)) continue;
     concealed.push({ origin, kind: "hidden" });
   }
 
   return concealed;
 }
+
+/**
+ * AC-7's clipped away rule, for a glyph the ordinary read dropped: it is not
+ * whitespace, its origin lies inside the visible area, and every time it was
+ * drawn, its origin lay outside the bounds of the clip in force. MuPDF's
+ * ordinary read drops a glyph a clip hides wholly (measured 2026-09-29), so
+ * without this, text a clip hides would ship with no word said. Whitespace is
+ * skipped, since extraction does not report every space a producer draws. The
+ * origin stands in for the centre, since there is no box to take one from.
+ */
+function clippedAway(drawn: readonly Placed[], area: Rect): boolean {
+  const [{ origin }] = drawn;
+  return (
+    inRect(area, origin) &&
+    drawn.some(({ unicode }) => !isSpace(unicode)) &&
+    drawn.every(({ clip }) => clip !== null && !inRect(clip, origin))
+  );
+}
+
+/** Is this code point whitespace? Printable ASCII, most of any page, answered without the pattern. */
+function isSpace(code: number): boolean {
+  if (code > 0x20 && code < 0x7f) return false;
+  return WHITESPACE.test(String.fromCodePoint(code));
+}
+
+const WHITESPACE = /^\s$/u;
 
 /**
  * Group paints into glyphs: every fill and stroke drawn at one origin. A
@@ -543,6 +595,10 @@ function boundsOf(points: readonly Point[]): Rect {
  * with its centre outside the bounds of the clip in force, not under
  * `TINY_TEXT_MAX` of em height, and not so close in colour to what is under
  * it that the contrast is below `HIDDEN_CONTRAST_MAX`.
+ *
+ * The clip is not judged for whitespace, as the clipped away rule does not
+ * judge it: a cell's trailing spaces run past its clip as a matter of course,
+ * and hide nothing.
  */
 function shows(
   paint: GlyphPaint,
@@ -551,7 +607,8 @@ function shows(
   drawing: DrawingReading,
 ): boolean {
   if (!(paint.paint.alpha > 0)) return false;
-  if (paint.clip !== null && !inRect(paint.clip, centre)) return false;
+  if (paint.clip !== null && !inRect(paint.clip, centre) && !isSpace(paint.unicode))
+    return false;
   if (!(em >= TINY_TEXT_MAX)) return false;
   return !blendsIn(paint, centre, drawing.backdrops);
 }
@@ -707,11 +764,12 @@ function readDrawing(mupdf: MuPdf, page: PDFPage): DrawingReading {
   let contrasting = false;
   let order = 0;
   const footprints: Footprint[] = [];
-  const invisible: Point[] = [];
+  const invisible: Placed[] = [];
   const paints: GlyphPaint[] = [];
   const covers: Cover[] = [];
   const backdrops: Backdrop[] = [];
   const clipOnly: Point[] = [];
+  let emptyClip = false;
 
   // The clips open as the page draws, mirroring the reader's own stack: a
   // clip of text keeps its glyphs, so its pop can tell whether anything was
@@ -730,8 +788,13 @@ function readDrawing(mupdf: MuPdf, page: PDFPage): DrawingReading {
     switch (drawing.kind) {
       case "text": {
         glyphs += drawing.glyphs.length;
+        if (state.emptyClip && drawing.glyphs.length > 0) emptyClip = true;
         if (drawing.mode === "ignore") {
-          for (const glyph of drawing.glyphs) invisible.push(glyph.origin);
+          // With the clip in force, as a painted glyph's record carries it, for
+          // the clipped away rule (AC-7).
+          for (const { origin, unicode } of drawing.glyphs) {
+            invisible.push({ origin, unicode, clip: state.clip });
+          }
         } else if (drawing.mode === "clip" || drawing.mode === "clip-stroke") {
           open.push({
             glyphs: drawing.glyphs.map(({ origin }) => origin),
@@ -741,10 +804,11 @@ function readDrawing(mupdf: MuPdf, page: PDFPage): DrawingReading {
           paintInside();
           // Once per text object, not once per glyph.
           const luminance = relativeLuminance(drawing.paint);
-          for (const { origin, em } of drawing.glyphs) {
+          for (const { origin, em, unicode } of drawing.glyphs) {
             paints.push({
               order,
               origin,
+              unicode,
               em,
               paint: drawing.paint,
               luminance,
@@ -868,6 +932,7 @@ function readDrawing(mupdf: MuPdf, page: PDFPage): DrawingReading {
     covers,
     backdrops,
     clipOnly,
+    emptyClip,
   };
 }
 

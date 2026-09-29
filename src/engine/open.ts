@@ -84,8 +84,9 @@ export async function openDocument(
  * costs a scan of at most 1024 bytes.
  *
  * The order is fixed (spec 0006, *State transitions*): door, open, password,
- * page cap, layers, prepare, inspect, the refusal, trim. Detection follows,
- * when the worker asks the handle for its matches, on the trimmed page.
+ * page cap, layers, prepare, inspect, the refusal, the empty clip refusal,
+ * trim. Detection follows, when the worker asks the handle for its matches,
+ * on the trimmed page.
  */
 export async function openDocumentWith(
   mupdf: MuPdf,
@@ -148,6 +149,15 @@ export async function openDocumentWith(
     // one and no second check is needed in the worker.
     if (inspections.every(readsAsNothing)) {
       throw new EngineFailure("no-readable-text");
+    }
+
+    // AC-11: text drawn under a clip that holds no area. MuPDF's `sanitize`
+    // write drops it, so every run on this file would fail its self check on
+    // text nobody ticked; the visitor hears it now, before reviewing. After
+    // the check above, so a document with nothing readable keeps that
+    // refusal and its advice.
+    if (inspections.some(({ emptyClip }) => emptyClip)) {
+      throw new EngineFailure("unsupported");
     }
 
     // AC-14: what lies outside each page's visible area goes from the review

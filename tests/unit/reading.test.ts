@@ -14,8 +14,10 @@ import {
   silenceEngineLog,
   walkCharacters,
   walkDrawing,
+  WRITE_OPTIONS,
   type Drawing,
   type PageInspection,
+  type Rect,
 } from "@/engine";
 
 import { showsCrookedLine } from "@/lib/page-findings";
@@ -24,6 +26,8 @@ import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
 import {
   CONCEALED,
   CROOKED_EMAILS,
+  EMPTY_CLIP_EMAIL,
+  EMPTY_CLIPS,
   MIXED_EMAIL,
   READ_PAGES,
   READ_COVERED,
@@ -32,7 +36,7 @@ import {
   STAMP_EMAIL,
 } from "../../scripts/lib/reading-fixtures.mjs";
 import { fixture } from "../support/bytes";
-import { documentText, LIMITS, mupdf } from "../support/mupdf";
+import { documentText, LIMITS, mupdf, pageText } from "../support/mupdf";
 
 /**
  * Reading every page before review, driven with the real MuPDF in Node. Spec
@@ -67,6 +71,18 @@ async function find(name: string) {
     return await doc.findMatches({ contextChars: 40 });
   } finally {
     doc.close();
+  }
+}
+
+/** One page of a file, read with `clip=no`, as the self check reads it. */
+function unclippedText(bytes: ArrayBuffer, index: number): string {
+  const doc = mupdf.Document.openDocument(bytes, "application/pdf");
+  try {
+    const pdf = doc.asPDF();
+    if (!pdf) throw new Error("expected a PDF document");
+    return pageText(pdf, index, "clip=no");
+  } finally {
+    doc.destroy();
   }
 }
 
@@ -114,10 +130,11 @@ describe("the findings of each page", () => {
     }
   });
 
-  it("carries closed findings, a flag and concealed glyphs, and only the findings reach the summary (INV-1)", async () => {
+  it("carries closed findings, two flags and concealed glyphs, and only the findings reach the summary (INV-1)", async () => {
     for (const inspection of await inspect("read-pages.pdf")) {
       expect(Object.keys(inspection).sort()).toEqual([
         "concealed",
+        "emptyClip",
         "findings",
         "readable",
       ]);
@@ -545,47 +562,91 @@ describe("text a viewer never shows", () => {
 
   /**
    * AC-9. A glyph from the drawing reader and a character from extraction meet
-   * by origin: every glyph filled, stroked or invisible on these pages meets
-   * one within `POSITION_TOLERANCE`, bar those wholly outside the visible area
-   * or wholly clipped away, which extraction drops.
+   * by origin: every glyph filled, stroked or invisible on these pages that is
+   * not whitespace meets one within `POSITION_TOLERANCE`, bar those whose
+   * origin lies outside the visible area or outside the bounds of the clip in
+   * force. On the pages a clip hides an address on, those it bars meet none:
+   * the ordinary read drops a glyph a clip hides wholly, which is why AC-7's
+   * clipped away rule exists.
    */
   it("finds an extracted character at the origin of every glyph it can judge (pin)", () => {
-    const cases: readonly (readonly [string, number])[] = [
-      ["text-page.pdf", 0],
-      ["carlito.pdf", 0],
-      ["detect-email.pdf", 1],
-      ["ocr-aligned.pdf", 0],
-      ["read-covered.pdf", 0],
-      ["read-hidden.pdf", 0],
-      ["read-hidden.pdf", 1],
+    const cases: readonly (readonly [string, number, boolean])[] = [
+      ["text-page.pdf", 0, false],
+      ["carlito.pdf", 0, false],
+      ["detect-email.pdf", 1, false],
+      ["ocr-aligned.pdf", 0, false],
+      ["read-covered.pdf", 0, false],
+      ["read-hidden.pdf", 0, false],
+      ["read-hidden.pdf", 1, false],
+      ["read-hidden.pdf", 4, false],
+      ["read-hidden.pdf", 11, true],
+      ["read-hidden.pdf", 12, true],
+      ["read-hidden.pdf", 13, true],
+      ["read-hidden.pdf", 14, false],
+      ["read-hidden.pdf", 15, false],
     ];
-    for (const [name, index] of cases) {
-      const { glyphs, origins } = onPage(name, index, (page) => {
-        const drawn: [number, number][] = [];
-        walkDrawing(mupdf, page, (drawing) => {
-          if (drawing.kind === "text" && drawing.mode !== "clip") {
-            for (const glyph of drawing.glyphs) {
-              if (glyph.unicode !== 0x20) drawn.push([...glyph.origin]);
-            }
+    for (const [name, index, clippedAway] of cases) {
+      const { judged, barred, origins } = onPage(name, index, (page) => {
+        const [vx0, vy0, vx1, vy1] = page.getBounds();
+        const inside = ([x, y]: readonly [number, number], [x0, y0, x1, y1]: Rect) =>
+          x >= x0 && x <= x1 && y >= y0 && y <= y1;
+        const kept: [number, number][] = [];
+        const dropped: [number, number][] = [];
+        walkDrawing(mupdf, page, (drawing, state) => {
+          if (drawing.kind !== "text" || drawing.mode === "clip") return;
+          for (const { origin, unicode } of drawing.glyphs) {
+            if (/\s/u.test(String.fromCodePoint(unicode))) continue;
+            const seen =
+              inside(origin, [vx0, vy0, vx1, vy1]) &&
+              (state.clip === null || inside(origin, state.clip));
+            (seen ? kept : dropped).push([...origin]);
           }
         });
         const extracted: [number, number][] = [];
         walkCharacters(page, EXTRACTION_OPTIONS[0], ({ origin }) =>
           extracted.push([...origin]),
         );
-        return { glyphs: drawn, origins: extracted };
+        return { judged: kept, barred: dropped, origins: extracted };
       });
-
-      expect(glyphs.length, name).toBeGreaterThan(0);
-      for (const [x, y] of glyphs) {
-        const met = origins.some(
+      const meets = ([x, y]: readonly [number, number]) =>
+        origins.some(
           ([ox, oy]) =>
             Math.abs(ox - x) <= POSITION_TOLERANCE &&
             Math.abs(oy - y) <= POSITION_TOLERANCE,
         );
-        expect(met, `${name}: a glyph at ${x}, ${y} met no character`).toBe(true);
+
+      expect(judged.length, name).toBeGreaterThan(0);
+      for (const origin of judged) {
+        expect(
+          meets(origin),
+          `${name} ${index}: a glyph at ${origin} met no character`,
+        ).toBe(true);
+      }
+      if (clippedAway) {
+        expect(barred.length, `${name} ${index}`).toBeGreaterThan(0);
+        for (const origin of barred) {
+          expect(meets(origin), `${name} ${index}: a glyph at ${origin} was read`).toBe(
+            false,
+          );
+        }
       }
     }
+  });
+
+  /**
+   * AC-7's recorded limit: text a clip hides wholly is named, never listed,
+   * and a run leaves it where it was, since detection reads what the page
+   * shows and the engine never edits a content stream itself.
+   */
+  it("names an address a clip hides wholly, lists no row for it, and leaves it in the output", async () => {
+    const found = await find("read-hidden.pdf");
+    for (const value of [CONCEALED.clippedEmail, CONCEALED.boxedEmail]) {
+      expect(found.map(({ text }) => text)).not.toContain(value);
+    }
+
+    const { output } = await redactDocumentWith(mupdf, fixture("read-hidden.pdf"), []);
+    expect(unclippedText(output, 11)).toContain(CONCEALED.clippedEmail);
+    expect(unclippedText(output, 12)).toContain(CONCEALED.boxedEmail);
   });
 
   /**
@@ -632,5 +693,125 @@ describe("text a viewer never shows", () => {
     } finally {
       doc.destroy();
     }
+  });
+});
+
+/**
+ * AC-11: text drawn under a clip that holds no area. MuPDF's `sanitize` write
+ * drops it, so every run on such a file would fail its self check on text
+ * nobody ticked; the open refuses it instead, after the `no-readable-text`
+ * check.
+ */
+describe("text under a clip that holds no area", () => {
+  const names = EMPTY_CLIPS.map((_clip, index) => `read-empty-clip-${index}.pdf`);
+
+  /** Every clip path's bounds as MuPDF gives them, and the glyphs drawn under the last. */
+  function clipsAndGlyphs(name: string): { clips: number[][]; glyphsUnder: number } {
+    return onPage(name, 0, (page) => {
+      const clips: number[][] = [];
+      let depth = 0;
+      let glyphsUnder = 0;
+      const device = new mupdf.Device({
+        clipPath(path, _evenOdd, ctm) {
+          clips.push([...path.getBounds(null as never, ctm)]);
+          depth += 1;
+          path.destroy();
+        },
+        popClip() {
+          depth -= 1;
+        },
+        fillText(text) {
+          if (depth > 0) text.walk({ showGlyph: () => void (glyphsUnder += 1) });
+          text.destroy();
+        },
+      });
+      try {
+        page.run(device, mupdf.Matrix.identity);
+        device.close();
+      } finally {
+        device.destroy();
+      }
+      return { clips, glyphsUnder };
+    });
+  }
+
+  /** The address, read unclipped, after the file is saved with `options`. */
+  function survivesSave(name: string, options: string): boolean {
+    const doc = mupdf.Document.openDocument(fixture(name), "application/pdf");
+    try {
+      const pdf = doc.asPDF();
+      if (!pdf) throw new Error("expected a PDF document");
+      const saved = pdf.saveToBuffer(options);
+      try {
+        const copy = saved.asUint8Array().slice().buffer as ArrayBuffer;
+        return unclippedText(copy, 0).includes(EMPTY_CLIP_EMAIL);
+      } finally {
+        saved.destroy();
+      }
+    } finally {
+      doc.destroy();
+    }
+  }
+
+  /**
+   * The four cases, pinned on MuPDF.js 1.28.1: the bounds MuPDF gives each
+   * clip, the glyphs the drawing pass reports under it, and the address kept
+   * by a plain save and dropped by the engine's write. The refusal covers
+   * exactly the cases that are both reported and dropped, which is all four.
+   */
+  it("reports each glyph under the clip, and loses it only in the engine's write (pin)", () => {
+    const [zeroArea, zeroWidth, apart, emptyPath] = names.map(clipsAndGlyphs);
+    expect(zeroArea.clips).toEqual([[0, 792, 0, 792]]);
+    expect(zeroWidth.clips).toEqual([[72, 72, 72, 102]]);
+    expect(apart.clips).toEqual([
+      [72, 72, 172, 102],
+      [300, 72, 400, 102],
+    ]);
+    // MuPDF's empty rect: inverted, about 2^31 out.
+    expect(emptyPath.clips).toHaveLength(1);
+    const [[x0, y0, x1, y1]] = emptyPath.clips;
+    expect(x0 > x1 && y0 > y1).toBe(true);
+    expect(Math.min(Math.abs(x0), Math.abs(x1))).toBeGreaterThan(1e9);
+
+    for (const [at, name] of names.entries()) {
+      expect([zeroArea, zeroWidth, apart, emptyPath][at].glyphsUnder, name).toBe(
+        `Write to ${EMPTY_CLIP_EMAIL}`.length,
+      );
+      expect(survivesSave(name, ""), name).toBe(true);
+      expect(survivesSave(name, WRITE_OPTIONS), name).toBe(false);
+    }
+  });
+
+  it("marks the page, and no page of the other fixtures", async () => {
+    for (const name of names) {
+      expect(
+        (await inspect(name)).map(({ emptyClip }) => emptyClip),
+        name,
+      ).toEqual([true]);
+    }
+    for (const name of [
+      "read-pages.pdf",
+      "read-hidden.pdf",
+      "read-covered.pdf",
+      "trim-ocr.pdf",
+    ]) {
+      for (const page of await inspect(name)) expect(page.emptyClip, name).toBe(false);
+    }
+  });
+
+  it("refuses each at open with unsupported", async () => {
+    for (const name of names) {
+      await expect(openDocumentWith(mupdf, fixture(name), LIMITS), name).rejects.toEqual(
+        new EngineFailure("unsupported"),
+      );
+    }
+  });
+
+  it("refuses a scan with nothing readable as no-readable-text, not unsupported", async () => {
+    const [page] = await inspect("read-empty-clip-scan.pdf");
+    expect(page.emptyClip).toBe(true);
+    await expect(
+      openDocumentWith(mupdf, fixture("read-empty-clip-scan.pdf"), LIMITS),
+    ).rejects.toEqual(new EngineFailure("no-readable-text"));
   });
 });
