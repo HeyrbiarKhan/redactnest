@@ -1,10 +1,10 @@
-# Verify: Scanned page detection & warnings · spec 0006 · updated 2026-09-28
+# Verify: Scanned page detection & warnings · spec 0006 · updated 2026-09-29
 
 _Steps derived from spec 0006's acceptance criteria and its Value sourcing table. `/check verify` runs these; `/test` locks the durable ones._
 
-Run the tool at `/tool` against a production build (`pnpm build && pnpm start`), because the content security policy is looser in development. The fixtures are `tests/fixtures/read-*.pdf` and `tests/fixtures/trim-*.pdf`, written by `node scripts/make-fixture.mjs`. Those over the free cap of 3 pages (`read-pages.pdf`, `read-pictures.pdf`, `read-covered.pdf`, `read-hidden.pdf`, `read-refused-mix.pdf`) need a paid entitlement, or are checked through `pnpm test` instead; `read-concealed.pdf` is the browser's three page sample of the covered and hidden cases.
+Run the tool at `/tool` against a production build (`pnpm build && pnpm start`), because the content security policy is looser in development. The fixtures are `tests/fixtures/read-*.pdf` and `tests/fixtures/trim-*.pdf`, written by `node scripts/make-fixture.mjs`. Those over the free cap of 3 pages (`read-pages.pdf`, `read-pictures.pdf`, `read-covered.pdf`, `read-hidden.pdf`, `read-refused-mix.pdf`) need a paid entitlement, or are checked through `pnpm test` instead; `read-concealed.pdf` is the browser's three page sample of the covered and hidden cases. `trim-edge.pdf` and `read-empty-clip-0.pdf` to `read-empty-clip-3.pdf` arrive with slice 4b.
 
-Built: slices 1 to 4 of the build plan. Slice 5 is the real scan run below (AC-30). Open: the peak memory of the 300 pixels per inch cropped scan run (see *Measured*), which AC-29 sends back to `/architect` before this ships.
+Built: slices 1 to 4 of the build plan. Slice 4b (what the build sent back, settled 2026-09-29: pictures outside the visible area kept and named, text a clip hides wholly named, text under an empty clip refused) is next, and the steps below already expect it. Slice 5 is the real scan run below (AC-30).
 
 ## UI / manual
 
@@ -18,10 +18,12 @@ Built: slices 1 to 4 of the build plan. Slice 5 is the real scan run below (AC-3
 - [ ] Open `read-crooked.pdf` → the card keeps the all clear line, then an untitled note: "Page 1 is a scan with machine read text. …" and last the crooked scan line naming OCRmyPDF's `--deskew`; both addresses are listed blocked with the steep angle reason → AC-5, AC-21, AC-25
 - [ ] Open `read-concealed.pdf` → the warning names "Pages 1 and 2 have text hidden under a box or shape drawn over it. …" and "Page 3 has text you can't see, …"; the covered email and phone rows read "Hidden under a box on the page.", the white one "Not visible on the page.", and every one is ticked and tickable → AC-6, AC-7, AC-13, AC-20, AC-24
 - [ ] Redact `read-concealed.pdf` and paste each page's text from the download → `board.minutes@example.com`, `020 7946 0321` and `white.ink@example.com` are gone; the file is `read-concealed-partly-redacted.pdf` → AC-13, AC-23
-- [ ] Open `trim-text.pdf` → an untitled note "Page 1 has content outside its visible area. RedactNest removes it when you redact, since nobody can see it."; the only row is `visible.person@example.com`, never `offpage.person@example.com` → AC-8, AC-12, AC-14, AC-21
-- [ ] Redact `trim-text.pdf` with nothing ticked → the outcome card holds the note "Content outside the visible area of page 1 was removed." and no warning; the file is `trim-text-redacted.pdf`; `mutool draw -F txt` with no crop (or a reader showing the media box) finds neither the address below the crop, "Below the media box" nor "Edge" → AC-14, AC-17, AC-22, AC-23
-- [ ] Open `trim-kept.pdf` → a warning "Part of a picture on page 1 lies outside the visible page and couldn't be cleared, so it is still in the file." naming both pages; redact and download → `trim-kept-partly-redacted.pdf` → AC-8, AC-15, AC-23
-- [ ] Open `trim-scan.pdf` → the off page note for both pages; redact, download, `mutool extract` the images → page 1's scan is white outside the crop box and banded inside it; page 2's picture off the page is white → AC-15, AC-17
+- [ ] Open `trim-text.pdf` → an untitled note "Page 1 has text or drawings outside its visible area. RedactNest removes them when you redact, since nobody can see them."; the only row is `visible.person@example.com`, never `offpage.person@example.com` → AC-8, AC-12, AC-14, AC-21
+- [ ] Redact `trim-text.pdf` with nothing ticked → the outcome card holds the note "Text and drawings outside the visible area of page 1 were removed." and no warning; the file is `trim-text-redacted.pdf`; `mutool draw -F txt` with no crop (or a reader showing the media box) finds neither the address below the crop, "Below the media box" nor "Edge" → AC-14, AC-17, AC-22, AC-23
+- [ ] Open `trim-kept.pdf` → a warning "Pages 1 and 2 have pictures that reach outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file."; redact and download → `trim-kept-partly-redacted.pdf` → AC-8, AC-15, AC-23
+- [ ] Open `trim-scan.pdf` → the same picture warning, naming the cropped scan's page and the page whose picture lies wholly outside, and no off page note for them; redact and download → `trim-scan-partly-redacted.pdf`; `mutool extract` the images → each is exactly the source's, the cropped scan's margins included → AC-8, AC-15, AC-23, INV-11
+- [ ] Open `trim-edge.pdf` → the picture warning names only the page with a picture reaching outside beside an email below the crop, and the off page note names that page too; the scan placed 0.28 pt past its page's edge and the soft mask image are named nowhere → AC-8, AC-15
+- [ ] Open `read-empty-clip-0.pdf` (and each of `-1` to `-3` through `pnpm test`) → today's generic `unsupported` line ("Something went wrong while working on this file."), with only Start over → AC-11
 - [ ] Keyboard only, on `read-mixed.pdf` and `read-concealed.pdf` → the warnings and notes add no tab stop: Choose a PDF, the group summary, each checkbox, Redact, Start over → AC-27
 - [ ] Screen reader → the opened card is read once with its warning ("Warning:" then the title and lines) and note ("Note:"); a page list reads "Pages 1 and 2"; a concealed row adds its line after the page and context → AC-24, AC-27
 - [ ] Forced colours (Windows High Contrast) → the warning, the note and the download warning keep their border and icon → AC-27
@@ -35,7 +37,7 @@ Make the scans locally and keep them out of git: print `detect-email.pdf` (or an
 - [ ] Spec 0004 (its AC-28, AC-29): on the crooked scan, a ticked name is removed and the run passes, and a long address or a whole line is shown blocked `slanted-text` during review
 - [ ] Spec 0006 (AC-5): the straight scan opens with the machine read note and no warning of its own for the text layer
 - [ ] Spec 0006 (AC-25): the crooked scan opens with the crooked scan line
-- [ ] Spec 0006 (AC-14, AC-15): crop the straight scan in a PDF editor, open it → the off page note; redact and download; `mutool extract` the image → the cropped away region is white
+- [ ] Spec 0006 (AC-14, AC-15, AC-23): crop the straight scan in a PDF editor through lines of text, open it → the off page picture warning and the off page note, not the edge refusal (if it refuses, bring the file's shape to `/architect`); redact and download → the name ends in `-partly-redacted.pdf`; `mutool extract` the image → exactly the scan's, the cropped away region included
 
 ## Value sourcing
 
@@ -53,11 +55,14 @@ Make the scans locally and keep them out of git: print `detect-email.pdf` (or an
 - [ ] The stamp count → `read-stamped.pdf` is refused, `read-slides.pdf` opens with each slide `bare-picture` → `STAMP_MAX_CHARS`
 - [ ] `no-readable-text` → the six refusal fixtures, and `read-mixed.pdf` opens → every page `scanned`, `drawn-only`, `blank` or unreadable
 - [ ] `matches[].concealed` → `read-concealed.pdf`'s rows → the match's character origins against the page's concealed glyphs
-- [ ] Whether a page is trimmed → `trim-text.pdf` for text, `trim-scan.pdf` for pictures, `text-page.pdf` untouched → the trim's own drawing pass and line boxes of the unclipped read
+- [ ] Whether a page is trimmed → `trim-text.pdf` trimmed for text; `trim-scan.pdf` and `trim-kept.pdf` never trimmed for their pictures; `text-page.pdf` untouched → the trim's own drawing pass for paths and line boxes of the unclipped read
+- [ ] A picture reaching outside → every page of `trim-scan.pdf` and `trim-kept.pdf` is `off-page-picture`; in `trim-edge.pdf` the scan 0.28 pt past its edge and the soft mask image give nothing, and the page with a picture reaching outside and an email below the crop gives both findings and loses the email → image footprints from the trim's drawing pass, cut to the clip in force, against the visible area past `PICTURE_REACH_MIN` (1 pt)
+- [ ] A cropped OCR scan → the Tesseract shaped pin in `trim.test.ts` opens with `off-page-content`, `off-page-picture` and `machine-read-text`, not `edge-text`, and its run passes → the trim's proof over per word `Tf` and `Tz`
 - [ ] The strips → the foundation pin: glyphs 0 and 0.5 pt inside every edge survive in four fonts, and everything outside goes → the visible area and what the page draws, grown by 1 pt
-- [ ] Pixel mode or kept → `trim-scan.pdf` blanked, `trim-kept.pdf` kept → `imageReach` per crossing placement against `TRIM_PIXEL_REACH`
 - [ ] The trim's proof → `trim-refused.pdf` is `edge-text`, `trim-quote.pdf` is `unsupported` → both unclipped modes before and after, matched as the self check matches
-- [ ] The outside pixel rule → a trim that claims pixel mode and blanks nothing fails `redaction-incomplete` on either page of `trim-scan.pdf` → `IMAGE_CHECK_OPTIONS` on the output
+- [ ] The off page character rule → the pipeline with the trim skipped fails `redaction-incomplete` over `trim-text.pdf`, ticked or not → both unclipped reads of the output against `page.getBounds()`
+- [ ] A glyph a clip hides wholly → the rectangle clip and `/BBox` pages of `read-hidden.pdf` are `hidden-text` with no row, and the email is still in a run's output read with `clip=no` (the recorded limit); text drawn inside its clip and trailing spaces past a cell's clip give nothing; the extended origin pin passes → an unmatched glyph's origin against the visible area and the clip in force
+- [ ] The empty clip refusal → each of `read-empty-clip-0.pdf` to `-3.pdf` fails the open with `unsupported`, the pins show each glyph reported by the drawing pass and gone after a `WRITE_OPTIONS` save, and a scan with nothing readable that also holds one is refused as `no-readable-text` → `PageInspection.emptyClip`, applied after AC-10
 - [ ] `outcome.pagesByFinding` → the worker test "assembles the outcome from the run and the open summary" → `countPagesByFinding(summary.pages)`
 - [ ] The trim agreement → the worker tests "posts unsupported, and no output, for a run whose trim …" → `result.trim` against the summary
 - [ ] The lines, page lists and advice → `tests/unit/page-findings.test.ts` ("Pages 1, 3 to 9 and 12", one page and many page forms) → `src/lib/page-findings.ts`
@@ -78,8 +83,9 @@ Make the scans locally and keep them out of git: print `detect-email.pdf` (or an
 On the build machine, the unit project, MuPDF.js 1.28.1:
 
 - 50 page text heavy document (60 dense lines a page, every glyph inside a clip): inspection plus trim took 700 to 970 ms of CPU across three passes, against the 2 second budget. `tests/unit/cost.test.ts` holds the budget (the least of three passes, since CPU time roughly doubles when the whole suite shares the cores).
-- 50 page cropped scan, one 2550 by 3300 grey image (300 pixels per inch, Flate) shared by every page, half an inch cropped on each side: open 1.3 s of CPU (2.4 s wall), most of it the trim blanking each page's pixels on the review copy; a run with nothing ticked 2.2 s of CPU (4.0 s wall) against 46 ms with the trim skipped; output 1.57 times the source (32 KB to 50 KB); MuPDF's heap 23 MB before, 33 MB after the open, 59 MB after the run. The source image is synthetic and compresses well, so a real JPEG scan will grow far more when its blanked pages are written again.
-- The peak is past spec 0004's four copies of the document by that measure (a 32 KB file), because each page image is decoded to blank it and again to check it. AC-29 returns this to `/architect` before the feature ships.
+- With pixel blanking, as slice 4 built it (2026-09-28 and 29): on a 50 page cropped scan at 300 pixels per inch with a distinct JPEG per page, a run peaked at 814 MB (grey) and 1,804 MB (colour) of MuPDF heap, took 33 s and 80 s of CPU, and wrote 4.8 and 6.2 times the source; the colour scan failed to open. The full table is in `rationale.md`, *What the build sent back*. This is why AC-15 now keeps pictures whole.
+- [ ] After slice 4b: `cost.test.ts` shows a run over the cropped scan leaving every page image's filter and bytes as the source has them → AC-29, INV-11
+- [ ] After slice 4b, once, outside CI: the open's and a run's peak heap on the 50 page cropped scan, grey and colour, a distinct JPEG per page, each beside the same scan uncropped, in a fresh engine per figure. Record them here and in `rationale.md`; a cropped peak more than 5% above its twin returns to `/architect` → AC-29
 
 ## Acceptance-criteria coverage
 
@@ -89,22 +95,22 @@ On the build machine, the unit project, MuPDF.js 1.28.1:
 - AC-4 · ID card, logo, photo, clipped headshot, sparse scans; `read-pictures.pdf`
 - AC-5 · Tesseract and ABBYY order, the redaction matrix's OCR scans
 - AC-6 · `read-covered.pdf`, the plain group and the baked Square annotation, and every near miss
-- AC-7 · `read-hidden.pdf`, the straddling cell glyph, and every near miss
+- AC-7 · `read-hidden.pdf`, the straddling cell glyph, the rectangle clip and `/BBox` pages, and every near miss
 - AC-8 · the off page note and picture warning from the trim's triggers
 - AC-9 · the heap pins in `device.test.ts`, the origin and ligature pins
 - AC-10 · the six refusal fixtures, and `read-mixed.pdf` opening
-- AC-11 · a page that cannot be loaded or drawn fails with `unsupported`
+- AC-11 · a page that cannot be loaded or drawn fails with `unsupported`; `read-empty-clip-0.pdf` to `-3.pdf`, their pins, and the order after AC-10
 - AC-12 · the stamp's address is found; unreadable pages are never read
 - AC-13 · concealed rows, and a covered and a hidden match that redact and pass the self check
 - AC-14 · `trim-text.pdf`, the foundation pins, the pipeline order
-- AC-15 · `trim-scan.pdf` blanked, `trim-kept.pdf` kept
+- AC-15 · `trim-scan.pdf`, `trim-kept.pdf` and `trim-edge.pdf`, their image streams unchanged by a run; the cropped OCR scan pin
 - AC-16 · `trim-refused.pdf` (`edge-text`), `trim-quote.pdf` (`unsupported`)
-- AC-17 · a skipped trim and a pretended pixel mode both fail `redaction-incomplete`
+- AC-17 · a skipped trim fails `redaction-incomplete`, ticked or not
 - AC-18 · the worker's agreement tests
 - AC-19 to AC-24 · the UI steps above; `tool-client.test.tsx`, `review-checklist.test.tsx`, `ui/checklist.test.tsx`, `page-findings.test.ts`, `session.test.ts`
 - AC-25 · `read-crooked.pdf`
 - AC-26 · the refusal lines and the qualified coverage wording
 - AC-27 · axe, keyboard, forced colours and 320px in `design-system.spec.ts`; the component axe tests
 - AC-28 · the loggable gate, the privacy run over `read-mixed.pdf`, the worker's key lists
-- AC-29 · `cost.test.ts`, the cancel tests in `reading.test.ts`, `trim.test.ts` and `engine-worker.test.ts`, and *Measured*
+- AC-29 · `cost.test.ts` (the CPU budget and the unchanged image streams), the cancel tests in `reading.test.ts`, `trim.test.ts` and `engine-worker.test.ts`, and *Measured*
 - AC-30 · the real scan steps above

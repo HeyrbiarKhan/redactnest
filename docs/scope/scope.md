@@ -120,11 +120,12 @@ Detect per page whether a text layer exists, and never let somebody leave with a
 **Done when:** pages with no text layer are identified at upload and named plainly, the warning is repeated at download, and a document whose every page lacks a text layer produces no file at all, with a clear explanation of why instead. Text under a box and white or invisible text are named the same way, and text outside the crop box never reaches the output.
 spec [0006](../specs/0006-scanned-page-detection-warnings/index.md) · code in `src/engine` (`device.ts`, `inspect.ts`, `trim.ts`, `open.ts`, `redact.ts`, `self-check.ts`, `pixels.ts`, `find.ts`, `characters.ts`), `src/worker` (`protocol.ts`, `engine.worker.ts`), `src/lib` (`page-findings.ts`, `session.ts`, `detectors.ts`), `src/app/tool` (`tool-client.tsx`, `review-checklist.tsx`), `src/ui/checklist-item.tsx`, `scripts/lib/reading-fixtures.mjs`
 - [x] Design it (spec): `/architect scanned page detection & warnings`
-- [x] Build it: `/develop scanned page detection & warnings`
+- [ ] Build it: `/develop scanned page detection & warnings`
   - [x] Scans named, and no file for a document with nothing readable: the page reading, the refusal, the warnings at open and at download, and the partly redacted name · AC-1, AC-2, AC-3, AC-9, AC-10, AC-11, AC-12, AC-19, AC-20, AC-22, AC-23, AC-26, AC-27, AC-28, AC-29
   - [x] Pictures, OCR and the crooked scan: bare pictures, the stamp cap, the machine read note and the crooked scan line · AC-2, AC-4, AC-5, AC-21, AC-25
   - [x] Text a viewer never shows: covered and hidden text, and the row marks · AC-6, AC-7, AC-9, AC-13, AC-24
   - [x] Nothing outside the visible area survives: the foundation pins, the trim on both copies with its proof, the self check rules, the off page note and picture warning · AC-8, AC-14, AC-15, AC-16, AC-17, AC-18, AC-21, AC-22, AC-29
+  - [ ] What the build sent back (slice 4b, settled 2026-09-29): the cropped OCR scan pin first, then pictures kept and named with no pixel work, the image stream cost test, text a clip hides wholly named, and text under an empty clip refused · AC-5, AC-7, AC-8, AC-9, AC-10, AC-11, AC-14 to AC-18, AC-20, AC-22, AC-23, AC-29
 - [ ] Verify it: `/check verify scanned page detection & warnings`, including the real scan steps made locally (AC-30)
 - [ ] Test it: `/test scanned page detection & warnings`
 - [ ] Review it (fresh model): `/check review scanned page detection & warnings`
@@ -210,6 +211,7 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **API access**: programmatic redaction · needs a decision
 - **Downloadable receipt file**: an audit record alongside the redacted PDF, once the on screen summary has proved its shape · needs a decision
 - **Dark mode**: light only for now (spec 0003). Needs its own decision: the colour roles redefined for dark, a second contrast contract, and axe runs in both schemes. It would follow the system setting, since a toggle cannot remember a choice without storage · needs a decision · from spec 0003
+- **A memory limit for blanking scan pixels**: spec 0004's padded pass rewrites every scan page it touches as Flate. One ticked match on each page of a 50 page 300 dpi grey scan measured 917 MB and a file 4.9 times larger. Settle a limit before the paid page cap applies to scans · needs a decision · from spec 0006
 - **Cookie consent banner**: deliberately not built. The only cookies are the strictly necessary auth ones and analytics is cookieless, so no consent is required. Kept here so it does not get added later out of habit.
 
 ## Legend

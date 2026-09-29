@@ -1,7 +1,7 @@
 # 0002. Document session and privacy guarantee
 
 **Date**: 2026-09-20
-**Updated**: 2026-09-21, reconciling the session ending rules with the warm engine (AC-1, AC-5a, AC-5b, INV-6, INV-6a); 2026-09-25, from spec [0004](../0004-redaction-engine/index.md): INV-1 and AC-6 reworded to say where the document really exists, `EngineSession.bytes` given its reader, `sanitized` defined as what was found
+**Updated**: 2026-09-21, reconciling the session ending rules with the warm engine (AC-1, AC-5a, AC-5b, INV-6, INV-6a); 2026-09-25, from spec [0004](../0004-redaction-engine/index.md): INV-1 and AC-6 reworded to say where the document really exists, `EngineSession.bytes` given its reader, `sanitized` defined as what was found; 2026-09-29, from spec [0006](../0006-scanned-page-detection-warnings/index.md): `DocumentSummary.pagesWithText` replaced by `pages` (one `PageReading` per page), `RedactionOutcome.pagesWithoutText` by `pagesByFinding`, `ReviewMatch` gains `concealed`, `ENGINE_ERROR_KINDS` gains `no-readable-text` and `edge-text`, and `outputName` is set again at `opened`
 **Status**: Accepted
 
 ## Summary
@@ -64,9 +64,9 @@ Main thread, `ToolSession`, held by a reducer, frozen and replaced rather than m
 | `state` | `SessionState` | yes | the machine below |
 | `jobId` | `string` | yes | `crypto.randomUUID()`, correlates to the worker's session |
 | `file` | `File` | yes | the handle, not the bytes. The recovery path for AC-11 |
-| `outputName` | `string` | yes | derived from `file.name` at open. Never logged, never sent |
+| `outputName` | `string` | yes | derived from `file.name` at open, and again at `opened` from what the pages hold (spec 0006, AC-23). Never logged, never sent |
 | `entitlement` | `Readonly<EntitlementSnapshot>` | yes | frozen at open, never refreshed mid job |
-| `summary` | `DocumentSummary \| null` | null until `reviewing` | `pageCount`, `pagesWithText`. Exists today |
+| `summary` | `DocumentSummary \| null` | null until `reviewing` | `pageCount`, `pages` (one `PageReading` per page, spec 0006) |
 | `matches` | `readonly ReviewMatch[]` | yes, may be empty | empty until feature 6 fills it |
 | `ticked` | `ReadonlySet<MatchId>` | yes | seeded from each match's own default |
 | `phase` | `ProgressPhase \| null` | null when not working | last phase the worker reported |
@@ -86,9 +86,9 @@ The tick comparison is what makes this honest. Someone who opened a file and rea
 | Type | Fields |
 |---|---|
 | `MatchId` | opaque branded `string`. Minted in the worker, meaningless to the main thread |
-| `ReviewMatch` | `id: MatchId` · `type: DetectorKind` · `page: number` (one based, for display) · `text: string` · `before: string` · `after: string` · `tickedByDefault: boolean`. **No quads** |
+| `ReviewMatch` | `id: MatchId` · `type: DetectorKind` · `page: number` (one based, for display) · `text: string` · `before: string` · `after: string` · `tickedByDefault: boolean` · `blocked` (spec 0005) · `concealed: Concealment \| null` (spec 0006). **No quads** |
 | `EntitlementSnapshot` | `tier: "free" \| "paid"` · `pageCap: number` · `maxFileBytes: number` |
-| `RedactionOutcome` | `pageCount: number` · `removedByType: Readonly<Partial<Record<DetectorKind, number>>>` · `pagesWithoutText: number` · `sanitized: readonly SanitizedKind[]` |
+| `RedactionOutcome` | `pageCount: number` · `removedByType: Readonly<Partial<Record<DetectorKind, number>>>` · `pagesByFinding: Readonly<Partial<Record<PageFinding, number>>>` (spec 0006, which replaced `pagesWithoutText: number`) · `sanitized: readonly SanitizedKind[]` |
 | `DetectorKind` | declared here as the union feature 6 populates. Feature 3 needs the type to exist and needs `tickedByDefault` to ride on every match; it does not decide the members |
 
 Worker, `EngineSession`, one entry in a `Map<string, EngineSession>` keyed by `jobId`:
@@ -161,11 +161,11 @@ Notes that matter when building this:
 | Action | Value produced or displayed | Source |
 |---|---|---|
 | open | `jobId` | `crypto.randomUUID()` on the main thread |
-| open | `outputName` | derived from `File.name`: strip a trailing `.pdf` case insensitively, trim, fall back to the literal `document` when nothing is left, then append `-redacted.pdf`. Repeated downloads of the same name are left to the browser's own numbering rather than inventing a scheme |
+| open | `outputName` | derived from `File.name`: strip a trailing `.pdf` case insensitively, trim, fall back to the literal `document` when nothing is left, then append `-redacted.pdf`, or `-partly-redacted.pdf` once `opened` when any page carries a warning finding (spec 0006, AC-23). Repeated downloads of the same name are left to the browser's own numbering rather than inventing a scheme |
 | open | `entitlement.tier`, `entitlement.pageCap` | `GET /api/entitlement`, decided in spec 0001, prefetched on the engine warm trigger, failing closed to the free tier on error or timeout |
 | open | `entitlement.maxFileBytes` | `config.maxFileBytes` |
 | open | `limits.maxPages` sent to the worker | **the snapshot's `pageCap`**, not `config.maxPages`. See the gap note in `rationale.md` |
-| open | `summary.pageCount`, `summary.pagesWithText` | the engine, already built |
+| open | `summary.pageCount`, `summary.pages` | the engine; `pages` from its page reading (spec 0006) |
 | open | `matches[].id` | minted in the worker per match, opaque to the main thread |
 | open | `matches[].text`, `.before`, `.after` | the worker's structured text extraction, window size from `config.matchContextChars` |
 | open | `matches[].type`, `.tickedByDefault` | declared by the detector that produced the match. Feature 6 owns the set and the defaults |
@@ -174,7 +174,7 @@ Notes that matter when building this:
 | redact | the target for each ticked id | the worker's private `targets` map. **Never from the main thread**, so a stale or tampered quad cannot cause a wrong removal |
 | redact | `outcome.removedByType` | counted in the worker by each target's kind, once spec 0004's self check has passed |
 | redact | `outcome.sanitized` | the kinds spec 0004's engine found in the source and removed, not every check it ran |
-| redact | `outcome.pagesWithoutText` | derived from `summary.pagesWithText` |
+| redact | `outcome.pagesByFinding` | `countPagesByFinding(summary.pages)` in the worker (spec 0006) |
 | download | the Blob media type | the literal `application/pdf`, the one type this tool produces |
 | download | the object URL | `URL.createObjectURL` on the main thread, revoked in the next macrotask after the click |
 | download | `downloaded` | set true by the download helper once the anchor click has been dispatched |

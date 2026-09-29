@@ -1,7 +1,7 @@
 # 0003. Design system and UI foundation
 
 **Date**: 2026-09-21
-**Updated**: 2026-09-22, making every way into `/tool` a real page load (AC-21, INV-10), then making the load guard unable to loop (AC-21, INV-11)
+**Updated**: 2026-09-22, making every way into `/tool` a real page load (AC-21, INV-10), then making the load guard unable to loop (AC-21, INV-11); 2026-09-29, from spec [0006](../0006-scanned-page-detection-warnings/index.md): the opened document card's text layer line gives way to an all clear line or page warnings and notes, and `ChecklistItem` gains `concealedNote`. No new colour pairing: the warnings use `Callout`'s existing `warning` and `info` tones
 **Status**: Accepted
 
 ## Summary
@@ -135,7 +135,7 @@ Shape and space: Tailwind's default spacing, radius and shadow scales stay. Cont
 | `Callout` | `div` | `tone: "warning" \| "info" \| "danger"`, `title?`, `headingLevel?: 2 \| 3` (the title is that heading when set, a `p` otherwise), `children`, `action?: ReactNode`, `role?`, `data-testid?` | no | Icon per tone (`TriangleAlert`, `Info`, `CircleAlert`), `aria-hidden`. An `sr-only` tone word goes first. No live role unless the caller passes one. |
 | `Checkbox` | `input type="checkbox"` with `appearance-none`, plus a sibling tick icon | `checked`, `indeterminate?`, `onCheckedChange`, `id`, `aria-labelledby`, `aria-describedby` | yes (sets `indeterminate` through a ref) | A native checkbox. In forced colours it returns to `appearance: auto` and hides the drawn tick. |
 | `ChecklistGroup` | `details` open on first render, `summary`, `ul` | `icon: LucideIcon`, `label`, `count`, `noun`, `children` | no | The summary holds no interactive element. The chevron is `aria-hidden` and turns with `group-open:`. |
-| `ChecklistItem` | `li` > `label` > `Checkbox` plus text | `id`, `text`, `before`, `after`, `page: number`, `checked`, `onCheckedChange` | yes (uses `Checkbox`) | Name: the match text (`aria-labelledby`). Description: "Page N" plus the context line (`aria-describedby`). `wrap-anywhere` (`overflow-wrap: anywhere`) on both lines. |
+| `ChecklistItem` | `li` > `label` > `Checkbox` plus text | `id`, `text`, `before`, `after`, `page: number`, `checked`, `onCheckedChange`; `blockedReason?` (spec 0005) and `concealedNote?` (spec 0006) | yes (uses `Checkbox`) | Name: the match text (`aria-labelledby`). Description: "Page N" plus the context line, then any blocked reason and concealed note (`aria-describedby`). `wrap-anywhere` (`overflow-wrap: anywhere`) on both lines. |
 | `DropZone` | `div` holding an `IconCircle`, title, helper line, the hidden `input type="file"` and a primary `Button` | `title`, `helper`, `buttonLabel`, `accept`, `onFile(file: File)`, `onWarm()` | yes (drag state, input ref) | One tab stop (AC-8). Keeps the test ids `drop-area`, `file-input` and `choose-file`. Clears `input.value` after every choice. Calls `onWarm` on pointer enter, drag over and button focus. |
 | `EmptyState` | `div` | `icon: LucideIcon`, `title`, `helper` | no | A neutral `IconCircle`, a `text-heading` title, and one `text-small` helper line. |
 | `IconCircle` | `span` | `icon: LucideIcon`, `tone: "accent" \| "neutral"`, `size: "md" \| "lg"` (48px or 64px) | no | Decorative, `aria-hidden`. |
@@ -167,7 +167,7 @@ Where each primitive is used by this feature:
 | Status line | the phase text | `PHASE_TEXT[session.phase]`, existing in `tool-client.tsx` |
 | Failure callout | the message | `errorText(kind, entitlement)`, existing |
 | Unsupported callout | each missing capability | `SUPPORT_GAP_TEXT`, existing in `src/lib/support.ts` |
-| Opened document card | page count, pages with a text layer | `session.summary` (spec 0002) |
+| Opened document card | page count, and the all clear line or the page warnings and notes (spec 0006, AC-19 to AC-21) | `session.summary.pages` (spec 0002, as spec 0006 amends it) |
 | Checklist row | `text`, `before`, `after`, `page` | the `ReviewMatch` fields (spec 0002, INV-1), mapped by feature 8 |
 | Checklist row | ellipsis before or after the context | derived: shown when `before` or `after` is not empty |
 | Checklist row | checked | the session's tick set (spec 0002), wired by feature 8 |
