@@ -95,7 +95,7 @@ On the build machine, the unit project, MuPDF.js 1.28.1:
   | colour, not cropped | 66 MB | 115 MB | 1.1 s | 0.99 times |
   | colour, cropped | 66 MB | 115 MB | 1.5 s | 0.99 times |
 
-  Every cropped peak equals its uncropped twin, 0% above against the 5% limit, so nothing returns to `/architect`. The trim adds 0.3 to 0.5 s of CPU across the 50 pages, at open and in a run. Not yet in `rationale.md`: `/architect` records it there.
+  Every cropped peak equals its uncropped twin, 0% above against the 5% limit, so nothing returns to `/architect`. The trim adds 0.3 to 0.5 s of CPU across the 50 pages, at open and in a run. Recorded in `rationale.md`, *What the build sent back*, on 2026-09-29.
 
 ## Acceptance-criteria coverage
 

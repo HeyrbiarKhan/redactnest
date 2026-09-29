@@ -149,6 +149,19 @@ A picture reaching outside the visible area is one more picture blind spot, and 
 
 That is spec 0004's open Follow-up on the pixel pass's peak, now with a number, and it goes back to `/architect` on its own (index Follow-up). AC-29's old yardstick, "spec 0004's four copies of the document", was the wrong measure here: it counts a document's own bytes, and against the build's 32 KB file any decoded image looked like a breach while the real problem, hundreds of MB, stayed hidden. AC-29 now pins that the trim rewrites no image and compares each peak with the same scan uncropped.
 
+### The cropped scan after slice 4b: the same memory as uncropped
+
+`/develop` measured AC-29's peaks once slice 4b was built (2026-09-29), with a scratch probe run once and deleted. The scan: 50 US Letter pages at 300 pixels per inch (2550 by 3300 pixels), a different JPEG per page made by MuPDF at quality 75 (about 430 KB grey and 500 KB colour, files of 21.9 MB and 25.1 MB), an invisible text layer on each page and a header line in its top margin, cropped half an inch on every side or not at all. The cropped header puts every cropped page through the trim's text pass, and every cropped page's scan reaches outside. Each figure is MuPDF's WebAssembly memory in a fresh engine, which starts at 23 MB and only grows.
+
+| 50 page scan, 300 dpi | Heap after the open | Peak over a run alone | Run CPU | Output against source |
+|---|---|---|---|---|
+| grey, not cropped | 60 MB | 105 MB | 1.1 s | 0.99 times |
+| grey, cropped | 60 MB | 105 MB | 1.6 s | 0.99 times |
+| colour, not cropped | 66 MB | 115 MB | 1.1 s | 0.99 times |
+| colour, cropped | 66 MB | 115 MB | 1.5 s | 0.99 times |
+
+Cropped scans used the same memory as uncropped, 0% above against AC-29's 5% limit, so nothing returns here. The trim adds 0.3 to 0.5 s of CPU across the 50 pages, at open and in a run. This scan is not the one in the table above (it adds a header line to every page, and MuPDF made its JPEGs), so read each cropped row against its own uncropped twin, not against the earlier figures.
+
 ### Text a clip hides wholly: named as hidden text
 
 Four one page probes, each with a visible line and an email a clip hides wholly, opened, read for matches, and run with nothing ticked:
@@ -166,7 +179,7 @@ Options weighed: **name it as hidden text (chosen)**; name it and list its match
 
 ### Text under an empty clip: refused at open
 
-The same probe with the email under `0 0 0 0 re W n` opened with no finding, and every run failed `unsupported`. The drawing pass did report the glyph, under a clip of `[0, 792, 0, 792]`. Traced: the email survives `prepareDocument` and a plain save, and is gone after any save with `sanitize` (the engine's `WRITE_OPTIONS`), so the self check sees text nobody ticked go missing. It fails closed, but only after the visitor has reviewed. The engineer chose to refuse at open, as AC-11 does for a page that throws (runner up: warn at open and fail at Redact). Whether `sanitize` also drops text under a zero width clip, nested clips that do not meet, or a clip whose path is empty is left to the build's pins, and the rule covers what is both reported and dropped.
+The same probe with the email under `0 0 0 0 re W n` opened with no finding, and every run failed `unsupported`. The drawing pass did report the glyph, under a clip of `[0, 792, 0, 792]`. Traced: the email survives `prepareDocument` and a plain save, and is gone after any save with `sanitize` (the engine's `WRITE_OPTIONS`), so the self check sees text nobody ticked go missing. It fails closed, but only after the visitor has reviewed. The engineer chose to refuse at open, as AC-11 does for a page that throws (runner up: warn at open and fail at Redact). Whether `sanitize` also drops text under a zero width clip, nested clips that do not meet, or a clip whose path is empty is left to the build's pins, and the rule covers what is both reported and dropped. (Settled after slice 4b: all four are, below.)
 
 ### What the cross check changed (2026-09-29)
 
@@ -183,6 +196,13 @@ An independent read only review on another model checked these changes against t
 - **Callback objects.** AC-9 said `Image` and `Shade` arrive without a kept reference. The build found `Image`'s constructor keeps one, so an image is destroyed like a path; `Shade` has none yet is registered for collection, and a collected wrapper frees a shading MuPDF still uses (the next page run crashed), so it is disowned; the text walker's `Font` is MuPDF.js's own and left alone. `device.test.ts` pins all three.
 - **MuPDF's own crop clip.** MuPDF.js 1.28.1 runs a cropped page inside a clip to its crop box, opened before any content. Counted as the clip in force, it would cut every picture to the visible area, and the trim could never see a cropped scan's margins. The drawing reader leaves it out (a clip opened before anything is drawn, at no depth, whose bounds equal the visible area within 0.01 pt), pinned in `trim.test.ts`. AC-4 now defines the clip in force with that exception.
 - **The amends** to specs 0002, 0003, 0004 and 0005 are applied in place.
+
+After slice 4b, four more, each read from the built code:
+
+- **Whitespace and the clip rules (AC-7).** The spec said only the clipped away rule skips whitespace. The existing rule for text whose centre lies outside the clip in force skips it too, because a cell's trailing spaces run past its clip and hide nothing. Neither clip rule judges a space.
+- **Only path clips count as empty (AC-11).** The build's pins answered the question left open above: a zero area rectangle, a zero width one, two nested rectangles that do not meet and a clip whose path is empty are all reported by the drawing pass and dropped by `sanitize`, and those four are what the refusal covers. Only `clipPath` can make the clip in force count as empty. Text clips, stroke clips, image masks and soft masks still cut the clip in force as before, and never trigger the refusal.
+- **"The same bytes" for a picture (AC-15, AC-29).** It holds only for an image stored with a filter. The engine's `compress` write deflates an image stored with none on every run, cropped or not, so that image keeps its pixels but not its bytes; the stretched colour band in `trim-kept.pdf` is stored compressed for this reason.
+- **Images are compared by content, not name.** MuPDF's content filter renames the image resources of a page it rewrites (`/Photo` becomes `/Im1`) and keeps the stream, so the tests compare each page's images by filter and a digest of the raw stream (`pageImages` in `tests/support/mupdf.ts`).
 
 ### The constants: every starting value held
 
