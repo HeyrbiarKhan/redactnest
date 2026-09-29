@@ -36,7 +36,15 @@ export default defineConfig({
 
   use: {
     baseURL: BASE_URL,
-    trace: "retain-on-failure",
+    /**
+     * Every test records a trace, so a failure has one, but without the
+     * screencast. The spinner turns for the whole engine load, and a screencast
+     * encodes every frame it paints; with the workers opening documents side by
+     * side that starved the 10 MB engine download and stretched a two page open
+     * from about 2 seconds to 15 to 30, past the 30 second test timeout. The
+     * DOM snapshot before and after each action is still in the trace.
+     */
+    trace: { mode: "retain-on-failure", screenshots: false },
   },
 
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
