@@ -39,6 +39,11 @@ vi.mock("@/engine", async (importOriginal) => {
 
 type PhaseCallback = (phase: "loading-engine" | "opening" | "inspecting") => void;
 
+interface OpenHooks {
+  onPhase?: PhaseCallback;
+  isCancelled?: () => boolean;
+}
+
 interface RunHooks {
   onPhase?: (phase: "redacting" | "writing" | "verifying") => void;
   isCancelled?: () => boolean;
@@ -87,7 +92,10 @@ class FakeScope {
   }
 }
 
-const SUMMARY: DocumentSummary = { pageCount: 2, pagesWithText: [true, false] };
+const SUMMARY: DocumentSummary = {
+  pageCount: 2,
+  pages: [{ findings: [] }, { findings: ["scanned", "machine-read-text"] }],
+};
 
 /** Text that must never appear on the other side of the boundary. */
 const SECRET = "Patient Jane Doe, account 4111-1111-1111-1111";
@@ -128,12 +136,20 @@ function redactRequest(overrides: { id?: string; jobId?: string } = {}): Request
   };
 }
 
+/** What the trim does on a page with nothing outside its visible area. */
+const UNTRIMMED = Object.freeze({
+  removed: false,
+  pictureOutside: false,
+});
+
 /** What the engine hands back from a run that passed its self check. */
 function engineResult() {
   return {
     output: new ArrayBuffer(128),
     removedByType: {},
     sanitized: ["document-info", "annotations"],
+    // One per page of SUMMARY, agreeing with it: neither page was trimmed.
+    trim: [UNTRIMMED, UNTRIMMED],
   };
 }
 
@@ -188,7 +204,7 @@ describe("opening a document", () => {
     expect(openDocument).toHaveBeenCalledWith(
       expect.any(ArrayBuffer),
       { maxBytes: 26_214_400, maxPages: 3 },
-      expect.any(Function),
+      { onPhase: expect.any(Function), isCancelled: expect.any(Function) },
     );
   });
 
@@ -205,7 +221,7 @@ describe("opening a document", () => {
 
   it("passes each phase on as it happens, detecting last", async () => {
     openDocument.mockImplementation(
-      async (_bytes: ArrayBuffer, _limits: unknown, onPhase?: PhaseCallback) => {
+      async (_bytes: ArrayBuffer, _limits: unknown, { onPhase }: OpenHooks = {}) => {
         onPhase?.("loading-engine");
         onPhase?.("opening");
         onPhase?.("inspecting");
@@ -288,6 +304,7 @@ describe("detecting", () => {
       after: " or call",
       tickedByDefault: true,
       blocked: null,
+      concealed: null,
       target: TARGET,
     },
     {
@@ -298,6 +315,7 @@ describe("detecting", () => {
       after: ".",
       tickedByDefault: true,
       blocked: "slanted-text",
+      concealed: null,
       target: null,
     },
   ]);
@@ -334,6 +352,7 @@ describe("detecting", () => {
       "after",
       "before",
       "blocked",
+      "concealed",
       "id",
       "page",
       "text",
@@ -756,9 +775,67 @@ describe("a redaction run", () => {
     expect(redacted.outcome).toEqual({
       pageCount: 2,
       removedByType: { email: 2 },
-      pagesWithoutText: 1,
+      // Spec 0006, AC-28: pages per finding, from the open summary's readings.
+      pagesByFinding: { scanned: 1, "machine-read-text": 1 },
       sanitized: ["xmp-metadata"],
     });
+  });
+
+  /**
+   * Spec 0006, AC-18 and INV-6. The summary, the name and the download warning
+   * describe the open's trim, so a run whose trim decided otherwise on any
+   * page hands back no file.
+   */
+  it.each([
+    ["removed something the open did not", [{ ...UNTRIMMED, removed: true }, UNTRIMMED]],
+    [
+      "found a picture outside the open did not",
+      [UNTRIMMED, { ...UNTRIMMED, pictureOutside: true }],
+    ],
+    ["read a different number of pages", [UNTRIMMED]],
+  ])(
+    "posts unsupported, and no output, for a run whose trim %s",
+    async (_label, trim) => {
+      redactDocument.mockResolvedValue({ ...engineResult(), trim });
+      await startWorker();
+
+      scope.send(openRequest());
+      await settle();
+      scope.send(redactRequest());
+      await settle();
+
+      expect(scope.of("redacted")).toEqual([]);
+      expect(scope.of("error")).toEqual([
+        { id: "op-2", jobId: "job-1", kind: "error", errorKind: "unsupported" },
+      ]);
+    },
+  );
+
+  it("posts the output when the run's trim agrees with a trimmed open", async () => {
+    const trimmed = fakeDocument();
+    Object.assign(trimmed, {
+      summary: {
+        pageCount: 2,
+        pages: [{ findings: ["off-page-content"] }, { findings: ["off-page-picture"] }],
+      },
+    });
+    openDocument.mockResolvedValue(trimmed);
+    redactDocument.mockResolvedValue({
+      ...engineResult(),
+      trim: [
+        { removed: true, pictureOutside: false },
+        { removed: false, pictureOutside: true },
+      ],
+    });
+    await startWorker();
+
+    scope.send(openRequest());
+    await settle();
+    scope.send(redactRequest());
+    await settle();
+
+    expect(scope.of("redacted")).toHaveLength(1);
+    expect(scope.of("error")).toEqual([]);
   });
 
   /**
@@ -1105,7 +1182,7 @@ describe("cancelling", () => {
 
   it("suppresses progress that arrives after the cancel", async () => {
     openDocument.mockImplementation(
-      async (_bytes: ArrayBuffer, _limits: unknown, onPhase?: PhaseCallback) => {
+      async (_bytes: ArrayBuffer, _limits: unknown, { onPhase }: OpenHooks = {}) => {
         await Promise.resolve();
         onPhase?.("opening");
         return fakeDocument();
@@ -1148,6 +1225,54 @@ describe("cancelling", () => {
     await settle();
 
     expect(doc.close).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * Spec 0006, AC-29. Inspection reads every page inside the open, so the
+   * open is handed the same check detection gets, and a cancel that lands
+   * while it inspects posts nothing: the engine stops with `RunCancelled` and
+   * has already let go of the document.
+   */
+  it("gives the open a check that turns true once it is cancelled, and posts nothing", async () => {
+    const { RunCancelled } = await import("@/engine");
+    const inspecting = gate<void>();
+    let asked: (() => boolean) | undefined;
+    openDocument.mockImplementation(
+      async (_bytes: ArrayBuffer, _limits: unknown, { isCancelled }: OpenHooks = {}) => {
+        asked = isCancelled;
+        await inspecting.promise;
+        if (isCancelled?.()) throw new RunCancelled();
+        return fakeDocument();
+      },
+    );
+    await startWorker();
+
+    scope.send(openRequest({ id: "op-9" }));
+    await settle();
+    expect(asked?.()).toBe(false);
+
+    scope.send({ id: "op-9", jobId: "job-1", kind: "cancel" });
+    expect(asked?.()).toBe(true);
+
+    inspecting.resolve();
+    await settle();
+
+    expect(scope.of("result")).toEqual([]);
+    expect(scope.of("error")).toEqual([]);
+  });
+
+  /** A refusal at open reaches the main thread as its kind and nothing else. */
+  it("reports a document with nothing readable as no-readable-text", async () => {
+    const { EngineFailure } = await import("@/engine");
+    openDocument.mockRejectedValue(new EngineFailure("no-readable-text"));
+    await startWorker();
+
+    scope.send(openRequest({ id: "op-3" }));
+    await settle();
+
+    expect(scope.posted).toEqual([
+      { id: "op-3", jobId: "job-1", kind: "error", errorKind: "no-readable-text" },
+    ]);
   });
 
   /** Cheaper still: cancelled before parsing began, so nothing is parsed at all. */

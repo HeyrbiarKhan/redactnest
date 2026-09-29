@@ -1,14 +1,26 @@
 import type { PDFDocument, PDFPage } from "mupdf";
 
 import { detect, readsJoinAsNothing, type Span } from "@/detect";
-import type { BlockedReason } from "@/worker/protocol";
+import type { BlockedReason, Concealment } from "@/worker/protocol";
 
-import { EXTRACTION_OPTIONS, walkCharacters, type Character } from "./characters";
+import {
+  EXTRACTION_OPTIONS,
+  originIndex,
+  walkCharacters,
+  type Character,
+} from "./characters";
 import { checkpoint, EngineFailure } from "./failure";
 import { containsPoint, isSoundQuad, quadBounds, quadCentre } from "./geometry";
 import { imageReachVerdicts } from "./pixels";
 import { slantedTargets, unsoundTargetsIn } from "./targets";
-import type { FindOptions, FoundMatch, Quad, RedactionTarget } from "./types";
+import type {
+  ConcealedGlyph,
+  FindOptions,
+  FoundMatch,
+  PageInspection,
+  Quad,
+  RedactionTarget,
+} from "./types";
 
 /**
  * The find step. Spec 0005, *The find step*.
@@ -57,21 +69,44 @@ interface Candidate {
 const WHITESPACE = /^\s$/u;
 
 /**
- * Every match on every page that reported a text layer, by page, then in
- * reading order (AC-3). A page without a text layer is not read at all
- * (AC-12).
+ * Every match on every page that holds a readable character, by page, then in
+ * reading order (AC-3). Any other page is not read at all (AC-12, as spec
+ * 0006 rewords it), so a scanned page's stamp is still searched and a blank
+ * page costs nothing.
  */
 export async function findMatchesIn(
   doc: PDFDocument,
-  pagesWithText: readonly boolean[],
+  pages: readonly Pick<PageInspection, "readable" | "concealed">[],
   options: FindOptions,
 ): Promise<readonly FoundMatch[]> {
   const found: FoundMatch[] = [];
-  for (let index = 0; index < pagesWithText.length; index += 1) {
-    if (!pagesWithText[index]) continue;
-    found.push(...(await findOnPage(doc, index, options)));
+  for (let index = 0; index < pages.length; index += 1) {
+    if (!pages[index].readable) continue;
+    found.push(...(await findOnPage(doc, index, options, pages[index].concealed)));
   }
   return found;
+}
+
+/**
+ * How a match is kept from view, from the page's concealed glyphs. Spec 0006,
+ * AC-13: a character of the match whose origin lies within
+ * `POSITION_TOLERANCE` of a covered glyph makes it covered; otherwise one near
+ * a hidden glyph makes it hidden; otherwise it is in plain sight.
+ */
+function concealmentOf(
+  concealed: readonly ConcealedGlyph[],
+): (characters: readonly Character[]) => Concealment | null {
+  if (concealed.length === 0) return () => null;
+  const index = originIndex<Concealment>();
+  // Covered first, so a lookup that meets both finds the covered one.
+  for (const kind of ["covered", "hidden"] as const) {
+    for (const glyph of concealed) if (glyph.kind === kind) index.add(glyph.origin, kind);
+  }
+  return (characters) => {
+    const kinds = characters.map(({ origin }) => index.find(origin));
+    if (kinds.includes("covered")) return "covered";
+    return kinds.includes("hidden") ? "hidden" : null;
+  };
 }
 
 /**
@@ -87,7 +122,9 @@ async function findOnPage(
   doc: PDFDocument,
   index: number,
   { contextChars, isCancelled }: FindOptions,
+  concealed: readonly ConcealedGlyph[],
 ): Promise<readonly FoundMatch[]> {
+  const concealedIn = concealmentOf(concealed);
   const page = readable(() => doc.loadPage(index));
 
   try {
@@ -118,8 +155,14 @@ async function findOnPage(
     ];
 
     const context = contextReader(ordinary.points, contextChars);
-    const listed = found.map(({ span, text, target }, at): FoundMatch => {
-      const around = { page: index, kind: span.kind, text, ...context(target) };
+    const listed = found.map(({ span, text, target, characters }, at): FoundMatch => {
+      const around = {
+        page: index,
+        kind: span.kind,
+        text,
+        ...context(target),
+        concealed: concealedIn(characters),
+      };
       const blocked = checks.find(([, failed]) => failed[at])?.[0] ?? null;
       return blocked === null
         ? { ...around, tickedByDefault: span.tickedByDefault, blocked, target }
@@ -140,11 +183,12 @@ async function findOnPage(
             !covering.some((quad) => containsPoint(quad, quadCentre(character.quad))),
         ),
       )
-      .map(({ span, text, target }): FoundMatch => ({
+      .map(({ span, text, target, characters }): FoundMatch => ({
         page: index,
         kind: span.kind,
         text,
         ...hiddenContext(target),
+        concealed: concealedIn(characters),
         tickedByDefault: false,
         blocked: "replacement-text",
         target: null,
@@ -223,10 +267,10 @@ function spelledInside(
 }
 
 /**
- * Run a read of a page that reported a text layer. A throw from MuPDF on the
- * way fails the open with `unsupported` (AC-12): a page with text that cannot
- * be read cannot be reviewed, and reviewing the rest would pass it over in
- * silence.
+ * Run a read of a page that holds a readable character. A throw from MuPDF on
+ * the way fails the open with `unsupported` (AC-12): a page with text that
+ * cannot be read cannot be reviewed, and reviewing the rest would pass it over
+ * in silence.
  */
 function readable<T>(read: () => T): T {
   try {

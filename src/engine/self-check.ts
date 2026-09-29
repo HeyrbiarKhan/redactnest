@@ -40,6 +40,13 @@ import type { RedactionTarget } from "./types";
  *
  * On a run with nothing ticked, any character difference is `unsupported`
  * instead, since nothing ticked can have leaked or reached too far.
+ *
+ * Spec 0006, AC-17, adds one rule that is `redaction-incomplete` whatever is
+ * ticked, because a leak is a leak: no character centred outside a page's
+ * visible area survives, in either extraction mode. The record is taken after
+ * the trim, so a trimmed character is never expected back, and a trim that
+ * silently did nothing is caught here. The trim changes no pixel (INV-11), so
+ * there is no pixel outside to check.
  */
 export function checkOutput(
   mupdf: MuPdf,
@@ -49,6 +56,7 @@ export function checkOutput(
 ): EngineErrorKind | null {
   const ticked = targets.size > 0;
   let leaked = false;
+  let escaped = false;
   let replaced = false;
   let overreached = false;
   let check: Document | null = null;
@@ -63,7 +71,15 @@ export function checkOutput(
       const page = pdf.loadPage(index);
 
       try {
-        const [ordinary, ignoring] = comparePage(page, record[index], quads.map(lineBox));
+        const bounds = page.getBounds();
+        const visible = [bounds[0], bounds[1], bounds[2], bounds[3]] as const;
+        const [ordinary, ignoring] = comparePage(
+          page,
+          record[index],
+          quads.map(lineBox),
+          visible,
+        );
+        if (ordinary.outside || ignoring.outside) escaped = true;
         if (ignoring.extra) leaked = true;
         if (ordinary.extra) replaced = true;
         if (ordinary.missing || ignoring.missing || ordinary.hidden || ignoring.hidden) {
@@ -74,7 +90,7 @@ export function checkOutput(
         page.destroy();
       }
 
-      if (leaked && ticked) break;
+      if ((leaked && ticked) || escaped) break;
     }
   } catch {
     // An output that cannot be reopened, extracted or decoded is an output
@@ -84,6 +100,7 @@ export function checkOutput(
     check?.destroy();
   }
 
+  if (escaped) return "redaction-incomplete";
   if (!ticked) return leaked || replaced || overreached ? "unsupported" : null;
   if (leaked) return "redaction-incomplete";
   if (replaced) return "replacement-text";

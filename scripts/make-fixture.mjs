@@ -23,6 +23,31 @@ import {
 import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
 import {
+  readBlank,
+  readConcealed,
+  readCovered,
+  readCrooked,
+  readEmptyClip,
+  readEmptyClipScan,
+  readHidden,
+  readMixed,
+  readPages,
+  readPictures,
+  readPrivate,
+  readRefusedMix,
+  readScans,
+  readSlides,
+  readStamped,
+  readUnmapped,
+  trimEdge,
+  trimKept,
+  trimOcr,
+  trimQuote,
+  trimRefused,
+  trimScan,
+  trimText,
+} from "./lib/reading-fixtures.mjs";
+import {
   actualText,
   angledText,
   boundsPin,
@@ -407,6 +432,72 @@ const FIXTURES = [
     "detect-wraps.pdf",
     detectWraps(),
     "addresses wrapped across lines, and across blocks",
+  ],
+  // Spec 0006: reading every page before review.
+  ["read-pages.pdf", readPages(), "one page per reading rule and near miss"],
+  ["read-scans.pdf", readScans(), "every page a scan"],
+  ["read-blank.pdf", readBlank(), "every page blank, one a white rectangle"],
+  ["read-stamped.pdf", readStamped(), "every page a scan with a Bates number"],
+  ["read-unmapped.pdf", readUnmapped(), "every page in a font with no character map"],
+  ["read-private.pdf", readPrivate(), "every page in private use code points"],
+  ["read-refused-mix.pdf", readRefusedMix(), "a scan, a blank, a stamped scan, unmapped"],
+  ["read-mixed.pdf", readMixed(), "a typed page, a scan and a blank page"],
+  ["read-pictures.pdf", readPictures(), "one page per picture rule and near miss"],
+  ["read-slides.pdf", readSlides(), "full bleed photo slides with a title and bullets"],
+  [
+    "read-crooked.pdf",
+    readCrooked(),
+    "a crooked OCR scan and a typed page at the same angle",
+  ],
+  ["read-covered.pdf", readCovered(), "one page per covering rule and near miss"],
+  ["read-hidden.pdf", readHidden(), "one page per hiding rule and near miss"],
+  // One case per file, because an open stops at the first page it refuses.
+  ...readEmptyClip().map((bytes, index) => [
+    `read-empty-clip-${index}.pdf`,
+    bytes,
+    [
+      "an address under a zero area clip",
+      "an address under a zero width clip",
+      "an address under two nested clips that do not meet",
+      "an address under a clip whose path is empty",
+    ][index],
+  ]),
+  [
+    "read-empty-clip-scan.pdf",
+    readEmptyClipScan(),
+    "a scan with nothing readable, and an address under a zero area clip",
+  ],
+  [
+    "read-concealed.pdf",
+    readConcealed(),
+    "a covered email and phone, and a hidden email",
+  ],
+  [
+    "trim-text.pdf",
+    trimText(),
+    "text below the crop, below the media box, and across its edge",
+  ],
+  [
+    "trim-scan.pdf",
+    trimScan(),
+    "a cropped 150 ppi scan, and a picture wholly off the page",
+  ],
+  ["trim-kept.pdf", trimKept(), "a stretched band and a turned picture across the edge"],
+  [
+    "trim-edge.pdf",
+    trimEdge(),
+    "a scan 0.28 pt past an A4 page, a picture beside an address, a mask's image",
+  ],
+  [
+    "trim-refused.pdf",
+    trimRefused(),
+    "a size change between glyphs outside and inside the crop",
+  ],
+  ["trim-quote.pdf", trimQuote(), "a trimmed page that shows a line with a quote"],
+  [
+    "trim-ocr.pdf",
+    trimOcr(),
+    "a scan with Tesseract's text layer, cropped through its lines",
   ],
 ];
 

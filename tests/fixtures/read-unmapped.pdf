@@ -1,0 +1,57 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [8 0 R 10 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /FontDescriptor /FontName /Mystery /FontBBox [0 -200 1000 800] /Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 /ItalicAngle 0 /Flags 4 >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Mystery /FirstChar 32 /LastChar 90 /Widths [600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600] /Encoding << /Type /Encoding /Differences [65 /zz65 /zz66 /zz67 /zz68 /zz69 /zz70 /zz71 /zz72 /zz73 /zz74 /zz75 /zz76 /zz77 /zz78 /zz79 /zz80 /zz81 /zz82 /zz83 /zz84 /zz85 /zz86 /zz87 /zz88 /zz89 /zz90] >> /FontDescriptor 5 0 R >>
+endobj
+7 0 obj
+<<  /Length 55 >>
+stream
+BT /M 12 Tf 72 700 Td (FIRST PAGE OF THE LETTER) Tj ET
+
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R /M 6 0 R >>  >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<<  /Length 56 >>
+stream
+BT /M 12 Tf 72 700 Td (SECOND PAGE OF THE LETTER) Tj ET
+
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R /M 6 0 R >>  >> /Contents 9 0 R >>
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000122 00000 n 
+0000000219 00000 n 
+0000000314 00000 n 
+0000000479 00000 n 
+0000001048 00000 n 
+0000001154 00000 n 
+0000001301 00000 n 
+0000001408 00000 n 
+trailer
+<< /Size 11 /Root 1 0 R >>
+startxref
+1556
+%%EOF

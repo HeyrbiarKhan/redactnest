@@ -6,6 +6,7 @@ import type {
   DocumentSummary,
   EngineErrorKind,
   LoggablePayload,
+  PageReading,
   ProgressPhase,
   RedactionOutcome,
   ReviewMatch,
@@ -77,6 +78,11 @@ describe("what may reach a log", () => {
     expectTypeOf<Verdict<EngineErrorKind>>().toEqualTypeOf<"kinds and numbers only">();
     expectTypeOf<Verdict<ProgressPhase>>().toEqualTypeOf<"kinds and numbers only">();
     expectTypeOf<Verdict<DetectorKind>>().toEqualTypeOf<"kinds and numbers only">();
+    // Spec 0006, AC-28: the page readings and the pages per finding.
+    expectTypeOf<Verdict<PageReading>>().toEqualTypeOf<"kinds and numbers only">();
+    expectTypeOf<
+      Verdict<RedactionOutcome["pagesByFinding"]>
+    >().toEqualTypeOf<"kinds and numbers only">();
   });
 
   /**

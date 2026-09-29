@@ -192,9 +192,68 @@ function turn(a: Point, b: Point, p: Point): number {
 }
 
 /** The corners in the order that walks the outline: `ul`, `ur`, `lr`, `ll`. */
-function outline(quad: Quad): readonly Point[] {
+export function outline(quad: Quad): readonly Point[] {
   const { ul, ur, ll, lr } = corners(quad);
   return [ul, ur, lr, ll];
+}
+
+/** A simple polygon's area, by the shoelace formula, never negative. */
+export function polygonArea(points: readonly Point[]): number {
+  let twice = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const [x0, y0] = points[index];
+    const [x1, y1] = points[(index + 1) % points.length];
+    twice += x0 * y1 - x1 * y0;
+  }
+  return Math.abs(twice) / 2;
+}
+
+/**
+ * The part of `subject` inside the convex polygon `within`, by
+ * Sutherland–Hodgman: clipped against each edge of `within` in turn. Spec
+ * 0006, AC-6, where it measures how much of a glyph's box lies under a cover.
+ * Either winding works, and an empty or degenerate `within` leaves nothing.
+ */
+export function clipToConvex(
+  subject: readonly Point[],
+  within: readonly Point[],
+): readonly Point[] {
+  // Which side of each edge is inside, from the winding of `within`.
+  let twice = 0;
+  for (let index = 0; index < within.length; index += 1) {
+    const [x0, y0] = within[index];
+    const [x1, y1] = within[(index + 1) % within.length];
+    twice += x0 * y1 - x1 * y0;
+  }
+  if (!(Math.abs(twice) > 0)) return [];
+  const sign = Math.sign(twice);
+
+  let result: readonly Point[] = subject;
+  for (let index = 0; index < within.length && result.length > 0; index += 1) {
+    const a = within[index];
+    const b = within[(index + 1) % within.length];
+    const inside = (p: Point) => sign * turn(a, b, p) >= 0;
+    const crossing = (p: Point, q: Point): Point => {
+      const dp = turn(a, b, p);
+      const dq = turn(a, b, q);
+      const t = dp / (dp - dq);
+      return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+    };
+
+    const next: Point[] = [];
+    for (let at = 0; at < result.length; at += 1) {
+      const current = result[at];
+      const previous = result[(at + result.length - 1) % result.length];
+      if (inside(current)) {
+        if (!inside(previous)) next.push(crossing(previous, current));
+        next.push(current);
+      } else if (inside(previous)) {
+        next.push(crossing(previous, current));
+      }
+    }
+    result = next;
+  }
+  return result;
 }
 
 /**

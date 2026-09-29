@@ -21,7 +21,7 @@
  * the checklist at the very end.
  */
 
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -108,9 +108,13 @@ const PAID: EntitlementSnapshot = Object.freeze({
   maxFileBytes: 100 * 1024 * 1024,
 });
 
+/** Page 1 typed, page 2 blank: quiet, so the plain name and the all clear line. */
 const SUMMARY: DocumentSummary = Object.freeze({
   pageCount: 2,
-  pagesWithText: Object.freeze([true, false]) as readonly boolean[],
+  pages: Object.freeze([
+    Object.freeze({ findings: [] }),
+    Object.freeze({ findings: ["blank"] }),
+  ]) as DocumentSummary["pages"],
 });
 
 function pdfFile(name = "report.pdf"): File {
@@ -783,6 +787,7 @@ describe("the redaction path (spec 0004)", () => {
       after: " today",
       tickedByDefault: true,
       blocked: null,
+      concealed: null,
     },
     {
       id: asMatchId("m2"),
@@ -793,13 +798,14 @@ describe("the redaction path (spec 0004)", () => {
       after: ".",
       tickedByDefault: false,
       blocked: null,
+      concealed: null,
     },
   ]);
 
   const OUTCOME: RedactionOutcome = Object.freeze<RedactionOutcome>({
     pageCount: 2,
     removedByType: { email: 2, phone: 1 },
-    pagesWithoutText: 1,
+    pagesByFinding: { blank: 1 },
     sanitized: ["document-info", "xmp-metadata", "annotations"],
   });
 
@@ -1113,6 +1119,7 @@ describe("the checklist (spec 0005)", () => {
       after: " today",
       tickedByDefault: true,
       blocked: null,
+      concealed: null,
     },
     {
       id: PHONE,
@@ -1123,6 +1130,7 @@ describe("the checklist (spec 0005)", () => {
       after: " retired",
       tickedByDefault: false,
       blocked: null,
+      concealed: null,
     },
     {
       id: BLOCKED,
@@ -1133,6 +1141,7 @@ describe("the checklist (spec 0005)", () => {
       after: "",
       tickedByDefault: false,
       blocked: "slanted-text",
+      concealed: null,
     },
   ]);
 
@@ -1248,7 +1257,7 @@ describe("the checklist (spec 0005)", () => {
                 outcome: {
                   pageCount: 2,
                   removedByType: { email: 1 },
-                  pagesWithoutText: 1,
+                  pagesByFinding: { blank: 1 },
                   sanitized: [],
                 },
               });
@@ -1272,5 +1281,346 @@ describe("the checklist (spec 0005)", () => {
     const { container } = await openWith(withMatches());
 
     await expectNoAxeViolations(container);
+  });
+});
+
+/**
+ * Spec 0006, slice 1. What the page readings say on screen: the all clear line
+ * or the warning at open, the warning again above Download, the partly
+ * redacted name, and the two refusal lines.
+ */
+describe("the page readings (spec 0006)", () => {
+  /** Page 1 typed, page 2 a scan, page 3 blank, page 4 drawn only. */
+  const FLAGGED: DocumentSummary = Object.freeze({
+    pageCount: 4,
+    pages: Object.freeze([
+      Object.freeze({ findings: [] }),
+      Object.freeze({ findings: ["scanned"] }),
+      Object.freeze({ findings: ["blank"] }),
+      Object.freeze({ findings: ["drawn-only"] }),
+    ]) as DocumentSummary["pages"],
+  });
+
+  const OUTCOME: RedactionOutcome = Object.freeze<RedactionOutcome>({
+    pageCount: 4,
+    removedByType: {},
+    pagesByFinding: { scanned: 1, "drawn-only": 1, blank: 1 },
+    sanitized: [],
+  });
+
+  function flagged(summary: DocumentSummary = FLAGGED) {
+    let finish!: () => void;
+    const session: OpenedSession = {
+      ...openedSession(),
+      summary,
+      redact: vi.fn(
+        () =>
+          new Promise<RedactedOutput>((resolve) => {
+            finish = () => resolve({ output: new ArrayBuffer(8), outcome: OUTCOME });
+          }),
+      ),
+    };
+    return { session, finish: () => act(async () => finish()) };
+  }
+
+  async function openWith(session: OpenedSession) {
+    mocks.openSession.mockResolvedValue(session);
+    const rendered = render(<ToolClient />);
+    await chooseFile(pdfFile());
+    await screen.findByTestId("review");
+    return rendered;
+  }
+
+  it("says every page can be read when no page carries a warning (AC-19)", async () => {
+    await openWith(openedSession());
+
+    expect(screen.getByTestId("all-clear")).toHaveTextContent(
+      "RedactNest can read the text on every page.",
+    );
+    expect(screen.queryByTestId("page-warnings")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("text-layer-count")).not.toBeInTheDocument();
+  });
+
+  it("names each warned page in the opened document card, with the advice (AC-20)", async () => {
+    const { container } = await openWith(flagged().session);
+
+    const warning = screen.getByTestId("page-warnings");
+    expect(
+      within(warning).getByRole("heading", {
+        level: 3,
+        name: "Some pages can't be fully checked",
+      }),
+    ).toBeInTheDocument();
+    expect(warning).toHaveTextContent(
+      "Page 2 is a scanned image. Text in the image can't be found or removed.",
+    );
+    expect(warning).toHaveTextContent(
+      "Page 4 has no text RedactNest can read. Anything on it, such as words in a picture or drawn as shapes, can't be found or removed.",
+    );
+    expect(within(warning).getByTestId("page-advice")).toHaveTextContent(
+      "If you have the original, run it through text recognition (OCR) first, then open the result here.",
+    );
+    // The blank page is never named.
+    expect(warning).not.toHaveTextContent("Page 3");
+    expect(screen.queryByTestId("all-clear")).not.toBeInTheDocument();
+
+    // Heard once, with the open: inside the first polite region, in the card.
+    expect(container.querySelector('[aria-live="polite"]')).toContainElement(warning);
+    expect(screen.getByRole("region", { name: "Document opened" })).toContainElement(
+      warning,
+    );
+    expect(warning).not.toHaveAttribute("role");
+    expect(warning).toHaveTextContent(/^Warning:/);
+  });
+
+  it("qualifies the coverage note when a page carries a warning (AC-26)", async () => {
+    await openWith(flagged().session);
+
+    expect(screen.getByTestId("coverage")).toHaveTextContent(
+      "on the pages it could read",
+    );
+  });
+
+  it("repeats the warning directly above Download, and names the file partly redacted (AC-22, AC-23)", async () => {
+    const run = flagged();
+    await openWith(run.session);
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("redact"));
+    await run.finish();
+
+    const card = screen.getByRole("region", { name: "Your clean file is ready" });
+    const warning = within(card).getByTestId("download-warning");
+    expect(
+      within(warning).getByRole("heading", {
+        level: 3,
+        name: "Not every page was checked",
+      }),
+    ).toBeInTheDocument();
+    expect(warning).toHaveTextContent("Page 2 is a scanned image.");
+    expect(warning).toHaveTextContent("Page 4 has no text RedactNest can read.");
+    expect(warning).toHaveTextContent(
+      "That is why the file's name ends in partly redacted.",
+    );
+    // The last thing in the outcome card, and the card sits right above the
+    // row that holds Download.
+    expect(card.lastElementChild).toBe(warning);
+    const download = screen.getByTestId("download");
+    expect(card.closest('[aria-live="polite"]')?.nextElementSibling).toContainElement(
+      download,
+    );
+
+    await user.click(download);
+    expect(mocks.offerDownload).toHaveBeenCalledWith(
+      expect.any(ArrayBuffer),
+      "report-partly-redacted.pdf",
+    );
+    // It stays after the download too.
+    expect(screen.getByTestId("download-warning")).toBeInTheDocument();
+  });
+
+  it("keeps the plain name and shows no download warning when no page carries one", async () => {
+    const session: OpenedSession = {
+      ...openedSession(),
+      redact: vi.fn(async () => ({ output: new ArrayBuffer(8), outcome: OUTCOME })),
+    };
+    await openWith(session);
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("redact"));
+    await user.click(await screen.findByTestId("download"));
+
+    expect(mocks.offerDownload).toHaveBeenCalledWith(
+      expect.any(ArrayBuffer),
+      "report-redacted.pdf",
+    );
+    expect(screen.queryByTestId("download-warning")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      "no-readable-text",
+      "RedactNest can't read any text in this PDF. It looks like a scan, or its text is in a form RedactNest can't read, so nothing could be found and no file was made. If you have the original, run it through text recognition (OCR) first, then open the result here.",
+    ],
+    [
+      "edge-text",
+      "This PDF has text at the edge of a page that RedactNest can't remove cleanly, so it can't be redacted and no file was made.",
+    ],
+  ] as const)(
+    "says plainly why no file was made for %s, with only Start over (AC-26)",
+    async (kind, words) => {
+      mocks.openSession.mockRejectedValue(new EngineError(kind));
+      const { container } = render(<ToolClient />);
+      await chooseFile(pdfFile());
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent(words);
+      expect(container.querySelector('[aria-live="polite"]')?.contains(alert)).toBe(
+        false,
+      );
+      expect(screen.queryByTestId("review")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("redact")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+      expect(screen.getByTestId("start-over")).toBeInTheDocument();
+    },
+  );
+
+  it("has no accessibility violations with the warning at open and at download (AC-27)", async () => {
+    const run = flagged();
+    const { container } = await openWith(run.session);
+    await expectNoAxeViolations(container);
+
+    await userEvent.setup().click(screen.getByTestId("redact"));
+    await run.finish();
+    await expectNoAxeViolations(container);
+  });
+
+  /**
+   * Spec 0006, AC-8, AC-21 and AC-22. What lies outside a page's visible
+   * area: a note at open and a note at complete when the trim removed text or
+   * drawings there, and a warning with the partly name for a picture reaching
+   * outside, which is always kept.
+   */
+  describe("content outside the visible area", () => {
+    const OFF_PAGE: DocumentSummary = Object.freeze({
+      pageCount: 3,
+      pages: Object.freeze([
+        Object.freeze({ findings: ["off-page-content"] }),
+        Object.freeze({ findings: ["off-page-picture"] }),
+        Object.freeze({ findings: [] }),
+      ]) as DocumentSummary["pages"],
+    });
+
+    it("notes the removal at open, warns of the picture outside, and names the file partly", async () => {
+      const run = flagged(OFF_PAGE);
+      await openWith(run.session);
+
+      expect(screen.getByTestId("page-notes")).toHaveTextContent(
+        "Page 1 has text or drawings outside its visible area. RedactNest removes them when you redact, since nobody can see them.",
+      );
+      expect(screen.getByTestId("page-warnings")).toHaveTextContent(
+        "Page 2 has a picture that reaches outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.",
+      );
+
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("redact"));
+      await run.finish();
+
+      const card = screen.getByRole("region", { name: "Your clean file is ready" });
+      const removed = within(card).getByTestId("off-page-removed");
+      expect(removed).toHaveTextContent(
+        "Text and drawings outside the visible area of page 1 were removed.",
+      );
+      expect(removed).toHaveTextContent(/^Note:/);
+      // Before the download warning, which stays the last thing in the card.
+      const warning = within(card).getByTestId("download-warning");
+      expect(
+        removed.compareDocumentPosition(warning) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(card.lastElementChild).toBe(warning);
+
+      await user.click(screen.getByTestId("download"));
+      expect(mocks.offerDownload).toHaveBeenCalledWith(
+        expect.any(ArrayBuffer),
+        "report-partly-redacted.pdf",
+      );
+    });
+
+    it("keeps the plain name when the trim only removed content", async () => {
+      const summary: DocumentSummary = {
+        pageCount: 1,
+        pages: [{ findings: ["off-page-content"] }],
+      };
+      const run = flagged(summary);
+      await openWith(run.session);
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("redact"));
+      await run.finish();
+
+      expect(screen.getByTestId("off-page-removed")).toBeInTheDocument();
+      expect(screen.queryByTestId("download-warning")).not.toBeInTheDocument();
+      await user.click(screen.getByTestId("download"));
+      expect(mocks.offerDownload).toHaveBeenCalledWith(
+        expect.any(ArrayBuffer),
+        "report-redacted.pdf",
+      );
+    });
+  });
+
+  /** Spec 0006, AC-21 and AC-25. What is worth knowing, and changes nothing. */
+  describe("the notes", () => {
+    const SLANTED: ReviewMatch = Object.freeze<ReviewMatch>({
+      id: asMatchId("m-slanted"),
+      type: "email",
+      page: 2,
+      text: "accounts@example.com",
+      before: "Write to ",
+      after: " today",
+      tickedByDefault: false,
+      blocked: "slanted-text",
+      concealed: null,
+    });
+
+    it("sit in an untitled note after the warnings, with the crooked scan line last", async () => {
+      const summary: DocumentSummary = {
+        pageCount: 3,
+        pages: [
+          { findings: ["bare-picture"] },
+          { findings: ["machine-read-text"] },
+          { findings: [] },
+        ],
+      };
+      await openWith({ ...openedSession(), summary, matches: [SLANTED] });
+
+      const notes = screen.getByTestId("page-notes");
+      expect(notes).toHaveTextContent(/^Note:/);
+      expect(within(notes).queryByRole("heading")).not.toBeInTheDocument();
+      const lines = [...notes.querySelectorAll("p")].map((line) => line.textContent);
+      expect(lines).toEqual([
+        "Page 2 is a scan with machine read text. RedactNest reads that text, so it can only find what the text recognition got right.",
+        "Some items on scanned pages can't be removed because the scan is slightly crooked. Straightening the scan before text recognition (OCRmyPDF's --deskew option, for one) usually fixes this.",
+      ]);
+
+      // After the warnings, in the same card, and never among them.
+      const warnings = screen.getByTestId("page-warnings");
+      expect(
+        warnings.compareDocumentPosition(notes) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(warnings).not.toHaveTextContent("machine read");
+      expect(screen.getByRole("region", { name: "Document opened" })).toContainElement(
+        notes,
+      );
+    });
+
+    it("keep the all clear line and the plain name when there are only notes", async () => {
+      const summary: DocumentSummary = {
+        pageCount: 2,
+        pages: [{ findings: ["machine-read-text"] }, { findings: [] }],
+      };
+      await openWith({ ...openedSession(), summary });
+
+      expect(screen.getByTestId("all-clear")).toBeInTheDocument();
+      expect(screen.getByTestId("page-notes")).toHaveTextContent(
+        "Page 1 is a scan with machine read text.",
+      );
+      expect(screen.queryByTestId("page-warnings")).not.toBeInTheDocument();
+      expect(screen.getByTestId("coverage")).not.toHaveTextContent(
+        "on the pages it could read",
+      );
+    });
+
+    it("leave the crooked scan line out when the slanted match is on a typed page", async () => {
+      const summary: DocumentSummary = {
+        pageCount: 2,
+        pages: [{ findings: ["machine-read-text"] }, { findings: [] }],
+      };
+      await openWith({ ...openedSession(), summary, matches: [SLANTED] });
+
+      expect(screen.getByTestId("page-notes")).not.toHaveTextContent("crooked");
+    });
+
+    it("show no note at all when there is nothing to note", async () => {
+      await openWith(openedSession());
+
+      expect(screen.queryByTestId("page-notes")).not.toBeInTheDocument();
+    });
   });
 });

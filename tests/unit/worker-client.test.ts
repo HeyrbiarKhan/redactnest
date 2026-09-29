@@ -113,12 +113,15 @@ function currentWorker(): FakeWorker {
   return worker;
 }
 
-const SUMMARY: DocumentSummary = { pageCount: 2, pagesWithText: [true, false] };
+const SUMMARY: DocumentSummary = {
+  pageCount: 2,
+  pages: [{ findings: [] }, { findings: ["blank"] }],
+};
 
 const OUTCOME: RedactionOutcome = {
   pageCount: 2,
   removedByType: { email: 3 },
-  pagesWithoutText: 1,
+  pagesByFinding: { blank: 1 },
   sanitized: ["xmp-metadata"],
 };
 

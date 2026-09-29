@@ -32,15 +32,88 @@ test("the engine opens a PDF in the worker and reports its page count", async ({
   });
 });
 
-test("per page text layer detection reports honestly", async ({ page }) => {
+/**
+ * Spec 0006, AC-19. The fixture's second page draws nothing at all, which is
+ * blank and says nothing, so the card reads the all clear line.
+ */
+test("the page readings report honestly: a typed page and a blank one are all clear", async ({
+  page,
+}) => {
   await page.goto("/tool");
   await page.getByTestId("file-input").setInputFiles(FIXTURE);
 
-  // The fixture is built with a text layer on page one and none on page two,
-  // which is what feature 7's scanned page warnings will read.
-  await expect(page.getByTestId("text-layer-count")).toHaveText(/1 of 2/, {
+  await expect(page.getByTestId("all-clear")).toHaveText(
+    "RedactNest can read the text on every page.",
+    { timeout: ENGINE_TIMEOUT },
+  );
+  await expect(page.getByTestId("page-warnings")).toHaveCount(0);
+});
+
+/**
+ * Spec 0006, the happy path of slice 1, in the real engine in the real worker:
+ * a typed page, a scan and a blank page. The scan is named at open and again
+ * above Download, and the file is offered as partly redacted.
+ */
+test("names a scanned page at open and at download, and the file partly redacted", async ({
+  page,
+}) => {
+  // Two waits of up to `ENGINE_TIMEOUT` each, the open and the run.
+  test.setTimeout(2 * ENGINE_TIMEOUT + 30_000);
+  await page.goto("/tool");
+  await page
+    .getByTestId("file-input")
+    .setInputFiles(resolve("tests/fixtures/read-mixed.pdf"));
+
+  const warning = page.getByTestId("page-warnings");
+  await expect(warning).toContainText(
+    "Page 2 is a scanned image. Text in the image can't be found or removed.",
+    { timeout: ENGINE_TIMEOUT },
+  );
+  await expect(page.getByTestId("page-advice")).toBeVisible();
+  await expect(warning).not.toContainText("Page 3");
+
+  await page.getByTestId("redact").click();
+  const repeated = page.getByTestId("download-warning");
+  await expect(repeated).toContainText("Page 2 is a scanned image.", {
     timeout: ENGINE_TIMEOUT,
   });
+  await expect(repeated).toContainText(
+    "That is why the file's name ends in partly redacted.",
+  );
+
+  const downloading = page.waitForEvent("download");
+  await page.getByTestId("download").click();
+  expect((await downloading).suggestedFilename()).toBe("read-mixed-partly-redacted.pdf");
+  await expect(repeated).toBeVisible();
+});
+
+/**
+ * Spec 0006, AC-10 and AC-26. A document with no page RedactNest can read is
+ * refused at open with its plain line, announced once as an alert, with no
+ * checklist, no Redact and no Download, and Start over still working.
+ */
+test("refuses a document with nothing readable, and says why no file was made", async ({
+  page,
+}) => {
+  await page.goto("/tool");
+  await page
+    .getByTestId("file-input")
+    .setInputFiles(resolve("tests/fixtures/read-scans.pdf"));
+
+  // By its test id: Next.js's route announcer is an alert of its own.
+  const alert = page.getByTestId("error");
+  await expect(alert).toHaveText(
+    /^Error: RedactNest can't read any text in this PDF\. .*so nothing could be found and no file was made\./,
+    { timeout: ENGINE_TIMEOUT },
+  );
+  await expect(alert).toHaveAttribute("role", "alert");
+  await expect(page.getByTestId("review")).toHaveCount(0);
+  await expect(page.getByTestId("redact")).toHaveCount(0);
+  await expect(page.getByTestId("download")).toHaveCount(0);
+
+  await page.getByTestId("start-over").click();
+  await expect(page.getByTestId("error")).toHaveCount(0);
+  await expect(page.getByTestId("choose-file")).toBeVisible();
 });
 
 test("the page hydrates and runs with no policy violation", async ({ page }) => {

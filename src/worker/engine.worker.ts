@@ -27,9 +27,12 @@ import {
   type OpenDocument,
   type RedactionTarget,
   type TargetMap,
+  type TrimOutcome,
 } from "@/engine";
 import {
   asMatchId,
+  countPagesByFinding,
+  type DocumentSummary,
   type EngineLimits,
   type ErrorMessage,
   type ProgressMessage,
@@ -76,7 +79,10 @@ interface EngineSession {
    * (spec 0004, AC-11).
    */
   readonly bytes: ArrayBuffer;
-  /** The review copy, prepared once at open. Never redacted (spec 0004, INV-1). */
+  /**
+   * The review copy, prepared and trimmed once at open. Never redacted inside
+   * its visible area (spec 0004, INV-1, as spec 0006 rewords it).
+   */
   readonly doc: OpenDocument;
   /** Page, quads and extraction offsets. Never crosses the boundary (INV-2). */
   readonly targets: TargetMap;
@@ -165,8 +171,13 @@ async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
     await Promise.all(evicted.map((session) => session.runs));
     if (cancelled.has(id)) return;
 
-    const doc = await openDocument(bytes, limits, (phase) => {
-      if (!cancelled.has(id)) postProgress(id, jobId, phase);
+    // Spec 0006, AC-29. Inspection reads every page inside the open, so the
+    // open asks the cancelled set after every page, as detection does below.
+    const doc = await openDocument(bytes, limits, {
+      onPhase: (phase) => {
+        if (!cancelled.has(id)) postProgress(id, jobId, phase);
+      },
+      isCancelled: () => cancelled.has(id),
     });
 
     // Only a session that reaches the registry keeps its document. Every other
@@ -204,6 +215,8 @@ async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
           after: match.after,
           tickedByDefault: match.blocked === null && match.tickedByDefault,
           blocked: match.blocked,
+          // Spec 0006, AC-13: a closed kind, so the row can say so (AC-24).
+          concealed: match.concealed,
         };
       });
 
@@ -306,6 +319,14 @@ async function runRedaction(
     if (cancelled.has(id)) return;
 
     const { summary } = session.doc;
+
+    // Spec 0006, AC-18 and INV-6. The summary the visitor was shown, the file
+    // name and the download warning all describe what the open's trim did, so
+    // a run whose trim decided otherwise on any page hands back no file.
+    if (!trimAgrees(result.trim, summary)) {
+      postError(id, jobId, "unsupported");
+      return;
+    }
     const message: RedactedMessage = {
       id,
       jobId,
@@ -314,7 +335,9 @@ async function runRedaction(
       outcome: {
         pageCount: summary.pageCount,
         removedByType: result.removedByType,
-        pagesWithoutText: summary.pagesWithText.filter((hasText) => !hasText).length,
+        // Spec 0006, AC-28 and INV-5: from the same readings the visitor was
+        // shown, so a log can never disagree with the warnings.
+        pagesByFinding: countPagesByFinding(summary.pages),
         sanitized: result.sanitized,
       },
     };
@@ -338,6 +361,23 @@ async function runRedaction(
     if (session.activeRunId === id) session.activeRunId = null;
     cancelled.delete(id);
   }
+}
+
+/**
+ * Did a run's trim reach the open's decisions, page by page? Which pages had
+ * something removed, and which draw a picture reaching outside the visible
+ * area, are exactly what the summary's `off-page-content` and
+ * `off-page-picture` say (AC-18).
+ */
+function trimAgrees(trim: readonly TrimOutcome[], summary: DocumentSummary): boolean {
+  return (
+    trim.length === summary.pages.length &&
+    trim.every(
+      ({ removed, pictureOutside }, index) =>
+        removed === summary.pages[index].findings.includes("off-page-content") &&
+        pictureOutside === summary.pages[index].findings.includes("off-page-picture"),
+    )
+  );
 }
 
 scope.addEventListener("message", (event: MessageEvent<RequestMessage>) => {

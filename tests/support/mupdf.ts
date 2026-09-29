@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import * as mupdf from "mupdf";
 import type { PDFDocument, PDFObject } from "mupdf";
 
@@ -372,6 +374,59 @@ export function filledPaths(bytes: ArrayBuffer, index: number): FilledPath[] {
     }
   });
   return found;
+}
+
+/** An image stream as the file stores it: its filters, and a digest of its raw bytes. */
+export interface StoredImage {
+  readonly filter: string;
+  readonly digest: string;
+}
+
+/**
+ * Every image XObject a page's resources name, read raw with
+ * `readRawStream()`, never decoded, in digest order. Two files whose pages
+ * give equal lists hold the same images byte for byte (spec 0006, AC-15 and
+ * AC-29). Names are left out: MuPDF's content filter renames the resources of
+ * a page it rewrites (`/Photo` becomes `/Im1`) and keeps the stream as it was.
+ */
+export function pageImages(bytes: ArrayBuffer, index: number): readonly StoredImage[] {
+  return inspect(bytes, (doc) => imagesOn(doc, index));
+}
+
+/** `pageImages` for every page of a file, opened once. */
+export function documentImages(bytes: ArrayBuffer): readonly (readonly StoredImage[])[] {
+  return inspect(bytes, (doc) =>
+    Array.from({ length: doc.countPages() }, (_, index) => imagesOn(doc, index)),
+  );
+}
+
+function imagesOn(doc: PDFDocument, index: number): readonly StoredImage[] {
+  const found: StoredImage[] = [];
+  const xobjects = doc.findPage(index).get("Resources").get("XObject");
+  if (!xobjects.isDictionary()) return found;
+  // Through the reference itself: MuPDF knows a stream only by its
+  // indirect reference, so a resolved one reads as a plain dictionary.
+  xobjects.forEach((image) => {
+    if (!image.isStream()) return;
+    const subtype = image.get("Subtype");
+    if (!subtype.isName() || subtype.asName() !== "Image") return;
+
+    const filter = image.get("Filter");
+    const filters: string[] = [];
+    if (filter.isName()) filters.push(filter.asName());
+    else if (filter.isArray()) filter.forEach((part) => filters.push(part.asName()));
+
+    const raw = image.readRawStream();
+    try {
+      found.push({
+        filter: filters.join(" "),
+        digest: createHash("sha256").update(raw.asUint8Array()).digest("hex"),
+      });
+    } finally {
+      raw.destroy();
+    }
+  });
+  return found.sort((a, b) => a.digest.localeCompare(b.digest));
 }
 
 /**

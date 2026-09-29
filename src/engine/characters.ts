@@ -134,6 +134,11 @@ export interface PageDifference {
   readonly missing: boolean;
   /** A character centred inside a line box, where a black box is drawn. */
   readonly hidden: boolean;
+  /**
+   * A character centred outside the page's visible area (spec 0006, AC-17),
+   * which the trim should have removed: a leak whatever is ticked.
+   */
+  readonly outside: boolean;
 }
 
 /** MuPDF infers spaces from gaps, and a removed target leaves one. */
@@ -218,6 +223,34 @@ export function walkCharacters(
     });
 
     if (whole && line + 1 !== whole.length) throw new EngineFailure("unsupported");
+  } finally {
+    stext.destroy();
+  }
+}
+
+/**
+ * Visit the box of every text line on a page, in extraction order. Spec
+ * 0006, AC-14.
+ *
+ * A line's box is the union of its characters' quads (MuPDF.js 1.28.1, every
+ * line of every fixture, pinned in `tests/unit/trim.test.ts`), so a line
+ * whose box reaches past an edge holds a character whose quad does. Reading
+ * lines rather than characters spares a callback per character, which is what
+ * keeps the trim inside AC-29's budget on a page of dense text. The structured
+ * text is destroyed before this returns, whatever happens.
+ */
+export function walkLines(
+  page: PDFPage,
+  options: string,
+  visit: (box: readonly [number, number, number, number]) => void,
+): void {
+  const stext = page.toStructuredText(options);
+  try {
+    stext.walk({
+      beginLine(bbox) {
+        visit([bbox[0], bbox[1], bbox[2], bbox[3]]);
+      },
+    });
   } finally {
     stext.destroy();
   }
@@ -321,15 +354,18 @@ export function recordPage(page: PDFPage, areas: readonly TargetArea[]): PageRec
  *
  * `lineBoxes` are where black boxes were drawn on this page. Any character
  * centred inside one, ticked or not, is `hidden` (INV-10): a surviving match
- * hidden only by its box, or unticked text the box covers.
+ * hidden only by its box, or unticked text the box covers. Any character
+ * centred outside `visible`, the page's visible area, is `outside` (spec
+ * 0006, AC-17).
  */
 export function comparePage(
   page: PDFPage,
   record: PageRecord,
   lineBoxes: readonly Quad[],
+  visible: readonly [number, number, number, number],
 ): readonly PageDifference[] {
   return CHECK_EXTRACTION_OPTIONS.map((options, mode) =>
-    compareMode(page, options, record[mode], lineBoxes),
+    compareMode(page, options, record[mode], lineBoxes, visible),
   );
 }
 
@@ -338,6 +374,7 @@ function compareMode(
   options: string,
   list: CharacterList,
   lineBoxes: readonly Quad[],
+  [x0, y0, x1, y1]: readonly [number, number, number, number],
 ): PageDifference {
   const index = gridIndex(list);
   // Each record entry matches once, so a glyph drawn twice in the same place
@@ -345,20 +382,101 @@ function compareMode(
   const used = new Uint8Array(list.codes.length);
   let extra = false;
   let hidden = false;
+  let outside = false;
 
   walkCharacters(page, options, (character) => {
     if (isWhitespace(character.code)) return;
 
     const centre = quadCentre(character.quad);
     if (lineBoxes.some((box) => containsPoint(box, centre))) hidden = true;
+    // Written so a centre that is not a number counts as outside.
+    if (!(centre[0] >= x0 && centre[0] <= x1 && centre[1] >= y0 && centre[1] <= y1)) {
+      outside = true;
+    }
 
     const found = findUnused(index, list, used, character);
     if (found < 0) extra = true;
     else used[found] = 1;
   });
 
-  return { extra, missing: used.includes(0), hidden };
+  return { extra, missing: used.includes(0), hidden, outside };
 }
+
+/**
+ * Values kept by a page space point, found again within
+ * `POSITION_TOLERANCE` on each axis: one tolerance square per cell, so a
+ * lookup probes the nine cells around a point. The key packs both cells into
+ * one number, which a `Map` looks up faster than a string.
+ */
+export function originIndex<T>(): {
+  add(origin: readonly [number, number], value: T): void;
+  find(origin: readonly [number, number]): T | null;
+  /** The first value within reach of `origin` that `accept` takes, or null. */
+  findWhere(origin: readonly [number, number], accept: (value: T) => boolean): T | null;
+} {
+  const cells = new Map<number, { origin: readonly [number, number]; value: T }[]>();
+  const cell = (value: number) => Math.floor(value / POSITION_TOLERANCE);
+  // Cells from about -2^21 to 2^21 on each axis keep the key exact; a point
+  // further out shares a key with another, which costs a comparison, never a
+  // wrong match, since every candidate's own coordinates are compared.
+  const key = (cx: number, cy: number) =>
+    (cx + CELL_OFFSET) * CELL_STRIDE + (cy + CELL_OFFSET);
+
+  const findWhere = (
+    [x, y]: readonly [number, number],
+    accept: (value: T) => boolean,
+  ): T | null => {
+    const cx = cell(x);
+    const cy = cell(y);
+    // The point's own cell first, where a match almost always is, then its
+    // eight neighbours.
+    for (const [dx, dy] of NEIGHBOURS) {
+      for (const entry of cells.get(key(cx + dx, cy + dy)) ?? NONE) {
+        if (
+          Math.abs(entry.origin[0] - x) <= POSITION_TOLERANCE &&
+          Math.abs(entry.origin[1] - y) <= POSITION_TOLERANCE &&
+          accept(entry.value)
+        ) {
+          return entry.value;
+        }
+      }
+    }
+    return null;
+  };
+
+  return {
+    add(origin, value) {
+      const at = key(cell(origin[0]), cell(origin[1]));
+      const bucket = cells.get(at);
+      if (bucket) bucket.push({ origin, value });
+      else cells.set(at, [{ origin, value }]);
+    },
+    find: (origin) => findWhere(origin, ANY),
+    findWhere,
+  };
+}
+
+const CELL_OFFSET = 2 ** 21;
+const CELL_STRIDE = 2 ** 22;
+
+/** A cell and its eight neighbours, the cell itself first. */
+const NEIGHBOURS: readonly (readonly [number, number])[] = Object.freeze([
+  [0, 0],
+  [-1, -1],
+  [-1, 0],
+  [-1, 1],
+  [0, -1],
+  [0, 1],
+  [1, -1],
+  [1, 0],
+  [1, 1],
+]);
+
+/** Takes every value, for a lookup that asks for none in particular. */
+const ANY = (): boolean => true;
+
+/** An empty bucket, shared, so a lookup that misses allocates nothing. */
+const NONE: readonly never[] = Object.freeze([]);
 
 /** The cell a position falls in, one `POSITION_TOLERANCE` square per cell. */
 function cellOf(x: number, y: number): readonly [number, number] {

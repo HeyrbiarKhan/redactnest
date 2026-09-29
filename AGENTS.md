@@ -41,6 +41,7 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md`.
 - Strict types, no `any`. Narrow from `unknown` at every boundary.
 - Folders by capability under `src/` (`engine`, `detect`, `worker`, `config`, `lib`, `ui`, `app`), not by layer and not by feature.
 - Expected failures are a closed set of kinds, never free text. The worker never throws across the boundary, and an error payload carries a kind and nothing derived from the document: no file name, no stack trace, no extracted text.
+- Page findings are a closed set of kinds too: `PAGE_FINDINGS` in `src/worker/protocol.ts`. A finding says which rule held on a page, never what the page holds or where. Their words live in `src/lib/page-findings.ts` as records over `PageFinding`, so a finding added without its words fails `pnpm typecheck`. Spec 0006, AC-28, INV-1.
 - The engine wall: only `src/worker/engine.worker.ts` may import `@/engine`, and only `src/engine` may touch `mupdf`. One PDF parser, ever. Document bytes live only inside the worker, so transfer the `ArrayBuffer` rather than copying it. The one exception is the checked output: it crosses to the main thread once, transferred, and waits in a `useRef` in `tool-client` (never in the session reducer) until Download, dropped whenever the session stops being `complete` with nothing downloaded. Spec 0004, INV-8 and AC-20.
 - The detector wall: `src/detect` holds the pattern detectors, pure text in and offsets out, with no page, config, network, storage or console, and nothing from the worker but types from `@/worker/protocol` (spec 0005, INV-5). Only `src/engine` may import `@/detect`, and only `src/detect` may import `libphonenumber-js`, so detection and the phone metadata ship in the worker's chunk and never in a page's (INV-8). The `redactnest/detect` zone in `eslint.config.mjs` holds both, and bans `search()` there as in the engine (INV-11).
 - `src/ui` holds the design system primitives and is presentation only. Its ESLint zone (`redactnest/ui`) bans imports from `@/worker`, `@/engine`, `@/config`, `@/lib/session` and `@/lib/entitlement`, and bans `dangerouslySetInnerHTML`. The caller reads state and passes what a primitive shows as props. Spec 0003, INV-7.
@@ -53,6 +54,7 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md`.
 - Every cap and every public URL comes from `src/config`, validated at module load. No page or size limit written as a literal anywhere else.
 - The engine's file format, geometry and self check constants (`PDF_HEADER_WINDOW`, `BOUNDS_REACH_RATIO` and the rest) are the one exception: they are rules about the file format, not caps on the visitor, so they live in `src/engine` where no environment variable can switch a check off. Spec 0004.
 - The detectors' constants (`PHONE_READINGS`, `MAX_WINDOW_DIGITS`, `MAX_PARSES_PER_GROUP`, `EXTENSION_MARKERS`, `PRECEDENCE`, `KEYWORD_REACH` and the rest) follow the same exception: they are rules about a pattern, not caps on the visitor, so they live in `src/detect`, each commented as such. Spec 0005.
+- The page reading's thresholds (`STAMP_MAX_CHARS`, `PICTURE_MIN_SHARE`, `PICTURE_REACH_MIN` and the rest) follow the same exception: they are rules about pages, not caps on the visitor, so they live in `src/engine` (`inspect.ts`, `trim.ts`), each commented as such. Spec 0006, INV-7.
 - `NEXT_PUBLIC_MATCH_CONTEXT_CHARS` (default 40, ceiling 200) sets how many characters of surrounding text travel with a match. That ceiling is a privacy limit rather than a display one: the text crosses the worker boundary, so a typo must not be able to widen it to a whole page. Spec 0002, INV-9.
 - Comments explain why, and name the spec invariant they uphold. Match the density already in `src/`.
 - Accessibility: WCAG 2.2 AA on the core path. Keyboard reachable, visible focus, sufficient contrast.
@@ -82,6 +84,7 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md`.
 - The phone detector finds its own candidates and asks libphonenumber-js only to judge each window (`parsePhoneNumberFromString` with `extract: false`, `max` metadata). Never bring back `findNumbers`: its matcher misses numbers written side by side. Spec 0005, AC-27.
 - Tailwind's default palette is wiped (`--color-*: initial`), so a pasted class such as `text-gray-500` fails silently: it generates no CSS and renders no colour. The alpha modifier lint also rejects the `text-<size>/<leading>` shorthand on purpose, because the type scale sets line height.
 - Colour tokens are written `--color-<role>: #RRGGBB;`, hex only. `tests/unit/contrast.test.ts` parses that exact form, so `oklch()` or any other notation breaks it.
+- Playwright records a trace without the screencast (`screenshots: false` in `playwright.config.ts`). The spinner turns for the whole engine load, a screencast encodes every frame it paints, and with workers opening documents side by side that starved the 10 MB engine download: a two page open went from about 2 s to 15 to 30 s, past the test timeout. Do not turn the screencast back on. The DOM snapshots in the trace are enough.
 - In ESLint flat config, a later block that sets `no-restricted-imports` or `no-restricted-syntax` replaces the rule rather than merging it. So each zone in `eslint.config.mjs` restates every restriction for its files, and `redactnest/tool-page` comes last so it drops only the tool client ban. Build a new zone with `zone()`, which always adds the storage ban and the colour patterns.
 
 ## Tooling
@@ -123,7 +126,7 @@ MCP servers: `@playwright/mcp` (connected, configured in `.mcp.json`, drives a r
 
 <!-- Nested AGENTS.md files are listed here as they are created -->
 - [src/ui/AGENTS.md](src/ui/AGENTS.md): the design system primitives, how to build and test one
-- [src/engine/AGENTS.md](src/engine/AGENTS.md): the redaction engine, its rules, the self check, MuPDF's quirks, the test seams and the fixture script
+- [src/engine/AGENTS.md](src/engine/AGENTS.md): the redaction engine, its rules, the page reading and the trim, the self check, MuPDF's quirks, the test seams and the fixture script
 
 <!-- BEGIN:nextjs-agent-rules -->
 

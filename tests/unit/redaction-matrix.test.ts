@@ -977,10 +977,15 @@ describe("text off the page", () => {
     expect(unclipped(output)).toContain("Name:");
   });
 
-  /** Kept text moved off the page is a survivor too, and so is it missing. */
+  /**
+   * Kept text moved off the page is a survivor too, and so is it missing.
+   * Spec 0006, AC-17: a character centred outside the visible area is a leak
+   * whatever is ticked, so with nothing ticked this is no longer the
+   * `unsupported` it was under spec 0004 alone.
+   */
   it.each([
     ["with the match ticked", "redaction-incomplete", true],
-    ["with nothing ticked", "unsupported", false],
+    ["with nothing ticked", "redaction-incomplete", false],
   ] as const)(
     "refuses case 3, kept text on a line shown with ', %s, with %s",
     async (_label, kind, ticked) => {
@@ -996,18 +1001,22 @@ describe("text off the page", () => {
       expect(unclipped(source)).toContain(OFF_PAGE_TEXT);
     });
 
-    it("raises no false alarm with nothing ticked", async () => {
-      const { output, removedByType } = await run(name(4), []);
+    // Spec 0006, AC-14: nobody can see a line drawn off the page, so every
+    // run now removes it, with nothing ticked as well. Spec 0004 kept it.
+    it("removes the line off the page with nothing ticked, and raises no false alarm", async () => {
+      const { output, removedByType, trim } = await run(name(4), []);
 
       expect(removedByType).toEqual({});
-      expect(unclipped(output)).toContain(OFF_PAGE_TEXT);
+      expect(unclipped(output)).not.toContain(OFF_PAGE_TEXT);
+      expect(unclipped(output)).toContain("Name:");
+      expect(trim).toEqual([{ removed: true, pictureOutside: false }]);
     });
 
-    it("redacts the match on the page and keeps the line off it", async () => {
+    it("redacts the match on the page and removes the line off it", async () => {
       const { output } = await run(name(4), [match(4)]);
 
       expect(containsInAnyEncoding(decompressedBytes(output), MATCH)).toBe(false);
-      expect(unclipped(output)).toContain(OFF_PAGE_TEXT);
+      expect(unclipped(output)).not.toContain(OFF_PAGE_TEXT);
     });
   });
 

@@ -25,6 +25,8 @@ import type {
   ReviewMatch,
 } from "@/worker/protocol";
 
+import { isPartly } from "@/lib/page-findings";
+
 /**
  * The steps a job passes through.
  *
@@ -105,13 +107,16 @@ export const IDLE: IdleSession = Object.freeze({ state: "idle" });
  * Trimmed before the extension is stripped as well as after. A name with
  * trailing whitespace is legal on some file systems, and stripping first would
  * leave the `.pdf` attached to it and hand somebody `report.pdf-redacted.pdf`.
+ *
+ * Spec 0006, AC-23: `partly` is `isPartly(summary)`, true when any page
+ * carries a warning, and the name then says so wherever the file goes.
  */
-export function outputNameFor(fileName: string): string {
+export function outputNameFor(fileName: string, partly: boolean): string {
   const stem = fileName
     .trim()
     .replace(/\.pdf$/i, "")
     .trim();
-  return `${stem === "" ? "document" : stem}-redacted.pdf`;
+  return `${stem === "" ? "document" : stem}-${partly ? "partly-redacted" : "redacted"}.pdf`;
 }
 
 /**
@@ -177,7 +182,9 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
         state: "opening",
         jobId: action.jobId,
         file: action.file,
-        outputName: outputNameFor(action.file.name),
+        // What the pages hold is not known yet, so the plain name for now;
+        // `opened` sets it again from the readings (spec 0006, AC-23).
+        outputName: outputNameFor(action.file.name, false),
         entitlement: Object.freeze({ ...action.entitlement }),
         summary: null,
         matches: [],
@@ -201,6 +208,9 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
         ...session,
         state: "reviewing",
         summary: action.summary,
+        // Spec 0006, AC-23 and INV-5: from the same predicate the download
+        // warning reads, over the same summary.
+        outputName: outputNameFor(session.file.name, isPartly(action.summary)),
         matches: action.matches,
         ticked: seededTicks(action.matches),
         phase: null,
@@ -296,6 +306,8 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
       return freeze({
         ...session,
         state: "opening",
+        // Back to the plain name until the new worker has read the pages.
+        outputName: outputNameFor(session.file.name, false),
         summary: null,
         matches: [],
         ticked: new Set<MatchId>(),

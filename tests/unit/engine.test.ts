@@ -34,7 +34,7 @@ describe("the size cap", () => {
     const onPhase = vi.fn();
 
     await expect(
-      openDocument(markerAt(0, 2048), { maxBytes: 1024, maxPages: 50 }, onPhase),
+      openDocument(markerAt(0, 2048), { maxBytes: 1024, maxPages: 50 }, { onPhase }),
     ).rejects.toMatchObject({ errorKind: "too-large" });
 
     expect(onPhase).not.toHaveBeenCalled();
@@ -54,7 +54,7 @@ describe("the size cap", () => {
     const onPhase = vi.fn();
 
     await expect(
-      openDocument(markerAt(0, 1024), { maxBytes: 1024, maxPages: 50 }, onPhase),
+      openDocument(markerAt(0, 1024), { maxBytes: 1024, maxPages: 50 }, { onPhase }),
     ).rejects.not.toMatchObject({ errorKind: "too-large" });
 
     expect(onPhase).toHaveBeenCalledWith("loading-engine");
@@ -82,7 +82,7 @@ describe("a file that is not a PDF", () => {
   ])("refuses %s as not-pdf without fetching the engine", async (_label, bytes) => {
     const onPhase = vi.fn();
 
-    await expect(openDocument(bytes, LIMITS, onPhase)).rejects.toMatchObject({
+    await expect(openDocument(bytes, LIMITS, { onPhase })).rejects.toMatchObject({
       name: "EngineFailure",
       errorKind: "not-pdf",
     });
@@ -99,7 +99,7 @@ describe("a file that is not a PDF", () => {
     const onPhase = vi.fn();
 
     await expect(
-      openDocument(fixture("header-at-1019.pdf"), LIMITS, onPhase),
+      openDocument(fixture("header-at-1019.pdf"), LIMITS, { onPhase }),
     ).rejects.toMatchObject({ errorKind: "engine-unavailable" });
 
     expect(onPhase).toHaveBeenCalledWith("loading-engine");

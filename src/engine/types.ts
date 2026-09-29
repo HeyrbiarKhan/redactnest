@@ -1,10 +1,67 @@
 import type {
   BlockedReason,
+  Concealment,
   DetectorKind,
   DocumentSummary,
   MatchId,
+  PageFinding,
   SanitizedKind,
 } from "@/worker/protocol";
+
+/**
+ * What reading one page found, before the trim adds its two findings. Spec
+ * 0006, *Data model sketch*.
+ *
+ * Private to the engine. The review document's handle holds one per page for
+ * detection, and drops them with the document (INV-8). Only `findings` ever
+ * reaches the summary.
+ */
+export interface PageInspection {
+  /** No repeats, in `PAGE_FINDINGS` order. */
+  readonly findings: readonly PageFinding[];
+  /** The page holds a readable character (AC-3), so detection reads it (AC-12). */
+  readonly readable: boolean;
+  /**
+   * Every glyph counted as covered (AC-6) or hidden (AC-7), by its origin, so
+   * detection can mark the matches that hold one (AC-13). Positions, so they
+   * never leave the engine, and are dropped with the review document (INV-8).
+   */
+  readonly concealed: readonly ConcealedGlyph[];
+  /**
+   * The page draws a glyph, in any render mode, while the clip in force holds
+   * no area (AC-11). MuPDF's `sanitize` write drops that text, so every run on
+   * the file would fail its self check; the open refuses it instead, after the
+   * `no-readable-text` check.
+   */
+  readonly emptyClip: boolean;
+}
+
+/**
+ * What the trim did to one page, decided from its triggers before anything is
+ * removed, never from what a pass reports. Spec 0006, AC-8, AC-14 and AC-15.
+ * The open turns it into `off-page-content` and `off-page-picture`; a run
+ * hands it back so the worker can check it agrees with the open (AC-18).
+ */
+export interface TrimOutcome {
+  /**
+   * The trim ran here for a character or a path: text or drawn shapes outside
+   * the visible area were removed. A picture never starts a pass (AC-15).
+   */
+  readonly removed: boolean;
+  /**
+   * The page draws a picture reaching outside the visible area by more than
+   * `PICTURE_REACH_MIN`, which the trim keeps whole, as every picture (AC-15,
+   * INV-11).
+   */
+  readonly pictureOutside: boolean;
+}
+
+/** One glyph a viewer does not see, and why. Spec 0006, *Data model sketch*. */
+export interface ConcealedGlyph {
+  /** In the page space structured text uses. */
+  readonly origin: readonly [number, number];
+  readonly kind: Concealment;
+}
 
 /**
  * One quad, as MuPDF gives them: four corners, upper left first, then upper
@@ -91,6 +148,11 @@ export type FoundMatch = {
   readonly after: string;
   /** The detector's rule (AC-10), and false whenever blocked. */
   readonly tickedByDefault: boolean;
+  /**
+   * Whether a character of the match sits where the page keeps a glyph from
+   * view, and how (spec 0006, AC-13). Covered takes precedence over hidden.
+   */
+  readonly concealed: Concealment | null;
 } & (
   | { readonly blocked: null; readonly target: RedactionTarget }
   | { readonly blocked: BlockedReason; readonly target: null }
@@ -124,11 +186,11 @@ export interface FindOptions {
 export interface OpenDocument {
   readonly summary: DocumentSummary;
   /**
-   * Find every match on every page with a text layer, by page, then in reading
-   * order (spec 0005, AC-3). Reads this review copy one page at a time and
-   * yields after each read. Throws `EngineFailure("unsupported")` when a page
-   * that reported a text layer cannot be read (AC-12), and `RunCancelled` when
-   * `isCancelled` says so.
+   * Find every match on every page that holds a readable character, by page,
+   * then in reading order (spec 0005, AC-3; spec 0006, AC-12). Reads this
+   * review copy one page at a time and yields after each read. Throws
+   * `EngineFailure("unsupported")` when such a page cannot be read (AC-12), and
+   * `RunCancelled` when `isCancelled` says so.
    */
   findMatches(options: FindOptions): Promise<readonly FoundMatch[]>;
   /**
@@ -143,8 +205,8 @@ export interface OpenDocument {
 }
 
 /**
- * What a run hands the worker. The worker adds the page counts from the open
- * summary to make the `RedactionOutcome`.
+ * What a run hands the worker. The worker adds the page count and the pages
+ * per finding from the open summary to make the `RedactionOutcome`.
  */
 export interface RedactionResult {
   /**
@@ -156,6 +218,11 @@ export interface RedactionResult {
   readonly removedByType: Readonly<Partial<Record<DetectorKind, number>>>;
   /** The kinds the source actually carried, in `SANITIZED_KINDS` order. */
   readonly sanitized: readonly SanitizedKind[];
+  /**
+   * What this run's trim did, one per page, for the worker to check against
+   * the open's (spec 0006, AC-18).
+   */
+  readonly trim: readonly TrimOutcome[];
 }
 
 /** How a run talks back to the worker while it works. */

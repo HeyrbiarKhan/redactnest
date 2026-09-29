@@ -36,7 +36,7 @@ function consoleCallCount(): number {
 
 /** Open the damaged fixture, prepare it, and run a redaction over it. */
 async function openFlattenAndRedact(): Promise<void> {
-  engine.openDocumentWith(mupdf, fixture("damaged.pdf"), LIMITS).close();
+  (await engine.openDocumentWith(mupdf, fixture("damaged.pdf"), LIMITS)).close();
   await engine.redactDocumentWith(mupdf, fixture("damaged.pdf"), []);
 }
 

@@ -17,7 +17,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 4 | Design system & UI foundation | Foundation | done |
 | 5 | Redaction engine | Release 1 | done |
 | 6 | Pattern detection | Release 1 | done |
-| 7 | Scanned page detection & warnings | Release 1 | planned |
+| 7 | Scanned page detection & warnings | Release 1 | done |
 | 8 | Redact flow | Release 1 | planned |
 | 9 | Privacy policy & terms | Release 2 | planned |
 | 10 | Billing & paid plan | Release 2 | planned |
@@ -115,16 +115,29 @@ spec [0005](../specs/0005-pattern-detection/index.md) · code in `src/detect`, `
 - [x] Verify it: `/check verify pattern detection`
 - [x] Test it: `/test pattern detection`
 
-### 7. Scanned page detection & warnings · needs a decision · GA
-Detect per page whether a text layer exists, and never let somebody leave with a file that looks redacted and is not.
-**Done when:** pages with no text layer are identified at upload and named plainly, the warning is repeated at download, and a document whose every page lacks a text layer produces no file at all, with a clear explanation of why instead.
-- [ ] Design it (spec): `/architect scanned page detection & warnings`
+### 7. Scanned page detection & warnings · done · GA
+Detect per page whether a text layer exists, and never let somebody leave with a file that looks redacted and is not. Besides scanned pages, that covers three kinds of text a viewer never shows: text under a box drawn over it (a fake redaction already in the source), white or otherwise invisible text that is not OCR, and text outside the crop box, which is now removed in every run.
+**Done when:** pages with no text layer are identified at upload and named plainly, the warning is repeated at download, and a document whose every page lacks a text layer produces no file at all, with a clear explanation of why instead. Text under a box and white or invisible text are named the same way, and text outside the crop box never reaches the output.
+spec [0006](../specs/0006-scanned-page-detection-warnings/index.md) · code in `src/engine` (`device.ts`, `inspect.ts`, `trim.ts`, `open.ts`, `redact.ts`, `passes.ts`, `self-check.ts`, `find.ts`, `characters.ts`), `src/worker` (`protocol.ts`, `engine.worker.ts`), `src/lib` (`page-findings.ts`, `session.ts`, `detectors.ts`), `src/app/tool` (`tool-client.tsx`, `review-checklist.tsx`), `src/ui/checklist-item.tsx`, `scripts/lib/reading-fixtures.mjs`
+- [x] Design it (spec): `/architect scanned page detection & warnings`
+- [x] Build it: `/develop scanned page detection & warnings`
+  - [x] Scans named, and no file for a document with nothing readable: the page reading, the refusal, the warnings at open and at download, and the partly redacted name · AC-1, AC-2, AC-3, AC-9, AC-10, AC-11, AC-12, AC-19, AC-20, AC-22, AC-23, AC-26, AC-27, AC-28, AC-29
+  - [x] Pictures, OCR and the crooked scan: bare pictures, the stamp cap, the machine read note and the crooked scan line · AC-2, AC-4, AC-5, AC-21, AC-25
+  - [x] Text a viewer never shows: covered and hidden text, and the row marks · AC-6, AC-7, AC-9, AC-13, AC-24
+  - [x] Nothing outside the visible area survives: the foundation pins, the trim on both copies with its proof, the self check rules, the off page note and picture warning · AC-8, AC-14, AC-15, AC-16, AC-17, AC-18, AC-21, AC-22, AC-29
+  - [x] What the build sent back (slice 4b, settled 2026-09-29): the cropped OCR scan pin first, then pictures kept and named with no pixel work, the image stream cost test, text a clip hides wholly named, and text under an empty clip refused · AC-5, AC-7, AC-8, AC-9, AC-10, AC-11, AC-14 to AC-18, AC-20, AC-22, AC-23, AC-29
+- [x] Verify it: `/check verify scanned page detection & warnings`, including the real scan steps made locally (AC-30)
+- [x] Test it: `/test scanned page detection & warnings`
+- [x] Review it (fresh model): `/check review scanned page detection & warnings`
+- [x] Document it: `/document scanned page detection & warnings`
 
 ### 8. Redact flow · needs a decision
 The single page that is the product: drop a PDF, see what was found, tick what to remove, download the clean file, read the summary of what happened.
 **Done when:** an anonymous visitor can take a document up to the page cap from drop to download in one pass, the cap is a config value (3 to start), the scanned page warnings surface in the flow, the summary shows counts by detection type plus what was sanitized, and failure states say plainly what went wrong.
 **Also owed here:** `retireOtherJobs` in `src/worker/client.ts` skips pending operations under the same `jobId` as the open it is making room for. The worker makes no such exception: an open with the same `jobId` cancels that job's run in flight, and a cancelled run posts nothing. So if such an open ever reached a live worker while that job's redact was pending, the redact could never settle, and the visitor would sit on a run that neither finishes nor fails. It is not reachable today, because both callers that reuse a `jobId` get a fresh worker first. The redact flow is where a new path that reopens a job on a live worker would most likely appear, so check this when you add one. A suggested fix and its test are in the open follow up at the end of the [redaction engine review](../reviews/2026-09-27-feat-redaction-engine.md).
 **Also owed here:** the review checklist is too slow on a big document. `ReviewChecklist` in `src/app/tool/review-checklist.tsx` renders every row again on each session change, with a new toggle handler per row, so a 50 page document with thousands of matches freezes the page for seconds, and a single tick takes 5 to 6 s. Feature 8 must avoid rendering a row again when nothing about it changed. Spec 0005's first Follow-up (measure at the paid cap, then decide on virtual scrolling or a cap) belongs to the same fix.
+**Also owed here:** plain copy for `unsupported` when the trim's proof fails away from the page edge. Today that case shows the generic `unsupported` line (spec 0006, AC-16 and AC-26).
+**Also owed here:** reword the `no-readable-text` advice in `src/lib/page-findings.ts` and `errorText` in `src/app/tool/tool-client.tsx`. "If you have the original" confuses people who only have the scan. Say "Run this file through text recognition (OCR) first" instead.
 - [ ] Design it (spec): `/architect redact flow`
 
 ### 18. AGPL compliance & source publication · Alpha · from spec 0001
@@ -184,6 +197,7 @@ A landing page plus a small set of pages on what this audience actually searches
 The page that closes the sale for HR, legal and healthcare buyers: what in memory processing means, what the logs do and do not hold, and why covering text with a box is not redaction.
 **Done when:** the page describes the real implementation accurately, with no claim the code does not support.
 **Also owed here:** a sticky note or a file attachment that shows in the source is flattened into the page like any other visible annotation (spec 0004, AC-22), so its icon stays as a mark on the page even though the note's text and the attached file are gone. Say so plainly, so the page does not suggest every trace of them was removed.
+**Also owed here:** the honest limits from spec 0006. A picture reaching past the crop keeps its hidden pixels, and text a clip hides wholly stays in the file. Both are warned about and the file is named partly redacted, but neither is removed. The page warnings lean toward saying too much, so a brochure photo or a thin legal line can raise one.
 - [ ] Build it: `/develop security & how it works page`
 
 ### 17. Data processing agreement · Prototype
@@ -200,6 +214,7 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **API access**: programmatic redaction · needs a decision
 - **Downloadable receipt file**: an audit record alongside the redacted PDF, once the on screen summary has proved its shape · needs a decision
 - **Dark mode**: light only for now (spec 0003). Needs its own decision: the colour roles redefined for dark, a second contrast contract, and axe runs in both schemes. It would follow the system setting, since a toggle cannot remember a choice without storage · needs a decision · from spec 0003
+- **A memory limit for blanking scan pixels**: spec 0004's padded pass rewrites every scan page it touches as Flate. One ticked match on each page of a 50 page 300 dpi grey scan measured 917 MB and a file 4.9 times larger. Settle a limit before the paid page cap applies to scans · needs a decision · from spec 0006
 - **Cookie consent banner**: deliberately not built. The only cookies are the strictly necessary auth ones and analytics is cookieless, so no consent is required. Kept here so it does not get added later out of habit.
 
 ## Legend

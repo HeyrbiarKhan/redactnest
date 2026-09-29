@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban } from "lucide-react";
+import { Ban, EyeOff } from "lucide-react";
 
 import { cx } from "@/lib/cx";
 
@@ -24,6 +24,12 @@ interface ChecklistItemProps {
    * description, so a screen reader hears it with the row.
    */
   readonly blockedReason?: string;
+  /**
+   * How the page keeps this match from view (spec 0006, AC-24), such as
+   * "Hidden under a box on the page.". The row stays tickable; the note shows
+   * after any blocked reason and joins the checkbox's description.
+   */
+  readonly concealedNote?: string;
   readonly onCheckedChange: (checked: boolean) => void;
 }
 
@@ -48,13 +54,16 @@ export function ChecklistItem({
   checked,
   disabled = false,
   blockedReason,
+  concealedNote,
   onCheckedChange,
 }: ChecklistItemProps) {
   const textId = `${id}-text`;
   const pageId = `${id}-page`;
   const contextId = `${id}-context`;
   const reasonId = `${id}-reason`;
+  const noteId = `${id}-concealed`;
   const blocked = blockedReason !== undefined;
+  const concealed = concealedNote !== undefined;
   const inactive = disabled || blocked;
 
   return (
@@ -74,7 +83,12 @@ export function ChecklistItem({
           disabled={inactive}
           onCheckedChange={onCheckedChange}
           aria-labelledby={textId}
-          aria-describedby={cx(pageId, contextId, blocked && reasonId)}
+          aria-describedby={cx(
+            pageId,
+            contextId,
+            blocked && reasonId,
+            concealed && noteId,
+          )}
         />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="flex items-start justify-between gap-3">
@@ -102,6 +116,17 @@ export function ChecklistItem({
                 strokeWidth={1.75}
               />
               <span className="min-w-0">{blockedReason}</span>
+            </span>
+          )}
+          {concealed && (
+            <span id={noteId} className="flex items-start gap-2 text-small text-ink">
+              {/* A shape as well as words, as the blocked reason has one. */}
+              <EyeOff
+                aria-hidden="true"
+                className="size-5 shrink-0 text-ink-muted"
+                strokeWidth={1.75}
+              />
+              <span className="min-w-0">{concealedNote}</span>
             </span>
           )}
         </span>

@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   asMatchId,
+  countPagesByFinding,
   DETECTOR_KINDS,
   ENGINE_ERROR_KINDS,
   EngineError,
   isEngineErrorKind,
   OperationCancelled,
+  PAGE_FINDINGS,
   SANITIZED_KINDS,
   type EngineErrorKind,
 } from "@/worker/protocol";
@@ -25,7 +27,7 @@ describe("the closed set of failures", () => {
    * Written out rather than derived from the export on purpose. Widening the set
    * is a contract change, and this is the line that makes it deliberate.
    */
-  it("is exactly the fourteen kinds the specs fix", () => {
+  it("is exactly the sixteen kinds the specs fix", () => {
     expect([...ENGINE_ERROR_KINDS]).toEqual([
       "engine-unavailable",
       "encrypted",
@@ -51,6 +53,11 @@ describe("the closed set of failures", () => {
       // Added by spec 0004 after slice 2's build: a ticked match set at too
       // steep an angle to redact safely, refused before anything is removed.
       "slanted-text",
+      // Added by spec 0006: a document with no page RedactNest can read,
+      // refused at open, and a trim that cannot remove text at a page's edge
+      // cleanly.
+      "no-readable-text",
+      "edge-text",
     ]);
   });
 
@@ -210,6 +217,71 @@ describe("the things a redaction strips besides the targeted text", () => {
     expect(SANITIZED_KINDS.filter((kind) => failures.has(kind))).toEqual([
       "hidden-layers",
     ]);
+  });
+});
+
+/**
+ * Spec 0006, *Page findings*. The order is the display order (AC-20, AC-21),
+ * so it is written out rather than derived, and a change is deliberate.
+ */
+describe("what reading a page can find", () => {
+  it("is exactly the ten findings spec 0006 fixes, warnings first", () => {
+    expect([...PAGE_FINDINGS]).toEqual([
+      "covered-text",
+      "hidden-text",
+      "scanned",
+      "drawn-only",
+      "unreadable-text",
+      "bare-picture",
+      "off-page-picture",
+      "machine-read-text",
+      "off-page-content",
+      "blank",
+    ]);
+  });
+
+  it("names each finding once, and cannot be changed", () => {
+    expect(new Set(PAGE_FINDINGS).size).toBe(PAGE_FINDINGS.length);
+    expect(Object.isFrozen(PAGE_FINDINGS)).toBe(true);
+  });
+
+  it("shares no word with the failure set", () => {
+    const failures = new Set<string>(ENGINE_ERROR_KINDS);
+    expect(PAGE_FINDINGS.filter((finding) => failures.has(finding))).toEqual([]);
+  });
+});
+
+/** Spec 0006, AC-28. Pages per finding, and nothing else. */
+describe("counting pages by finding", () => {
+  it("counts each page once per finding it carries, in the findings' order", () => {
+    const counts = countPagesByFinding([
+      { findings: [] },
+      { findings: ["scanned"] },
+      { findings: ["covered-text", "bare-picture"] },
+      { findings: ["scanned", "machine-read-text"] },
+      { findings: ["blank"] },
+    ]);
+
+    expect(counts).toEqual({
+      "covered-text": 1,
+      scanned: 2,
+      "bare-picture": 1,
+      "machine-read-text": 1,
+      blank: 1,
+    });
+    expect(Object.keys(counts)).toEqual([
+      "covered-text",
+      "scanned",
+      "bare-picture",
+      "machine-read-text",
+      "blank",
+    ]);
+  });
+
+  it("leaves out every finding no page carries, and is frozen", () => {
+    const counts = countPagesByFinding([{ findings: [] }, { findings: [] }]);
+    expect(counts).toEqual({});
+    expect(Object.isFrozen(counts)).toBe(true);
   });
 });
 

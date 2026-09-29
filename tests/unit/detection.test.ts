@@ -50,7 +50,7 @@ beforeAll(() => {
 });
 
 async function find(name: string, contextChars = 40): Promise<readonly FoundMatch[]> {
-  const doc = openDocumentWith(mupdf, fixture(name), LIMITS);
+  const doc = await openDocumentWith(mupdf, fixture(name), LIMITS);
   try {
     return await doc.findMatches({ contextChars });
   } finally {
@@ -463,7 +463,7 @@ describe("phone numbers (AC-2, AC-10)", () => {
 /** AC-11 and AC-12: one page at a time, and a page that cannot be read fails. */
 describe("reading pages", () => {
   it("asks whether to stop after every read of every page, and stops when told", async () => {
-    const doc = openDocumentWith(mupdf, fixture("detect-email.pdf"), LIMITS);
+    const doc = await openDocumentWith(mupdf, fixture("detect-email.pdf"), LIMITS);
     try {
       const asked = vi.fn(() => false);
       await doc.findMatches({ contextChars: 40, isCancelled: asked });
@@ -487,23 +487,32 @@ describe("reading pages", () => {
       },
     } as unknown as PDFDocument;
 
-    await expect(findMatchesIn(broken, [true], { contextChars: 40 })).rejects.toEqual(
-      new EngineFailure("unsupported"),
-    );
+    await expect(
+      findMatchesIn(broken, [{ readable: true, concealed: [] }], { contextChars: 40 }),
+    ).rejects.toEqual(new EngineFailure("unsupported"));
   });
 
-  it("does not touch a page without a text layer", async () => {
+  it("does not touch a page that holds no readable character", async () => {
     const loadPage = vi.fn();
     const blank = { loadPage } as unknown as PDFDocument;
 
     await expect(
-      findMatchesIn(blank, [false, false], { contextChars: 40 }),
+      findMatchesIn(
+        blank,
+        [
+          { readable: false, concealed: [] },
+          { readable: false, concealed: [] },
+        ],
+        {
+          contextChars: 40,
+        },
+      ),
     ).resolves.toEqual([]);
     expect(loadPage).not.toHaveBeenCalled();
   });
 
   it("refuses to read a document once it is closed", async () => {
-    const doc = openDocumentWith(mupdf, fixture("detect-email.pdf"), LIMITS);
+    const doc = await openDocumentWith(mupdf, fixture("detect-email.pdf"), LIMITS);
     doc.close();
 
     await expect(doc.findMatches({ contextChars: 40 })).rejects.toEqual(

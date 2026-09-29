@@ -12,7 +12,13 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ReviewChecklist } from "@/app/tool/review-checklist";
-import { BLOCKED_REASON_TEXT, COVERAGE_NOTE, NOTHING_FOUND } from "@/lib/detectors";
+import {
+  BLOCKED_REASON_TEXT,
+  COVERAGE_NOTE,
+  COVERAGE_NOTE_PARTLY,
+  NOTHING_FOUND,
+  NOTHING_FOUND_PARTLY,
+} from "@/lib/detectors";
 import { asMatchId, type MatchId, type ReviewMatch } from "@/worker/protocol";
 
 import { expectNoAxeViolations } from "../setup/component";
@@ -32,6 +38,7 @@ function match(
     after: " today",
     tickedByDefault: true,
     blocked: null,
+    concealed: null,
     ...overrides,
   };
 }
@@ -53,6 +60,7 @@ function show(
     matches?: readonly ReviewMatch[];
     ticked?: readonly MatchId[];
     running?: boolean;
+    partly?: boolean;
     onToggle?: (id: MatchId) => void;
   } = {},
 ) {
@@ -61,6 +69,7 @@ function show(
       matches={overrides.matches ?? MATCHES}
       ticked={new Set(overrides.ticked ?? [asMatchId("p1"), asMatchId("e1")])}
       running={overrides.running ?? false}
+      partly={overrides.partly ?? false}
       onToggle={overrides.onToggle ?? (() => {})}
     />,
   );
@@ -215,6 +224,30 @@ describe("the coverage note and the empty state", () => {
     );
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
+
+  /**
+   * Spec 0006, AC-26. When a page carries a warning, neither line speaks for
+   * a page RedactNest could not read.
+   */
+  it("speaks only for the pages RedactNest could read when some page carries a warning", () => {
+    show({ partly: true });
+
+    expect(screen.getByTestId("coverage")).toHaveTextContent(COVERAGE_NOTE_PARTLY);
+    expect(COVERAGE_NOTE_PARTLY).toBe(
+      "RedactNest looked for email addresses and phone numbers on the pages it could read. Anything else, such as names and addresses, stays in the file.",
+    );
+  });
+
+  it("says nothing was found on the pages it could read, when some page carries a warning", () => {
+    show({ matches: [], partly: true });
+
+    expect(screen.getByText(NOTHING_FOUND_PARTLY.title)).toBeVisible();
+    expect(screen.getByText(NOTHING_FOUND_PARTLY.helper)).toBeVisible();
+    expect(NOTHING_FOUND_PARTLY.helper).toBe(
+      "RedactNest found no email addresses or phone numbers on the pages it could read. Redact still makes a cleaned copy, with metadata and hidden content removed.",
+    );
+    expect(screen.queryByText(NOTHING_FOUND.helper)).not.toBeInTheDocument();
+  });
 });
 
 describe("document text", () => {
@@ -238,5 +271,29 @@ describe("accessibility", () => {
     const { container } = show({ matches: [] });
 
     await expectNoAxeViolations(container);
+  });
+});
+
+/** Spec 0006, AC-24. The rows a fake redaction or hidden text keeps from view. */
+describe("concealed rows", () => {
+  it("says a covered row is under a box, and a hidden one is not visible, and both can be ticked", () => {
+    show({
+      matches: [
+        match("c1", "email", "board.minutes@example.com", { concealed: "covered" }),
+        match("h1", "email", "white.ink@example.com", { concealed: "hidden" }),
+        match("p1", "email", "plain@example.com"),
+      ],
+      ticked: [],
+    });
+
+    const covered = screen.getByRole("checkbox", { name: "board.minutes@example.com" });
+    const hidden = screen.getByRole("checkbox", { name: "white.ink@example.com" });
+    const plain = screen.getByRole("checkbox", { name: "plain@example.com" });
+
+    expect(covered).toHaveAccessibleDescription(/Hidden under a box on the page\.$/);
+    expect(hidden).toHaveAccessibleDescription(/Not visible on the page\.$/);
+    expect(plain).not.toHaveAccessibleDescription(/on the page\.$/);
+    expect(covered).toBeEnabled();
+    expect(hidden).toBeEnabled();
   });
 });
