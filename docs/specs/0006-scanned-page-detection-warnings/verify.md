@@ -25,7 +25,7 @@ Built: slices 1 to 4 and slice 4b of the build plan (what the build sent back, s
 - [x] Open `trim-edge.pdf` → the picture warning names only the page with a picture reaching outside beside an email below the crop, and the off page note names that page too; the scan placed 0.28 pt past its page's edge and the soft mask image are named nowhere → AC-8, AC-15
 - [x] Open `read-empty-clip-0.pdf` (and each of `-1` to `-3` through `pnpm test`) → today's generic `unsupported` line ("Something went wrong while working on this file."), with only Start over → AC-11
 - [x] Keyboard only, on `read-mixed.pdf` and `read-concealed.pdf` → the warnings and notes add no tab stop: Choose a PDF, the group summary, each checkbox, Redact, Start over → AC-27
-- [ ] Screen reader → the opened card is read once with its warning ("Warning:" then the title and lines) and note ("Note:"); a page list reads "Pages 1 and 2"; a concealed row adds its line after the page and context → AC-24, AC-27
+- [x] Screen reader → the opened card is read once with its warning ("Warning:" then the title and lines) and note ("Note:"); a page list reads "Pages 1 and 2"; a concealed row adds its line after the page and context → AC-24, AC-27 _(2026-09-29, by the engineer with Narrator on Windows 11, on a production build: all three as written.)_
 - [x] Forced colours (Windows High Contrast) → the warning, the note and the download warning keep their border and icon → AC-27
 - [x] At 320 CSS pixels → the warnings wrap with no sideways scroll → AC-27
 
@@ -77,7 +77,7 @@ _Run on 2026-09-29 on simulated scans, not printed ones: each page of `detect-em
 - [x] `pnpm test` → all pass, including `reading`, `trim`, `device`, `cost`, `page-findings`, `protocol`, `session`, `engine-worker`, `redaction-matrix`, `tool-client` and `review-checklist` → AC-1 to AC-29
 - [x] `pnpm typecheck` → passes, with the `PageReading` gate in `loggable.test.ts` → AC-28
 - [x] `pnpm lint` → passes → INV-7, spec 0003 zones
-- [ ] `pnpm test:e2e` → all pass: the flagged, notes, concealed and refused states in `design-system.spec.ts`, the flagged run in `engine.spec.ts`, the flagged document in `privacy.spec.ts`, and `cancel.spec.ts` → AC-19 to AC-28
+- [x] `pnpm test:e2e` → all pass: the flagged, notes, concealed and refused states in `design-system.spec.ts`, the flagged run in `engine.spec.ts`, the flagged document in `privacy.spec.ts`, and `cancel.spec.ts` → AC-19 to AC-28 _(2026-09-29, after the trace screencast was turned off: 143 passed in 2.2 minutes against a production build, both full run privacy tests and the flagged document among them.)_
 - [x] `node scripts/make-fixture.mjs && git status tests/fixtures` → nothing changes
 
 ## Measured (AC-29)
@@ -87,7 +87,7 @@ On the build machine, the unit project, MuPDF.js 1.28.1:
 - 50 page text heavy document (60 dense lines a page, every glyph inside a clip): inspection plus trim took 700 to 970 ms of CPU across three passes, against the 2 second budget. `tests/unit/cost.test.ts` holds the budget (the least of three passes, since CPU time roughly doubles when the whole suite shares the cores).
 - With pixel blanking, as slice 4 built it (2026-09-28 and 29): on a 50 page cropped scan at 300 pixels per inch with a distinct JPEG per page, a run peaked at 814 MB (grey) and 1,804 MB (colour) of MuPDF heap, took 33 s and 80 s of CPU, and wrote 4.8 and 6.2 times the source; the colour scan failed to open. The full table is in `rationale.md`, *What the build sent back*. This is why AC-15 now keeps pictures whole.
 - [x] After slice 4b: `cost.test.ts` shows a run over the cropped scan leaving every page image's filter and bytes as the source has them → AC-29, INV-11
-- [ ] After slice 4b, once, outside CI: the open's and a run's peak heap on the 50 page cropped scan, grey and colour, a distinct JPEG per page, each beside the same scan uncropped, in a fresh engine per figure. Record them here and in `rationale.md`; a cropped peak more than 5% above its twin returns to `/architect` → AC-29
+- [x] After slice 4b, once, outside CI: the open's and a run's peak heap on the 50 page cropped scan, grey and colour, a distinct JPEG per page, each beside the same scan uncropped, in a fresh engine per figure. Record them here and in `rationale.md`; a cropped peak more than 5% above its twin returns to `/architect` → AC-29
 - Measured after slice 4b (2026-09-29), by `/develop`, with a scratch probe run once and deleted: 50 US Letter pages at 300 pixels per inch (2550 by 3300 pixels), a distinct JPEG per page made by MuPDF at quality 75 (about 430 KB grey and 500 KB colour; files of 21.9 MB and 25.1 MB, under the 25 MB cap), an invisible text layer on each page and a header line in its top margin, cropped half an inch on every side or not at all. The cropped header puts every cropped page through the trim's text pass, and every cropped page's scan reaches outside. Each figure is MuPDF's WebAssembly memory in a fresh engine, which starts at 23 MB and only grows, in steps:
 
   | 50 page scan, 300 dpi | Heap after the open | Peak over a run alone | Run CPU | Output against source |
@@ -98,6 +98,16 @@ On the build machine, the unit project, MuPDF.js 1.28.1:
   | colour, cropped | 66 MB | 115 MB | 1.5 s | 0.99 times |
 
   Every cropped peak equals its uncropped twin, 0% above against the 5% limit, so nothing returns to `/architect`. The trim adds 0.3 to 0.5 s of CPU across the 50 pages, at open and in a run. Recorded in `rationale.md`, *What the build sent back*, on 2026-09-29.
+- Measured again by `/check verify` (2026-09-29), with a probe of its own kept outside git: the same shape of scan, built fresh (a distinct JPEG per page from MuPDF at quality 75, about 440 KB grey and 470 KB colour; files of 22.3 MB and 23.8 MB), each figure in its own process with a fresh engine starting at 23 MB, and a third column for the open and then a run in one engine, as the worker does it:
+
+  | 50 page scan, 300 dpi | Heap after the open | Peak over a run alone | Peak over the open, then a run | Output against source |
+  |---|---|---|---|---|
+  | grey, not cropped | 60.4 MB | 106.0 MB | 152.8 MB | 0.99 times |
+  | grey, cropped | 60.4 MB | 106.2 MB | 153.9 MB | 0.99 times |
+  | colour, not cropped | 63.6 MB | 110.6 MB | 162.3 MB | 0.99 times |
+  | colour, cropped | 63.6 MB | 110.8 MB | 163.4 MB | 0.99 times |
+
+  Cropped against its twin: the open 0%, a run alone 0.2% (0.25% on a second pass, one heap step more), the open then a run 0.7%, all inside the 5% limit, so this agrees with the figures above and nothing returns to `/architect`. The run figures held on a second pass. Every cropped page opened `off-page-content`, `off-page-picture` and `machine-read-text`, and every run's trim matched. The trim added 0.5 to 0.9 s of CPU to the open and 0.4 to 1.1 s to a run, over 50 pages (single samples, so noisy), inside the 2 second budget.
 
 ## Acceptance-criteria coverage
 

@@ -126,7 +126,7 @@ spec [0006](../specs/0006-scanned-page-detection-warnings/index.md) · code in `
   - [x] Text a viewer never shows: covered and hidden text, and the row marks · AC-6, AC-7, AC-9, AC-13, AC-24
   - [x] Nothing outside the visible area survives: the foundation pins, the trim on both copies with its proof, the self check rules, the off page note and picture warning · AC-8, AC-14, AC-15, AC-16, AC-17, AC-18, AC-21, AC-22, AC-29
   - [x] What the build sent back (slice 4b, settled 2026-09-29): the cropped OCR scan pin first, then pictures kept and named with no pixel work, the image stream cost test, text a clip hides wholly named, and text under an empty clip refused · AC-5, AC-7, AC-8, AC-9, AC-10, AC-11, AC-14 to AC-18, AC-20, AC-22, AC-23, AC-29
-- [ ] Verify it: `/check verify scanned page detection & warnings`, including the real scan steps made locally (AC-30)
+- [x] Verify it: `/check verify scanned page detection & warnings`, including the real scan steps made locally (AC-30)
 - [ ] Test it: `/test scanned page detection & warnings`
 - [ ] Review it (fresh model): `/check review scanned page detection & warnings`
 - [ ] Document it: `/document scanned page detection & warnings`
