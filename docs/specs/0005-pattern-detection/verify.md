@@ -36,9 +36,9 @@ Each is ticked in its own spec's `verify.md` as well as here.
 - [x] Spec 0002: from complete, change one tick, run again and download a second time without the file picker → the second file matches the new ticks → its AC-14
 - [x] Spec 0004: a ticked match leaves a box no wider than the match and no taller than its line, and pasting the page's text shows the match gone and its neighbours present → its AC-4, AC-6
 - [x] Spec 0004: in single spaced text, the lines above and below a ticked match read exactly as before (use a document with an address in single spaced lines) → its AC-4, AC-6
-- [ ] **(after feature 7, spec 0006 AC-30)** Spec 0004: on a real OCRmyPDF scan, a ticked match with descenders leaves no ink around or below its box → its AC-5, AC-13
+- [x] **(after feature 7, spec 0006 AC-30)** Spec 0004: on a real OCRmyPDF scan, a ticked match with descenders leaves no ink around or below its box → its AC-5, AC-13 _(Run on 2026-09-29 on simulated scans, not printed ones; see spec 0006 `verify.md`, AC-30.)_
 - [x] Spec 0004: two ticks, then one unticked and run again → the unticked match is in plain text → its AC-11
-- [ ] **(after feature 7, spec 0006 AC-30)** Spec 0004: on a scan fed about a degree crooked, a match redacts and a long line is shown blocked `slanted-text` during review → its AC-28, AC-29
+- [x] **(after feature 7, spec 0006 AC-30)** Spec 0004: on a scan fed about a degree crooked, a match redacts and a long line is shown blocked `slanted-text` during review → its AC-28, AC-29 _(Run on 2026-09-29 on simulated scans, not printed ones; see spec 0006 `verify.md`, AC-30.)_
 - [x] Spec 0003: Enter and Space on a group summary close and open it; a long unbroken address wraps inside its row; the checkbox falls back to the native control in forced colours; a row reads as the match, then "Page N" and the context line; a compact count badge reads with its noun → its review vocabulary checks
 
 ## Value sourcing
