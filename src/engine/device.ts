@@ -154,10 +154,12 @@ export interface DrawState {
    */
   readonly clip: Rect | null;
   /**
-   * The clip in force holds no area (spec 0006, AC-11): an open clip's bounds
-   * have no width or no height, or are inverted, as MuPDF reports an empty
-   * path's, or the open clips do not meet. MuPDF's `sanitize` write drops text
-   * drawn under such a clip (measured, and pinned in `tests/unit/reading.test.ts`).
+   * The clip in force holds no area (spec 0006, AC-11): an open path clip's
+   * bounds have no width or no height, or are inverted, as MuPDF reports an
+   * empty path's, or the open path clips do not meet. Only path clips count:
+   * text clips, stroke clips, image masks and soft masks still cut `clip`, but
+   * never set this. MuPDF's `sanitize` write drops text drawn under such a
+   * clip (measured, and pinned in `tests/unit/reading.test.ts`).
    */
   readonly emptyClip: boolean;
   /** A soft mask is in force (spec 0006, AC-6). */
