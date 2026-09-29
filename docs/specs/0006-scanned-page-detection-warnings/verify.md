@@ -2,9 +2,9 @@
 
 _Steps derived from spec 0006's acceptance criteria and its Value sourcing table. `/check verify` runs these; `/test` locks the durable ones._
 
-Run the tool at `/tool` against a production build (`pnpm build && pnpm start`), because the content security policy is looser in development. The fixtures are `tests/fixtures/read-*.pdf` and `tests/fixtures/trim-*.pdf`, written by `node scripts/make-fixture.mjs`. Those over the free cap of 3 pages (`read-pages.pdf`, `read-pictures.pdf`, `read-covered.pdf`, `read-hidden.pdf`, `read-refused-mix.pdf`) need a paid entitlement, or are checked through `pnpm test` instead; `read-concealed.pdf` is the browser's three page sample of the covered and hidden cases. `trim-edge.pdf` and `read-empty-clip-0.pdf` to `read-empty-clip-3.pdf` arrive with slice 4b.
+Run the tool at `/tool` against a production build (`pnpm build && pnpm start`), because the content security policy is looser in development. The fixtures are `tests/fixtures/read-*.pdf` and `tests/fixtures/trim-*.pdf`, written by `node scripts/make-fixture.mjs`. Those over the free cap of 3 pages (`read-pages.pdf`, `read-pictures.pdf`, `read-covered.pdf`, `read-hidden.pdf`, `read-refused-mix.pdf`) need a paid entitlement, or are checked through `pnpm test` instead; `read-concealed.pdf` is the browser's three page sample of the covered and hidden cases. Slice 4b added `trim-ocr.pdf` (a scan with Tesseract's text layer, cropped through its lines), `trim-edge.pdf`, `read-empty-clip-0.pdf` to `read-empty-clip-3.pdf`, and `read-empty-clip-scan.pdf` (a scan with nothing readable that also draws under an empty clip).
 
-Built: slices 1 to 4 of the build plan. Slice 4b (what the build sent back, settled 2026-09-29: pictures outside the visible area kept and named, text a clip hides wholly named, text under an empty clip refused) is next, and the steps below already expect it. Slice 5 is the real scan run below (AC-30).
+Built: slices 1 to 4 and slice 4b of the build plan (what the build sent back, settled 2026-09-29: pictures outside the visible area kept and named, text a clip hides wholly named, text under an empty clip refused). Slice 5 is the real scan run below (AC-30).
 
 ## UI / manual
 
@@ -86,6 +86,16 @@ On the build machine, the unit project, MuPDF.js 1.28.1:
 - With pixel blanking, as slice 4 built it (2026-09-28 and 29): on a 50 page cropped scan at 300 pixels per inch with a distinct JPEG per page, a run peaked at 814 MB (grey) and 1,804 MB (colour) of MuPDF heap, took 33 s and 80 s of CPU, and wrote 4.8 and 6.2 times the source; the colour scan failed to open. The full table is in `rationale.md`, *What the build sent back*. This is why AC-15 now keeps pictures whole.
 - [ ] After slice 4b: `cost.test.ts` shows a run over the cropped scan leaving every page image's filter and bytes as the source has them → AC-29, INV-11
 - [ ] After slice 4b, once, outside CI: the open's and a run's peak heap on the 50 page cropped scan, grey and colour, a distinct JPEG per page, each beside the same scan uncropped, in a fresh engine per figure. Record them here and in `rationale.md`; a cropped peak more than 5% above its twin returns to `/architect` → AC-29
+- Measured after slice 4b (2026-09-29), by `/develop`, with a scratch probe run once and deleted: 50 US Letter pages at 300 pixels per inch (2550 by 3300 pixels), a distinct JPEG per page made by MuPDF at quality 75 (about 430 KB grey and 500 KB colour; files of 21.9 MB and 25.1 MB, under the 25 MB cap), an invisible text layer on each page and a header line in its top margin, cropped half an inch on every side or not at all. The cropped header puts every cropped page through the trim's text pass, and every cropped page's scan reaches outside. Each figure is MuPDF's WebAssembly memory in a fresh engine, which starts at 23 MB and only grows, in steps:
+
+  | 50 page scan, 300 dpi | Heap after the open | Peak over a run alone | Run CPU | Output against source |
+  |---|---|---|---|---|
+  | grey, not cropped | 60 MB | 105 MB | 1.1 s | 0.99 times |
+  | grey, cropped | 60 MB | 105 MB | 1.6 s | 0.99 times |
+  | colour, not cropped | 66 MB | 115 MB | 1.1 s | 0.99 times |
+  | colour, cropped | 66 MB | 115 MB | 1.5 s | 0.99 times |
+
+  Every cropped peak equals its uncropped twin, 0% above against the 5% limit, so nothing returns to `/architect`. The trim adds 0.3 to 0.5 s of CPU across the 50 pages, at open and in a run. Not yet in `rationale.md`: `/architect` records it there.
 
 ## Acceptance-criteria coverage
 
