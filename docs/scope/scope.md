@@ -129,7 +129,7 @@ spec [0006](../specs/0006-scanned-page-detection-warnings/index.md) · code in `
 - [x] Verify it: `/check verify scanned page detection & warnings`, including the real scan steps made locally (AC-30)
 - [x] Test it: `/test scanned page detection & warnings`
 - [x] Review it (fresh model): `/check review scanned page detection & warnings`
-- [ ] Document it: `/document scanned page detection & warnings`
+- [x] Document it: `/document scanned page detection & warnings`
 
 ### 8. Redact flow · needs a decision
 The single page that is the product: drop a PDF, see what was found, tick what to remove, download the clean file, read the summary of what happened.
