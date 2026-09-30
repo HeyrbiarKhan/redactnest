@@ -18,7 +18,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 5 | Redaction engine | Release 1 | done |
 | 6 | Pattern detection | Release 1 | done |
 | 7 | Scanned page detection & warnings | Release 1 | done |
-| 8 | Redact flow | Release 1 | planned |
+| 8 | Redact flow | Release 1 | in-progress |
 | 9 | Privacy policy & terms | Release 2 | planned |
 | 10 | Billing & paid plan | Release 2 | planned |
 | 11 | Telemetry & error monitoring | Release 3 | planned |
@@ -131,14 +131,24 @@ spec [0006](../specs/0006-scanned-page-detection-warnings/index.md) · code in `
 - [x] Review it (fresh model): `/check review scanned page detection & warnings`
 - [x] Document it: `/document scanned page detection & warnings`
 
-### 8. Redact flow · needs a decision
+### 8. Redact flow · in-progress
 The single page that is the product: drop a PDF, see what was found, tick what to remove, download the clean file, read the summary of what happened.
 **Done when:** an anonymous visitor can take a document up to the page cap from drop to download in one pass, the cap is a config value (3 to start), the scanned page warnings surface in the flow, the summary shows counts by detection type plus what was sanitized, and failure states say plainly what went wrong.
+spec [0007](../specs/0007-redact-flow/index.md) · code in `src/app/tool` (`tool-client.tsx`, `review-checklist.tsx`, new `action-panel.tsx`, `result-card.tsx`, `failure-callout.tsx`), `src/lib` (`session.ts`, `detectors.ts`, `page-findings.ts`, new `flow-text.ts`), `src/ui` (`drop-zone.tsx`, `checklist-item.tsx`, new `summary-list.tsx`), `src/worker` (`client.ts`, `protocol.ts`), `src/engine/find.ts`
 **Also owed here:** `retireOtherJobs` in `src/worker/client.ts` skips pending operations under the same `jobId` as the open it is making room for. The worker makes no such exception: an open with the same `jobId` cancels that job's run in flight, and a cancelled run posts nothing. So if such an open ever reached a live worker while that job's redact was pending, the redact could never settle, and the visitor would sit on a run that neither finishes nor fails. It is not reachable today, because both callers that reuse a `jobId` get a fresh worker first. The redact flow is where a new path that reopens a job on a live worker would most likely appear, so check this when you add one. A suggested fix and its test are in the open follow up at the end of the [redaction engine review](../reviews/2026-09-27-feat-redaction-engine.md).
 **Also owed here:** the review checklist is too slow on a big document. `ReviewChecklist` in `src/app/tool/review-checklist.tsx` renders every row again on each session change, with a new toggle handler per row, so a 50 page document with thousands of matches freezes the page for seconds, and a single tick takes 5 to 6 s. Feature 8 must avoid rendering a row again when nothing about it changed. Spec 0005's first Follow-up (measure at the paid cap, then decide on virtual scrolling or a cap) belongs to the same fix.
 **Also owed here:** plain copy for `unsupported` when the trim's proof fails away from the page edge. Today that case shows the generic `unsupported` line (spec 0006, AC-16 and AC-26).
 **Also owed here:** reword the `no-readable-text` advice in `src/lib/page-findings.ts` and `errorText` in `src/app/tool/tool-client.tsx`. "If you have the original" confuses people who only have the scan. Say "Run this file through text recognition (OCR) first" instead.
-- [ ] Design it (spec): `/architect redact flow`
+- [x] Design it (spec): `/architect redact flow`
+- [ ] Build it: `/develop redact flow`
+  - [ ] The session and the counts: `retireOtherJobs` hardened, the refusal that keeps the review, select all and rerun edges, the cleaned name, `resultCounts` · AC-7, AC-12, AC-13, AC-14, AC-23, AC-24, AC-25
+  - [ ] The steps take over: the file bar, the action panel above the checklist, the result card with its summary, failures in place, after download actions, focus · AC-2, AC-3, AC-5, AC-6, AC-10, AC-11, AC-12, AC-13, AC-14, AC-15, AC-20
+  - [ ] The checklist: select all rows, memoised rows, the cut flags for the ellipsis, the dense fixture measured · AC-7, AC-8, AC-9, AC-26
+  - [ ] The words: every failure kind, the phase lines, the stripped list, the OCR advice and the fragment line · AC-4, AC-16, AC-17, AC-18, AC-19
+  - [ ] The browser proof and the amends: every step state under axe, the keyboard walk and 320px reflow, then specs 0001 to 0006 amended · AC-1, AC-21, AC-22, AC-23, AC-26
+- [ ] Verify it: `/check verify redact flow`
+- [ ] Test it: `/test redact flow`
+- [ ] Review it (fresh model): `/check review redact flow`
 
 ### 18. AGPL compliance & source publication · Alpha · from spec 0001
 Spec 0001 chose MuPDF, which is copyleft, so RedactNest's own source is licensed AGPL 3.0 and published. The obligation attaches the moment the tool is publicly available and shipping the engine to visitors' browsers, which is this release rather than a later one. Artifex enforce their licence, so this is a real deliverable and not a formality.
@@ -215,6 +225,8 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **Downloadable receipt file**: an audit record alongside the redacted PDF, once the on screen summary has proved its shape · needs a decision
 - **Dark mode**: light only for now (spec 0003). Needs its own decision: the colour roles redefined for dark, a second contrast contract, and axe runs in both schemes. It would follow the system setting, since a toggle cannot remember a choice without storage · needs a decision · from spec 0003
 - **A memory limit for blanking scan pixels**: spec 0004's padded pass rewrites every scan page it touches as Flate. One ticked match on each page of a 50 page 300 dpi grey scan measured 917 MB and a file 4.9 times larger. Settle a limit before the paid page cap applies to scans · needs a decision · from spec 0006
+- **Name the item behind a refused run**: carry the `MatchId` with a run refusal where the engine can trace one, so the checklist can point at it. Waits for feature 11's refusal counts, alongside spec 0005's Follow-up on `replacement-text` · needs a decision · from spec 0007
+- **Page preview in review**: page images on the main thread are a new kind of document data (spec 0002, INV-1). Decide with feature 14, which renders pages for rectangles · needs a decision · from spec 0007
 - **Cookie consent banner**: deliberately not built. The only cookies are the strictly necessary auth ones and analytics is cookieless, so no consent is required. Kept here so it does not get added later out of habit.
 
 ## Legend
