@@ -1642,7 +1642,7 @@ describe("the page readings (spec 0006)", () => {
       expect(within(notes).queryByRole("heading")).not.toBeInTheDocument();
       const lines = [...notes.querySelectorAll("p")].map((line) => line.textContent);
       expect(lines).toEqual([
-        "Page 2 is a scan with machine read text. RedactNest reads that text, so it can only find what the text recognition got right.",
+        "Page 2 is a scan with machine read text. RedactNest reads that text, so it can only find what the text recognition got right. Words it missed, such as handwriting, stamps or tables it couldn't read, stay in the picture.",
         "Some items on scanned pages can't be removed because the scan is slightly crooked. Straightening the scan before text recognition (OCRmyPDF's --deskew option, for one) usually fixes this.",
       ]);
 
@@ -1665,8 +1665,9 @@ describe("the page readings (spec 0006)", () => {
       await openWith({ ...openedSession(), summary });
 
       expect(screen.getByTestId("all-clear")).toBeInTheDocument();
+      // Spec 0008, AC-9: the note says what the text recognition may have missed.
       expect(screen.getByTestId("page-notes")).toHaveTextContent(
-        "Page 1 is a scan with machine read text.",
+        "Page 1 is a scan with machine read text. RedactNest reads that text, so it can only find what the text recognition got right. Words it missed, such as handwriting, stamps or tables it couldn't read, stay in the picture.",
       );
       expect(screen.queryByTestId("page-warnings")).not.toBeInTheDocument();
       expect(screen.getByTestId("coverage")).not.toHaveTextContent(
