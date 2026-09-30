@@ -450,11 +450,12 @@ describe("pictures and machine read text", () => {
 
 /**
  * Spec 0008: sparse OCR scans. A picture holding a machine read run, three or
- * more readable, purely invisible characters in a row on one line centred
- * inside it, is not bare. The table above reads each of `read-pictures.pdf`'s
- * new pages; these prove what it rests on, and that following the OCR advice
- * clears the warning. `read-stamped.pdf` and `read-slides.pdf` keep their
- * findings in the blocks above (AC-4, AC-5).
+ * more letters or numbers in a row on one line, purely invisible, on a line no
+ * drawn text runs beside, centred inside it and inside no picture of a
+ * different footprint, is not bare. The table above reads each of
+ * `read-pictures.pdf`'s new pages; these prove what it rests on, and that
+ * following the OCR advice clears the warning. `read-stamped.pdf` and
+ * `read-slides.pdf` keep their findings in the blocks above (AC-4, AC-5).
  */
 describe("sparse OCR scans", () => {
   /** The index of the `read-pictures.pdf` page `READ_PICTURES` names. */
@@ -486,6 +487,24 @@ describe("sparse OCR scans", () => {
     });
     expect(drawn).toBe("Yes");
     expect(read).toBe("Ye");
+  });
+
+  /**
+   * AC-14's pin, which the format character page rests on: the ordinary read
+   * keeps each zero width space, zero width joiner and soft hyphen as one
+   * character of its own, so they reach the run search and end each run there,
+   * rather than being dropped or merged by extraction.
+   */
+  it("keeps each format character of the layer as one character (pin)", () => {
+    const index = picture("a scan whose layer is runs of format characters");
+    const codes = onPage("read-pictures.pdf", index, (page) => {
+      const seen: number[] = [];
+      walkCharacters(page, EXTRACTION_OPTIONS[0], ({ code }) => seen.push(code));
+      return seen;
+    });
+    expect(codes.filter((code) => code !== 0x20)).toEqual([
+      0x200b, 0x200b, 0x200b, 0x200d, 0x200d, 0x200d, 0xad, 0xad, 0xad,
+    ]);
   });
 
   /**
@@ -608,18 +627,19 @@ describe("sparse OCR scans", () => {
    * One page: a full page grey scan, then `layer` over it. `/F1` is
    * Helvetica. `/M` is a simple font whose glyph names map to no character
    * and which has no ToUnicode map, so MuPDF reads each of its glyphs as
-   * U+FFFD, as it reads `read-unmapped.pdf`'s. Built here, because each is one
-   * line over one scan.
+   * U+FFFD, as it reads `read-unmapped.pdf`'s. `/Clear` sets the fill opacity
+   * to zero. `keys` are more page keys, such as `/Rotate 90`. Built here,
+   * because each is a line or two over one scan.
    */
-  function scanUnder(layer: string): Uint8Array {
+  function scanUnder(layer: string, { keys = "" } = {}): Uint8Array {
     const names = Array.from({ length: 26 }, (_, at) => `/zz${65 + at}`).join(" ");
     return writePdf({
       objects: [
         "<< /Type /Catalog /Pages 2 0 R >>",
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
-          "/Resources << /Font << /F1 4 0 R /M 5 0 R >> /XObject << /Scan 7 0 R >> >> " +
-          "/Contents 8 0 R >>",
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ${keys} ` +
+          "/Resources << /Font << /F1 4 0 R /M 5 0 R >> /XObject << /Scan 7 0 R >> " +
+          "/ExtGState << /Clear << /ca 0 >> >> >> /Contents 8 0 R >>",
         "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
         "<< /Type /Font /Subtype /Type1 /BaseFont /Mystery /FirstChar 32 /LastChar 90 " +
           `/Widths [${Array(59).fill(600).join(" ")}] ` +
@@ -636,14 +656,17 @@ describe("sparse OCR scans", () => {
     }).bytes;
   }
 
-  /** One line in font `font` and render mode `mode`, at the sparse scans' place. */
-  function textLine(font: string, mode: number, text: string): string {
-    return `BT ${mode} Tr /${font} 12 Tf 72 120 Td (${text}) Tj ET\n`;
+  /**
+   * One line in font `font` and render mode `mode`, at 12 pt from x 72, on the
+   * sparse scans' baseline unless `y` says otherwise.
+   */
+  function textLine(font: string, mode: number, text: string, y = 120): string {
+    return `BT ${mode} Tr /${font} 12 Tf 72 ${y} Td (${text}) Tj ET\n`;
   }
 
   /**
-   * AC-2: a character is purely invisible only when no clipping glyph sits at
-   * its origin, whatever was painted inside that clip. The same sentence is
+   * AC-2 and AC-15: a clipping glyph at a character's origin makes its line a
+   * drawn copy, whatever was painted inside that clip. The same sentence is
    * drawn invisible (`3 Tr`) and then as a clip (`7 Tr`) at one place: with
    * the scan painted again inside the clip, which only `clipGlyphs` records,
    * and with nothing painted inside it, which `clipOnly` records too. Each
@@ -665,6 +688,54 @@ describe("sparse OCR scans", () => {
       );
       expect(clipped.findings).toContain("bare-picture");
       expect(clipped.findings).toContain("machine-read-text");
+    },
+  );
+
+  /**
+   * AC-2 and AC-15: however the copy at the invisible line's origin is drawn,
+   * its line counts for nothing. Stroked, filled in white, filled at zero
+   * opacity, and in `5 Tr` (stroked and added to the clip) and `6 Tr` (filled,
+   * stroked and added to the clip), each clip inside `q … Q`. MuPDF sends the
+   * clip part of both `5 Tr` and `6 Tr` through `clipText`, the reader's
+   * `clip` branch, never `clip-stroke`, with the fill and the stroke as their
+   * own calls (measured 2026-09-30). Each stays bare, where the invisible line
+   * alone clears the scan.
+   */
+  it.each([
+    ["stroked (1 Tr)", textLine("F1", 1, SENTENCE)],
+    ["filled white", `q 1 g ${textLine("F1", 0, SENTENCE)}Q\n`],
+    ["filled at zero opacity", `q /Clear gs ${textLine("F1", 0, SENTENCE)}Q\n`],
+    ["in 5 Tr", `q ${textLine("F1", 5, SENTENCE)}Q\n`],
+    ["in 6 Tr", `q ${textLine("F1", 6, SENTENCE)}Q\n`],
+  ])("never counts a line with a copy drawn at its origin, %s", async (_label, copy) => {
+    const alone = await inspectBytes(scanUnder(textLine("F1", 3, SENTENCE)));
+    expect(alone.map(({ findings }) => findings)).toEqual([["machine-read-text"]]);
+
+    const [copied] = await inspectBytes(scanUnder(textLine("F1", 3, SENTENCE) + copy));
+    expect(copied.findings).toContain("bare-picture");
+    expect(copied.findings).toContain("machine-read-text");
+  });
+
+  /**
+   * AC-15: the next line is out of reach. The same words drawn visible one
+   * line spacing (14.4 pt) above the invisible sentence leave it clearing the
+   * scan: Helvetica's 12 pt quad is about 16.5 pt tall, so the reach is about
+   * 8.2 pt. On a turned page the lines run up the page, so a reach measured in
+   * plain x and y, from the reach before a character to the reach past its
+   * end, would take in the neighbour's glyphs; measured along each line's own
+   * direction, it does not.
+   */
+  it.each([
+    ["upright", ""],
+    ["on a turned page", "/Rotate 90"],
+  ])(
+    "leaves a line clearing the scan with visible text a line above it, %s",
+    async (_label, keys) => {
+      const layer = textLine("F1", 3, SENTENCE) + textLine("F1", 0, SENTENCE, 134.4);
+      const inspections = await inspectBytes(scanUnder(layer, { keys }));
+      expect(inspections.map(({ findings }) => findings)).toEqual([
+        ["machine-read-text"],
+      ]);
     },
   );
 

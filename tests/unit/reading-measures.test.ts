@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   contrastWithWhite,
+  COPY_REACH_RATIO,
   HIDDEN_CONTRAST_MAX,
   intersect,
   MACHINE_READ_RUN,
@@ -10,12 +11,14 @@ import {
   POSITION_TOLERANCE,
   readsAsNothing,
   relativeLuminance,
+  runStep,
   transformPoint,
   transformRect,
   type PageInspection,
   type Paint,
   type Quad,
   type Rect,
+  type RunStep,
   type Transform,
 } from "@/engine";
 import { PAGE_FINDINGS, type PageFinding } from "@/worker/protocol";
@@ -31,7 +34,8 @@ import { clipToConvex, polygonArea } from "@/engine/geometry";
  * space, the clip in force, how much of a glyph's box a cover holds, how a
  * glyph meets its extracted character, and which page counts toward nothing
  * readable. `reading.test.ts` proves the same rules on real pages; this pins
- * the edges no fixture reaches. Spec 0008 adds the machine read run's edges.
+ * the edges no fixture reaches. Spec 0008 adds the machine read run's edges
+ * and each character's step in it.
  */
 
 function paint(space: ColorSpaceType, ...components: number[]): Paint {
@@ -414,9 +418,51 @@ describe("finding a value by its origin", () => {
 });
 
 /**
- * Spec 0008, AC-1 and AC-2: a picture holds a machine read run when
- * `MACHINE_READ_RUN` characters in a row on one line each qualify (readable
- * and purely invisible) and centre inside it. Anything else ends the run.
+ * Spec 0008, AC-14: only letters and numbers count toward a run, a combining
+ * mark continues one without adding to it, and anything else ends it.
+ */
+describe("a character's step in a machine read run", () => {
+  const code = (character: string) => character.codePointAt(0) ?? -1;
+
+  it.each([
+    ["a Latin capital", "S"],
+    ["a Latin small letter", "z"],
+    ["a Latin letter with its accent composed", "é"],
+    ["a CJK ideograph", "漢"],
+    ["an ASCII digit", "7"],
+    ["an Arabic Indic digit", "٣"],
+  ])("counts %s", (_label, character) => {
+    expect(runStep(code(character))).toBe("counts");
+  });
+
+  it.each([
+    ["a Devanagari vowel sign (U+093F)", 0x093f],
+    ["a combining acute accent (U+0301)", 0x0301],
+  ])("continues on %s", (_label, point) => {
+    expect(runStep(point)).toBe("continues");
+  });
+
+  it.each<readonly [string, number]>([
+    ...["_", ".", "|", "-", "~", "*"].map((mark) => [`"${mark}"`, code(mark)] as const),
+    ["a zero width space (U+200B)", 0x200b],
+    ["a zero width joiner (U+200D)", 0x200d],
+    ["a soft hyphen (U+00AD)", 0x00ad],
+    ["a word joiner (U+2060)", 0x2060],
+    ["a space", 0x20],
+    ["U+FFFD", 0xfffd],
+    ["a private use code point (U+E000)", 0xe000],
+    ["a lone surrogate (U+D800)", 0xd800],
+    ["a value that is no code point", 0x110000],
+  ])("ends on %s", (_label, point) => {
+    expect(runStep(point)).toBe("ends");
+  });
+});
+
+/**
+ * Spec 0008, AC-1, AC-2 and AC-14: a picture holds a machine read run when
+ * `MACHINE_READ_RUN` characters that count lie in a row on one line, each
+ * centred inside it. A combining mark carries a run without adding to it;
+ * anything else ends it.
  */
 describe("the machine read run", () => {
   /** The picture: x 0 to 500, y 0 to 100 in page space. */
@@ -425,13 +471,14 @@ describe("the machine read run", () => {
 
   /**
    * Characters from a pattern, 6 pt apart on one baseline, as the ordinary
-   * read gives them: `q` qualifies and centres inside the picture, `n` does
-   * not qualify (a space, a visible or an unreadable character), `o`
-   * qualifies but centres outside it, and `/` starts the next line.
+   * read gives them: `c` counts and centres inside the picture, `m` continues
+   * (a combining mark), `e` ends (a space, punctuation, a visible character or
+   * one on a drawn copy), `o` counts but centres outside it, and `/` starts
+   * the next line.
    */
   function laidOut(pattern: string) {
     const characters: { readonly line: number; readonly quad: Quad }[] = [];
-    const qualifying: boolean[] = [];
+    const steps: RunStep[] = [];
     let line = 0;
     for (const mark of pattern) {
       if (mark === "/") {
@@ -440,43 +487,49 @@ describe("the machine read run", () => {
       }
       const x = (mark === "o" ? 600 : 10) + 6 * characters.length;
       characters.push({ line, quad: [x, 40, x + 6, 40, x, 52, x + 6, 52] });
-      qualifying.push(mark !== "n");
+      steps.push(mark === "m" ? "continues" : mark === "e" ? "ends" : "counts");
     }
-    return { characters, qualifies: (at: number) => qualifying[at] };
+    return { characters, step: (at: number) => steps[at] };
   }
 
-  it("is 3 characters in a row", () => {
+  it("is 3 characters in a row, and a drawn copy's reach is half a character's height", () => {
     expect(MACHINE_READ_RUN).toBe(3);
+    expect(COPY_REACH_RATIO).toBe(0.5);
   });
 
   it.each([
-    ["exactly three qualifying characters", "qqq"],
-    ["three after a broken pair", "qqnqqq"],
-    ["three on the second line", "qq/qqq"],
-    ["a word straddling the edge, three of its letters inside", "ooqqq"],
+    ["exactly three that count", "ccc"],
+    ["three after a broken pair", "cceccc"],
+    ["three on the second line", "cc/ccc"],
+    ["a word straddling the edge, three of its letters inside", "ooccc"],
+    ["a letter, a mark, then two letters", "cmcc"],
+    ["three letters, each carrying a mark", "cmcmcm"],
   ])("finds one in %s", (_label, pattern) => {
-    const { characters, qualifies } = laidOut(pattern);
-    expect(machineReadRun(characters, qualifies, inside)).toBe(true);
+    const { characters, step } = laidOut(pattern);
+    expect(machineReadRun(characters, step, inside)).toBe(true);
   });
 
   it.each([
-    ["two, then a space or a visible character", "qqnqq"],
-    ["two, then the end of the line", "qq/qq"],
-    ["two, then one centred outside", "qqoqq"],
-    ["a word straddling the edge, two of its letters inside", "qqooo"],
-    ["characters that qualify one at a time", "qnqnqnq"],
+    ["two, then a space or punctuation", "ccecc"],
+    ["two, then the end of the line", "cc/cc"],
+    ["two, then one centred outside", "ccocc"],
+    ["a word straddling the edge, two of its letters inside", "ccooo"],
+    ["characters that count one at a time", "cecece"],
+    ["one letter carrying two marks", "cmm"],
+    ["marks alone", "mmmm"],
+    ["a letter and a mark, an end, then two letters", "cmecc"],
     ["nothing at all", ""],
   ])("finds none in %s", (_label, pattern) => {
-    const { characters, qualifies } = laidOut(pattern);
-    expect(machineReadRun(characters, qualifies, inside)).toBe(false);
+    const { characters, step } = laidOut(pattern);
+    expect(machineReadRun(characters, step, inside)).toBe(false);
   });
 
   it("asks only about characters centred inside, and stops at the first run (AC-12)", () => {
-    const { characters, qualifies } = laidOut("ooqqqqqq");
+    const { characters, step } = laidOut("ooccccccc");
     const asked: number[] = [];
     const counting = (at: number) => {
       asked.push(at);
-      return qualifies(at);
+      return step(at);
     };
 
     expect(machineReadRun(characters, counting, inside)).toBe(true);

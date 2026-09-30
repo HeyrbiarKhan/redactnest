@@ -399,6 +399,47 @@ export const READ_PICTURES = Object.freeze([
     name: "a layered scan: a background and a stencil under one layer",
     findings: ["machine-read-text"],
   },
+  // Spec 0008, after the 2026-09-30 review. AC-16: text over two pictures of
+  // different footprints counts for neither, so each photo stays bare.
+  {
+    name: "a photo drawn after an OCR line that runs over it",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  {
+    name: "a photo drawn before an OCR line that runs over it",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  {
+    name: "a photo across the edge of a half page scan",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  {
+    name: "a small OCR scan on a full page photo",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  // AC-14: only letters and numbers count toward a run.
+  {
+    name: "a scan whose layer is runs of punctuation",
+    findings: ["scanned", "machine-read-text"],
+  },
+  {
+    name: "a scan whose layer is runs of format characters",
+    findings: ["scanned", "machine-read-text"],
+  },
+  // AC-15: a line within reach of drawn text counts for nothing.
+  {
+    name: "a sentence and its invisible copy half a point away",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  {
+    name: "a sentence and an invisible copy drifting ahead of it",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  // AC-3's recorded limit, taken up as scope feature 20.
+  {
+    name: "a photo pasted onto a dense OCR layer",
+    findings: ["machine-read-text"],
+  },
 ]);
 
 /** The sparse scans' one recognised sentence: 45 readable characters. */
@@ -406,11 +447,12 @@ const SPARSE_SENTENCE = "Signed for and on behalf of the company by its director
 
 /**
  * One line of Helvetica (`/F1`) in render mode `mode`: 3 is invisible, 0 is
- * filled. The mode is text state, so it outlasts the text object; each line
- * sets its own.
+ * filled. `spacing` is the character spacing (`Tc`), added after every glyph.
+ * The mode and the spacing are text state, so they outlast the text object;
+ * each line sets its own.
  */
-function modeLine(mode, size, x, y, text) {
-  return `BT ${mode} Tr /F1 ${size} Tf ${x} ${y} Td ${literal(text)} Tj ET\n`;
+function modeLine(mode, size, x, y, text, { spacing = 0 } = {}) {
+  return `BT ${mode} Tr ${spacing} Tc /F1 ${size} Tf ${x} ${y} Td ${literal(text)} Tj ET\n`;
 }
 
 /** Typed words for the pages that are letters, so each is readable. */
@@ -423,8 +465,8 @@ function letterText() {
 }
 
 /**
- * Spec 0006, AC-2, AC-4 and AC-5, and spec 0008, AC-1 to AC-7. One page per
- * picture rule and near miss. The glyphless font joins each page through
+ * Spec 0006, AC-2, AC-4 and AC-5, and spec 0008, AC-1 to AC-7 and, from page
+ * 20, AC-14 to AC-16. One page per picture rule and near miss. The glyphless font joins each page through
  * `fonts`, so a page that also draws Helvetica has one `/Font` dictionary
  * holding both.
  */
@@ -565,6 +607,100 @@ export function readPictures() {
           fullPage("Scan") +
           `0 0 0 rg ${fullPage("Mask")}` +
           invisibleLine(12, 72, 120, SPARSE_SENTENCE),
+      },
+      // Spec 0008, AC-16. The glyphless font advances 6 pt a glyph at 12 pt,
+      // so from x 60 "by its director" starts at x 300 and centres over the
+      // photo (x 300 to 600, y 250 to 550) and the scan, and the words before
+      // it over the scan alone, which they clear. The line covers under 3% of
+      // the photo's grid points, so the photo is searched, and stays bare. The
+      // next page draws the photo first.
+      {
+        fonts,
+        resources: `/XObject << /Scan ${scan} 0 R /Photo ${photo} 0 R >>`,
+        content:
+          fullPage("Scan") +
+          invisibleLine(12, 60, 400, SPARSE_SENTENCE) +
+          "q 300 0 0 300 300 250 cm /Photo Do Q\n",
+      },
+      {
+        fonts,
+        resources: `/XObject << /Scan ${scan} 0 R /Photo ${photo} 0 R >>`,
+        content:
+          fullPage("Scan") +
+          "q 300 0 0 300 300 250 cm /Photo Do Q\n" +
+          invisibleLine(12, 60, 400, SPARSE_SENTENCE),
+      },
+      // Spec 0008, AC-16. The scan is the top half of the page (y 396 up), the
+      // photo reaches 146 pt below it, so it is not wholly inside the scan: the
+      // review's own fix would have cleared it. The line's words before "by"
+      // lie over the scan alone, its last three over both.
+      {
+        fonts,
+        resources: `/XObject << /Scan ${scan} 0 R /Photo ${photo} 0 R >>`,
+        content:
+          "q 612 0 0 396 0 396 cm /Scan Do Q\n" +
+          "q 300 0 0 200 300 250 cm /Photo Do Q\n" +
+          invisibleLine(12, 60, 420, SPARSE_SENTENCE),
+      },
+      // Spec 0008, AC-16. A 300 by 200 pt scan on a full page photo, its three
+      // lines wholly inside it (at 10 pt, x 166 to 441). Each baseline puts one
+      // row of grid points in its 10 pt line box, so the lines cover about 17%
+      // of the scan, which the coverage test clears, and about 2% of the photo.
+      // The scan still takes the characters from the photo: a veto from a
+      // picture that passed coverage. The review's own fix, a picture wholly
+      // inside a larger one takes no run, would have cleared the photo.
+      {
+        fonts,
+        resources: `/XObject << /Scan ${scan} 0 R /Photo ${photo} 0 R >>`,
+        content:
+          fullPage("Photo") +
+          "q 300 0 0 200 156 300 cm /Scan Do Q\n" +
+          [446, 410, 372].map((y) => invisibleLine(10, 166, y, SPARSE_SENTENCE)).join(""),
+      },
+      // Spec 0008, AC-14: 15 readable characters in runs of three, none of
+      // them a letter or a number.
+      {
+        fonts,
+        resources: scanned,
+        content: fullPage("Scan") + invisibleLine(12, 72, 120, "___ ... ||| --- ~~~"),
+      },
+      // Spec 0008, AC-14: the zero width space, the zero width joiner and the
+      // soft hyphen, three of each. 9 readable characters, each kept by the
+      // ordinary read (pinned in `reading.test.ts`).
+      {
+        fonts,
+        resources: scanned,
+        content: fullPage("Scan") + invisibleLine(12, 72, 120, "​​​ ‍‍‍ ­­­"),
+      },
+      // Spec 0008, AC-15: an invisible copy of a visible sentence, offset half
+      // a point left and down.
+      {
+        resources: scanned,
+        content:
+          fullPage("Scan") +
+          modeLine(0, 12, 72, 120, SPARSE_SENTENCE) +
+          modeLine(3, 12, 71.5, 119.5, SPARSE_SENTENCE),
+      },
+      // Spec 0008, AC-15: an invisible copy from the same start, drifting ahead
+      // with character spacing, 32.4 pt by the line's end. Its last 4 letters
+      // ("ctor") lie out of reach of every visible glyph (measured
+      // 2026-09-30), so judged character by character they would clear the
+      // scan; judged per line, they do not.
+      {
+        resources: scanned,
+        content:
+          fullPage("Scan") +
+          modeLine(0, 12, 72, 120, SPARSE_SENTENCE) +
+          modeLine(3, 12, 72, 120, SPARSE_SENTENCE, { spacing: 0.6 }),
+      },
+      // Spec 0008, AC-3's recorded limit. The full text layer covers about a
+      // third of the photo (x 156 to 456, y 300 to 600), so spec 0006's
+      // coverage test clears the photo before any run is asked, as it did
+      // before spec 0008. Accepted, and taken up as scope feature 20.
+      {
+        fonts,
+        resources: `/XObject << /Scan ${scan} 0 R /Photo ${photo} 0 R >>`,
+        content: fullPage("Scan") + "q 300 0 0 300 156 300 cm /Photo Do Q\n" + ocrLayer(),
       },
     ];
   });
