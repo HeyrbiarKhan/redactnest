@@ -162,7 +162,7 @@ spec [0008](../specs/0008-sparse-ocr-scans/index.md) · code in `src/engine` (`i
   - [x] The fixtures: eleven new pages on `read-pictures.pdf`, two expectations moved, and `read-short-ocr.pdf` · AC-1 to AC-8
   - [x] The rule, proved: the machine read run per picture with every clipping glyph's origin, the shared painted index and the guarded, lazy search; the pins, the run edges, the cost case and the browser check · AC-1 to AC-8, AC-11, AC-12
   - [x] The words and the amends: the machine read note's new sentence, the advice comment, and specs 0006 and 0007 amended · AC-9, AC-10
-- [ ] Verify it: `/check verify sparse OCR scans`, including the real scan steps on the local scans (AC-13)
+- [x] Verify it: `/check verify sparse OCR scans`, including the real scan steps on the local scans (AC-13)
 - [ ] Test it: `/test sparse OCR scans`
 - [ ] Review it (fresh model): `/check review sparse OCR scans`
 - [ ] Document it: `/document sparse OCR scans`
