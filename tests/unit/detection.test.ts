@@ -24,6 +24,7 @@ import {
   DETECT_BLOCKED,
   DETECT_DENSE_PAGES,
   DETECT_DENSE_PER_PAGE,
+  DETECT_STAMPED,
   DETECT_EMAIL,
   DETECT_MANY_COUNT,
   DETECT_PHONE,
@@ -390,6 +391,37 @@ describe("a page with more matches than search() returns", () => {
 
     expect(packedText(output, 0)).not.toContain("@ex.io");
   }, 120_000);
+});
+
+/**
+ * Spec 0007, AC-14. The refusal a tick causes, as the flow's browser suite
+ * reaches it: both addresses listed and tickable, a run over both refused for
+ * the stamp, and a run over the clear one alone clean.
+ */
+describe("an address under a stamp", () => {
+  it("is listed tickable, and refused in a run, while the one clear of it redacts", async () => {
+    const found = await find("detect-stamped.pdf");
+    expect(found.map((match) => match.text)).toEqual([
+      DETECT_STAMPED.stamped,
+      DETECT_STAMPED.clear,
+    ]);
+    expect(found.every((match) => match.blocked === null && match.tickedByDefault)).toBe(
+      true,
+    );
+
+    await expect(
+      redactDocumentWith(mupdf, fixture("detect-stamped.pdf"), targetsOf(found)),
+    ).rejects.toEqual(new EngineFailure("redaction-overreach"));
+
+    const clear = found.filter((match) => match.text === DETECT_STAMPED.clear);
+    const { output } = await redactDocumentWith(
+      mupdf,
+      fixture("detect-stamped.pdf"),
+      targetsOf(clear),
+    );
+    expect(packedText(output, 0)).not.toContain(DETECT_STAMPED.clear);
+    expect(packedText(output, 0)).toContain(DETECT_STAMPED.stamped);
+  }, 60_000);
 });
 
 /**

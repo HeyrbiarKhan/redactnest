@@ -160,11 +160,81 @@ async function refuseUnreadable(page: Page): Promise<void> {
   await expect(page.getByTestId("error")).toBeVisible({ timeout: ENGINE_TIMEOUT });
 }
 
-/** The states the tool page can settle in today (AC-18; spec 0005, AC-13). */
+/**
+ * Spec 0007, AC-22. A file chosen with the engine's download held, so the file
+ * bar and the phase line stay on screen: the `opening` step.
+ */
+async function openingHeld(page: Page): Promise<void> {
+  await page.route("**/engine/**", () => new Promise(() => {}));
+  await page.getByTestId("file-input").setInputFiles(FIXTURE);
+  await expect(page.getByTestId("file-bar")).toBeVisible();
+  await expect(page.getByTestId("progress")).toHaveText("Loading the PDF engine…", {
+    timeout: ENGINE_TIMEOUT,
+  });
+}
+
+/**
+ * Spec 0007, AC-22. A run under way, held there: the page's own requests to
+ * the worker go through, except `redact`, which is kept back, so the run
+ * never ends and Cancel stays in the action panel.
+ */
+async function redactingHeld(page: Page): Promise<void> {
+  await openDocument(page);
+  await page.evaluate(() => {
+    const post = Worker.prototype.postMessage as (
+      this: Worker,
+      ...args: unknown[]
+    ) => void;
+    Worker.prototype.postMessage = function (this: Worker, ...args: unknown[]) {
+      if ((args[0] as { kind?: string } | null)?.kind === "redact") return;
+      post.apply(this, args);
+    } as Worker["postMessage"];
+  });
+  await page.getByTestId("redact").click();
+  await expect(page.getByTestId("cancel")).toBeFocused();
+}
+
+/** Spec 0007, AC-14. A run refused for a stamp across a ticked address. */
+async function refuseARun(page: Page): Promise<void> {
+  await page
+    .getByTestId("file-input")
+    .setInputFiles(resolve("tests/fixtures/detect-stamped.pdf"));
+  await page.getByTestId("redact").click({ timeout: ENGINE_TIMEOUT });
+  await expect(page.getByTestId("run-refusal")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+}
+
+/** Spec 0007, AC-12. A run with nothing ticked: a cleaned copy. */
+async function completeNothingRemoved(page: Page): Promise<void> {
+  await openDocument(page);
+  await page.getByRole("checkbox", { name: "contact@example.com" }).click();
+  await page.getByTestId("redact").click();
+  await expect(page.getByRole("heading", { name: "Nothing was removed" })).toBeVisible({
+    timeout: ENGINE_TIMEOUT,
+  });
+}
+
+/** Spec 0007, AC-13. The file handed over, with the two ways on. */
+async function downloaded(page: Page): Promise<void> {
+  await completeARun(page);
+  const downloading = page.waitForEvent("download");
+  await page.getByTestId("download").click();
+  await downloading;
+  await expect(page.getByTestId("downloaded")).toBeVisible();
+}
+
+/**
+ * The states the tool page can settle in (AC-18; spec 0005, AC-13; spec 0007,
+ * AC-22).
+ */
 const TOOL_STATES: readonly (readonly [string, (page: Page) => Promise<void>])[] = [
   ["idle", async () => {}],
   ["failed", failToOpen],
+  ["opening", openingHeld],
   ["opened", openDocument],
+  ["redacting", redactingHeld],
+  ["a run refusal", refuseARun],
+  ["complete, nothing removed", completeNothingRemoved],
+  ["downloaded", downloaded],
   ["reviewing, with both groups", reviewBothGroups],
   ["reviewing, with many rows", reviewManyRows],
   ["reviewing, with blocked rows", reviewBlockedRows],
@@ -295,6 +365,41 @@ async function expectRingAtOnce(target: Locator): Promise<void> {
   expect(ring.landed).toBe(ring.settled);
 }
 
+/**
+ * Spec 0007, AC-22. Tab from the top of `main` reaches every control in the
+ * page's reading order, each with its ring. The controls are listed from the
+ * page itself (everything focusable, enabled and drawn), so a control added in
+ * the wrong place or left unreachable fails here without the list being kept
+ * by hand.
+ */
+async function expectKeyboardWalk(page: Page): Promise<void> {
+  const stops = await page.locator("main").evaluate((main) => {
+    const reachable = [
+      ...main.querySelectorAll<HTMLElement>(
+        "a[href], button, input, summary, [tabindex]",
+      ),
+    ].filter(
+      (element) =>
+        element.tabIndex >= 0 &&
+        !(element as HTMLButtonElement).disabled &&
+        element.getClientRects().length > 0,
+    );
+    reachable.forEach((element, index) => {
+      element.dataset.walk = String(index);
+    });
+    return reachable.length;
+  });
+  expect(stops).toBeGreaterThan(0);
+
+  await page.locator("main").focus();
+  for (let index = 0; index < stops; index += 1) {
+    await page.keyboard.press("Tab");
+    const stop = page.locator(`[data-walk="${index}"]`);
+    await expect(stop).toBeFocused();
+    await expectFocusRing(stop);
+  }
+}
+
 test.describe("axe on the tool page (AC-18)", () => {
   for (const [state, reach] of TOOL_STATES) {
     test(`reports nothing in the ${state} state`, async ({ page }) => {
@@ -404,6 +509,53 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await expectRingAtOnce(page.getByTestId("choose-file"));
     await expectRingAtOnce(page.getByTestId("start-over"));
   });
+
+  // Spec 0007, AC-22: every step state, walked control by control.
+  for (const [state, reach] of TOOL_STATES) {
+    test(`reaches every control in order in the ${state} state`, async ({ page }) => {
+      await page.goto("/tool");
+      await reach(page);
+
+      await expectKeyboardWalk(page);
+    });
+  }
+
+  /**
+   * Spec 0007, AC-8 and AC-22. A row the browser skipped drawing, because it
+   * sat far below the fold (`content-visibility: auto`), is still reached by
+   * Tab, scrolled into view and ringed.
+   */
+  test("reaches a row far below the fold, and brings it into view with its ring", async ({
+    page,
+  }) => {
+    test.setTimeout(ENGINE_TIMEOUT + 90_000);
+    await page.route("**/api/entitlement", (route) =>
+      route.fulfill({ json: { tier: "paid", pageCap: 50, maxFileBytes: 26_214_400 } }),
+    );
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/tool");
+    await page
+      .getByTestId("file-input")
+      .setInputFiles(resolve("tests/fixtures/detect-dense.pdf"));
+
+    const first = page.getByRole("checkbox", {
+      name: "staff.0000@example.com",
+      exact: true,
+    });
+    await expect(first).toBeVisible({ timeout: ENGINE_TIMEOUT + 60_000 });
+    const far = page.getByRole("checkbox", {
+      name: "staff.0030@example.com",
+      exact: true,
+    });
+    await expect(far).not.toBeInViewport();
+
+    await first.focus();
+    for (let step = 0; step < 30; step += 1) await page.keyboard.press("Tab");
+
+    await expect(far).toBeFocused();
+    await expect(far).toBeInViewport();
+    await expectFocusRing(far);
+  });
 });
 
 test.describe("target sizes on the tool page (AC-7)", () => {
@@ -435,6 +587,19 @@ test.describe("reflow and zoom on the tool page (AC-15)", () => {
     await openDocument(page);
     await expectNoHorizontalScroll(page);
   });
+
+  // Spec 0007, AC-21 and AC-22: every step state reflows at 320px.
+  for (const [state, reach] of TOOL_STATES) {
+    test(`needs no sideways scroll at 320 CSS pixels in the ${state} state`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 320, height: 640 });
+      await page.goto("/tool");
+      await reach(page);
+
+      await expectNoHorizontalScroll(page);
+    });
+  }
 
   /**
    * WCAG 1.4.4 at an ordinary desktop width. Doubling the text at 320px as well
