@@ -168,7 +168,7 @@ spec [0008](../specs/0008-sparse-ocr-scans/index.md) · code in `src/engine` (`i
 - [x] Verify it: `/check verify sparse OCR scans`, including the real scan steps on the local scans (AC-13). Run once for the first build; run again for the review's fixes (spec task 11)
 - [x] Test it: `/test sparse OCR scans`, again for the review's fixes
 - [x] Review it (fresh model): `/check review sparse OCR scans`, again for the review's fixes
-- [ ] Document it: `/document sparse OCR scans`
+- [x] Document it: `/document sparse OCR scans`
 
 ### 20. Dense text layers over pictures · needs a decision · GA · from spec 0008
 A picture loses its warning once text lines cover at least 5% of it (`TEXT_OVER_PICTURE_MAX`), because spec 0006's coverage test counts any readable line, visible or hidden, punctuation included, over any picture, whichever picture it belongs to. So a photo pasted onto a dense OCR scan is cleared by the scan's layer, and a scan whose only layer is dense junk (six hidden lines of `|||` from a ruled form or table) is cleared although no letter or number was read. Both were true before spec 0008, which pins the photo case (`read-pictures.pdf` page 28) and leaves the decision here. Found by the cross check of spec 0008's review fixes and by its second review (minor 1), both on 2026-09-30.
