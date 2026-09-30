@@ -1,7 +1,7 @@
 # 0003. Design system and UI foundation
 
 **Date**: 2026-09-21
-**Updated**: 2026-09-22, making every way into `/tool` a real page load (AC-21, INV-10), then making the load guard unable to loop (AC-21, INV-11); 2026-09-29, from spec [0006](../0006-scanned-page-detection-warnings/index.md): the opened document card's text layer line gives way to an all clear line or page warnings and notes, and `ChecklistItem` gains `concealedNote`. No new colour pairing: the warnings use `Callout`'s existing `warning` and `info` tones
+**Updated**: 2026-09-22, making every way into `/tool` a real page load (AC-21, INV-10), then making the load guard unable to loop (AC-21, INV-11); 2026-09-29, from spec [0006](../0006-scanned-page-detection-warnings/index.md): the opened document card's text layer line gives way to an all clear line or page warnings and notes, and `ChecklistItem` gains `concealedNote`. No new colour pairing: the warnings use `Callout`'s existing `warning` and `info` tones; 2026-09-30, from spec [0007](../0007-redact-flow/index.md): `SummaryList` (a definition list) meets the summary panel Follow-up inside the result card; `DropZone` gains a `compact` form, the file bar; `ChecklistItem` shows "…" only where the context was cut and its row gets `content-visibility: auto`; a group's select all is its first row (`ChecklistSelectAll`); `Callout` gains a `lead` line and, with `Card`, a heading focus can move to; and the `link` button is 40px tall at `md` and 48px at `lg`, as AC-7 asks of every button. No new colour pairing enters the product: `ink-muted` on `accent-soft`, which the drop zone's helper has shown during a drag since slice 1, joins the contract table and its test
 **Status**: Accepted
 
 ## Summary
@@ -93,6 +93,7 @@ Contrast contract, mirrored as a frozen array in `tests/unit/contrast.test.ts`. 
 | `on-accent` | `accent`, `accent-strong` | 4.5 | 5.09, 6.89 |
 | `accent-strong` | `canvas`, `surface`, `subtle`, `accent-soft` | 4.5 | 6.43, 6.89, 6.00, 5.66 |
 | `ink` | `accent-soft` | 4.5 | 13.17 |
+| `ink-muted` | `accent-soft` | 4.5 | 5.20 (the drop zone's helper and the file bar's page count during a drag; added by spec 0007) |
 | `ink`, `ink-muted` | `warning-bg` | 4.5 | 14.58, 5.76 |
 | `ink`, `ink-muted` | `info-bg` | 4.5 | 14.29, 5.64 |
 | `ink`, `ink-muted` | `danger-bg` | 4.5 | 14.19, 5.60 |
@@ -298,7 +299,7 @@ Ordered by Skateboard. The first slice is the thinnest usable whole: the tool pa
 
 ## Follow-up
 
-- [ ] Feature 8 builds the summary panel (counts by detection type, plus what was sanitized) from `Card` and a definition list, adding any new colour pairing to the contract. Scope row 4 now says so.
+- [x] Feature 8 builds the summary panel (counts by detection type, plus what was sanitized) from `Card` and a definition list, adding any new colour pairing to the contract. Scope row 4 now says so. _Met by spec 0007: `SummaryList` in `src/ui/summary-list.tsx`, inside the result card (AC-11). No new pairing; the drop zone's existing `ink-muted` on `accent-soft` was added to the contract._
 - [x] Feature 8 places `Checkbox`, `ChecklistGroup`, `ChecklistItem` and `EmptyState` on `/tool`, and extends `design-system.spec.ts` to the review state. That run is their first real browser proof, including the checkbox in forced colours. _Done by feature 6 instead, which spec 0005 made the first to place them; feature 8 still owns the final layout. The browser checks are ticked in this spec's `verify.md`._
 - [x] Feature 6 owns the map from each `DetectorKind` to its group label, icon and noun (for example email to `Mail` and "email address", phone to `Phone` and "phone number"). _Done: `DETECTOR_LABELS` in `src/lib/detectors.ts` (spec 0005)._
 - [ ] Feature 15 builds the feature trio (three columns, each an `accent` `lucide-react` line icon, a `text-heading` title and one `text-small` line) and is the first to use `eyebrow` and `max-w-wide`.

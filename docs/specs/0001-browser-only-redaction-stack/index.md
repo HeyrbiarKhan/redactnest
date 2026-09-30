@@ -1,6 +1,7 @@
 # 0001. Browser only redaction stack
 
 **Date**: 2026-09-19
+**Updated**: 2026-09-30, from spec [0007](../0007-redact-flow/index.md): three Follow-ups met (every failure kind's copy, the entitlement in flight for the free tier, and what mobile visitors see). No design changed.
 **Status**: Accepted
 
 ## Summary
@@ -168,10 +169,10 @@ All are read through one typed config module that parses and validates them at m
 - [ ] Get a commercial licence quote from Artifex and record it, so relicensing later is a known number rather than an emergency negotiation.
 - [ ] Design feature 10 as an honesty based paywall. The page cap cannot be technically enforced under this architecture, and pricing, copy and expectations should reflect that.
 - [ ] Write features 5, 6 and 13 knowing redaction is geometric. Feature 6 needs a text match to quad mapping, and feature 5's acceptance criteria should test the geometric edges rather than assume string level precision.
-- [ ] Feature 8 owns the user facing treatment of every failure kind in the worker contract, including the encrypted and password protected cases that feature 7 does not cover.
-- [ ] Decide the tool page's default state while the entitlement fetch is in flight. Assume the free cap, and settle whether the interface waits or shows the cap and corrects upward.
+- [x] Feature 8 owns the user facing treatment of every failure kind in the worker contract, including the encrypted and password protected cases that feature 7 does not cover. _Met by spec 0007: `FAILURE_TEXT` in `src/lib/flow-text.ts` gives every kind a title, a body and a next step (AC-16, AC-17), and the page never asks for a password._
+- [x] Decide the tool page's default state while the entitlement fetch is in flight. Assume the free cap, and settle whether the interface waits or shows the cap and corrects upward. _Met for the free tier: spec 0002 waits behind `checking-entitlement` and fails closed to free, and spec 0007's drop zone names `config.freePageCap` (AC-2). Feature 10 owns showing a paid cap._
 - [ ] Measure the real browser memory ceiling on a representative machine before raising `NEXT_PUBLIC_MAX_PAGES` above 50, accounting for more than one tab being open.
-- [ ] Decide what mobile visitors actually see. Mobile is not promised, so feature 8 needs a deliberate answer rather than a silent failure.
+- [x] Decide what mobile visitors actually see. Mobile is not promised, so feature 8 needs a deliberate answer rather than a silent failure. _Met by spec 0007, AC-21: the tool runs on any browser the support check passes, with no device or screen size check, and every step reflows at 320px. A phone that runs out of memory lands on the lost callout, as any browser does._
 - [ ] Run `/audit` (feature 2) once the scaffold exists, so root `AGENTS.md` records this stack for every later skill.
 - [ ] Consider connecting a Playwright MCP server (for example `reason-machines/mcp-skills@playwright-mcp-server`) when you reach `/check verify`. It gives the agent live control of a real browser instead of assumptions about one, which matters most for proving the engine loads in a worker and for driving the redact flow in feature 8. Deferred deliberately, not overlooked.
 - [ ] Record in root `AGENTS.md` when feature 2 runs: Agent Skills were searched for this stack and declined, so nothing offers them again. Nothing exists for MuPDF, PDF redaction or WebAssembly in a worker, which is where guidance would actually have helped.
