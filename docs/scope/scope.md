@@ -143,7 +143,7 @@ spec [0007](../specs/0007-redact-flow/index.md) · code in `src/app/tool` (`tool
 - [ ] Build it: `/develop redact flow`
   - [x] The session and the counts: `retireOtherJobs` hardened, the refusal that keeps the review, select all and rerun edges, the cleaned name, `resultCounts` · AC-7, AC-12, AC-13, AC-14, AC-23, AC-24, AC-25
   - [x] The steps take over: the file bar, the action panel above the checklist, the result card with its summary, failures in place, after download actions, focus · AC-2, AC-3, AC-5, AC-6, AC-10, AC-11, AC-12, AC-13, AC-14, AC-15, AC-20
-  - [ ] The checklist: select all rows, memoised rows, the cut flags for the ellipsis, the dense fixture measured · AC-7, AC-8, AC-9, AC-26
+  - [x] The checklist: select all rows, memoised rows, the cut flags for the ellipsis, the dense fixture measured · AC-7, AC-8, AC-9, AC-26
   - [ ] The words: every failure kind, the phase lines, the stripped list, the OCR advice and the fragment line · AC-4, AC-16, AC-17, AC-18, AC-19
   - [ ] The browser proof and the amends: every step state under axe, the keyboard walk and 320px reflow, then specs 0001 to 0006 amended · AC-1, AC-21, AC-22, AC-23, AC-26
 - [ ] Verify it: `/check verify redact flow`

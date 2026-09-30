@@ -110,4 +110,14 @@ An independent read only pass on another model found about twenty places where t
 
 ## Measurements
 
-To be recorded by task 13: the dense fixture's page and match counts, the checklist's first render after `opened`, and a single tick's time to paint, in Chromium on the machine used, with the commit.
+Recorded by task 13 on 2026-09-30, at commit `888ec1a`, with `tests/e2e/checklist-speed.spec.ts` against a production build, in Playwright 1.63.0's Chromium on a 13th Gen Intel Core i5-1335U laptop with 16 GB of memory, running Windows 11. Three runs, one worker.
+
+**The fixture.** `tests/fixtures/detect-dense.pdf`, from `scripts/make-fixture.mjs`: a 50 page staff directory, 22 rows a page, each a name, an email address and a phone number. Detection lists 2,200 matches (1,100 of each kind), none blocked, every one ticked by default, so the checklist holds 2,200 rows and two select all rows.
+
+**The checklist's first render**, from the worker's `result` reply reaching the page to the first paint after the list is in it: 145 ms, 174 ms and 155 ms. Of that, React's render and commit took 110 ms, 135 ms and 121 ms. Under AC-8's 1 s line with room to spare.
+
+**A single tick**, from the click to the next paint, on a row far down the list, the same row again, then a row near the top: 25, 13 and 13 ms; 37, 15 and 19 ms; 19, 31 and 13 ms. Under AC-8's 200 ms line in every case. Before this feature, a tick on a list this long took 5 to 6 s (*Context*).
+
+**`Checkbox`'s mount effect.** No long task (50 ms or more) ran after the first paint in any run, so the effect each row's `Checkbox` runs to set `indeterminate` adds under 50 ms in total across all 2,200 rows. It is not where the first render's time goes.
+
+Both lines hold, so virtual scrolling stays out (the *Follow-up* on it does not trigger). The spec keeps asserting both lines on every browser run, so a regression fails `pnpm test:e2e` rather than going unnoticed.
