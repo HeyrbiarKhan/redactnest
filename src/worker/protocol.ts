@@ -205,6 +205,14 @@ export interface ReviewMatch {
   readonly before: string;
   /** Up to `config.matchContextChars` of the text after the match. */
   readonly after: string;
+  /**
+   * Whether the page text goes on before `before` and after `after`. Spec
+   * 0007, AC-9: the row shows "…" only on a side that was cut, so a match at
+   * the start of its page shows none there. Two booleans, and the only thing
+   * spec 0007 adds to what crosses the boundary (AC-26).
+   */
+  readonly beforeCut: boolean;
+  readonly afterCut: boolean;
   /** The detector's own recommendation. Seeds the tick set. False when blocked. */
   readonly tickedByDefault: boolean;
   /**

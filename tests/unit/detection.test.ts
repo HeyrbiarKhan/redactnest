@@ -22,6 +22,8 @@ import {
 
 import {
   DETECT_BLOCKED,
+  DETECT_DENSE_PAGES,
+  DETECT_DENSE_PER_PAGE,
   DETECT_EMAIL,
   DETECT_MANY_COUNT,
   DETECT_PHONE,
@@ -30,6 +32,7 @@ import {
   DETECT_PHONE_SPACED,
   DETECT_UNICODE_EMAIL,
   DETECT_WRAPS,
+  denseRow,
   manyAddress,
 } from "../../scripts/lib/detection-fixtures.mjs";
 import { fixture } from "../support/bytes";
@@ -220,6 +223,35 @@ describe("context", () => {
       expect(Array.from(match.after).length).toBeLessThanOrEqual(7);
     }
   });
+
+  /**
+   * Spec 0007, AC-9. Each side says whether the page went on past it, so the
+   * row shows "…" only where something was left out.
+   */
+  it("says a side was cut only when the page text goes on past it", async () => {
+    const [first, second] = await find("detect-email.pdf", 20);
+
+    // The page's first words, so nothing was left out before it.
+    expect(first).toMatchObject({
+      before: "Contact: ",
+      beforeCut: false,
+      afterCut: true,
+    });
+    // Mid page: both sides stop short of the page's text.
+    expect(second).toMatchObject({ beforeCut: true, afterCut: true });
+  });
+
+  it("never says a side was cut when its context stopped short of the reach", async () => {
+    const found = await find("detect-email.pdf", 200);
+
+    expect(found.length).toBeGreaterThan(0);
+    for (const match of found) {
+      if (Array.from(match.before).length < 200) expect(match.beforeCut).toBe(false);
+      if (Array.from(match.after).length < 200) expect(match.afterCut).toBe(false);
+    }
+    // The last match on a page reaches its end.
+    expect(found.some((match) => !match.afterCut)).toBe(true);
+  });
 });
 
 /** AC-7: the same geometry `page.search()` gives, on left to right text. */
@@ -357,6 +389,29 @@ describe("a page with more matches than search() returns", () => {
     );
 
     expect(packedText(output, 0)).not.toContain("@ex.io");
+  }, 120_000);
+});
+
+/**
+ * Spec 0007, task 13. The dense document the checklist is measured against
+ * holds exactly what the measure assumes: every row's address and number,
+ * each tickable and ticked by default.
+ */
+describe("the dense staff directory", () => {
+  it("lists every address and number, in page and reading order, none blocked", async () => {
+    const found = await find("detect-dense.pdf");
+    const rows = DETECT_DENSE_PAGES * DETECT_DENSE_PER_PAGE;
+
+    expect(found).toHaveLength(rows * 2);
+    expect(found.map((match) => match.text)).toEqual(
+      Array.from({ length: rows }, (_, index) => {
+        const { email, phone } = denseRow(index);
+        return [email, phone];
+      }).flat(),
+    );
+    expect(found.every((match) => match.blocked === null && match.tickedByDefault)).toBe(
+      true,
+    );
   }, 120_000);
 });
 

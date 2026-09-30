@@ -169,6 +169,55 @@ export function detectMany() {
   return document(() => [{ content }]);
 }
 
+/** How `detect-dense.pdf` is laid out: 50 pages of 22 staff rows. */
+export const DETECT_DENSE_PAGES = 50;
+export const DETECT_DENSE_PER_PAGE = 22;
+
+const DENSE_FIRST = Object.freeze(
+  "Alex Bea Cai Dana Eli Fay Gus Hana Ivo Jo Kit Lior Mae Nia Oli Pia Rex Sol Tam Uma".split(
+    " ",
+  ),
+);
+const DENSE_LAST = Object.freeze(
+  "Abbot Bryce Chen Dunn Evans Ford Garcia Hughes Iqbal Jones Khan Lopez Moss Nowak Okafor Patel Quinn Reyes Shaw Tran".split(
+    " ",
+  ),
+);
+
+/**
+ * The staff row `detect-dense.pdf` holds at `index`, from 0: an invented name,
+ * an address at `example.com` and a number from Ofcom's drama range, then, past
+ * its thousand numbers, the US one.
+ */
+export function denseRow(index) {
+  const name = `${DENSE_FIRST[index % 20]} ${DENSE_LAST[Math.floor(index / 20) % 20]}`;
+  const email = `staff.${String(index).padStart(4, "0")}@example.com`;
+  const phone =
+    index < 1000
+      ? `020 7946 0${String(index).padStart(3, "0")}`
+      : `(212) 555-01${String(index - 1000).padStart(2, "0")}`;
+  return Object.freeze({ name, email, phone });
+}
+
+/**
+ * Spec 0007, task 13. A 50 page staff directory, the paid cap's worth of a
+ * dense document: 1,100 rows, each a name, an email address and a phone
+ * number, so detection lists 2,200 matches, every one ticked by default. The
+ * checklist's first render and a single tick are measured against it (AC-8).
+ */
+export function detectDense() {
+  return document(() =>
+    Array.from({ length: DETECT_DENSE_PAGES }, (_, page) => {
+      let content = line("F1", 14, 72, 760, "Staff directory");
+      for (let row = 0; row < DETECT_DENSE_PER_PAGE; row += 1) {
+        const { name, email, phone } = denseRow(page * DETECT_DENSE_PER_PAGE + row);
+        content += line("F1", 10, 72, 730 - row * 30, `${name}    ${email}    ${phone}`);
+      }
+      return { content };
+    }),
+  );
+}
+
 /**
  * The address `detect-unicode.pdf` holds. Its local part starts with U+20BB7
  * (𠮷, a character used in Japanese names) and U+2D800, both above U+FFFF.

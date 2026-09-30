@@ -17,6 +17,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Checkbox } from "@/ui/checkbox";
 import { ChecklistGroup } from "@/ui/checklist-group";
 import { ChecklistItem } from "@/ui/checklist-item";
+import { ChecklistSelectAll } from "@/ui/checklist-select-all";
 import { CountBadge } from "@/ui/count-badge";
 
 import { expectNoAxeViolations } from "../../setup/component";
@@ -24,7 +25,14 @@ import { expectNoAxeViolations } from "../../setup/component";
 const ITEMS = { one: "item", other: "items" } as const;
 
 /** A row the way feature 8 will hold it: the tick set lives in the caller. */
-function Row(props: { text: string; before?: string; after?: string; page?: number }) {
+function Row(props: {
+  text: string;
+  before?: string;
+  after?: string;
+  beforeCut?: boolean;
+  afterCut?: boolean;
+  page?: number;
+}) {
   const [checked, setChecked] = useState(true);
   return (
     <ul>
@@ -33,6 +41,8 @@ function Row(props: { text: string; before?: string; after?: string; page?: numb
         text={props.text}
         before={props.before ?? ""}
         after={props.after ?? ""}
+        beforeCut={props.beforeCut ?? true}
+        afterCut={props.afterCut ?? true}
         page={props.page ?? 1}
         checked={checked}
         onCheckedChange={setChecked}
@@ -319,6 +329,39 @@ describe("ChecklistItem", () => {
     expect(context?.textContent).toBe("alex@example.com is my email…");
   });
 
+  /** Spec 0007, AC-9. Only where the page text went on past the context. */
+  it.each([
+    [true, true, "…Email: alex@example.com (work)…"],
+    [false, true, "Email: alex@example.com (work)…"],
+    [true, false, "…Email: alex@example.com (work)"],
+    [false, false, "Email: alex@example.com (work)"],
+  ])(
+    "shows an ellipsis only on a side that was cut (before cut %s, after cut %s)",
+    (beforeCut, afterCut, expected) => {
+      const { container } = render(
+        <Row
+          text="alex@example.com"
+          before="Email: "
+          after=" (work)"
+          beforeCut={beforeCut}
+          afterCut={afterCut}
+        />,
+      );
+
+      expect(container.querySelector("mark")?.parentElement?.textContent).toBe(expected);
+    },
+  );
+
+  /** Spec 0007, AC-8: an off screen row skips its layout and paint. */
+  it("lets the browser skip an off screen row, holding a typical row's height", () => {
+    const { container } = render(<Row text="alex@example.com" />);
+
+    expect(container.querySelector("li")).toHaveClass(
+      "[content-visibility:auto]",
+      "[contain-intrinsic-size:auto_4.5rem]",
+    );
+  });
+
   it("lets both lines wrap anywhere, so a long unbroken value is never cut off", () => {
     const long = "a.very.long.unbroken.address.that.goes.on@example-company.co.uk";
     const { container } = render(<Row text={long} />);
@@ -370,6 +413,8 @@ describe("ChecklistItem, blocked or disabled", () => {
           text="slanted@example.com"
           before="Write to "
           after=" today"
+          beforeCut
+          afterCut
           page={2}
           checked={false}
           blockedReason={REASON}
@@ -418,6 +463,8 @@ describe("ChecklistItem, blocked or disabled", () => {
           text="alex@example.com"
           before=""
           after=""
+          beforeCut
+          afterCut
           page={1}
           checked
           disabled
@@ -459,6 +506,8 @@ describe("ChecklistItem, concealed", () => {
           text="board.minutes@example.com"
           before="Email: "
           after=""
+          beforeCut
+          afterCut
           page={1}
           checked={false}
           blockedReason={props.blockedReason}
@@ -512,5 +561,76 @@ describe("ChecklistItem, concealed", () => {
 
     const both = render(<Concealed blockedReason={REASON} />);
     await expectNoAxeViolations(both.container);
+  });
+});
+
+/** Spec 0007, AC-7. A group's select all, as its first row. */
+describe("ChecklistSelectAll", () => {
+  function renderSelectAll(
+    state: "checked" | "clear" | "mixed",
+    props: { disabled?: boolean; onChange?: (on: boolean) => void } = {},
+  ) {
+    return render(
+      <ul>
+        <ChecklistSelectAll
+          id="select-all-email"
+          label="Select all 3 email addresses"
+          state={state}
+          disabled={props.disabled}
+          onChange={props.onChange ?? (() => {})}
+          data-testid="select-all-email"
+        />
+      </ul>,
+    );
+  }
+
+  it("is a native checkbox named by its whole label, in a row of its own", () => {
+    renderSelectAll("clear");
+
+    const box = screen.getByRole("checkbox", { name: "Select all 3 email addresses" });
+    expect(box.tagName).toBe("INPUT");
+    expect(screen.getByTestId("select-all-email").tagName).toBe("LI");
+  });
+
+  it("says mixed to assistive technology when some rows are ticked", () => {
+    renderSelectAll("mixed");
+
+    expect(screen.getByRole("checkbox")).toBePartiallyChecked();
+  });
+
+  it.each([
+    ["clear", true],
+    ["mixed", true],
+    ["checked", false],
+  ] as const)(
+    "asks for every row to be ticked, or cleared, from %s",
+    async (state, on) => {
+      const onChange = vi.fn();
+      renderSelectAll(state, { onChange });
+
+      // The whole row is the target, as a match row's is.
+      await userEvent.setup().click(screen.getByText("Select all 3 email addresses"));
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledWith(on);
+    },
+  );
+
+  it("does nothing while disabled, and leaves the tab order", async () => {
+    const onChange = vi.fn();
+    renderSelectAll("clear", { disabled: true, onChange });
+    const user = userEvent.setup();
+
+    await user.click(screen.getByText("Select all 3 email addresses"));
+    await user.tab();
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("checkbox")).not.toHaveFocus();
+  });
+
+  it.each(["clear", "mixed", "checked"] as const)("passes axe when %s", async (state) => {
+    const { container } = renderSelectAll(state);
+
+    await expectNoAxeViolations(container);
   });
 });

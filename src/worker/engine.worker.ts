@@ -213,6 +213,9 @@ async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
           text: match.text,
           before: match.before,
           after: match.after,
+          // Spec 0007, AC-9 and AC-26: two booleans, and nothing else new.
+          beforeCut: match.beforeCut,
+          afterCut: match.afterCut,
           tickedByDefault: match.blocked === null && match.tickedByDefault,
           blocked: match.blocked,
           // Spec 0006, AC-13: a closed kind, so the row can say so (AC-24).

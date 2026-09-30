@@ -34,6 +34,8 @@ function match(
     text: "private value",
     before: "private before",
     after: "private after",
+    beforeCut: true,
+    afterCut: true,
     tickedByDefault: blocked === null,
     blocked,
     concealed: null,

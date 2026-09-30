@@ -1,4 +1,5 @@
 import { SearchCheck } from "lucide-react";
+import { memo, useMemo } from "react";
 
 import {
   BLOCKED_REASON_TEXT,
@@ -9,11 +10,17 @@ import {
   NOTHING_FOUND_PARTLY,
 } from "@/lib/detectors";
 import { CONCEALED_TEXT } from "@/lib/page-findings";
-import { DETECTOR_KINDS, type MatchId, type ReviewMatch } from "@/worker/protocol";
+import {
+  DETECTOR_KINDS,
+  type DetectorKind,
+  type MatchId,
+  type ReviewMatch,
+} from "@/worker/protocol";
 import { Callout } from "@/ui/callout";
 import { Card } from "@/ui/card";
 import { ChecklistGroup } from "@/ui/checklist-group";
 import { ChecklistItem } from "@/ui/checklist-item";
+import { ChecklistSelectAll, type SelectAllState } from "@/ui/checklist-select-all";
 import { EmptyState } from "@/ui/empty-state";
 
 interface ReviewChecklistProps {
@@ -27,17 +34,50 @@ interface ReviewChecklistProps {
    * state speak only for the pages RedactNest could read.
    */
   readonly partly: boolean;
+  /** Stable across renders, so an unchanged row is never rendered again. */
   readonly onToggle: (id: MatchId) => void;
+  /** A group's select all, as one action (spec 0007, AC-7). Stable, likewise. */
+  readonly onTicksSet: (ids: readonly MatchId[], on: boolean) => void;
+}
+
+interface Group {
+  readonly kind: DetectorKind;
+  readonly rows: readonly ReviewMatch[];
+  /** The rows a tick can reach: every one that is not blocked. */
+  readonly tickable: readonly MatchId[];
 }
 
 /**
- * What detection found, to tick or leave. Spec 0005, AC-13 and AC-14.
+ * The fewest tickable rows that earn a select all (spec 0007, AC-7). A rule
+ * about the list's shape, not a cap on the visitor: with one row, the row's own
+ * box already does the job.
+ */
+const SELECT_ALL_MIN = 2;
+
+/** What a group's select all shows, counted once per tick change. */
+function selectAllState(
+  tickable: readonly MatchId[],
+  ticked: ReadonlySet<MatchId>,
+): SelectAllState {
+  const on = tickable.reduce((count, id) => count + (ticked.has(id) ? 1 : 0), 0);
+  if (on === 0) return "clear";
+  return on === tickable.length ? "checked" : "mixed";
+}
+
+/**
+ * What detection found, to tick or leave. Spec 0005, AC-13 and AC-14, and spec
+ * 0007, AC-7 to AC-9.
  *
- * The thin checklist feature 6 places on `/tool`: one group per kind that has
- * a match, in `DETECTOR_KINDS` order, and one row per match in the order the
- * worker sent them, which is by page, then reading order (AC-3). A blocked row
- * is listed, disabled, with its reason, so nobody believes it is gone. Feature
- * 8 owns the final layout, select all and the summary.
+ * One group per kind that has a match, in `DETECTOR_KINDS` order, and one row
+ * per match in the order the worker sent them, which is by page, then reading
+ * order (AC-3). A blocked row is listed, disabled, with its reason, so nobody
+ * believes it is gone. A group with two or more rows a tick can reach starts
+ * with a select all row.
+ *
+ * Built for a long list (INV-7): the groups are built once per `matches`, and
+ * each row is memoised on its match, its checked state and whether it is
+ * disabled, with one stable toggle handler for all of them, so a tick renders
+ * that row and its group's select all again and nothing else.
  *
  * Rendered by `tool-client` outside the polite live region: a list this long
  * read out as it appeared would drown the phase line. The coverage note sits
@@ -50,11 +90,18 @@ export function ReviewChecklist({
   running,
   partly,
   onToggle,
+  onTicksSet,
 }: ReviewChecklistProps) {
-  const groups = DETECTOR_KINDS.map((kind) => ({
-    kind,
-    rows: matches.filter((match) => match.type === kind),
-  })).filter(({ rows }) => rows.length > 0);
+  const groups = useMemo<readonly Group[]>(
+    () =>
+      DETECTOR_KINDS.flatMap((kind) => {
+        const rows = matches.filter((match) => match.type === kind);
+        if (rows.length === 0) return [];
+        const tickable = rows.filter((row) => row.blocked === null).map((row) => row.id);
+        return [{ kind, rows, tickable }];
+      }),
+    [matches],
+  );
   const nothingFound = partly ? NOTHING_FOUND_PARTLY : NOTHING_FOUND;
 
   return (
@@ -72,7 +119,7 @@ export function ReviewChecklist({
           />
         ) : (
           <div className="flex flex-col gap-2">
-            {groups.map(({ kind, rows }) => {
+            {groups.map(({ kind, rows, tickable }) => {
               const { icon, label, noun } = DETECTOR_LABELS[kind];
               return (
                 <ChecklistGroup
@@ -82,27 +129,23 @@ export function ReviewChecklist({
                   count={rows.length}
                   noun={noun}
                 >
+                  {tickable.length >= SELECT_ALL_MIN && (
+                    <SelectAllRow
+                      kind={kind}
+                      ids={tickable}
+                      noun={noun.other}
+                      state={selectAllState(tickable, ticked)}
+                      disabled={running}
+                      onTicksSet={onTicksSet}
+                    />
+                  )}
                   {rows.map((match) => (
-                    <ChecklistItem
+                    <ReviewRow
                       key={match.id}
-                      id={`match-${match.id}`}
-                      text={match.text}
-                      before={match.before}
-                      after={match.after}
-                      page={match.page}
+                      match={match}
                       checked={ticked.has(match.id)}
                       disabled={running}
-                      blockedReason={
-                        match.blocked === null
-                          ? undefined
-                          : BLOCKED_REASON_TEXT[match.blocked]
-                      }
-                      concealedNote={
-                        match.concealed === null
-                          ? undefined
-                          : CONCEALED_TEXT[match.concealed]
-                      }
-                      onCheckedChange={() => onToggle(match.id)}
+                      onToggle={onToggle}
                     />
                   ))}
                 </ChecklistGroup>
@@ -114,3 +157,75 @@ export function ReviewChecklist({
     </div>
   );
 }
+
+/**
+ * One match's row, rendered again only when its match, its checked state or
+ * whether it is disabled changes (spec 0007, AC-8 and INV-7). The per row
+ * closure is made here, inside the memoised row, so the list hands every row
+ * the same handler.
+ */
+const ReviewRow = memo(function ReviewRow({
+  match,
+  checked,
+  disabled,
+  onToggle,
+}: {
+  readonly match: ReviewMatch;
+  readonly checked: boolean;
+  readonly disabled: boolean;
+  readonly onToggle: (id: MatchId) => void;
+}) {
+  return (
+    <ChecklistItem
+      id={`match-${match.id}`}
+      text={match.text}
+      before={match.before}
+      after={match.after}
+      beforeCut={match.beforeCut}
+      afterCut={match.afterCut}
+      page={match.page}
+      checked={checked}
+      disabled={disabled}
+      blockedReason={
+        match.blocked === null ? undefined : BLOCKED_REASON_TEXT[match.blocked]
+      }
+      concealedNote={
+        match.concealed === null ? undefined : CONCEALED_TEXT[match.concealed]
+      }
+      onCheckedChange={() => onToggle(match.id)}
+    />
+  );
+});
+
+/**
+ * A group's select all (spec 0007, AC-7): named for how many rows it reaches,
+ * checked, clear or mixed by how many of those are ticked, and one `ticks-set`
+ * over exactly those rows, so a blocked row never changes. Memoised, so a tick
+ * in another group leaves it alone.
+ */
+const SelectAllRow = memo(function SelectAllRow({
+  kind,
+  ids,
+  noun,
+  state,
+  disabled,
+  onTicksSet,
+}: {
+  readonly kind: DetectorKind;
+  readonly ids: readonly MatchId[];
+  readonly noun: string;
+  readonly state: SelectAllState;
+  readonly disabled: boolean;
+  readonly onTicksSet: (ids: readonly MatchId[], on: boolean) => void;
+}) {
+  return (
+    <ChecklistSelectAll
+      id={`select-all-${kind}`}
+      data-testid={`select-all-${kind}`}
+      label={`Select all ${ids.length} ${noun}`}
+      state={state}
+      disabled={disabled}
+      onChange={(on) => onTicksSet(ids, on)}
+    />
+  );
+});

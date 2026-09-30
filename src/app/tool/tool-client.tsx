@@ -483,6 +483,11 @@ export function ToolClient() {
     dispatch({ type: "tick-toggled", id });
   }, []);
 
+  /** A group's select all, as one action and one render (spec 0007, AC-7). */
+  const handleTicksSet = useCallback((ids: readonly MatchId[], on: boolean) => {
+    dispatch({ type: "ticks-set", ids, on });
+  }, []);
+
   /**
    * AC-20. The output is dropped whenever the session stops being `complete`
    * with nothing downloaded: a tick change, start over, a replacement, a lost
@@ -807,6 +812,7 @@ export function ToolClient() {
             running={session.state === "redacting"}
             partly={session.summary !== null && isPartly(session.summary)}
             onToggle={handleToggle}
+            onTicksSet={handleTicksSet}
           />
         </div>
       )}
