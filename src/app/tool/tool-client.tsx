@@ -808,9 +808,18 @@ function SessionAlert({
         </div>
       );
 
+    case "reviewing":
+      // Spec 0007, AC-14: a refused run keeps the review, and says why here.
+      return session.runFailure === null ? null : (
+        <div className="mt-6">
+          <Callout tone="danger" role="alert" data-testid="run-refusal">
+            {errorText(session.runFailure, session.entitlement)}
+          </Callout>
+        </div>
+      );
+
     case "idle":
     case "opening":
-    case "reviewing":
     case "redacting":
     case "complete":
       return null;

@@ -777,6 +777,33 @@ describe("a second document in the same tab", () => {
 
     await expect(pending).resolves.toMatchObject({ jobId: "job-2" });
   });
+
+  /**
+   * Spec 0007, AC-24. The worker ends a job's session, run and all, when an
+   * open arrives under the same `jobId`, and a cancelled run posts nothing. So
+   * the main thread settles that redact itself, or it would hang for good.
+   */
+  it("settles a pending redact as cancelled when an open reuses its jobId", async () => {
+    const client = await loadClient();
+    const { session, worker } = await openedSession(client);
+    const run = session.redact([asMatchId("m-1")]);
+    const runId = worker.requests.at(-1)?.id;
+
+    const reopened = client.openSession({
+      jobId: "job-1",
+      bytes: new ArrayBuffer(8),
+      limits: LIMITS,
+    });
+
+    await expect(run).rejects.toMatchObject({ name: "OperationCancelled" });
+    expect(worker.requests).toContainEqual({ id: runId, jobId: "job-1", kind: "cancel" });
+
+    // The new open is not retired by its own call, and answers as usual.
+    const { id } = worker.lastOpen;
+    expect(worker.requests).not.toContainEqual({ id, jobId: "job-1", kind: "cancel" });
+    worker.reply({ id, jobId: "job-1", kind: "result", summary: SUMMARY, matches: [] });
+    await expect(reopened).resolves.toMatchObject({ jobId: "job-1" });
+  });
 });
 
 describe("releasing the session", () => {

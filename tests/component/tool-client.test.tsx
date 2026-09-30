@@ -1301,9 +1301,12 @@ describe("the page readings (spec 0006)", () => {
     ]) as DocumentSummary["pages"],
   });
 
+  // Removed something: a run that removed nothing is a cleaned copy, whatever
+  // the pages hold (spec 0007, AC-12), and these cases are about the other two
+  // names.
   const OUTCOME: RedactionOutcome = Object.freeze<RedactionOutcome>({
     pageCount: 4,
-    removedByType: {},
+    removedByType: { email: 1 },
     pagesByFinding: { scanned: 1, "drawn-only": 1, blank: 1 },
     sanitized: [],
   });

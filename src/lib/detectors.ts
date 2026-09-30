@@ -15,6 +15,9 @@ import {
   type BlockedReason,
   type DetectionCounts,
   type DetectorKind,
+  type MatchId,
+  type RedactionOutcome,
+  type ResultCounts,
   type ReviewMatch,
 } from "@/worker/protocol";
 
@@ -57,8 +60,12 @@ export const BLOCKED_REASON_TEXT: Readonly<Record<BlockedReason, string>> = Obje
   },
 );
 
-/** Every kind looked for, as plural nouns joined for a sentence. */
-function lookedFor(type: "conjunction" | "disjunction"): string {
+/**
+ * Every kind looked for, as plural nouns joined for a sentence. Also the
+ * `detecting` phase line (spec 0007, *Phase copy*), so it names exactly what
+ * the coverage note does.
+ */
+export function lookedFor(type: "conjunction" | "disjunction"): string {
   return new Intl.ListFormat("en", { type }).format(
     DETECTOR_KINDS.map((kind) => DETECTOR_LABELS[kind].noun.other),
   );
@@ -106,5 +113,55 @@ export function detectionCounts(matches: readonly ReviewMatch[]): DetectionCount
   return Object.freeze({
     foundByType: Object.freeze(foundByType),
     blockedByReason: Object.freeze(blockedByReason),
+  });
+}
+
+/**
+ * How many items a run removed, over every kind. The one sum behind the result
+ * card's title and the file's name (spec 0007, AC-12 and INV-2).
+ */
+export function countRemoved(outcome: RedactionOutcome): number {
+  return DETECTOR_KINDS.reduce(
+    (total, kind) => total + (outcome.removedByType[kind] ?? 0),
+    0,
+  );
+}
+
+/**
+ * What a finished run removed and what it left in the file. Spec 0007, AC-25
+ * and INV-4.
+ *
+ * Pure, and the only source of the result card's Removed and Left in the file
+ * lines. Removed comes from what the engine reports, never from the ticks, so
+ * the card cannot claim a removal the run did not make. Left in the file is
+ * every tickable match left unticked and every blocked one, by kind. The ticks
+ * cannot change while a session is `complete`, so they describe this run.
+ * Counts and kinds only, a `LoggablePayload`, so feature 11 may log it.
+ */
+export function resultCounts(
+  matches: readonly ReviewMatch[],
+  ticked: ReadonlySet<MatchId>,
+  outcome: RedactionOutcome,
+): ResultCounts {
+  const untickedByType: Partial<Record<DetectorKind, number>> = {};
+  const blockedByType: Partial<Record<DetectorKind, number>> = {};
+  const blockedByReason: Partial<Record<BlockedReason, number>> = {};
+
+  for (const match of matches) {
+    if (match.blocked !== null) {
+      blockedByType[match.type] = (blockedByType[match.type] ?? 0) + 1;
+      blockedByReason[match.blocked] = (blockedByReason[match.blocked] ?? 0) + 1;
+    } else if (!ticked.has(match.id)) {
+      untickedByType[match.type] = (untickedByType[match.type] ?? 0) + 1;
+    }
+  }
+
+  return Object.freeze({
+    removedByType: Object.freeze({ ...outcome.removedByType }),
+    untickedByType: Object.freeze(untickedByType),
+    blockedByType: Object.freeze(blockedByType),
+    blockedByReason: Object.freeze(blockedByReason),
+    removedTotal: countRemoved(outcome),
+    sanitized: Object.freeze([...outcome.sanitized]),
   });
 }

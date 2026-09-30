@@ -9,6 +9,7 @@ import type {
   PageReading,
   ProgressPhase,
   RedactionOutcome,
+  ResultCounts,
   ReviewMatch,
 } from "@/worker/protocol";
 
@@ -75,6 +76,8 @@ describe("what may reach a log", () => {
     expectTypeOf<Verdict<RedactionOutcome>>().toEqualTypeOf<"kinds and numbers only">();
     // Spec 0005, AC-15: what detection found, by kind and by blocked reason.
     expectTypeOf<Verdict<DetectionCounts>>().toEqualTypeOf<"kinds and numbers only">();
+    // Spec 0007, AC-25: what a finished run removed and left in the file.
+    expectTypeOf<Verdict<ResultCounts>>().toEqualTypeOf<"kinds and numbers only">();
     expectTypeOf<Verdict<EngineErrorKind>>().toEqualTypeOf<"kinds and numbers only">();
     expectTypeOf<Verdict<ProgressPhase>>().toEqualTypeOf<"kinds and numbers only">();
     expectTypeOf<Verdict<DetectorKind>>().toEqualTypeOf<"kinds and numbers only">();

@@ -141,7 +141,7 @@ spec [0007](../specs/0007-redact-flow/index.md) · code in `src/app/tool` (`tool
 **Also owed here:** reword the `no-readable-text` advice in `src/lib/page-findings.ts` and `errorText` in `src/app/tool/tool-client.tsx`. "If you have the original" confuses people who only have the scan. Say "Run this file through text recognition (OCR) first" instead.
 - [x] Design it (spec): `/architect redact flow`
 - [ ] Build it: `/develop redact flow`
-  - [ ] The session and the counts: `retireOtherJobs` hardened, the refusal that keeps the review, select all and rerun edges, the cleaned name, `resultCounts` · AC-7, AC-12, AC-13, AC-14, AC-23, AC-24, AC-25
+  - [x] The session and the counts: `retireOtherJobs` hardened, the refusal that keeps the review, select all and rerun edges, the cleaned name, `resultCounts` · AC-7, AC-12, AC-13, AC-14, AC-23, AC-24, AC-25
   - [ ] The steps take over: the file bar, the action panel above the checklist, the result card with its summary, failures in place, after download actions, focus · AC-2, AC-3, AC-5, AC-6, AC-10, AC-11, AC-12, AC-13, AC-14, AC-15, AC-20
   - [ ] The checklist: select all rows, memoised rows, the cut flags for the ellipsis, the dense fixture measured · AC-7, AC-8, AC-9, AC-26
   - [ ] The words: every failure kind, the phase lines, the stripped list, the OCR advice and the fragment line · AC-4, AC-16, AC-17, AC-18, AC-19

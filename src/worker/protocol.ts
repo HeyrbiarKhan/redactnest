@@ -233,6 +233,29 @@ export interface DetectionCounts {
 }
 
 /**
+ * What a finished run did and did not remove, as counts. Spec 0007, AC-25.
+ *
+ * Derived on the main thread by `resultCounts` in `src/lib/detectors.ts` from
+ * the matches, the ticks and the outcome it already holds, and never sent
+ * across the boundary. It lives here beside `DetectionCounts` only so it can
+ * join `LoggablePayload`: counts and kinds only, so feature 11 may log it.
+ */
+export interface ResultCounts {
+  /** From `outcome.removedByType`. */
+  readonly removedByType: Readonly<Partial<Record<DetectorKind, number>>>;
+  /** Tickable matches left unticked, by kind. */
+  readonly untickedByType: Readonly<Partial<Record<DetectorKind, number>>>;
+  /** Blocked matches, by kind. They stay in the file whatever was ticked. */
+  readonly blockedByType: Readonly<Partial<Record<DetectorKind, number>>>;
+  /** Blocked matches, by reason. */
+  readonly blockedByReason: Readonly<Partial<Record<BlockedReason, number>>>;
+  /** The sum of `removedByType`. */
+  readonly removedTotal: number;
+  /** From `outcome.sanitized`. */
+  readonly sanitized: readonly SanitizedKind[];
+}
+
+/**
  * What a visitor is allowed to do, frozen at the moment a job opens.
  *
  * INV-5: a job runs to completion on the snapshot it started with. The tier is
@@ -363,6 +386,7 @@ export type LoggablePayload =
   | DocumentSummary
   | RedactionOutcome
   | DetectionCounts
+  | ResultCounts
   | EngineErrorKind
   | ProgressPhase
   | DetectorKind

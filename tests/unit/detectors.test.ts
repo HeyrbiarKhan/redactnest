@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { BLOCKED_REASON_TEXT, DETECTOR_LABELS, detectionCounts } from "@/lib/detectors";
+import {
+  BLOCKED_REASON_TEXT,
+  countRemoved,
+  DETECTOR_LABELS,
+  detectionCounts,
+  resultCounts,
+} from "@/lib/detectors";
 import {
   asMatchId,
   BLOCKED_REASONS,
   DETECTOR_KINDS,
+  type RedactionOutcome,
   type ReviewMatch,
 } from "@/worker/protocol";
 
@@ -63,6 +70,89 @@ describe("detectionCounts (AC-15)", () => {
     expect(counts).toEqual({ foundByType: {}, blockedByReason: {} });
     expect(Object.isFrozen(counts)).toBe(true);
     expect(Object.isFrozen(counts.foundByType)).toBe(true);
+  });
+});
+
+/**
+ * Spec 0007, AC-25 and INV-4. The one source of the result card's Removed and
+ * Left in the file lines, counts only.
+ */
+describe("resultCounts (spec 0007, AC-25)", () => {
+  const MATCHES = [
+    match("a", "email", null),
+    match("b", "email", null),
+    match("c", "email", "slanted-text"),
+    match("d", "phone", null),
+    match("e", "phone", "image-overreach"),
+    match("f", "phone", "slanted-text"),
+  ];
+  const TICKED = new Set([asMatchId("a"), asMatchId("d")]);
+  const OUTCOME: RedactionOutcome = {
+    pageCount: 1,
+    removedByType: { email: 1, phone: 1 },
+    pagesByFinding: {},
+    sanitized: ["document-info", "annotations"],
+  };
+
+  it("takes Removed from what the engine reported, never from the ticks", () => {
+    const counts = resultCounts(MATCHES, TICKED, {
+      ...OUTCOME,
+      removedByType: { email: 1 },
+    });
+
+    expect(counts.removedByType).toEqual({ email: 1 });
+    expect(counts.removedTotal).toBe(1);
+  });
+
+  it("counts the tickable matches left unticked, by kind", () => {
+    expect(resultCounts(MATCHES, TICKED, OUTCOME).untickedByType).toEqual({ email: 1 });
+  });
+
+  it("counts the blocked matches by kind and by reason, whatever was ticked", () => {
+    const counts = resultCounts(MATCHES, TICKED, OUTCOME);
+
+    expect(counts.blockedByType).toEqual({ email: 1, phone: 2 });
+    expect(counts.blockedByReason).toEqual({ "slanted-text": 2, "image-overreach": 1 });
+  });
+
+  it("sums what was removed and keeps what was stripped, in order", () => {
+    const counts = resultCounts(MATCHES, TICKED, OUTCOME);
+
+    expect(counts.removedTotal).toBe(2);
+    expect(counts.sanitized).toEqual(["document-info", "annotations"]);
+  });
+
+  it("is empty for a run with nothing found and nothing removed, and frozen", () => {
+    const counts = resultCounts([], new Set(), {
+      ...OUTCOME,
+      removedByType: {},
+      sanitized: [],
+    });
+
+    expect(counts).toEqual({
+      removedByType: {},
+      untickedByType: {},
+      blockedByType: {},
+      blockedByReason: {},
+      removedTotal: 0,
+      sanitized: [],
+    });
+    expect(Object.isFrozen(counts)).toBe(true);
+    expect(Object.isFrozen(counts.untickedByType)).toBe(true);
+    expect(Object.isFrozen(counts.sanitized)).toBe(true);
+  });
+
+  it("carries no document text at all", () => {
+    expect(JSON.stringify(resultCounts(MATCHES, TICKED, OUTCOME))).not.toContain(
+      "private",
+    );
+  });
+
+  it("agrees with countRemoved", () => {
+    expect(countRemoved(OUTCOME)).toBe(
+      resultCounts(MATCHES, TICKED, OUTCOME).removedTotal,
+    );
+    expect(countRemoved({ ...OUTCOME, removedByType: {} })).toBe(0);
   });
 });
 
