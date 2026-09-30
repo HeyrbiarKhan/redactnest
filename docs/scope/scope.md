@@ -148,7 +148,7 @@ spec [0007](../specs/0007-redact-flow/index.md) · code in `src/app/tool` (`tool
   - [x] The browser proof and the amends: every step state under axe, the keyboard walk and 320px reflow, then specs 0001 to 0006 amended · AC-1, AC-21, AC-22, AC-23, AC-26
 - [x] Verify it: `/check verify redact flow`
 - [x] Test it: `/test redact flow`
-- [ ] Review it (fresh model): `/check review redact flow`
+- [x] Review it (fresh model): `/check review redact flow`
 
 ### 18. AGPL compliance & source publication · Alpha · from spec 0001
 Spec 0001 chose MuPDF, which is copyleft, so RedactNest's own source is licensed AGPL 3.0 and published. The obligation attaches the moment the tool is publicly available and shipping the engine to visitors' browsers, which is this release rather than a later one. Artifex enforce their licence, so this is a real deliverable and not a formality.
