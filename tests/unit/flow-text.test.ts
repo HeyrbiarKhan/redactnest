@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  BLOCKED_REASON_TEXT,
+  COVERAGE_NOTE,
+  COVERAGE_NOTE_PARTLY,
+  NOTHING_FOUND,
+  NOTHING_FOUND_PARTLY,
+} from "@/lib/detectors";
+import {
   DOWNLOADED_LINE,
   FAILURE_TEXT,
   failureText,
@@ -11,18 +18,32 @@ import {
   phaseLine,
   redactLabel,
   removedLine,
+  RESULT_TERMS,
   resultTitle,
   RUN_REFUSAL_LEAD,
   SANITIZED_TEXT,
   strippedLine,
   tickCountLine,
 } from "@/lib/flow-text";
-import { ADVICE } from "@/lib/page-findings";
+import {
+  ADVICE,
+  ALL_CLEAR,
+  CONCEALED_TEXT,
+  CROOKED_LINE,
+  DOWNLOAD_WARNING_TITLE,
+  findingLine,
+  OPEN_WARNING_TITLE,
+  PARTLY_REASON,
+  removedOffPageLine,
+} from "@/lib/page-findings";
 import {
   ENGINE_ERROR_KINDS,
+  PAGE_FINDINGS,
   PROGRESS_PHASES,
   SANITIZED_KINDS,
+  type DocumentSummary,
   type EntitlementSnapshot,
+  type PageFinding,
   type ResultCounts,
 } from "@/worker/protocol";
 
@@ -197,6 +218,73 @@ describe("text recognition is never promised (AC-18)", () => {
     expect(ADVICE).toMatch(/\bmay\b/);
     expect(ADVICE).not.toContain("If you have the original");
     expect(failureText("no-readable-text", FREE).next).toMatch(/\bmay\b/);
+  });
+
+  /**
+   * "No line anywhere": the page findings, the checklist's notes and the
+   * result card too, not only the failures. `CROOKED_LINE` and the
+   * `slanted-text` step credit straightening a scan *before* text
+   * recognition, so they send nobody to it as the cure and are not held to
+   * "may".
+   */
+  describe("across every line the page can show", () => {
+    function summaryOf(...pages: (readonly PageFinding[])[]): DocumentSummary {
+      return {
+        pageCount: pages.length,
+        pages: pages.map((findings) => ({ findings })),
+      } as DocumentSummary;
+    }
+
+    const shown = [
+      ...everyLine,
+      LOST_TEXT.title,
+      LOST_TEXT.body,
+      ...Object.values(PHASE_TEXT),
+      ...PAGE_FINDINGS.flatMap((finding) => [
+        findingLine(summaryOf([finding]), finding),
+        findingLine(summaryOf([finding], [finding]), finding),
+      ]),
+      removedOffPageLine(summaryOf(["off-page-content"])),
+      CROOKED_LINE,
+      ALL_CLEAR,
+      OPEN_WARNING_TITLE,
+      DOWNLOAD_WARNING_TITLE,
+      PARTLY_REASON,
+      ...Object.values(CONCEALED_TEXT),
+      ...Object.values(BLOCKED_REASON_TEXT),
+      COVERAGE_NOTE,
+      COVERAGE_NOTE_PARTLY,
+      NOTHING_FOUND.title,
+      NOTHING_FOUND.helper,
+      NOTHING_FOUND_PARTLY.helper,
+      ...Object.values(RESULT_TERMS),
+      ...Object.values(SANITIZED_TEXT),
+      DOWNLOADED_LINE,
+    ].filter((line): line is string => line !== null);
+
+    /** A line that sends the visitor to text recognition as what to do next. */
+    const sendsToOcr = shown.filter((line) =>
+      /\b(run|running)\b[^.]*\bthrough text recognition\b/i.test(line),
+    );
+
+    it("never says text recognition will help, clears a warning or makes a file readable", () => {
+      for (const line of shown) {
+        expect(line).not.toMatch(/\b(OCR|text recognition)\)? will\b/i);
+        expect(line).not.toMatch(/\bwill (let|help|make) RedactNest\b/i);
+        expect(line).not.toMatch(/\bclears? (the|this|that|a|any|every) warning/i);
+        expect(line).not.toMatch(
+          /\bmakes? (it|the file|this file|them|those pages) readable/i,
+        );
+      }
+    });
+
+    it("says may wherever it sends somebody to text recognition", () => {
+      // The advice and the no readable text step, at least, so this can fail.
+      expect(sendsToOcr).toEqual(
+        expect.arrayContaining([ADVICE, failureText("no-readable-text", FREE).next]),
+      );
+      for (const line of sendsToOcr) expect(line).toMatch(/\bmay\b/);
+    });
   });
 });
 

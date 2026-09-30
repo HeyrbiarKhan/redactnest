@@ -21,7 +21,7 @@
  * the checklist at the very end.
  */
 
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -1807,6 +1807,17 @@ describe("the redact flow (spec 0007)", () => {
     return screen.getByRole("checkbox", { name });
   }
 
+  /**
+   * A file dropped on the file bar. Drag and drop has no user-event API, so
+   * this is the one `fireEvent` here, as in the drop zone's own tests. A drop
+   * moves no focus, which is what lets the focus cases see where it was left.
+   */
+  async function dropOnFileBar(file: File): Promise<void> {
+    await act(async () => {
+      fireEvent.drop(screen.getByTestId("file-bar"), { dataTransfer: { files: [file] } });
+    });
+  }
+
   describe("one step at a time (AC-2 to AC-6)", () => {
     it("shows the full drop zone naming the free page cap while nothing is open (AC-2)", () => {
       render(<ToolClient />);
@@ -1815,6 +1826,42 @@ describe("the redact flow (spec 0007)", () => {
         `Up to ${config.freePageCap} pages for now.`,
       );
       expect(screen.queryByTestId("file-bar")).not.toBeInTheDocument();
+    });
+
+    it("names the page cap again after Start over, after Redact another PDF, and under a failed open (AC-2)", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      const user = userEvent.setup();
+      const helper = `Up to ${config.freePageCap} pages for now.`;
+
+      await user.click(screen.getByTestId("start-over"));
+      expect(screen.getByTestId("drop-area")).toHaveTextContent(helper);
+
+      await chooseFile(pdfFile());
+      await screen.findByTestId("review");
+      await user.click(screen.getByTestId("redact"));
+      await run.finish();
+      await user.click(screen.getByTestId("download"));
+      await user.click(screen.getByTestId("redact-another"));
+      expect(screen.getByTestId("drop-area")).toHaveTextContent(helper);
+
+      mocks.openSession.mockRejectedValue(new EngineError("corrupt"));
+      await chooseFile(pdfFile());
+      await screen.findByTestId("error");
+      expect(screen.getByTestId("drop-area")).toHaveTextContent(helper);
+    });
+
+    it("opens a file dropped on the file bar in place of the one open (AC-3)", async () => {
+      await openFlow(controllable().session);
+      const bar = screen.getByTestId("file-bar");
+
+      await dropOnFileBar(pdfFile("second.pdf"));
+
+      expect(await within(bar).findByText("second.pdf")).toBeInTheDocument();
+      expect(await within(bar).findByTestId("page-count")).toHaveTextContent("2 pages");
+      expect(jobIdsOpened()).toHaveLength(2);
+      expect(new Set(jobIdsOpened()).size).toBe(2);
+      expect(within(bar).queryByText("report.pdf")).not.toBeInTheDocument();
     });
 
     it("turns the drop zone into the file bar once a file is chosen (AC-3)", async () => {
@@ -1979,6 +2026,37 @@ describe("the redact flow (spec 0007)", () => {
       expect(await screen.findByTestId("redact")).toHaveTextContent("Redact 3 items");
       expect(box("020 7946 0958")).toBeChecked();
     });
+
+    /**
+     * AC-7 through the page's own reducer: the select all the checklist shows
+     * is the one the action panel counts and the run sends.
+     */
+    it("clears and ticks a whole group from its select all, never touching a blocked row (AC-7)", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      const user = userEvent.setup();
+      const selectAll = () => box("Select all 2 email addresses");
+      expect(selectAll()).toBeChecked();
+
+      await user.click(selectAll());
+      expect(box("ann@example.com")).not.toBeChecked();
+      expect(box("bob@example.com")).not.toBeChecked();
+      expect(screen.getByTestId("tick-count")).toHaveTextContent(
+        "Nothing is ticked, so nothing will be removed.",
+      );
+
+      await user.click(selectAll());
+      expect(box("ann@example.com")).toBeChecked();
+      expect(box("bob@example.com")).toBeChecked();
+      expect(box("tilted@example.com")).not.toBeChecked();
+      expect(screen.getByTestId("tick-count")).toHaveTextContent(
+        "2 of 3 found items will be removed.",
+      );
+
+      await user.click(screen.getByTestId("redact"));
+      const [ids] = vi.mocked(run.session.redact).mock.calls[0];
+      expect([...ids].sort()).toEqual([E1, E2].sort());
+    });
   });
 
   describe("the result (AC-11 to AC-13)", () => {
@@ -2127,6 +2205,38 @@ describe("the redact flow (spec 0007)", () => {
       expect(box("020 7946 0958")).toHaveFocus();
     });
 
+    /** *Focus*: "a tick or select all changed from `complete`" stays put. */
+    it("returns to review when a select all changes before the download, focus staying on it (AC-11, AC-20)", async () => {
+      await complete();
+
+      await userEvent.setup().click(box("Select all 2 email addresses"));
+
+      expect(screen.queryByTestId("result")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+      expect(screen.getByTestId("redact")).toHaveTextContent("Make a cleaned copy");
+      expect(box("Select all 2 email addresses")).toHaveFocus();
+    });
+
+    /**
+     * A lost worker moves no attempt on, so this late reply passes the attempt
+     * guard. It must still land nowhere, because the session has left
+     * `redacting`.
+     */
+    it("drops a Make it again reply that lands after the worker was lost (AC-13)", async () => {
+      const { run } = await complete();
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("download"));
+      await user.click(screen.getByTestId("make-again"));
+
+      await fireEngineLost();
+      await run.finish();
+
+      expect(screen.getByTestId("lost")).toBeInTheDocument();
+      expect(screen.queryByTestId("result")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+      expect(mocks.offerDownload).toHaveBeenCalledTimes(1);
+    });
+
     it("has no accessibility violations before and after the download", async () => {
       const { container } = await complete(NOTHING_REMOVED, PARTLY);
       await expectNoAxeViolations(container);
@@ -2219,6 +2329,46 @@ describe("the redact flow (spec 0007)", () => {
       expect(screen.queryByTestId("run-refusal")).not.toBeInTheDocument();
     });
 
+    it("keeps Redact enabled beside a refusal a tick cannot cause, with no file offered (AC-14)", async () => {
+      await refused("edge-text");
+
+      expect(screen.getByTestId("run-refusal")).toHaveTextContent(
+        "Changing what's ticked won't help with this file.",
+      );
+      expect(screen.getByTestId("redact")).toBeEnabled();
+      expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("result")).not.toBeInTheDocument();
+    });
+
+    it("clears when a new file replaces the document", async () => {
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+      await refused();
+
+      await chooseFile(pdfFile("second.pdf"));
+
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(
+        await within(screen.getByTestId("file-bar")).findByText("second.pdf"),
+      ).toBeInTheDocument();
+      await screen.findByTestId("review");
+      expect(screen.queryByTestId("run-refusal")).not.toBeInTheDocument();
+    });
+
+    /** A lost worker is not a refusal, and its retry starts the review over. */
+    it("clears when the worker is lost, and stays clear through Try again", async () => {
+      const { user } = await refused();
+
+      await fireEngineLost();
+      expect(screen.getByTestId("lost")).toBeInTheDocument();
+      expect(screen.queryByTestId("run-refusal")).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId("retry"));
+      await screen.findByTestId("review");
+      expect(screen.queryByTestId("run-refusal")).not.toBeInTheDocument();
+      // The seeded ticks again, not the ones changed before the refusal.
+      expect(box("020 7946 0958")).not.toBeChecked();
+    });
+
     it("counts as unsaved work: leaving warns and replacing asks (AC-23)", async () => {
       const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
       const run = controllable();
@@ -2278,6 +2428,38 @@ describe("the redact flow (spec 0007)", () => {
           name: "Choose another PDF",
         }),
       ).toHaveFocus();
+    });
+
+    /**
+     * The checklist the focused box sat in goes while the new file opens, so
+     * without the move focus would fall to the page body.
+     */
+    it("moves to the file bar's button when a replacement is dropped from inside the list", async () => {
+      await openFlow(controllable().session);
+      act(() => box("ann@example.com").focus());
+
+      await dropOnFileBar(pdfFile("second.pdf"));
+      await within(screen.getByTestId("file-bar")).findByText("second.pdf");
+      await screen.findByTestId("review");
+
+      expect(
+        within(screen.getByTestId("file-bar")).getByRole("button", {
+          name: "Choose another PDF",
+        }),
+      ).toHaveFocus();
+    });
+
+    it("stays where it was when a replace confirm is cancelled", async () => {
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      await openFlow(controllable().session);
+      await userEvent.setup().click(box("020 7946 0958"));
+
+      await dropOnFileBar(pdfFile("second.pdf"));
+
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(mocks.openSession).toHaveBeenCalledTimes(1);
+      expect(box("020 7946 0958")).toHaveFocus();
+      expect(box("020 7946 0958")).toBeChecked();
     });
 
     it("moves to Cancel on Redact, and back to Redact on Cancel", async () => {

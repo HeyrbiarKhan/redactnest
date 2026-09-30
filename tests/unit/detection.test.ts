@@ -253,6 +253,26 @@ describe("context", () => {
     // The last match on a page reaches its end.
     expect(found.some((match) => !match.afterCut)).toBe(true);
   });
+
+  /**
+   * Spec 0007, AC-9: the reader with replacement text ignored sets them too, so
+   * a match found only that way shows "…" by the same rule as any other row.
+   * `hidden@…` sits mid page, between the replaced line and the plain one.
+   */
+  it("says a side was cut for a match found only with replacement text ignored", async () => {
+    const hidden = async (contextChars: number) =>
+      (await find("detect-blocked.pdf", contextChars)).find(
+        (match) => match.text === DETECT_BLOCKED.hidden,
+      );
+
+    expect(await hidden(3)).toMatchObject({
+      blocked: "replacement-text",
+      beforeCut: true,
+      afterCut: true,
+    });
+    // A reach wider than the page's text runs out before anything is cut.
+    expect(await hidden(200)).toMatchObject({ beforeCut: false, afterCut: false });
+  });
 });
 
 /** AC-7: the same geometry `page.search()` gives, on left to right text. */
