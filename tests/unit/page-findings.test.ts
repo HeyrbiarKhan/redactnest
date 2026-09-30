@@ -136,10 +136,11 @@ describe("the line for each finding", () => {
       "Page 1 has a picture that reaches outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.",
       "Pages 1 and 2 have pictures that reach outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.",
     ],
+    // Spec 0008, AC-9: the last sentence, picture for one page, pictures for several.
     [
       "machine-read-text",
-      "Page 1 is a scan with machine read text. RedactNest reads that text, so it can only find what the text recognition got right.",
-      "Pages 1 and 2 are scans with machine read text. RedactNest reads that text, so it can only find what the text recognition got right.",
+      "Page 1 is a scan with machine read text. RedactNest reads that text, so it can only find what the text recognition got right. Words it missed, such as handwriting, stamps or tables it couldn't read, stay in the picture.",
+      "Pages 1 and 2 are scans with machine read text. RedactNest reads that text, so it can only find what the text recognition got right. Words it missed, such as handwriting, stamps or tables it couldn't read, stay in the pictures.",
     ],
     [
       "off-page-content",
@@ -206,6 +207,7 @@ describe("the fixed lines", () => {
   it("read as the spec writes them", () => {
     expect(ALL_CLEAR).toBe("RedactNest can read the text on every page.");
     expect(OPEN_WARNING_TITLE).toBe("Some pages can't be fully checked");
+    // Spec 0008, AC-10: unchanged, "may" included.
     expect(ADVICE).toBe(
       "Run this file through text recognition (OCR) first, then open the result here. That may let RedactNest read those pages.",
     );

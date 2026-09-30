@@ -29,6 +29,8 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 16 | Security & how it works page | Release 6 | planned |
 | 17 | Data processing agreement | Release 6 | planned |
 | 18 | AGPL compliance & source publication | Release 1 | planned |
+| 19 | Sparse OCR scans | Release 1 | done |
+| 20 | Dense text layers over pictures | Release 1 | planned |
 
 ## Foundations
 
@@ -151,6 +153,27 @@ Spec 0001 chose MuPDF, which is copyleft, so RedactNest's own source is licensed
 **Done when:** the repository is public under AGPL 3.0, the licence file and third party notices are in place, every production deploy is tagged, and the source offer link in the footer and on the tool page resolves to the exact deployed commit rather than the repository root.
 - [ ] Build it: `/develop AGPL compliance & source publication`
 - [ ] Verify it: `/check verify AGPL compliance & source publication`
+
+### 19. Sparse OCR scans · done · GA · from spec 0006
+A scan that has been through text recognition (OCR) but holds only a few lines is named as a picture with no text over it, and a very short one is refused, so following RedactNest's own advice to run OCR never clears the warning. Found by the 2026-09-29 review of feature 7.
+**Done when:** a picture with a run of three readable, purely invisible characters over it is no longer bare, so sparse and short OCR scans open with the machine read note only and download as `-redacted.pdf`; a scan whose text layer holds only stray marks stays warned; visible text over a picture is judged as before; every OCR note says that words the recognition missed stay in the picture; and the local scans are refused before OCR and open with the note only after it.
+spec [0008](../specs/0008-sparse-ocr-scans/index.md) · code in `src/engine` (`inspect.ts`, `index.ts`), `src/lib/page-findings.ts`, `scripts/lib/reading-fixtures.mjs`, `scripts/make-fixture.mjs`
+- [x] Design it (spec): `/architect sparse OCR scans`
+- [x] Build it: `/develop sparse OCR scans`
+  - [x] The fixtures: eleven new pages on `read-pictures.pdf`, two expectations moved, and `read-short-ocr.pdf` · AC-1 to AC-8
+  - [x] The rule, proved: the machine read run per picture with every clipping glyph's origin, the shared painted index and the guarded, lazy search; the pins, the run edges, the cost case and the browser check · AC-1 to AC-8, AC-11, AC-12
+  - [x] The words and the amends: the machine read note's new sentence, the advice comment, and specs 0006 and 0007 amended · AC-9, AC-10
+  - [x] The review's fixes (2026-09-30, slice 3): nine new pages on `read-pictures.pdf`, then only letters and numbers counting with marks carried, a line beside drawn text counting for nothing, and a character over two different pictures counting for neither · AC-1, AC-2, AC-3, AC-5, AC-11, AC-14, AC-15, AC-16
+  - [x] Proved and amended: the copies at one origin, the next line pin, `runStep` and the run edges, the second cost case, and spec 0006 amended again · AC-2, AC-12, AC-14, AC-15, AC-16
+- [x] Verify it: `/check verify sparse OCR scans`, including the real scan steps on the local scans (AC-13). Run once for the first build; run again for the review's fixes (spec task 11)
+- [x] Test it: `/test sparse OCR scans`, again for the review's fixes
+- [x] Review it (fresh model): `/check review sparse OCR scans`, again for the review's fixes
+- [x] Document it: `/document sparse OCR scans`
+
+### 20. Dense text layers over pictures · needs a decision · GA · from spec 0008
+A picture loses its warning once text lines cover at least 5% of it (`TEXT_OVER_PICTURE_MAX`), because spec 0006's coverage test counts any readable line, visible or hidden, punctuation included, over any picture, whichever picture it belongs to. So a photo pasted onto a dense OCR scan is cleared by the scan's layer, and a scan whose only layer is dense junk (six hidden lines of `|||` from a ruled form or table) is cleared although no letter or number was read. Both were true before spec 0008, which pins the photo case (`read-pictures.pdf` page 28) and leaves the decision here. Found by the cross check of spec 0008's review fixes and by its second review (minor 1), both on 2026-09-30.
+**Done when:** it is decided what the coverage test counts: whether spec 0008's rule that a character over two different pictures counts for neither reaches it for machine read lines, and whether a line holding no letter or number counts toward it at all. Each is measured for its effect on dense OCR scans and its cost, and page 28's expectation, and a dense punctuation page's, follow that decision.
+- [ ] Design it (spec): `/architect dense text layers over pictures`
 
 ## Release 2: Take money
 

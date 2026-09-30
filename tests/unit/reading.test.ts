@@ -5,6 +5,7 @@ import {
   EngineFailure,
   EXTRACTION_OPTIONS,
   inspectPages,
+  MACHINE_READ_RUN,
   openDocumentWith,
   POSITION_TOLERANCE,
   prepareDocument,
@@ -12,6 +13,7 @@ import {
   readsAsNothing,
   RunCancelled,
   silenceEngineLog,
+  STAMP_MAX_CHARS,
   walkCharacters,
   walkDrawing,
   WRITE_OPTIONS,
@@ -20,7 +22,9 @@ import {
   type Rect,
 } from "@/engine";
 
-import { showsCrookedLine } from "@/lib/page-findings";
+import { isPartly, showsCrookedLine } from "@/lib/page-findings";
+import { outputFormFor, outputNameFor } from "@/lib/session";
+import { countPagesByFinding } from "@/worker/protocol";
 
 import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
 import {
@@ -33,6 +37,8 @@ import {
   READ_COVERED,
   READ_HIDDEN,
   READ_PICTURES,
+  readShortOcr,
+  SHORT_OCR_EMAIL,
   STAMP_EMAIL,
 } from "../../scripts/lib/reading-fixtures.mjs";
 import { fixture } from "../support/bytes";
@@ -52,8 +58,15 @@ beforeAll(() => {
 });
 
 /** Open a fixture the way the review copy is opened, prepare it, and read it. */
-async function inspect(name: string): Promise<readonly PageInspection[]> {
-  const doc = mupdf.Document.openDocument(fixture(name), "application/pdf");
+function inspect(name: string): Promise<readonly PageInspection[]> {
+  return inspectBytes(fixture(name));
+}
+
+/** The same, for a file built in the test. */
+async function inspectBytes(
+  bytes: ArrayBuffer | Uint8Array,
+): Promise<readonly PageInspection[]> {
+  const doc = mupdf.Document.openDocument(bytes, "application/pdf");
   try {
     const pdf = doc.asPDF();
     if (!pdf) throw new Error("expected a PDF document");
@@ -433,6 +446,407 @@ describe("pictures and machine read text", () => {
       expect(inspections[index].findings).not.toContain("covered-text");
       expect(inspections[index].findings).not.toContain("hidden-text");
     }
+  });
+});
+
+/**
+ * Spec 0008: sparse OCR scans. A picture holding a machine read run, three or
+ * more letters or numbers in a row on one line, purely invisible, on a line no
+ * drawn text runs beside, centred inside it and inside no picture of a
+ * different footprint, is not bare. The table above reads each of
+ * `read-pictures.pdf`'s new pages; these prove what it rests on, and that
+ * following the OCR advice clears the warning. `read-stamped.pdf` and
+ * `read-slides.pdf` keep their findings in the blocks above (AC-4, AC-5).
+ */
+describe("sparse OCR scans", () => {
+  /** The index of the `read-pictures.pdf` page `READ_PICTURES` names. */
+  function picture(name: string): number {
+    const index = READ_PICTURES.findIndex((page) => page.name === name);
+    if (index < 0) throw new Error(`no page named ${name}`);
+    return index;
+  }
+
+  /**
+   * AC-2's pin, which the clipped letter case rests on: the ordinary read
+   * drops a glyph a clip hides wholly, and keeps one the clip only cuts, so
+   * the clipped "Yes" reads as "Ye", a run of 2, though all three are drawn.
+   */
+  it("reads the clipped Yes as Ye, though the page draws all three glyphs (pin)", () => {
+    const index = picture("a scan whose three letter word a clip cuts to two");
+    const { drawn, read } = onPage("read-pictures.pdf", index, (page) => {
+      let invisible = "";
+      walkDrawing(mupdf, page, (drawing) => {
+        if (drawing.kind !== "text" || drawing.mode !== "ignore") return;
+        for (const { unicode } of drawing.glyphs)
+          invisible += String.fromCodePoint(unicode);
+      });
+      let extracted = "";
+      walkCharacters(page, EXTRACTION_OPTIONS[0], ({ code }) => {
+        extracted += String.fromCodePoint(code);
+      });
+      return { drawn: invisible, read: extracted };
+    });
+    expect(drawn).toBe("Yes");
+    expect(read).toBe("Ye");
+  });
+
+  /**
+   * AC-14's pin, which the format character page rests on: the ordinary read
+   * keeps each zero width space, zero width joiner and soft hyphen as one
+   * character of its own, so they reach the run search and end each run there,
+   * rather than being dropped or merged by extraction.
+   */
+  it("keeps each format character of the layer as one character (pin)", () => {
+    const index = picture("a scan whose layer is runs of format characters");
+    const codes = onPage("read-pictures.pdf", index, (page) => {
+      const seen: number[] = [];
+      walkCharacters(page, EXTRACTION_OPTIONS[0], ({ code }) => seen.push(code));
+      return seen;
+    });
+    expect(codes.filter((code) => code !== 0x20)).toEqual([
+      0x200b, 0x200b, 0x200b, 0x200d, 0x200d, 0x200d, 0xad, 0xad, 0xad,
+    ]);
+  });
+
+  /**
+   * AC-2's reverse pin: on every page a run clears, each character of each
+   * run of `MACHINE_READ_RUN` characters that are not whitespace, on one line
+   * of the ordinary read, meets an invisible glyph at its origin within
+   * `POSITION_TOLERANCE`. Found with MuPDF's readers alone, nothing from the
+   * rule, so the rule's "at its origin" is proved to hold on these layers.
+   */
+  it("finds an invisible glyph at the origin of every character in a run (pin)", () => {
+    const cases: readonly (readonly [string, number])[] = [
+      ...[
+        "a sparse scan with one recognised sentence",
+        "a sparse scan with a few recognised words",
+        "a scan whose layer is one three letter word",
+        "a sparse Tesseract layer, straight",
+        "a sparse Tesseract layer, turned a degree",
+        "a sparse Tesseract layer on a turned page",
+        "a scan in two strips, its one word across the join",
+        "a layered scan: a background and a stencil under one layer",
+      ].map((name) => ["read-pictures.pdf", picture(name)] as const),
+      ["read-short-ocr.pdf", 0],
+    ];
+    for (const [name, index] of cases) {
+      const { invisible, runs } = onPage(name, index, (page) => {
+        const origins: (readonly [number, number])[] = [];
+        walkDrawing(mupdf, page, (drawing) => {
+          if (drawing.kind !== "text" || drawing.mode !== "ignore") return;
+          for (const { origin } of drawing.glyphs) origins.push(origin);
+        });
+
+        const found: (readonly [number, number])[][] = [];
+        let run: (readonly [number, number])[] = [];
+        let line = -1;
+        const close = () => {
+          if (run.length >= MACHINE_READ_RUN) found.push(run);
+          run = [];
+        };
+        walkCharacters(page, EXTRACTION_OPTIONS[0], (character) => {
+          if (character.line !== line) {
+            close();
+            line = character.line;
+          }
+          if (/\s/u.test(String.fromCodePoint(character.code))) close();
+          else run.push(character.origin);
+        });
+        close();
+        return { invisible: origins, runs: found };
+      });
+      const meets = ([x, y]: readonly [number, number]) =>
+        invisible.some(
+          ([ox, oy]) =>
+            Math.abs(ox - x) <= POSITION_TOLERANCE &&
+            Math.abs(oy - y) <= POSITION_TOLERANCE,
+        );
+
+      expect(runs.length, `${name} ${index}`).toBeGreaterThan(0);
+      for (const origin of runs.flat()) {
+        expect(
+          meets(origin),
+          `${name} ${index}: a character at ${origin} met no invisible glyph`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  /**
+   * AC-5 and AC-8: following the advice clears the warning. The scan alone is
+   * refused, as `read-scans.pdf` still is; with one short line of text
+   * recognition over it, 20 readable characters, it opens with the machine
+   * read note only, its address is listed, and a run that removes it is named
+   * redacted, not partly redacted.
+   */
+  it("refuses the scan alone, and opens it once a short text layer lies over it", async () => {
+    const alone = readShortOcr({ layer: false }).slice().buffer as ArrayBuffer;
+    for (const bytes of [alone, fixture("read-scans.pdf")]) {
+      await expect(openDocumentWith(mupdf, bytes, LIMITS)).rejects.toEqual(
+        new EngineFailure("no-readable-text"),
+      );
+    }
+
+    const doc = await openDocumentWith(mupdf, fixture("read-short-ocr.pdf"), LIMITS);
+    try {
+      expect(doc.summary).toEqual({
+        pageCount: 1,
+        pages: [{ findings: ["machine-read-text"] }],
+      });
+      expect(isPartly(doc.summary)).toBe(false);
+
+      const found = await doc.findMatches({ contextChars: 40 });
+      expect(found.map(({ page, text, blocked }) => ({ page, text, blocked }))).toEqual([
+        { page: 0, text: SHORT_OCR_EMAIL, blocked: null },
+      ]);
+      const [{ target }] = found;
+      if (!target) throw new Error("expected a tickable match");
+
+      const { output, removedByType, sanitized } = await redactDocumentWith(
+        mupdf,
+        fixture("read-short-ocr.pdf"),
+        [target],
+      );
+      expect(documentText(output)).not.toContain(SHORT_OCR_EMAIL);
+      // The outcome as the worker makes it, and the name the visitor is offered.
+      const form = outputFormFor(doc.summary, {
+        pageCount: doc.summary.pageCount,
+        removedByType,
+        pagesByFinding: countPagesByFinding(doc.summary.pages),
+        sanitized,
+      });
+      expect(outputNameFor("signed-letter.pdf", form)).toBe("signed-letter-redacted.pdf");
+    } finally {
+      doc.close();
+    }
+  });
+
+  /** The sparse scans' one recognised sentence: 45 readable characters. */
+  const SENTENCE = "Signed for and on behalf of the company by its director";
+
+  /**
+   * One page: a full page grey scan, then `layer` over it. `/F1` is
+   * Helvetica. `/M` is a simple font whose glyph names map to no character
+   * and which has no ToUnicode map, so MuPDF reads each of its glyphs as
+   * U+FFFD, as it reads `read-unmapped.pdf`'s. `/Clear` sets the fill opacity
+   * to zero. `/Logo` is a second image, drawn only where `layer` says so.
+   * `keys` are more page keys, such as `/Rotate 90`. Built here, because each
+   * is a line or two over one scan.
+   */
+  function scanUnder(layer: string, { keys = "" } = {}): Uint8Array {
+    const names = Array.from({ length: 26 }, (_, at) => `/zz${65 + at}`).join(" ");
+    return writePdf({
+      objects: [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ${keys} ` +
+          "/Resources << /Font << /F1 4 0 R /M 5 0 R >> /XObject << /Scan 7 0 R /Logo 9 0 R >> " +
+          "/ExtGState << /Clear << /ca 0 >> >> >> /Contents 8 0 R >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Mystery /FirstChar 32 /LastChar 90 " +
+          `/Widths [${Array(59).fill(600).join(" ")}] ` +
+          `/Encoding << /Type /Encoding /Differences [65 ${names}] >> /FontDescriptor 6 0 R >>`,
+        "<< /Type /FontDescriptor /FontName /Mystery /FontBBox [0 -200 1000 800] " +
+          "/Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 /ItalicAngle 0 /Flags 4 >>",
+        stream(
+          "/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8",
+          new Uint8Array(4).fill(200),
+        ),
+        stream("", `q 612 0 0 792 0 0 cm /Scan Do Q\n${layer}`),
+        stream(
+          "/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8",
+          new Uint8Array(4).fill(40),
+        ),
+      ],
+      trailer: "/Root 1 0 R",
+    }).bytes;
+  }
+
+  /**
+   * One line in font `font` and render mode `mode`, at 12 pt from x 72, on the
+   * sparse scans' baseline unless `y` says otherwise.
+   */
+  function textLine(font: string, mode: number, text: string, y = 120): string {
+    return `BT ${mode} Tr /${font} 12 Tf 72 ${y} Td (${text}) Tj ET\n`;
+  }
+
+  /**
+   * AC-2 and AC-15: a clipping glyph at a character's origin makes its line a
+   * drawn copy, whatever was painted inside that clip. The same sentence is
+   * drawn invisible (`3 Tr`) and then as a clip (`7 Tr`) at one place: with
+   * the scan painted again inside the clip, which only `clipGlyphs` records,
+   * and with nothing painted inside it, which `clipOnly` records too. Each
+   * stays bare, where the invisible line alone clears the scan.
+   */
+  it.each([
+    ["with the scan painted inside the clip", "612 0 0 792 0 0 cm /Scan Do "],
+    ["with nothing painted inside the clip", ""],
+  ])(
+    "never counts a character drawn invisible and as a clip at one place, %s",
+    async (_label, inside) => {
+      const alone = await inspectBytes(scanUnder(textLine("F1", 3, SENTENCE)));
+      expect(alone.map(({ findings }) => findings)).toEqual([["machine-read-text"]]);
+
+      const [clipped] = await inspectBytes(
+        scanUnder(
+          textLine("F1", 3, SENTENCE) + `q ${textLine("F1", 7, SENTENCE)}${inside}Q\n`,
+        ),
+      );
+      expect(clipped.findings).toContain("bare-picture");
+      expect(clipped.findings).toContain("machine-read-text");
+    },
+  );
+
+  /**
+   * AC-2 and AC-15: however the copy at the invisible line's origin is drawn,
+   * its line counts for nothing. Stroked, filled in white, filled at zero
+   * opacity, and in `5 Tr` (stroked and added to the clip) and `6 Tr` (filled,
+   * stroked and added to the clip), each clip inside `q … Q`. MuPDF sends the
+   * clip part of both `5 Tr` and `6 Tr` through `clipText`, the reader's
+   * `clip` branch, never `clip-stroke`, with the fill and the stroke as their
+   * own calls (measured 2026-09-30). Each stays bare, where the invisible line
+   * alone clears the scan.
+   */
+  it.each([
+    ["stroked (1 Tr)", textLine("F1", 1, SENTENCE)],
+    ["filled white", `q 1 g ${textLine("F1", 0, SENTENCE)}Q\n`],
+    ["filled at zero opacity", `q /Clear gs ${textLine("F1", 0, SENTENCE)}Q\n`],
+    ["in 5 Tr", `q ${textLine("F1", 5, SENTENCE)}Q\n`],
+    ["in 6 Tr", `q ${textLine("F1", 6, SENTENCE)}Q\n`],
+  ])("never counts a line with a copy drawn at its origin, %s", async (_label, copy) => {
+    const alone = await inspectBytes(scanUnder(textLine("F1", 3, SENTENCE)));
+    expect(alone.map(({ findings }) => findings)).toEqual([["machine-read-text"]]);
+
+    const [copied] = await inspectBytes(scanUnder(textLine("F1", 3, SENTENCE) + copy));
+    expect(copied.findings).toContain("bare-picture");
+    expect(copied.findings).toContain("machine-read-text");
+  });
+
+  /**
+   * AC-15: the next line is out of reach. The same words drawn visible one
+   * line spacing (14.4 pt) above the invisible sentence leave it clearing the
+   * scan: Helvetica's 12 pt quad is about 16.5 pt tall, so the reach is about
+   * 8.2 pt. On a turned page the lines run up the page, so a reach measured in
+   * plain x and y, from the reach before a character to the reach past its
+   * end, would take in the neighbour's glyphs; measured along each line's own
+   * direction, it does not.
+   */
+  it.each([
+    ["upright", ""],
+    ["on a turned page", "/Rotate 90"],
+  ])(
+    "leaves a line clearing the scan with visible text a line above it, %s",
+    async (_label, keys) => {
+      const layer = textLine("F1", 3, SENTENCE) + textLine("F1", 0, SENTENCE, 134.4);
+      const inspections = await inspectBytes(scanUnder(layer, { keys }));
+      expect(inspections.map(({ findings }) => findings)).toEqual([
+        ["machine-read-text"],
+      ]);
+    },
+  );
+
+  /**
+   * AC-15: a copy is caught along the line's own direction, not in plain x
+   * and y. The two copies of `read-pictures.pdf` (an invisible sentence half a
+   * point left of and below a visible one, and one drifting ahead of it with
+   * 0.6 pt character spacing) drawn on each turned page and on lines tilted 1,
+   * 3 and 10 degrees. Each stays bare, where the invisible line alone clears
+   * the scan. Each copy puts a drawn glyph within reach of some character's
+   * own origin, which no error in the direction maths moves out of range, so
+   * these pin the copy being caught; the next line test above pins the reach
+   * not running into a neighbour.
+   */
+  describe.each([
+    ["on a page turned 90 degrees", "/Rotate 90", 0],
+    ["on a page turned 180 degrees", "/Rotate 180", 0],
+    ["on a page turned 270 degrees", "/Rotate 270", 0],
+    ["on a line tilted 1 degree", "", 1],
+    ["on a line tilted 3 degrees", "", 3],
+    ["on a line tilted 10 degrees", "", 10],
+  ])("a hidden copy %s", (_label, keys, degrees) => {
+    const cos = Math.cos((degrees * Math.PI) / 180);
+    const sin = Math.sin((degrees * Math.PI) / 180);
+    const line = (mode: number, x: number, y: number, spacing = 0) =>
+      `BT ${mode} Tr /F1 12 Tf ${spacing} Tc ` +
+      `${cos} ${sin} ${-sin} ${cos} ${x} ${y} Tm (${SENTENCE}) Tj ET\n`;
+
+    it.each([
+      ["offset half a point", line(3, 71.5, 119.5)],
+      ["drifting ahead", line(3, 72, 120, 0.6)],
+    ])("is caught when %s", async (_label, copy) => {
+      const alone = await inspectBytes(scanUnder(copy, { keys }));
+      expect(alone.map(({ findings }) => findings)).toEqual([["machine-read-text"]]);
+
+      const [copied] = await inspectBytes(scanUnder(line(0, 72, 120) + copy, { keys }));
+      expect(copied.findings).toContain("bare-picture");
+      expect(copied.findings).toContain("machine-read-text");
+    });
+  });
+
+  /**
+   * AC-1: each character in a run is readable (spec 0006, AC-3). A text layer
+   * in a font with no character map reads as U+FFFD, so it never forms a run,
+   * and the scan under it stays a scan. The same words in a mapped font make
+   * a short OCR page, machine read and nothing more (AC-5).
+   */
+  it("never counts an invisible layer that reads as U+FFFD, and does count the same words mapped", async () => {
+    const words = "SIGNED FOR THE COMPANY";
+
+    const [mapped] = await inspectBytes(scanUnder(textLine("F1", 3, words)));
+    expect(mapped.findings).toEqual(["machine-read-text"]);
+
+    const [unmapped] = await inspectBytes(scanUnder(textLine("M", 3, words)));
+    expect(unmapped.readable).toBe(false);
+    expect(unmapped.findings).toContain("scanned");
+    expect(unmapped.findings).toContain("machine-read-text");
+  });
+
+  /**
+   * AC-16: "picture" is spec 0006's, so an image under `PICTURE_MIN_SHARE`
+   * takes no character from the scan beneath. The whole sentence (x 72 to
+   * about 370) lies over a logo 320 by 60 pt, about 4% of the page, and still
+   * clears the scan. The near miss is the same image 160 pt tall, about 11%:
+   * a picture of a different footprint, which takes every character, so the
+   * scan is left bare.
+   */
+  it.each([
+    ["a small logo, no picture, leaves the scan cleared", 60, ["machine-read-text"]],
+    [
+      "a picture the same width, taller, leaves the scan bare",
+      160,
+      ["bare-picture", "machine-read-text"],
+    ],
+  ])(
+    "counts a line over an image on a scan by its size: %s",
+    async (_label, height, findings) => {
+      const logo = `q 320 0 0 ${height} 60 100 cm /Logo Do Q\n`;
+      const [inspection] = await inspectBytes(
+        scanUnder(logo + textLine("F1", 3, SENTENCE)),
+      );
+      expect(inspection.findings).toEqual(findings);
+    },
+  );
+
+  /**
+   * AC-14: the readable count is unchanged, so punctuation that ends every run
+   * still counts toward the stamp cap. A layer of `STAMP_MAX_CHARS` marks with
+   * no letter or number holds no run, so the scan is bare, but the page is too
+   * full of readable characters to be a stamped scan. One mark fewer, and it
+   * is `scanned`.
+   */
+  it("counts punctuation toward the stamp cap, though it never forms a run", async () => {
+    const marks = (count: number) => "|.~,".repeat(count).slice(0, count);
+
+    const [atCap] = await inspectBytes(
+      scanUnder(textLine("F1", 3, marks(STAMP_MAX_CHARS))),
+    );
+    expect(atCap.readable).toBe(true);
+    expect(atCap.findings).toEqual(["bare-picture", "machine-read-text"]);
+
+    const [underCap] = await inspectBytes(
+      scanUnder(textLine("F1", 3, marks(STAMP_MAX_CHARS - 1))),
+    );
+    expect(underCap.findings).toEqual(["scanned", "machine-read-text"]);
   });
 });
 

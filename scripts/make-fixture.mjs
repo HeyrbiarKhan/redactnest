@@ -38,6 +38,7 @@ import {
   readPrivate,
   readRefusedMix,
   readScans,
+  readShortOcr,
   readSlides,
   readStamped,
   readUnmapped,
@@ -459,6 +460,8 @@ const FIXTURES = [
   ],
   ["read-covered.pdf", readCovered(), "one page per covering rule and near miss"],
   ["read-hidden.pdf", readHidden(), "one page per hiding rule and near miss"],
+  // Spec 0008: the OCR advice followed on a one line scan.
+  ["read-short-ocr.pdf", readShortOcr(), "a scan whose text layer is one short line"],
   // One case per file, because an open stops at the first page it refuses.
   ...readEmptyClip().map((bytes, index) => [
     `read-empty-clip-${index}.pdf`,

@@ -5,6 +5,7 @@ import { PAGE_FINDINGS, type PageFinding } from "@/worker/protocol";
 import {
   EXTRACTION_OPTIONS,
   originIndex,
+  POSITION_TOLERANCE,
   walkCharacters,
   type Character,
 } from "./characters";
@@ -25,6 +26,8 @@ import {
   polygonArea,
   quadBounds,
   quadCentre,
+  quadHeight,
+  quadWidth,
 } from "./geometry";
 import type { MuPdf } from "./load";
 import type { ConcealedGlyph, PageInspection, Quad } from "./types";
@@ -83,6 +86,32 @@ export const STAMP_MAX_CHARS = 40;
  * a font RedactNest cannot read. A lone unmapped bullet is not (AC-3).
  */
 export const UNREADABLE_RUN = 3;
+
+/**
+ * This many letters or numbers in a row on one line, purely invisible and
+ * centred inside a picture and inside no picture of a different footprint, is
+ * text recognition having read that picture: in practice one word. A stray
+ * mark, a run of punctuation, or a word of one or two characters is not. Spec
+ * 0008, AC-1 and AC-14. A line with drawn text within `COPY_REACH_RATIO` of
+ * its characters counts for nothing, however long its run (AC-15). It counts
+ * characters in a row on one line as `UNREADABLE_RUN` does, but it is a
+ * separate rule with its own number.
+ */
+export const MACHINE_READ_RUN = 3;
+
+/**
+ * How near drawn text may come to a line of machine read text before the line
+ * counts as a drawn copy of it, as a share of each character's own quad
+ * height (spec 0008, AC-15). Half the height: MuPDF makes a quad somewhat
+ * taller than an em (1.0 em for Tesseract's glyphless font, about 1.37 em for
+ * Helvetica, measured), so the reach is half an em to about 0.7 em. That holds
+ * a hidden copy offset by half a point or drifting along its line, while a
+ * neighbouring line's baseline sits a line's spacing away, more than that in
+ * ordinary text, so the next line is out of reach. A share of the quad, as
+ * `TARGET_PADDING_RATIO` is a share of a target's, because a reach in ems would
+ * be wrong by a third for Helvetica.
+ */
+export const COPY_REACH_RATIO = 0.5;
 
 /**
  * The contrast ratio, by the WCAG formula, a colour must exceed to be seen
@@ -174,6 +203,12 @@ interface TextReading {
    * or null. Its quad is the glyph's box (AC-9).
    */
   readonly characterAt: (origin: Point) => Character | null;
+  /**
+   * The page's characters in reading order, each with its line: the ones
+   * `characterAt` matches glyphs to, handed out for the machine read run
+   * (spec 0008, AC-11), so nothing more of the page is held (INV-8).
+   */
+  readonly characters: readonly Character[];
 }
 
 /** What the drawing reader says about a page. */
@@ -196,6 +231,12 @@ interface DrawingReading {
   readonly backdrops: readonly Backdrop[];
   /** Glyphs used only as a clip that nothing was painted inside (AC-7). */
   readonly clipOnly: readonly Point[];
+  /**
+   * The origin of every glyph drawn as part of a clip (render modes 4 to 7),
+   * whatever was painted inside it, so a clipping glyph can make a line of
+   * machine read text a drawn copy (spec 0008, AC-2 and AC-15).
+   */
+  readonly clipGlyphs: readonly Point[];
   /** A glyph, in any render mode, drawn while the clip in force holds no area (AC-11). */
   readonly emptyClip: boolean;
 }
@@ -258,6 +299,16 @@ interface Footprint {
   readonly clip: Rect | null;
 }
 
+/**
+ * An image whose footprint holds at least `PICTURE_MIN_SHARE` of the grid
+ * points (AC-4), with the points it holds.
+ */
+interface Picture {
+  readonly footprint: Footprint;
+  readonly held: Uint8Array;
+  readonly count: number;
+}
+
 function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
   const visible = page.getBounds();
   const area: Rect = [visible[0], visible[1], visible[2], visible[3]];
@@ -272,11 +323,10 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
   for (const box of text.readableLines)
     grid.mark(underText, (point) => inRect(box, point), box);
 
-  // The pictures, each with the points its footprint holds, and which of
-  // those have readable text over them.
-  const bare = new Uint8Array(grid.count);
-  let bareShare = 0;
-  let anyBare = false;
+  // Every picture with the points its footprint holds, gathered before any is
+  // judged, so a search can ask which other pictures hold a character's
+  // centre, whether drawn before it or after (spec 0008, AC-16).
+  const pictures: Picture[] = [];
   for (const footprint of drawing.footprints) {
     const held = new Uint8Array(grid.count);
     const count = grid.mark(
@@ -284,12 +334,33 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
       (point) => holds(footprint, point),
       footprintBounds(footprint),
     );
-    if (count < PICTURE_MIN_SHARE * grid.count) continue;
+    if (count >= PICTURE_MIN_SHARE * grid.count)
+      pictures.push({ footprint, held, count });
+  }
+  const machineRead = machineReadTest(text.characters, drawing);
+  const runArea = runAreas(pictures);
 
+  // Then each picture, and whether it has readable text over it.
+  const bare = new Uint8Array(grid.count);
+  let bareShare = 0;
+  let anyBare = false;
+  for (let index = 0; index < pictures.length; index += 1) {
+    const { held, count } = pictures[index];
     let covered = 0;
     for (let at = 0; at < grid.count; at += 1)
       if (held[at] && underText[at]) covered += 1;
     if (covered >= TEXT_OVER_PICTURE_MAX * count) continue;
+
+    // Spec 0008, AC-1 to AC-3: a picture text recognition read a word on is
+    // not bare, judged picture by picture. Searched only when the coverage
+    // test failed and the page draws enough invisible glyphs to hold a run,
+    // so a born digital page pays nothing (AC-12).
+    if (
+      drawing.invisible.length >= MACHINE_READ_RUN &&
+      machineReadRun(text.characters, machineRead, runArea(index))
+    ) {
+      continue;
+    }
 
     anyBare = true;
     for (let at = 0; at < grid.count; at += 1) if (held[at]) bare[at] = 1;
@@ -302,7 +373,8 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
   // AC-2. A page with no readable character over pictures holding half the
   // page is a scan, and so is one with a stamp's few characters over bare
   // pictures; with no readable character every picture is bare, so the one
-  // test covers both.
+  // test covers both. A picture holding a machine read run is not bare, so a
+  // short OCR page is not a scan (spec 0008, AC-5).
   const scanned = text.readableCount < STAMP_MAX_CHARS && bareShare >= SCAN_MIN_SHARE;
   if (scanned) found.add("scanned");
 
@@ -340,6 +412,314 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
     concealed,
     emptyClip: drawing.emptyClip,
   };
+}
+
+/**
+ * What a character does to a machine read run. Spec 0008, AC-14: a letter or
+ * a number counts, a combining mark continues a run without adding to it,
+ * since it is part of the letter before it, and anything else ends one.
+ */
+export type RunStep = "counts" | "continues" | "ends";
+
+/**
+ * A code point's step in a machine read run. Spec 0008, AC-14: `\p{L}` or
+ * `\p{N}` counts, `\p{M}` continues, and anything else ends a run, readable or
+ * not: whitespace, punctuation, symbols, and format characters such as the
+ * zero width space. The readable count keeps `isReadable`, so a punctuation
+ * mark still counts toward the stamp cap.
+ */
+export function runStep(code: number): RunStep {
+  if (!Number.isInteger(code) || code < 0 || code > 0x10ffff) return "ends";
+  // ASCII, most of any page, answered without the pattern. No ASCII character
+  // is a mark, and only its letters and digits count, so `_` ends a run.
+  if (code < 0x80) {
+    return (code >= 0x30 && code <= 0x39) ||
+      (code >= 0x41 && code <= 0x5a) ||
+      (code >= 0x61 && code <= 0x7a)
+      ? "counts"
+      : "ends";
+  }
+  const character = String.fromCodePoint(code);
+  if (LETTER_OR_NUMBER.test(character)) return "counts";
+  return COMBINING_MARK.test(character) ? "continues" : "ends";
+}
+
+const LETTER_OR_NUMBER = /^[\p{L}\p{N}]$/u;
+const COMBINING_MARK = /^\p{M}$/u;
+
+/**
+ * Does a picture hold a machine read run? Spec 0008, AC-1 and AC-14:
+ * `MACHINE_READ_RUN` or more characters that count, in a row on one line of
+ * the ordinary read, each with its quad centre `inside` the picture. A
+ * character that continues (a combining mark) carries a run without adding to
+ * it. One that ends, one centred outside, and the end of a line each end a
+ * run. So a word straddling a picture's edge counts only its letters centred
+ * inside, and one letter carrying two marks is no run. It stops at the first
+ * run.
+ *
+ * Pure, over the page's characters in reading order, so its edges are proved
+ * as plain logic. `step` is asked by index and only for a character centred
+ * inside, so the page's answers are computed where a picture needs them and no
+ * further (AC-12).
+ */
+export function machineReadRun(
+  characters: readonly Pick<Character, "line" | "quad">[],
+  step: (at: number) => RunStep,
+  inside: (centre: Point) => boolean,
+): boolean {
+  let run = 0;
+  let line = -1;
+  for (let at = 0; at < characters.length; at += 1) {
+    const character = characters[at];
+    if (character.line !== line) {
+      line = character.line;
+      run = 0;
+    }
+    if (!inside(quadCentre(character.quad))) {
+      run = 0;
+      continue;
+    }
+    const next = step(at);
+    if (next === "counts") {
+      run += 1;
+      if (run >= MACHINE_READ_RUN) return true;
+    } else if (next === "ends") {
+      run = 0;
+    }
+  }
+  return false;
+}
+
+/**
+ * A character's step, or a line's copy answer, as `machineReadTest` keeps it.
+ * 0 is not yet asked, which is what a fresh `Uint8Array` holds.
+ */
+const UNASKED = 0;
+const COUNTS = 1;
+const CONTINUES = 2;
+const ENDS = 3;
+const DRAWN_COPY = 1;
+const NO_COPY = 2;
+
+/**
+ * The step of the page's character at `at` (spec 0008, AC-2, AC-14 and
+ * AC-15). It ends a run unless it is purely invisible: the drawing pass drew
+ * an invisible glyph at its origin, within `POSITION_TOLERANCE`, and its line
+ * is no drawn copy. Then its step is its code point's, `runStep`. A drawn glyph
+ * at a character's own origin is within its reach, so text drawn both
+ * invisible and visible at one place never counts.
+ *
+ * Neither answer depends on the picture, so each character's step is decided
+ * once per page, and each line's copy answer once per line, the first time a
+ * picture needs it. The index and the list behind them are made on first need
+ * too, so a page no picture asks about pays nothing (AC-12).
+ */
+function machineReadTest(
+  characters: readonly Character[],
+  drawing: DrawingReading,
+): (at: number) => RunStep {
+  let asked: {
+    readonly steps: Uint8Array;
+    readonly lines: Uint8Array;
+    readonly invisible: ReturnType<typeof originIndex<true>>;
+  } | null = null;
+  let drawn: DrawnOrigins | null = null;
+
+  /** Is the line of the character at `at` a drawn copy? Decided once per line. */
+  const isCopy = (at: number, lines: Uint8Array): boolean => {
+    const { line } = characters[at];
+    if (lines[line] === UNASKED) {
+      drawn ??= drawnOrigins(drawing);
+      // A line's characters are contiguous in reading order.
+      let from = at;
+      while (from > 0 && characters[from - 1].line === line) from -= 1;
+      let copy = false;
+      for (
+        let each = from;
+        !copy && each < characters.length && characters[each].line === line;
+        each += 1
+      ) {
+        copy = withinReach(characters[each], drawn);
+      }
+      lines[line] = copy ? DRAWN_COPY : NO_COPY;
+    }
+    return lines[line] === DRAWN_COPY;
+  };
+
+  return (at) => {
+    if (asked === null) {
+      const invisible = originIndex<true>();
+      for (const { origin } of drawing.invisible) invisible.add(origin, true);
+      // Lines are counted from 0 in reading order, so the last is the highest.
+      const lineCount =
+        characters.length === 0 ? 0 : characters[characters.length - 1].line + 1;
+      asked = {
+        steps: new Uint8Array(characters.length),
+        lines: new Uint8Array(lineCount),
+        invisible,
+      };
+    }
+    const { steps, lines, invisible } = asked;
+    if (steps[at] === UNASKED) {
+      const { code, origin } = characters[at];
+      // The code point first: it is the cheapest, and whitespace and
+      // punctuation end a run whatever is drawn.
+      const step = runStep(code);
+      steps[at] =
+        step === "ends" || invisible.find(origin) === null || isCopy(at, lines)
+          ? ENDS
+          : step === "counts"
+            ? COUNTS
+            : CONTINUES;
+    }
+    return steps[at] === COUNTS
+      ? "counts"
+      : steps[at] === CONTINUES
+        ? "continues"
+        : "ends";
+  };
+}
+
+/**
+ * The origin of every glyph drawn visibly, filled, stroked or as a clip
+ * (`drawing.paints` and `drawing.clipGlyphs`), in one list sorted by x, so the
+ * area within a character's reach is asked with a binary search on x and a
+ * check of y (spec 0008, AC-15). An origin that is not a finite number lies
+ * within reach of no character, so it is left out rather than let it spoil the
+ * order.
+ */
+interface DrawnOrigins {
+  readonly xs: Float64Array;
+  readonly ys: Float64Array;
+}
+
+function drawnOrigins(drawing: DrawingReading): DrawnOrigins {
+  const origins: Point[] = [];
+  for (const { origin } of drawing.paints) origins.push(origin);
+  for (const origin of drawing.clipGlyphs) origins.push(origin);
+  const finite = origins.filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
+  finite.sort(([a], [b]) => a - b);
+  return {
+    xs: Float64Array.from(finite, ([x]) => x),
+    ys: Float64Array.from(finite, ([, y]) => y),
+  };
+}
+
+/**
+ * Does a drawn glyph's origin lie within this character's reach? Spec 0008,
+ * AC-15. The reach is `COPY_REACH_RATIO` of the character's quad height, never
+ * less than `POSITION_TOLERANCE`, measured from its baseline along its
+ * `direction`: up to the reach on either side of the baseline, and along the
+ * line from the reach before its origin to the reach past its end (its origin
+ * plus its quad's width). A character whose height, width, direction or origin
+ * cannot be measured answers yes, so its line is a drawn copy and fails safe.
+ * The height and width checks are defence in depth: `machineReadRun` asks
+ * whether a quad's centre is inside the picture first, and a quad with a non
+ * finite corner has a centre inside nothing, so such a character never reaches
+ * here.
+ */
+function withinReach(character: Character, drawn: DrawnOrigins): boolean {
+  const height = quadHeight(character.quad);
+  const width = quadWidth(character.quad);
+  const [ox, oy] = character.origin;
+  const [dx, dy] = character.direction;
+  const length = Math.hypot(dx, dy);
+  if (
+    !Number.isFinite(height) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(ox) ||
+    !Number.isFinite(oy) ||
+    !(length > 0 && Number.isFinite(length))
+  ) {
+    return true;
+  }
+
+  // Along the line, and across it.
+  const ux = dx / length;
+  const uy = dy / length;
+  const reach = Math.max(COPY_REACH_RATIO * height, POSITION_TOLERANCE);
+  const before = -reach;
+  const past = width + reach;
+
+  // The bounds of that area in page space, to ask the list with.
+  const xs = [before, past].flatMap((along) =>
+    [-reach, reach].map((across) => ox + along * ux - across * uy),
+  );
+  const ys = [before, past].flatMap((along) =>
+    [-reach, reach].map((across) => oy + along * uy + across * ux),
+  );
+  const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
+  const [y0, y1] = [Math.min(...ys), Math.max(...ys)];
+
+  for (let at = firstAtLeast(drawn.xs, x0); at < drawn.xs.length; at += 1) {
+    const x = drawn.xs[at];
+    if (x > x1) break;
+    const y = drawn.ys[at];
+    if (y < y0 || y > y1) continue;
+    const along = (x - ox) * ux + (y - oy) * uy;
+    const across = (y - oy) * ux - (x - ox) * uy;
+    if (along >= before && along <= past && Math.abs(across) <= reach) return true;
+  }
+  return false;
+}
+
+/** The first index of an ascending list whose value is at least `value`. */
+function firstAtLeast(sorted: Float64Array, value: number): number {
+  let low = 0;
+  let high = sorted.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (sorted[middle] < value) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+/**
+ * Where each picture's run may be counted. Spec 0008, AC-16: a character's
+ * centre inside its footprint and inside no picture of a different footprint,
+ * whether that picture passed the coverage test or not. Two pictures share a
+ * footprint when they hold exactly the same grid points, as a scan and its
+ * stencil layer do (AC-7), so they never take a character from each other.
+ *
+ * The pictures are grouped once per page, on the first search, in a `Map`
+ * keyed on the points each holds, so equal footprints meet without a compare
+ * per pair (AC-12).
+ */
+function runAreas(
+  pictures: readonly Picture[],
+): (index: number) => (centre: Point) => boolean {
+  let grouped: readonly number[] | null = null;
+
+  return (index) => {
+    if (grouped === null) {
+      const byPoints = new Map<string, number>();
+      grouped = pictures.map(({ held }) => {
+        const key = pointsKey(held);
+        const group = byPoints.get(key) ?? byPoints.size;
+        byPoints.set(key, group);
+        return group;
+      });
+    }
+    const groups = grouped;
+    const own = groups[index];
+    const { footprint } = pictures[index];
+    const others = pictures.filter((_, other) => groups[other] !== own);
+    return (centre) =>
+      holds(footprint, centre) && !others.some((other) => holds(other.footprint, centre));
+  };
+}
+
+/** A picture's grid points as a key, sixteen points to a character. */
+function pointsKey(held: Uint8Array): string {
+  let key = "";
+  for (let at = 0; at < held.length; at += 16) {
+    let unit = 0;
+    for (let bit = 0; bit < 16 && at + bit < held.length; bit += 1)
+      if (held[at + bit]) unit |= 1 << bit;
+    key += String.fromCharCode(unit);
+  }
+  return key;
 }
 
 /** A glyph as the drawing reader drew it: every fill and stroke at one origin. */
@@ -684,7 +1064,8 @@ function readText(page: PDFPage): TextReading {
     number,
     { box: [number, number, number, number]; readable: boolean }
   >();
-  // Held for this page only, to match glyphs to (INV-8).
+  // Held for this page only, to match glyphs to and for the machine read run
+  // (INV-8; spec 0008, AC-11).
   const characters: Character[] = [];
 
   walkCharacters(page, EXTRACTION_OPTIONS[0], (character: Character) => {
@@ -721,6 +1102,7 @@ function readText(page: PDFPage): TextReading {
     unreadableRun,
     readableLines,
     characterAt: indexByOrigin(characters),
+    characters,
   };
 }
 
@@ -769,6 +1151,7 @@ function readDrawing(mupdf: MuPdf, page: PDFPage): DrawingReading {
   const covers: Cover[] = [];
   const backdrops: Backdrop[] = [];
   const clipOnly: Point[] = [];
+  const clipGlyphs: Point[] = [];
   let emptyClip = false;
 
   // The clips open as the page draws, mirroring the reader's own stack: a
@@ -796,10 +1179,13 @@ function readDrawing(mupdf: MuPdf, page: PDFPage): DrawingReading {
             invisible.push({ origin, unicode, clip: state.clip });
           }
         } else if (drawing.mode === "clip" || drawing.mode === "clip-stroke") {
-          open.push({
-            glyphs: drawing.glyphs.map(({ origin }) => origin),
-            painted: false,
-          });
+          const origins = drawing.glyphs.map(({ origin }) => origin);
+          // Every one, whatever is painted inside the clip, so a clipping
+          // glyph makes a line of machine read text beside it a drawn copy
+          // (spec 0008, AC-2 and AC-15). A loop, not a spread, for a clip of
+          // many glyphs.
+          for (const origin of origins) clipGlyphs.push(origin);
+          open.push({ glyphs: origins, painted: false });
         } else if (drawing.paint !== null && !state.defining) {
           paintInside();
           // Once per text object, not once per glyph.
@@ -932,6 +1318,7 @@ function readDrawing(mupdf: MuPdf, page: PDFPage): DrawingReading {
     covers,
     backdrops,
     clipOnly,
+    clipGlyphs,
     emptyClip,
   };
 }

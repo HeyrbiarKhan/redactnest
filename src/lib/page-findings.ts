@@ -8,7 +8,7 @@
  * Typed as records over `PageFinding`, so a finding added to the protocol
  * without its words fails `pnpm typecheck`. Spec 0007 reviewed the wording as
  * it reads on the page, reworded `ADVICE` and added the edge line (AC-18,
- * AC-19).
+ * AC-19). Spec 0008 gave the machine read line its last sentence (AC-9).
  */
 
 import {
@@ -173,11 +173,13 @@ const FINDING_TEXT: Readonly<Record<Exclude<PageFinding, "blank">, Worded>> =
       many: (pages) =>
         `${pages} have pictures that reach outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.`,
     },
+    // Spec 0008, AC-9: the last sentence says what the text recognition may
+    // have missed, since one word it read is enough to clear a picture.
     "machine-read-text": {
       one: (pages) =>
-        `${pages} is a scan with machine read text. RedactNest reads that text, so it can only find what the text recognition got right.`,
+        `${pages} is a scan with machine read text. RedactNest reads that text, so it can only find what the text recognition got right. Words it missed, such as handwriting, stamps or tables it couldn't read, stay in the picture.`,
       many: (pages) =>
-        `${pages} are scans with machine read text. RedactNest reads that text, so it can only find what the text recognition got right.`,
+        `${pages} are scans with machine read text. RedactNest reads that text, so it can only find what the text recognition got right. Words it missed, such as handwriting, stamps or tables it couldn't read, stay in the pictures.`,
     },
     // Spec 0007, AC-19: the last sentence says why a found item at the edge
     // is listed shorter than it is drawn.
@@ -263,9 +265,10 @@ export const OPEN_WARNING_TITLE = "Some pages can't be fully checked";
 
 /**
  * The advice after the warning lines (AC-20). Spec 0007, AC-18: it says text
- * recognition "may" help and promises nothing, because a sparse OCR page can
- * still carry a warning afterwards (spec 0006's open Follow-up). It speaks to
- * the file in hand, since somebody holding only the scan has no original.
+ * recognition "may" help and promises nothing. Spec 0008, AC-10 keeps "may":
+ * `bare-picture` and `scanned` also name photos on which text recognition
+ * finds no word, and those pages stay warned after it. It speaks to the file
+ * in hand, since somebody holding only the scan has no original.
  */
 export const ADVICE =
   "Run this file through text recognition (OCR) first, then open the result here. That may let RedactNest read those pages.";

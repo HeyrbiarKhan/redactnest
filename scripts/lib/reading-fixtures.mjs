@@ -359,15 +359,101 @@ export const READ_PICTURES = Object.freeze([
     name: "a scan with its text layer under it (ABBYY)",
     findings: ["machine-read-text"],
   },
+  // Spec 0008, AC-1 and AC-5: a machine read run clears each, so neither is
+  // bare, and the short one is no longer a stamped scan.
+  { name: "a sparse scan with one recognised sentence", findings: ["machine-read-text"] },
+  { name: "a sparse scan with a few recognised words", findings: ["machine-read-text"] },
+  // Spec 0008, from here on.
   {
-    name: "a sparse scan with one recognised sentence",
+    name: "a scan whose layer is stray marks",
+    findings: ["scanned", "machine-read-text"],
+  },
+  {
+    name: "a scan whose layer is words of one and two characters",
+    findings: ["scanned", "machine-read-text"],
+  },
+  {
+    name: "a scan whose layer is one three letter word",
+    findings: ["machine-read-text"],
+  },
+  {
+    name: "a scan whose three letter word a clip cuts to two",
+    findings: ["scanned", "machine-read-text"],
+  },
+  { name: "a sparse Tesseract layer, straight", findings: ["machine-read-text"] },
+  { name: "a sparse Tesseract layer, turned a degree", findings: ["machine-read-text"] },
+  { name: "a sparse Tesseract layer on a turned page", findings: ["machine-read-text"] },
+  {
+    name: "a sentence drawn invisible and visible at one place over a scan",
     findings: ["bare-picture", "machine-read-text"],
   },
   {
-    name: "a sparse scan with a few recognised words",
+    name: "a photo pasted onto an OCR scan, away from its layer",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  {
+    name: "a scan in two strips, its one word across the join",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  {
+    name: "a layered scan: a background and a stencil under one layer",
+    findings: ["machine-read-text"],
+  },
+  // Spec 0008, after the 2026-09-30 review. AC-16: text over two pictures of
+  // different footprints counts for neither, so each photo stays bare.
+  {
+    name: "a photo drawn after an OCR line that runs over it",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  {
+    name: "a photo drawn before an OCR line that runs over it",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  {
+    name: "a photo across the edge of a half page scan",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  {
+    name: "a small OCR scan on a full page photo",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  // AC-14: only letters and numbers count toward a run.
+  {
+    name: "a scan whose layer is runs of punctuation",
     findings: ["scanned", "machine-read-text"],
   },
+  {
+    name: "a scan whose layer is runs of format characters",
+    findings: ["scanned", "machine-read-text"],
+  },
+  // AC-15: a line within reach of drawn text counts for nothing.
+  {
+    name: "a sentence and its invisible copy half a point away",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  {
+    name: "a sentence and an invisible copy drifting ahead of it",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  // AC-3's recorded limit, taken up as scope feature 20.
+  {
+    name: "a photo pasted onto a dense OCR layer",
+    findings: ["machine-read-text"],
+  },
 ]);
+
+/** The sparse scans' one recognised sentence: 45 readable characters. */
+const SPARSE_SENTENCE = "Signed for and on behalf of the company by its director";
+
+/**
+ * One line of Helvetica (`/F1`) in render mode `mode`: 3 is invisible, 0 is
+ * filled. `spacing` is the character spacing (`Tc`), added after every glyph.
+ * The mode and the spacing are text state, so they outlast the text object;
+ * each line sets its own.
+ */
+function modeLine(mode, size, x, y, text, { spacing = 0 } = {}) {
+  return `BT ${mode} Tr ${spacing} Tc /F1 ${size} Tf ${x} ${y} Td ${literal(text)} Tj ET\n`;
+}
 
 /** Typed words for the pages that are letters, so each is readable. */
 function letterText() {
@@ -378,15 +464,22 @@ function letterText() {
   );
 }
 
-/** Spec 0006, AC-2, AC-4 and AC-5. One page per picture rule and near miss. */
+/**
+ * Spec 0006, AC-2, AC-4 and AC-5, and spec 0008, AC-1 to AC-7 and, from page
+ * 20, AC-14 to AC-16. One page per picture rule and near miss. The glyphless font joins each page through
+ * `fonts`, so a page that also draws Helvetica has one `/Font` dictionary
+ * holding both.
+ */
 export function readPictures() {
   return document(({ add }) => {
     const card = scanImage(add, { columns: 40, rows: 25 });
     const logo = scanImage(add, { columns: 8, rows: 8 });
     const photo = scanImage(add, { columns: 48, rows: 36 });
     const scan = scanImage(add);
+    const stencil = stencilScan(add);
     const glyphless = glyphlessFont(add);
-    const ocr = `/Font << /Fg ${glyphless} 0 R >>`;
+    const fonts = `/Fg ${glyphless} 0 R`;
+    const scanned = `/XObject << /Scan ${scan} 0 R >>`;
 
     return [
       {
@@ -411,28 +504,231 @@ export function readPictures() {
         // 3% of the page: its footprint is the frame, not the photo.
         content: `${letterText()}q 72 460 120 120 re W n 612 0 0 792 0 0 cm /Photo Do Q\n`,
       },
+      { fonts, resources: scanned, content: fullPage("Scan") + ocrLayer() },
+      { fonts, resources: scanned, content: ocrLayer() + fullPage("Scan") },
       {
-        resources: `/XObject << /Scan ${scan} 0 R >> ${ocr}`,
-        content: fullPage("Scan") + ocrLayer(),
+        fonts,
+        resources: scanned,
+        content: fullPage("Scan") + invisibleLine(12, 72, 120, SPARSE_SENTENCE),
       },
       {
-        resources: `/XObject << /Scan ${scan} 0 R >> ${ocr}`,
-        content: ocrLayer() + fullPage("Scan"),
+        fonts,
+        resources: scanned,
+        content: fullPage("Scan") + invisibleLine(12, 72, 120, "Signed John Smith"),
       },
+      // Spec 0008, AC-5: 8 readable marks, each alone, so no run.
       {
-        resources: `/XObject << /Scan ${scan} 0 R >> ${ocr}`,
+        fonts,
+        resources: scanned,
+        content: fullPage("Scan") + invisibleLine(12, 72, 120, "| . ~ , | . ~ ,"),
+      },
+      // Spec 0008, AC-5: 8 readable characters in runs of one and two.
+      {
+        fonts,
+        resources: scanned,
+        content: fullPage("Scan") + invisibleLine(12, 72, 120, "No 12 at 45"),
+      },
+      // Spec 0008, AC-1: a run of exactly `MACHINE_READ_RUN`.
+      {
+        fonts,
+        resources: scanned,
+        content: fullPage("Scan") + invisibleLine(12, 72, 120, "Yes"),
+      },
+      // Spec 0008, AC-2: the glyphless font advances 6 pt a glyph at 12 pt,
+      // so from x 72 the "s" spans 84 to 90. A clip ending at x 83 holds the
+      // "Y" and most of the "e", and none of the "s", which the ordinary read
+      // then drops (pinned in `reading.test.ts`): a run of 2.
+      {
+        fonts,
+        resources: scanned,
         content:
           fullPage("Scan") +
-          invisibleLine(
-            12,
-            72,
-            120,
-            "Signed for and on behalf of the company by its director",
-          ),
+          `q 60 100 23 40 re W n\n${invisibleLine(12, 72, 120, "Yes")}Q\n`,
+      },
+      // Spec 0008, AC-6: the same sentence written word by word the way
+      // Tesseract writes it, straight, turned a degree, and on a turned page.
+      {
+        fonts,
+        resources: scanned,
+        content:
+          fullPage("Scan") + tesseractLayer([{ x: 72, y: 120, text: SPARSE_SENTENCE }]),
       },
       {
-        resources: `/XObject << /Scan ${scan} 0 R >> ${ocr}`,
-        content: fullPage("Scan") + invisibleLine(12, 72, 120, "Signed John Smith"),
+        fonts,
+        resources: scanned,
+        content:
+          fullPage("Scan") +
+          tesseractLayer([{ x: 72, y: 120, text: SPARSE_SENTENCE }], { degrees: 1 }),
+      },
+      {
+        keys: "/Rotate 90",
+        fonts,
+        resources: scanned,
+        content:
+          fullPage("Scan") + tesseractLayer([{ x: 72, y: 120, text: SPARSE_SENTENCE }]),
+      },
+      // Spec 0008, AC-2: each character is drawn invisible, then filled at the
+      // same origin, so none is purely invisible and the scan stays bare. The
+      // ordinary read reports each origin twice, one line per drawing
+      // (measured 2026-09-30), so 90 readable characters: not a stamped scan
+      // either way.
+      {
+        fonts,
+        resources: scanned,
+        content:
+          fullPage("Scan") +
+          modeLine(3, 12, 72, 120, SPARSE_SENTENCE) +
+          modeLine(0, 12, 72, 120, SPARSE_SENTENCE),
+      },
+      // Spec 0008, AC-3: the photo, 300 by 100 pt (6.2% of the page), sits
+      // below the layer's lowest line (y 132), so no run is over it.
+      {
+        fonts,
+        resources: `/XObject << /Scan ${scan} 0 R /Photo ${photo} 0 R >>`,
+        content: fullPage("Scan") + "q 300 0 0 100 156 10 cm /Photo Do Q\n" + ocrLayer(),
+      },
+      // Spec 0008, AC-3: strips 200 and 412 pt wide. "Signed" starts at x
+      // 188, 6 pt a glyph, so "S" and "i" centre at 191 and 197 over the left
+      // strip (a run of 2) and "gned" from 203 over the right (a run of 4).
+      {
+        fonts,
+        resources: scanned,
+        content:
+          "q 200 0 0 792 0 0 cm /Scan Do Q\n" +
+          "q 412 0 0 792 200 0 cm /Scan Do Q\n" +
+          invisibleLine(12, 188, 400, "Signed"),
+      },
+      // Spec 0008, AC-7: a background image and a stencil mask, each over the
+      // whole page, with the text layer over both.
+      {
+        fonts,
+        resources: `/XObject << /Scan ${scan} 0 R /Mask ${stencil} 0 R >>`,
+        content:
+          fullPage("Scan") +
+          `0 0 0 rg ${fullPage("Mask")}` +
+          invisibleLine(12, 72, 120, SPARSE_SENTENCE),
+      },
+      // Spec 0008, AC-16. The glyphless font advances 6 pt a glyph at 12 pt,
+      // so from x 60 "by its director" starts at x 300 and centres over the
+      // photo (x 300 to 600, y 250 to 550) and the scan, and the words before
+      // it over the scan alone, which they clear. The line covers under 3% of
+      // the photo's grid points, so the photo is searched, and stays bare. The
+      // next page draws the photo first.
+      {
+        fonts,
+        resources: `/XObject << /Scan ${scan} 0 R /Photo ${photo} 0 R >>`,
+        content:
+          fullPage("Scan") +
+          invisibleLine(12, 60, 400, SPARSE_SENTENCE) +
+          "q 300 0 0 300 300 250 cm /Photo Do Q\n",
+      },
+      {
+        fonts,
+        resources: `/XObject << /Scan ${scan} 0 R /Photo ${photo} 0 R >>`,
+        content:
+          fullPage("Scan") +
+          "q 300 0 0 300 300 250 cm /Photo Do Q\n" +
+          invisibleLine(12, 60, 400, SPARSE_SENTENCE),
+      },
+      // Spec 0008, AC-16. The scan is the top half of the page (y 396 up), the
+      // photo reaches 146 pt below it, so it is not wholly inside the scan: the
+      // review's own fix would have cleared it. The line's words before "by"
+      // lie over the scan alone, its last three over both.
+      {
+        fonts,
+        resources: `/XObject << /Scan ${scan} 0 R /Photo ${photo} 0 R >>`,
+        content:
+          "q 612 0 0 396 0 396 cm /Scan Do Q\n" +
+          "q 300 0 0 200 300 250 cm /Photo Do Q\n" +
+          invisibleLine(12, 60, 420, SPARSE_SENTENCE),
+      },
+      // Spec 0008, AC-16. A 300 by 200 pt scan on a full page photo, its three
+      // lines wholly inside it (at 10 pt, x 166 to 441). Each baseline puts one
+      // row of grid points in its 10 pt line box, so the lines cover about 17%
+      // of the scan, which the coverage test clears, and about 2% of the photo.
+      // The scan still takes the characters from the photo: a veto from a
+      // picture that passed coverage. The review's own fix, a picture wholly
+      // inside a larger one takes no run, would have cleared the photo.
+      {
+        fonts,
+        resources: `/XObject << /Scan ${scan} 0 R /Photo ${photo} 0 R >>`,
+        content:
+          fullPage("Photo") +
+          "q 300 0 0 200 156 300 cm /Scan Do Q\n" +
+          [446, 410, 372].map((y) => invisibleLine(10, 166, y, SPARSE_SENTENCE)).join(""),
+      },
+      // Spec 0008, AC-14: 15 readable characters in runs of three, none of
+      // them a letter or a number.
+      {
+        fonts,
+        resources: scanned,
+        content: fullPage("Scan") + invisibleLine(12, 72, 120, "___ ... ||| --- ~~~"),
+      },
+      // Spec 0008, AC-14: the zero width space, the zero width joiner and the
+      // soft hyphen, three of each. 9 readable characters, each kept by the
+      // ordinary read (pinned in `reading.test.ts`).
+      {
+        fonts,
+        resources: scanned,
+        content: fullPage("Scan") + invisibleLine(12, 72, 120, "​​​ ‍‍‍ ­­­"),
+      },
+      // Spec 0008, AC-15: an invisible copy of a visible sentence, offset half
+      // a point left and down.
+      {
+        resources: scanned,
+        content:
+          fullPage("Scan") +
+          modeLine(0, 12, 72, 120, SPARSE_SENTENCE) +
+          modeLine(3, 12, 71.5, 119.5, SPARSE_SENTENCE),
+      },
+      // Spec 0008, AC-15: an invisible copy from the same start, drifting ahead
+      // with character spacing, 32.4 pt by the line's end. Its last 4 letters
+      // ("ctor") lie out of reach of every visible glyph (measured
+      // 2026-09-30), so judged character by character they would clear the
+      // scan; judged per line, they do not.
+      {
+        resources: scanned,
+        content:
+          fullPage("Scan") +
+          modeLine(0, 12, 72, 120, SPARSE_SENTENCE) +
+          modeLine(3, 12, 72, 120, SPARSE_SENTENCE, { spacing: 0.6 }),
+      },
+      // Spec 0008, AC-3's recorded limit. The full text layer covers about a
+      // third of the photo (x 156 to 456, y 300 to 600), so spec 0006's
+      // coverage test clears the photo before any run is asked, as it did
+      // before spec 0008. Accepted, and taken up as scope feature 20.
+      {
+        fonts,
+        resources: `/XObject << /Scan ${scan} 0 R /Photo ${photo} 0 R >>`,
+        content: fullPage("Scan") + "q 300 0 0 300 156 300 cm /Photo Do Q\n" + ocrLayer(),
+      },
+    ];
+  });
+}
+
+/** The address in `read-short-ocr.pdf`'s text layer. */
+export const SHORT_OCR_EMAIL = "jo@example.com";
+
+/**
+ * Spec 0008, AC-8. A full page scan whose text layer is one short line,
+ * "Signed" and an address: 20 readable characters, under `STAMP_MAX_CHARS`.
+ * With the layer it opens with the machine read note only; `layer: false`
+ * builds the same page with none, which the test builds in memory and sees
+ * refused. The scan is 150 ppi, fine enough that blanking its pixels under
+ * the address stays within `BOUNDS_REACH_RATIO`, so the address can be
+ * ticked and removed; the coarse `scanImage` would block it `image-overreach`.
+ */
+export function readShortOcr({ layer = true } = {}) {
+  return document(({ add }) => {
+    const scan = bandedScan(add, PAGE.width, PAGE.height, 150);
+    const glyphless = glyphlessFont(add);
+    return [
+      {
+        fonts: `/Fg ${glyphless} 0 R`,
+        resources: `/XObject << /Scan ${scan} 0 R >>`,
+        content:
+          fullPage("Scan") +
+          (layer ? invisibleLine(12, 72, 120, `Signed ${SHORT_OCR_EMAIL}`) : ""),
       },
     ];
   });
@@ -1066,6 +1362,15 @@ export function trimEdge() {
 /** Where `trim-ocr.pdf` is cropped: through every line on the left, and through line 1 at the top. */
 export const TRIM_OCR = Object.freeze({ cropLeft: 80, cropTop: 746 });
 
+/** The twenty rows of a full page statement, 32 pt apart, as `tesseractLayer` takes them. */
+function statementRows() {
+  return Array.from({ length: 20 }, (_, row) => ({
+    x: 60,
+    y: 740 - row * 32,
+    text: `Line ${row + 1} of the statement reads as words recognised from the scan`,
+  }));
+}
+
 /**
  * A page's text layer the way Tesseract writes one (its `pdfrenderer.cpp`):
  * one text object for the whole page, invisible (`3 Tr`), the first word
@@ -1074,18 +1379,21 @@ export const TRIM_OCR = Object.freeze({ cropLeft: 80, cropTop: 746 });
  * its box. The size steps by half a point from word to word, so no `Tf` is
  * ever redundant: the worst case for spec 0004's quirk, where a `Tf` or a `Tz`
  * between removed glyphs and the next kept one moves the text after them.
+ *
+ * `rows` are the lines, each with its first word's origin. `degrees` turns the
+ * first word's `Tm`, and so the whole layer about that origin, since each `Td`
+ * moves in the turned text space: a crooked scan's layer (spec 0008, AC-6).
  */
-function tesseractLayer() {
+function tesseractLayer(rows = statementRows(), { degrees = 0 } = {}) {
+  const angle = (degrees * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
   let layer = "BT 3 Tr ";
   let previous = null;
   let count = 0;
-  for (let row = 0; row < 20; row += 1) {
-    const baseline = 740 - row * 32;
-    const words =
-      `Line ${row + 1} of the statement reads as words recognised from the scan`.split(
-        " ",
-      );
-    let x = 60;
+  for (const { x: start, y: baseline, text } of rows) {
+    const words = text.split(" ");
+    let x = start;
     words.forEach((word, at) => {
       const size = 11.5 + (count % 3) * 0.5;
       count += 1;
@@ -1096,7 +1404,7 @@ function tesseractLayer() {
         .join("");
       layer +=
         previous === null
-          ? `1 0 0 1 ${num(x)} ${baseline} Tm `
+          ? `${num(cos)} ${num(sin)} ${num(-sin)} ${num(cos)} ${num(x)} ${baseline} Tm `
           : `${num(x - previous[0])} ${baseline - previous[1]} Td `;
       layer += `/Fg ${size} Tf ${num((100 * width) / (word.length * 0.5 * size))} Tz [ <${hex}> ] TJ\n`;
       previous = [x, baseline];

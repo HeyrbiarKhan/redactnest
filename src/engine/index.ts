@@ -108,13 +108,18 @@ export {
 } from "./geometry";
 export {
   contrastWithWhite,
+  COPY_REACH_RATIO,
   COVER_MIN_OVERLAP,
   HIDDEN_CONTRAST_MAX,
   inspectPages,
+  MACHINE_READ_RUN,
+  machineReadRun,
   PICTURE_MIN_SHARE,
   READING_GRID,
   readsAsNothing,
   relativeLuminance,
+  runStep,
+  type RunStep,
   SCAN_MIN_SHARE,
   STAMP_MAX_CHARS,
   TEXT_OVER_PICTURE_MAX,

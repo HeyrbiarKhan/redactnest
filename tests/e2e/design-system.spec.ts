@@ -140,6 +140,17 @@ async function reviewNotes(page: Page): Promise<void> {
 }
 
 /**
+ * Spec 0008, AC-8. A scan whose text layer is one short line: the OCR advice
+ * followed, so the notes and no warning.
+ */
+async function reviewShortOcr(page: Page): Promise<void> {
+  await page
+    .getByTestId("file-input")
+    .setInputFiles(resolve("tests/fixtures/read-short-ocr.pdf"));
+  await expect(page.getByTestId("page-notes")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+}
+
+/**
  * Spec 0006, AC-24 and AC-27. Fake redactions: rows under a box, each with its
  * line, beside the covered text warning.
  */
@@ -409,6 +420,30 @@ test.describe("axe on the tool page (AC-18)", () => {
       await expectNoAxeViolations(page);
     });
   }
+});
+
+/**
+ * Spec 0008, AC-8 and AC-9, in the real engine in the real worker. The notes
+ * state's layout is `reviewNotes`'s; this proves a short OCR scan reaches it
+ * with no warning, and the note's words.
+ */
+test.describe("a short OCR scan (spec 0008)", () => {
+  test("opens with the all clear line and the machine read note, and no warning", async ({
+    page,
+  }) => {
+    await page.goto("/tool");
+    await reviewShortOcr(page);
+
+    await expect(page.getByTestId("all-clear")).toHaveText(
+      "RedactNest can read the text on every page.",
+    );
+    await expect(page.getByTestId("page-notes")).toContainText(
+      "Page 1 is a scan with machine read text. RedactNest reads that text, so it can only find what the text recognition got right. Words it missed, such as handwriting, stamps or tables it couldn't read, stay in the picture.",
+    );
+    await expect(page.getByTestId("page-warnings")).toHaveCount(0);
+    await expect(page.getByTestId("page-advice")).toHaveCount(0);
+    await expect(page.getByRole("checkbox", { name: "jo@example.com" })).toBeEnabled();
+  });
 });
 
 test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
