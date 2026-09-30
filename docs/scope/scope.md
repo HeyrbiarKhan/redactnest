@@ -164,7 +164,7 @@ spec [0008](../specs/0008-sparse-ocr-scans/index.md) · code in `src/engine` (`i
   - [x] The words and the amends: the machine read note's new sentence, the advice comment, and specs 0006 and 0007 amended · AC-9, AC-10
 - [x] Verify it: `/check verify sparse OCR scans`, including the real scan steps on the local scans (AC-13)
 - [x] Test it: `/test sparse OCR scans`
-- [ ] Review it (fresh model): `/check review sparse OCR scans`
+- [x] Review it (fresh model): `/check review sparse OCR scans`
 - [ ] Document it: `/document sparse OCR scans`
 
 ## Release 2: Take money
