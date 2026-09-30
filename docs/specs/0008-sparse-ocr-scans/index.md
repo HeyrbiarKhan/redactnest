@@ -1,7 +1,7 @@
 # 0008. Sparse OCR scans
 
 **Date**: 2026-09-30
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 

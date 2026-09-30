@@ -156,12 +156,12 @@ Spec 0001 chose MuPDF, which is copyleft, so RedactNest's own source is licensed
 ### 19. Sparse OCR scans · in-progress · GA · from spec 0006
 A scan that has been through text recognition (OCR) but holds only a few lines is named as a picture with no text over it, and a very short one is refused, so following RedactNest's own advice to run OCR never clears the warning. Found by the 2026-09-29 review of feature 7.
 **Done when:** a picture with a run of three readable, purely invisible characters over it is no longer bare, so sparse and short OCR scans open with the machine read note only and download as `-redacted.pdf`; a scan whose text layer holds only stray marks stays warned; visible text over a picture is judged as before; every OCR note says that words the recognition missed stay in the picture; and the local scans are refused before OCR and open with the note only after it.
-spec [0008](../specs/0008-sparse-ocr-scans/index.md)
+spec [0008](../specs/0008-sparse-ocr-scans/index.md) · code in `src/engine` (`inspect.ts`, `index.ts`), `src/lib/page-findings.ts`, `scripts/lib/reading-fixtures.mjs`, `scripts/make-fixture.mjs`
 - [x] Design it (spec): `/architect sparse OCR scans`
-- [ ] Build it: `/develop sparse OCR scans`
-  - [ ] The fixtures: eleven new pages on `read-pictures.pdf`, two expectations moved, and `read-short-ocr.pdf` · AC-1 to AC-8
-  - [ ] The rule, proved: the machine read run per picture with every clipping glyph's origin, the shared painted index and the guarded, lazy search; the pins, the run edges, the cost case and the browser check · AC-1 to AC-8, AC-11, AC-12
-  - [ ] The words and the amends: the machine read note's new sentence, the advice comment, and specs 0006 and 0007 amended · AC-9, AC-10
+- [x] Build it: `/develop sparse OCR scans`
+  - [x] The fixtures: eleven new pages on `read-pictures.pdf`, two expectations moved, and `read-short-ocr.pdf` · AC-1 to AC-8
+  - [x] The rule, proved: the machine read run per picture with every clipping glyph's origin, the shared painted index and the guarded, lazy search; the pins, the run edges, the cost case and the browser check · AC-1 to AC-8, AC-11, AC-12
+  - [x] The words and the amends: the machine read note's new sentence, the advice comment, and specs 0006 and 0007 amended · AC-9, AC-10
 - [ ] Verify it: `/check verify sparse OCR scans`, including the real scan steps on the local scans (AC-13)
 - [ ] Test it: `/test sparse OCR scans`
 - [ ] Review it (fresh model): `/check review sparse OCR scans`
