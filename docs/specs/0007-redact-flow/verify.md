@@ -24,7 +24,7 @@ _Steps derived from spec 0007's acceptance criteria and its Value sourcing table
 - [x] Open `detect-email.pdf` → the email group's first row is "Select all 12 email addresses"; clicking it clears every row, clicking again ticks them all, each in one step; untick one row → the box shows mixed → AC-7
 - [x] Open `detect-blocked.pdf` → a group's select all counts only rows that can be ticked, the group's badge counts every row, and select all never changes a blocked row → AC-7
 - [x] Start a run → every checkbox, select all included, is disabled → AC-7, AC-10
-- [x] Open `detect-dense.pdf` with a paid entitlement and tick a row far down → the tick lands at once; `pnpm test:e2e tests/e2e/checklist-speed.spec.ts` passes (first render under 1 s, a tick under 200 ms) → AC-8
+- [x] Open `detect-dense.pdf` with a paid entitlement and tick a row far down → the tick lands at once; `pnpm exec playwright test --project=speed --no-deps` passes (first render under 1 s, a tick under 200 ms) → AC-8
 - [x] On `detect-email.pdf`, read the first row's context → no "…" before "Contact:" (the page's start); a row mid page → "…" on both sides → AC-9
 - [x] Change a tick, press Redact, then Cancel → back on the checklist with the same ticks → AC-10
 
