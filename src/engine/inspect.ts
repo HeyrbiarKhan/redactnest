@@ -85,6 +85,15 @@ export const STAMP_MAX_CHARS = 40;
 export const UNREADABLE_RUN = 3;
 
 /**
+ * This many readable, purely invisible characters in a row on one line,
+ * centred inside a picture, is text recognition having read that picture: in
+ * practice one word. A stray mark, or a word of one or two characters, is
+ * not. Spec 0008, AC-1. It counts characters in a row on one line as
+ * `UNREADABLE_RUN` does, but it is a separate rule with its own number.
+ */
+export const MACHINE_READ_RUN = 3;
+
+/**
  * The contrast ratio, by the WCAG formula, a colour must exceed to be seen
  * against what it is drawn on. Below it, a viewer sees nothing: the white
  * rectangle Word and Chrome paint on every page is not drawing (AC-2), and
@@ -174,6 +183,12 @@ interface TextReading {
    * or null. Its quad is the glyph's box (AC-9).
    */
   readonly characterAt: (origin: Point) => Character | null;
+  /**
+   * The page's characters in reading order, each with its line: the ones
+   * `characterAt` matches glyphs to, handed out for the machine read run
+   * (spec 0008, AC-11), so nothing more of the page is held (INV-8).
+   */
+  readonly characters: readonly Character[];
 }
 
 /** What the drawing reader says about a page. */
@@ -196,6 +211,12 @@ interface DrawingReading {
   readonly backdrops: readonly Backdrop[];
   /** Glyphs used only as a clip that nothing was painted inside (AC-7). */
   readonly clipOnly: readonly Point[];
+  /**
+   * The origin of every glyph drawn as part of a clip (render modes 4 to 7),
+   * whatever was painted inside it, so "no clipping glyph there" can be
+   * answered (spec 0008, AC-2).
+   */
+  readonly clipGlyphs: readonly Point[];
   /** A glyph, in any render mode, drawn while the clip in force holds no area (AC-11). */
   readonly emptyClip: boolean;
 }
@@ -265,6 +286,10 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
   const text = readText(page);
   const drawing = readDrawing(mupdf, page);
   const grid = sampleGrid(area);
+  // Built once, and asked by both the machine read run and the concealment
+  // rules, so "a glyph painted there" means the same in each (spec 0008).
+  const painted = byOrigin(drawing.paints);
+  const machineRead = machineReadTest(text.characters, drawing, painted);
 
   // Which grid points readable text lines cover, visible or invisible, so an
   // OCR layer counts and an unmapped font does not.
@@ -291,6 +316,17 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
       if (held[at] && underText[at]) covered += 1;
     if (covered >= TEXT_OVER_PICTURE_MAX * count) continue;
 
+    // Spec 0008, AC-1 to AC-3: a picture text recognition read a word on is
+    // not bare, judged picture by picture. Searched only when the coverage
+    // test failed and the page draws enough invisible glyphs to hold a run,
+    // so a born digital page pays nothing (AC-12).
+    if (
+      drawing.invisible.length >= MACHINE_READ_RUN &&
+      machineReadRun(text.characters, machineRead, (centre) => holds(footprint, centre))
+    ) {
+      continue;
+    }
+
     anyBare = true;
     for (let at = 0; at < grid.count; at += 1) if (held[at]) bare[at] = 1;
   }
@@ -302,7 +338,8 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
   // AC-2. A page with no readable character over pictures holding half the
   // page is a scan, and so is one with a stamp's few characters over bare
   // pictures; with no readable character every picture is bare, so the one
-  // test covers both.
+  // test covers both. A picture holding a machine read run is not bare, so a
+  // short OCR page is not a scan (spec 0008, AC-5).
   const scanned = text.readableCount < STAMP_MAX_CHARS && bareShare >= SCAN_MIN_SHARE;
   if (scanned) found.add("scanned");
 
@@ -330,7 +367,7 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
     found.add("machine-read-text");
 
   // AC-6 and AC-7: text a viewer never shows.
-  const concealed = concealedGlyphs(text, drawing, area, overImage);
+  const concealed = concealedGlyphs(text, drawing, painted, area, overImage);
   if (concealed.some(({ kind }) => kind === "covered")) found.add("covered-text");
   if (concealed.some(({ kind }) => kind === "hidden")) found.add("hidden-text");
 
@@ -342,6 +379,92 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
   };
 }
 
+/**
+ * Does a picture hold a machine read run? Spec 0008, AC-1: `MACHINE_READ_RUN`
+ * or more characters in a row on one line of the ordinary read, each one that
+ * `qualifies` (readable and purely invisible, AC-2) and whose quad centre is
+ * `inside` the picture's footprint. Anything else ends a run: a character
+ * that does not qualify, one centred outside, and the end of a line. So a word
+ * straddling a picture's edge counts only its letters centred inside. It
+ * stops at the first run.
+ *
+ * Pure, over the page's characters in reading order, so its edges are proved
+ * as plain logic. `qualifies` is asked by index and only for a character
+ * centred inside, so the page's answers are computed where a picture needs
+ * them and no further (AC-12).
+ */
+export function machineReadRun(
+  characters: readonly Pick<Character, "line" | "quad">[],
+  qualifies: (at: number) => boolean,
+  inside: (centre: Point) => boolean,
+): boolean {
+  let run = 0;
+  let line = -1;
+  for (let at = 0; at < characters.length; at += 1) {
+    const character = characters[at];
+    if (character.line !== line) {
+      line = character.line;
+      run = 0;
+    }
+    if (inside(quadCentre(character.quad)) && qualifies(at)) {
+      run += 1;
+      if (run >= MACHINE_READ_RUN) return true;
+    } else {
+      run = 0;
+    }
+  }
+  return false;
+}
+
+/**
+ * Is the page's character at `at` readable and purely invisible? Spec 0008,
+ * AC-2. Purely invisible: the drawing pass drew an invisible glyph at its
+ * origin, within `POSITION_TOLERANCE`, and no filled, stroked or clipping
+ * glyph there, so text drawn both invisible and visible at one place never
+ * counts. The answer does not depend on the picture, so each character's is
+ * decided once per page, on first need. The answers and the two origin
+ * indexes behind them are made on the first ask, so a page no picture asks
+ * about pays nothing (AC-12).
+ */
+function machineReadTest(
+  characters: readonly Character[],
+  drawing: DrawingReading,
+  painted: PaintedGlyphs,
+): (at: number) => boolean {
+  let asked: {
+    readonly answers: Uint8Array;
+    readonly invisible: ReturnType<typeof originIndex<true>>;
+    readonly clipping: ReturnType<typeof originIndex<true>>;
+  } | null = null;
+
+  return (at) => {
+    if (asked === null) {
+      const invisible = originIndex<true>();
+      for (const { origin } of drawing.invisible) invisible.add(origin, true);
+      const clipping = originIndex<true>();
+      for (const origin of drawing.clipGlyphs) clipping.add(origin, true);
+      asked = { answers: new Uint8Array(characters.length), invisible, clipping };
+    }
+    const { answers, invisible, clipping } = asked;
+    if (answers[at] === UNASKED) {
+      const { code, origin } = characters[at];
+      answers[at] =
+        isReadable(code) &&
+        invisible.find(origin) !== null &&
+        painted.at(origin) === null &&
+        clipping.find(origin) === null
+          ? QUALIFIES
+          : FAILS;
+    }
+    return answers[at] === QUALIFIES;
+  };
+}
+
+/** A character's machine read answer, as `machineReadTest` keeps it. */
+const UNASKED = 0;
+const QUALIFIES = 1;
+const FAILS = 2;
+
 /** A glyph as the drawing reader drew it: every fill and stroke at one origin. */
 interface DrawnGlyph {
   readonly origin: Point;
@@ -349,6 +472,13 @@ interface DrawnGlyph {
   readonly paints: GlyphPaint[];
   /** The drawing order of its last paint, which a cover must come after. */
   lastOrder: number;
+}
+
+/** A page's painted glyphs, each with every fill and stroke at its origin. */
+interface PaintedGlyphs {
+  readonly all: readonly DrawnGlyph[];
+  /** The glyph painted within `POSITION_TOLERANCE` of an origin, or null. */
+  at(origin: Point): DrawnGlyph | null;
 }
 
 /**
@@ -369,11 +499,11 @@ interface DrawnGlyph {
 function concealedGlyphs(
   text: TextReading,
   drawing: DrawingReading,
+  glyphs: PaintedGlyphs,
   area: Rect,
   overImage: (origin: Point) => boolean,
 ): readonly ConcealedGlyph[] {
   const concealed: ConcealedGlyph[] = [];
-  const glyphs = byOrigin(drawing.paints);
   const lastCover = drawing.covers.reduce(
     (latest, { order }) => Math.max(latest, order),
     0,
@@ -467,12 +597,10 @@ const WHITESPACE = /^\s$/u;
  * object, with the same text matrix, so its two paints share their origin
  * exactly, and a map keyed by the exact coordinates groups them without a
  * tolerance search. `at` answers within `POSITION_TOLERANCE`, for the rare
- * clip only glyph asked about.
+ * clip only glyph asked about and for a character the machine read run asks
+ * about (spec 0008, AC-2).
  */
-function byOrigin(paints: readonly GlyphPaint[]): {
-  readonly all: readonly DrawnGlyph[];
-  at(origin: Point): DrawnGlyph | null;
-} {
+function byOrigin(paints: readonly GlyphPaint[]): PaintedGlyphs {
   const all: DrawnGlyph[] = [];
   const exact = new Map<number, Map<number, DrawnGlyph>>();
   for (const paint of paints) {
@@ -684,7 +812,8 @@ function readText(page: PDFPage): TextReading {
     number,
     { box: [number, number, number, number]; readable: boolean }
   >();
-  // Held for this page only, to match glyphs to (INV-8).
+  // Held for this page only, to match glyphs to and for the machine read run
+  // (INV-8; spec 0008, AC-11).
   const characters: Character[] = [];
 
   walkCharacters(page, EXTRACTION_OPTIONS[0], (character: Character) => {
@@ -721,6 +850,7 @@ function readText(page: PDFPage): TextReading {
     unreadableRun,
     readableLines,
     characterAt: indexByOrigin(characters),
+    characters,
   };
 }
 
@@ -769,6 +899,7 @@ function readDrawing(mupdf: MuPdf, page: PDFPage): DrawingReading {
   const covers: Cover[] = [];
   const backdrops: Backdrop[] = [];
   const clipOnly: Point[] = [];
+  const clipGlyphs: Point[] = [];
   let emptyClip = false;
 
   // The clips open as the page draws, mirroring the reader's own stack: a
@@ -796,10 +927,12 @@ function readDrawing(mupdf: MuPdf, page: PDFPage): DrawingReading {
             invisible.push({ origin, unicode, clip: state.clip });
           }
         } else if (drawing.mode === "clip" || drawing.mode === "clip-stroke") {
-          open.push({
-            glyphs: drawing.glyphs.map(({ origin }) => origin),
-            painted: false,
-          });
+          const origins = drawing.glyphs.map(({ origin }) => origin);
+          // Every one, whatever is painted inside the clip, so a glyph drawn
+          // invisible and as a clip at one place is never machine read
+          // (spec 0008, AC-2). A loop, not a spread, for a clip of many glyphs.
+          for (const origin of origins) clipGlyphs.push(origin);
+          open.push({ glyphs: origins, painted: false });
         } else if (drawing.paint !== null && !state.defining) {
           paintInside();
           // Once per text object, not once per glyph.
@@ -932,6 +1065,7 @@ function readDrawing(mupdf: MuPdf, page: PDFPage): DrawingReading {
     covers,
     backdrops,
     clipOnly,
+    clipGlyphs,
     emptyClip,
   };
 }

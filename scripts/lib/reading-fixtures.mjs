@@ -359,15 +359,59 @@ export const READ_PICTURES = Object.freeze([
     name: "a scan with its text layer under it (ABBYY)",
     findings: ["machine-read-text"],
   },
+  // Spec 0008, AC-1 and AC-5: a machine read run clears each, so neither is
+  // bare, and the short one is no longer a stamped scan.
+  { name: "a sparse scan with one recognised sentence", findings: ["machine-read-text"] },
+  { name: "a sparse scan with a few recognised words", findings: ["machine-read-text"] },
+  // Spec 0008, from here on.
   {
-    name: "a sparse scan with one recognised sentence",
+    name: "a scan whose layer is stray marks",
+    findings: ["scanned", "machine-read-text"],
+  },
+  {
+    name: "a scan whose layer is words of one and two characters",
+    findings: ["scanned", "machine-read-text"],
+  },
+  {
+    name: "a scan whose layer is one three letter word",
+    findings: ["machine-read-text"],
+  },
+  {
+    name: "a scan whose three letter word a clip cuts to two",
+    findings: ["scanned", "machine-read-text"],
+  },
+  { name: "a sparse Tesseract layer, straight", findings: ["machine-read-text"] },
+  { name: "a sparse Tesseract layer, turned a degree", findings: ["machine-read-text"] },
+  { name: "a sparse Tesseract layer on a turned page", findings: ["machine-read-text"] },
+  {
+    name: "a sentence drawn invisible and visible at one place over a scan",
     findings: ["bare-picture", "machine-read-text"],
   },
   {
-    name: "a sparse scan with a few recognised words",
-    findings: ["scanned", "machine-read-text"],
+    name: "a photo pasted onto an OCR scan, away from its layer",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  {
+    name: "a scan in two strips, its one word across the join",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  {
+    name: "a layered scan: a background and a stencil under one layer",
+    findings: ["machine-read-text"],
   },
 ]);
+
+/** The sparse scans' one recognised sentence: 45 readable characters. */
+const SPARSE_SENTENCE = "Signed for and on behalf of the company by its director";
+
+/**
+ * One line of Helvetica (`/F1`) in render mode `mode`: 3 is invisible, 0 is
+ * filled. The mode is text state, so it outlasts the text object; each line
+ * sets its own.
+ */
+function modeLine(mode, size, x, y, text) {
+  return `BT ${mode} Tr /F1 ${size} Tf ${x} ${y} Td ${literal(text)} Tj ET\n`;
+}
 
 /** Typed words for the pages that are letters, so each is readable. */
 function letterText() {
@@ -378,15 +422,22 @@ function letterText() {
   );
 }
 
-/** Spec 0006, AC-2, AC-4 and AC-5. One page per picture rule and near miss. */
+/**
+ * Spec 0006, AC-2, AC-4 and AC-5, and spec 0008, AC-1 to AC-7. One page per
+ * picture rule and near miss. The glyphless font joins each page through
+ * `fonts`, so a page that also draws Helvetica has one `/Font` dictionary
+ * holding both.
+ */
 export function readPictures() {
   return document(({ add }) => {
     const card = scanImage(add, { columns: 40, rows: 25 });
     const logo = scanImage(add, { columns: 8, rows: 8 });
     const photo = scanImage(add, { columns: 48, rows: 36 });
     const scan = scanImage(add);
+    const stencil = stencilScan(add);
     const glyphless = glyphlessFont(add);
-    const ocr = `/Font << /Fg ${glyphless} 0 R >>`;
+    const fonts = `/Fg ${glyphless} 0 R`;
+    const scanned = `/XObject << /Scan ${scan} 0 R >>`;
 
     return [
       {
@@ -411,28 +462,137 @@ export function readPictures() {
         // 3% of the page: its footprint is the frame, not the photo.
         content: `${letterText()}q 72 460 120 120 re W n 612 0 0 792 0 0 cm /Photo Do Q\n`,
       },
+      { fonts, resources: scanned, content: fullPage("Scan") + ocrLayer() },
+      { fonts, resources: scanned, content: ocrLayer() + fullPage("Scan") },
       {
-        resources: `/XObject << /Scan ${scan} 0 R >> ${ocr}`,
-        content: fullPage("Scan") + ocrLayer(),
+        fonts,
+        resources: scanned,
+        content: fullPage("Scan") + invisibleLine(12, 72, 120, SPARSE_SENTENCE),
       },
       {
-        resources: `/XObject << /Scan ${scan} 0 R >> ${ocr}`,
-        content: ocrLayer() + fullPage("Scan"),
+        fonts,
+        resources: scanned,
+        content: fullPage("Scan") + invisibleLine(12, 72, 120, "Signed John Smith"),
       },
+      // Spec 0008, AC-5: 8 readable marks, each alone, so no run.
       {
-        resources: `/XObject << /Scan ${scan} 0 R >> ${ocr}`,
+        fonts,
+        resources: scanned,
+        content: fullPage("Scan") + invisibleLine(12, 72, 120, "| . ~ , | . ~ ,"),
+      },
+      // Spec 0008, AC-5: 8 readable characters in runs of one and two.
+      {
+        fonts,
+        resources: scanned,
+        content: fullPage("Scan") + invisibleLine(12, 72, 120, "No 12 at 45"),
+      },
+      // Spec 0008, AC-1: a run of exactly `MACHINE_READ_RUN`.
+      {
+        fonts,
+        resources: scanned,
+        content: fullPage("Scan") + invisibleLine(12, 72, 120, "Yes"),
+      },
+      // Spec 0008, AC-2: the glyphless font advances 6 pt a glyph at 12 pt,
+      // so from x 72 the "s" spans 84 to 90. A clip ending at x 83 holds the
+      // "Y" and most of the "e", and none of the "s", which the ordinary read
+      // then drops (pinned in `reading.test.ts`): a run of 2.
+      {
+        fonts,
+        resources: scanned,
         content:
           fullPage("Scan") +
-          invisibleLine(
-            12,
-            72,
-            120,
-            "Signed for and on behalf of the company by its director",
-          ),
+          `q 60 100 23 40 re W n\n${invisibleLine(12, 72, 120, "Yes")}Q\n`,
+      },
+      // Spec 0008, AC-6: the same sentence written word by word the way
+      // Tesseract writes it, straight, turned a degree, and on a turned page.
+      {
+        fonts,
+        resources: scanned,
+        content:
+          fullPage("Scan") + tesseractLayer([{ x: 72, y: 120, text: SPARSE_SENTENCE }]),
       },
       {
-        resources: `/XObject << /Scan ${scan} 0 R >> ${ocr}`,
-        content: fullPage("Scan") + invisibleLine(12, 72, 120, "Signed John Smith"),
+        fonts,
+        resources: scanned,
+        content:
+          fullPage("Scan") +
+          tesseractLayer([{ x: 72, y: 120, text: SPARSE_SENTENCE }], { degrees: 1 }),
+      },
+      {
+        keys: "/Rotate 90",
+        fonts,
+        resources: scanned,
+        content:
+          fullPage("Scan") + tesseractLayer([{ x: 72, y: 120, text: SPARSE_SENTENCE }]),
+      },
+      // Spec 0008, AC-2: each character is drawn invisible, then filled at the
+      // same origin, so none is purely invisible and the scan stays bare. The
+      // ordinary read reports each origin twice, one line per drawing
+      // (measured 2026-09-30), so 90 readable characters: not a stamped scan
+      // either way.
+      {
+        fonts,
+        resources: scanned,
+        content:
+          fullPage("Scan") +
+          modeLine(3, 12, 72, 120, SPARSE_SENTENCE) +
+          modeLine(0, 12, 72, 120, SPARSE_SENTENCE),
+      },
+      // Spec 0008, AC-3: the photo, 300 by 100 pt (6.2% of the page), sits
+      // below the layer's lowest line (y 132), so no run is over it.
+      {
+        fonts,
+        resources: `/XObject << /Scan ${scan} 0 R /Photo ${photo} 0 R >>`,
+        content: fullPage("Scan") + "q 300 0 0 100 156 10 cm /Photo Do Q\n" + ocrLayer(),
+      },
+      // Spec 0008, AC-3: strips 200 and 412 pt wide. "Signed" starts at x
+      // 188, 6 pt a glyph, so "S" and "i" centre at 191 and 197 over the left
+      // strip (a run of 2) and "gned" from 203 over the right (a run of 4).
+      {
+        fonts,
+        resources: scanned,
+        content:
+          "q 200 0 0 792 0 0 cm /Scan Do Q\n" +
+          "q 412 0 0 792 200 0 cm /Scan Do Q\n" +
+          invisibleLine(12, 188, 400, "Signed"),
+      },
+      // Spec 0008, AC-7: a background image and a stencil mask, each over the
+      // whole page, with the text layer over both.
+      {
+        fonts,
+        resources: `/XObject << /Scan ${scan} 0 R /Mask ${stencil} 0 R >>`,
+        content:
+          fullPage("Scan") +
+          `0 0 0 rg ${fullPage("Mask")}` +
+          invisibleLine(12, 72, 120, SPARSE_SENTENCE),
+      },
+    ];
+  });
+}
+
+/** The address in `read-short-ocr.pdf`'s text layer. */
+export const SHORT_OCR_EMAIL = "jo@example.com";
+
+/**
+ * Spec 0008, AC-8. A full page scan whose text layer is one short line,
+ * "Signed" and an address: 20 readable characters, under `STAMP_MAX_CHARS`.
+ * With the layer it opens with the machine read note only; `layer: false`
+ * builds the same page with none, which the test builds in memory and sees
+ * refused. The scan is 150 ppi, fine enough that blanking its pixels under
+ * the address stays within `BOUNDS_REACH_RATIO`, so the address can be
+ * ticked and removed; the coarse `scanImage` would block it `image-overreach`.
+ */
+export function readShortOcr({ layer = true } = {}) {
+  return document(({ add }) => {
+    const scan = bandedScan(add, PAGE.width, PAGE.height, 150);
+    const glyphless = glyphlessFont(add);
+    return [
+      {
+        fonts: `/Fg ${glyphless} 0 R`,
+        resources: `/XObject << /Scan ${scan} 0 R >>`,
+        content:
+          fullPage("Scan") +
+          (layer ? invisibleLine(12, 72, 120, `Signed ${SHORT_OCR_EMAIL}`) : ""),
       },
     ];
   });
@@ -1066,6 +1226,15 @@ export function trimEdge() {
 /** Where `trim-ocr.pdf` is cropped: through every line on the left, and through line 1 at the top. */
 export const TRIM_OCR = Object.freeze({ cropLeft: 80, cropTop: 746 });
 
+/** The twenty rows of a full page statement, 32 pt apart, as `tesseractLayer` takes them. */
+function statementRows() {
+  return Array.from({ length: 20 }, (_, row) => ({
+    x: 60,
+    y: 740 - row * 32,
+    text: `Line ${row + 1} of the statement reads as words recognised from the scan`,
+  }));
+}
+
 /**
  * A page's text layer the way Tesseract writes one (its `pdfrenderer.cpp`):
  * one text object for the whole page, invisible (`3 Tr`), the first word
@@ -1074,18 +1243,21 @@ export const TRIM_OCR = Object.freeze({ cropLeft: 80, cropTop: 746 });
  * its box. The size steps by half a point from word to word, so no `Tf` is
  * ever redundant: the worst case for spec 0004's quirk, where a `Tf` or a `Tz`
  * between removed glyphs and the next kept one moves the text after them.
+ *
+ * `rows` are the lines, each with its first word's origin. `degrees` turns the
+ * first word's `Tm`, and so the whole layer about that origin, since each `Td`
+ * moves in the turned text space: a crooked scan's layer (spec 0008, AC-6).
  */
-function tesseractLayer() {
+function tesseractLayer(rows = statementRows(), { degrees = 0 } = {}) {
+  const angle = (degrees * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
   let layer = "BT 3 Tr ";
   let previous = null;
   let count = 0;
-  for (let row = 0; row < 20; row += 1) {
-    const baseline = 740 - row * 32;
-    const words =
-      `Line ${row + 1} of the statement reads as words recognised from the scan`.split(
-        " ",
-      );
-    let x = 60;
+  for (const { x: start, y: baseline, text } of rows) {
+    const words = text.split(" ");
+    let x = start;
     words.forEach((word, at) => {
       const size = 11.5 + (count % 3) * 0.5;
       count += 1;
@@ -1096,7 +1268,7 @@ function tesseractLayer() {
         .join("");
       layer +=
         previous === null
-          ? `1 0 0 1 ${num(x)} ${baseline} Tm `
+          ? `${num(cos)} ${num(sin)} ${num(-sin)} ${num(cos)} ${num(x)} ${baseline} Tm `
           : `${num(x - previous[0])} ${baseline - previous[1]} Td `;
       layer += `/Fg ${size} Tf ${num((100 * width) / (word.length * 0.5 * size))} Tz [ <${hex}> ] TJ\n`;
       previous = [x, baseline];

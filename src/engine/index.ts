@@ -111,6 +111,8 @@ export {
   COVER_MIN_OVERLAP,
   HIDDEN_CONTRAST_MAX,
   inspectPages,
+  MACHINE_READ_RUN,
+  machineReadRun,
   PICTURE_MIN_SHARE,
   READING_GRID,
   readsAsNothing,

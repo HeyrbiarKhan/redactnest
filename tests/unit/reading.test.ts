@@ -5,6 +5,7 @@ import {
   EngineFailure,
   EXTRACTION_OPTIONS,
   inspectPages,
+  MACHINE_READ_RUN,
   openDocumentWith,
   POSITION_TOLERANCE,
   prepareDocument,
@@ -20,7 +21,9 @@ import {
   type Rect,
 } from "@/engine";
 
-import { showsCrookedLine } from "@/lib/page-findings";
+import { isPartly, showsCrookedLine } from "@/lib/page-findings";
+import { outputFormFor, outputNameFor } from "@/lib/session";
+import { countPagesByFinding } from "@/worker/protocol";
 
 import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
 import {
@@ -33,6 +36,8 @@ import {
   READ_COVERED,
   READ_HIDDEN,
   READ_PICTURES,
+  readShortOcr,
+  SHORT_OCR_EMAIL,
   STAMP_EMAIL,
 } from "../../scripts/lib/reading-fixtures.mjs";
 import { fixture } from "../support/bytes";
@@ -432,6 +437,160 @@ describe("pictures and machine read text", () => {
     for (const index of ocrPages) {
       expect(inspections[index].findings).not.toContain("covered-text");
       expect(inspections[index].findings).not.toContain("hidden-text");
+    }
+  });
+});
+
+/**
+ * Spec 0008: sparse OCR scans. A picture holding a machine read run, three or
+ * more readable, purely invisible characters in a row on one line centred
+ * inside it, is not bare. The table above reads each of `read-pictures.pdf`'s
+ * new pages; these prove what it rests on, and that following the OCR advice
+ * clears the warning. `read-stamped.pdf` and `read-slides.pdf` keep their
+ * findings in the blocks above (AC-4, AC-5).
+ */
+describe("sparse OCR scans", () => {
+  /** The index of the `read-pictures.pdf` page `READ_PICTURES` names. */
+  function picture(name: string): number {
+    const index = READ_PICTURES.findIndex((page) => page.name === name);
+    if (index < 0) throw new Error(`no page named ${name}`);
+    return index;
+  }
+
+  /**
+   * AC-2's pin, which the clipped letter case rests on: the ordinary read
+   * drops a glyph a clip hides wholly, and keeps one the clip only cuts, so
+   * the clipped "Yes" reads as "Ye", a run of 2, though all three are drawn.
+   */
+  it("reads the clipped Yes as Ye, though the page draws all three glyphs (pin)", () => {
+    const index = picture("a scan whose three letter word a clip cuts to two");
+    const { drawn, read } = onPage("read-pictures.pdf", index, (page) => {
+      let invisible = "";
+      walkDrawing(mupdf, page, (drawing) => {
+        if (drawing.kind !== "text" || drawing.mode !== "ignore") return;
+        for (const { unicode } of drawing.glyphs)
+          invisible += String.fromCodePoint(unicode);
+      });
+      let extracted = "";
+      walkCharacters(page, EXTRACTION_OPTIONS[0], ({ code }) => {
+        extracted += String.fromCodePoint(code);
+      });
+      return { drawn: invisible, read: extracted };
+    });
+    expect(drawn).toBe("Yes");
+    expect(read).toBe("Ye");
+  });
+
+  /**
+   * AC-2's reverse pin: on every page a run clears, each character of each
+   * run of `MACHINE_READ_RUN` characters that are not whitespace, on one line
+   * of the ordinary read, meets an invisible glyph at its origin within
+   * `POSITION_TOLERANCE`. Found with MuPDF's readers alone, nothing from the
+   * rule, so the rule's "at its origin" is proved to hold on these layers.
+   */
+  it("finds an invisible glyph at the origin of every character in a run (pin)", () => {
+    const cases: readonly (readonly [string, number])[] = [
+      ...[
+        "a sparse scan with one recognised sentence",
+        "a sparse scan with a few recognised words",
+        "a scan whose layer is one three letter word",
+        "a sparse Tesseract layer, straight",
+        "a sparse Tesseract layer, turned a degree",
+        "a sparse Tesseract layer on a turned page",
+        "a scan in two strips, its one word across the join",
+        "a layered scan: a background and a stencil under one layer",
+      ].map((name) => ["read-pictures.pdf", picture(name)] as const),
+      ["read-short-ocr.pdf", 0],
+    ];
+    for (const [name, index] of cases) {
+      const { invisible, runs } = onPage(name, index, (page) => {
+        const origins: (readonly [number, number])[] = [];
+        walkDrawing(mupdf, page, (drawing) => {
+          if (drawing.kind !== "text" || drawing.mode !== "ignore") return;
+          for (const { origin } of drawing.glyphs) origins.push(origin);
+        });
+
+        const found: (readonly [number, number])[][] = [];
+        let run: (readonly [number, number])[] = [];
+        let line = -1;
+        const close = () => {
+          if (run.length >= MACHINE_READ_RUN) found.push(run);
+          run = [];
+        };
+        walkCharacters(page, EXTRACTION_OPTIONS[0], (character) => {
+          if (character.line !== line) {
+            close();
+            line = character.line;
+          }
+          if (/\s/u.test(String.fromCodePoint(character.code))) close();
+          else run.push(character.origin);
+        });
+        close();
+        return { invisible: origins, runs: found };
+      });
+      const meets = ([x, y]: readonly [number, number]) =>
+        invisible.some(
+          ([ox, oy]) =>
+            Math.abs(ox - x) <= POSITION_TOLERANCE &&
+            Math.abs(oy - y) <= POSITION_TOLERANCE,
+        );
+
+      expect(runs.length, `${name} ${index}`).toBeGreaterThan(0);
+      for (const origin of runs.flat()) {
+        expect(
+          meets(origin),
+          `${name} ${index}: a character at ${origin} met no invisible glyph`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  /**
+   * AC-5 and AC-8: following the advice clears the warning. The scan alone is
+   * refused, as `read-scans.pdf` still is; with one short line of text
+   * recognition over it, 20 readable characters, it opens with the machine
+   * read note only, its address is listed, and a run that removes it is named
+   * redacted, not partly redacted.
+   */
+  it("refuses the scan alone, and opens it once a short text layer lies over it", async () => {
+    const alone = readShortOcr({ layer: false }).slice().buffer as ArrayBuffer;
+    for (const bytes of [alone, fixture("read-scans.pdf")]) {
+      await expect(openDocumentWith(mupdf, bytes, LIMITS)).rejects.toEqual(
+        new EngineFailure("no-readable-text"),
+      );
+    }
+
+    const doc = await openDocumentWith(mupdf, fixture("read-short-ocr.pdf"), LIMITS);
+    try {
+      expect(doc.summary).toEqual({
+        pageCount: 1,
+        pages: [{ findings: ["machine-read-text"] }],
+      });
+      expect(isPartly(doc.summary)).toBe(false);
+
+      const found = await doc.findMatches({ contextChars: 40 });
+      expect(found.map(({ page, text, blocked }) => ({ page, text, blocked }))).toEqual([
+        { page: 0, text: SHORT_OCR_EMAIL, blocked: null },
+      ]);
+      const [{ target }] = found;
+      if (!target) throw new Error("expected a tickable match");
+
+      const { output, removedByType, sanitized } = await redactDocumentWith(
+        mupdf,
+        fixture("read-short-ocr.pdf"),
+        [target],
+      );
+      expect(documentText(output)).not.toContain(SHORT_OCR_EMAIL);
+      // The outcome as the worker makes it, and the name the visitor is offered.
+      const form = outputFormFor(doc.summary, {
+        pageCount: doc.summary.pageCount,
+        removedByType,
+        pagesByFinding: countPagesByFinding(doc.summary.pages),
+        sanitized,
+      });
+      expect(outputNameFor("signed-letter.pdf", form)).toBe("signed-letter-redacted.pdf");
+    } finally {
+      doc.close();
     }
   });
 });

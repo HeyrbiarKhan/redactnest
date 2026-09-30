@@ -5,6 +5,8 @@ import {
   contrastWithWhite,
   HIDDEN_CONTRAST_MAX,
   intersect,
+  MACHINE_READ_RUN,
+  machineReadRun,
   POSITION_TOLERANCE,
   readsAsNothing,
   relativeLuminance,
@@ -12,6 +14,7 @@ import {
   transformRect,
   type PageInspection,
   type Paint,
+  type Quad,
   type Rect,
   type Transform,
 } from "@/engine";
@@ -28,7 +31,7 @@ import { clipToConvex, polygonArea } from "@/engine/geometry";
  * space, the clip in force, how much of a glyph's box a cover holds, how a
  * glyph meets its extracted character, and which page counts toward nothing
  * readable. `reading.test.ts` proves the same rules on real pages; this pins
- * the edges no fixture reaches.
+ * the edges no fixture reaches. Spec 0008 adds the machine read run's edges.
  */
 
 function paint(space: ColorSpaceType, ...components: number[]): Paint {
@@ -407,5 +410,76 @@ describe("finding a value by its origin", () => {
 
     expect(index.find([-0.005, 20971.525])).toBeNull();
     expect(index.find([0.005, -20971.515])).toBe("far away");
+  });
+});
+
+/**
+ * Spec 0008, AC-1 and AC-2: a picture holds a machine read run when
+ * `MACHINE_READ_RUN` characters in a row on one line each qualify (readable
+ * and purely invisible) and centre inside it. Anything else ends the run.
+ */
+describe("the machine read run", () => {
+  /** The picture: x 0 to 500, y 0 to 100 in page space. */
+  const inside = ([x, y]: readonly [number, number]) =>
+    x >= 0 && x <= 500 && y >= 0 && y <= 100;
+
+  /**
+   * Characters from a pattern, 6 pt apart on one baseline, as the ordinary
+   * read gives them: `q` qualifies and centres inside the picture, `n` does
+   * not qualify (a space, a visible or an unreadable character), `o`
+   * qualifies but centres outside it, and `/` starts the next line.
+   */
+  function laidOut(pattern: string) {
+    const characters: { readonly line: number; readonly quad: Quad }[] = [];
+    const qualifying: boolean[] = [];
+    let line = 0;
+    for (const mark of pattern) {
+      if (mark === "/") {
+        line += 1;
+        continue;
+      }
+      const x = (mark === "o" ? 600 : 10) + 6 * characters.length;
+      characters.push({ line, quad: [x, 40, x + 6, 40, x, 52, x + 6, 52] });
+      qualifying.push(mark !== "n");
+    }
+    return { characters, qualifies: (at: number) => qualifying[at] };
+  }
+
+  it("is 3 characters in a row", () => {
+    expect(MACHINE_READ_RUN).toBe(3);
+  });
+
+  it.each([
+    ["exactly three qualifying characters", "qqq"],
+    ["three after a broken pair", "qqnqqq"],
+    ["three on the second line", "qq/qqq"],
+    ["a word straddling the edge, three of its letters inside", "ooqqq"],
+  ])("finds one in %s", (_label, pattern) => {
+    const { characters, qualifies } = laidOut(pattern);
+    expect(machineReadRun(characters, qualifies, inside)).toBe(true);
+  });
+
+  it.each([
+    ["two, then a space or a visible character", "qqnqq"],
+    ["two, then the end of the line", "qq/qq"],
+    ["two, then one centred outside", "qqoqq"],
+    ["a word straddling the edge, two of its letters inside", "qqooo"],
+    ["characters that qualify one at a time", "qnqnqnq"],
+    ["nothing at all", ""],
+  ])("finds none in %s", (_label, pattern) => {
+    const { characters, qualifies } = laidOut(pattern);
+    expect(machineReadRun(characters, qualifies, inside)).toBe(false);
+  });
+
+  it("asks only about characters centred inside, and stops at the first run (AC-12)", () => {
+    const { characters, qualifies } = laidOut("ooqqqqqq");
+    const asked: number[] = [];
+    const counting = (at: number) => {
+      asked.push(at);
+      return qualifies(at);
+    };
+
+    expect(machineReadRun(characters, counting, inside)).toBe(true);
+    expect(asked).toEqual([2, 3, 4]);
   });
 });
