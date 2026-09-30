@@ -29,7 +29,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 16 | Security & how it works page | Release 6 | planned |
 | 17 | Data processing agreement | Release 6 | planned |
 | 18 | AGPL compliance & source publication | Release 1 | planned |
-| 19 | Sparse OCR scans | Release 1 | in-progress |
+| 19 | Sparse OCR scans | Release 1 | done |
 | 20 | Dense text layers over pictures | Release 1 | planned |
 
 ## Foundations
@@ -154,7 +154,7 @@ Spec 0001 chose MuPDF, which is copyleft, so RedactNest's own source is licensed
 - [ ] Build it: `/develop AGPL compliance & source publication`
 - [ ] Verify it: `/check verify AGPL compliance & source publication`
 
-### 19. Sparse OCR scans · in-progress · GA · from spec 0006
+### 19. Sparse OCR scans · done · GA · from spec 0006
 A scan that has been through text recognition (OCR) but holds only a few lines is named as a picture with no text over it, and a very short one is refused, so following RedactNest's own advice to run OCR never clears the warning. Found by the 2026-09-29 review of feature 7.
 **Done when:** a picture with a run of three readable, purely invisible characters over it is no longer bare, so sparse and short OCR scans open with the machine read note only and download as `-redacted.pdf`; a scan whose text layer holds only stray marks stays warned; visible text over a picture is judged as before; every OCR note says that words the recognition missed stay in the picture; and the local scans are refused before OCR and open with the note only after it.
 spec [0008](../specs/0008-sparse-ocr-scans/index.md) · code in `src/engine` (`inspect.ts`, `index.ts`), `src/lib/page-findings.ts`, `scripts/lib/reading-fixtures.mjs`, `scripts/make-fixture.mjs`
