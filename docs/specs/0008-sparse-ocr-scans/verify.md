@@ -30,3 +30,28 @@ _Steps derived from spec 0008 acceptance criteria and its Value sourcing table. 
 - AC-11 … the first command, by review of `src/engine/inspect.ts` (no shape crossing the worker boundary changed)
 - AC-12 … the cost command
 - AC-13 … the real scans step
+
+## Slice 3: the review's fixes (task 11)
+_The rule changed after the 2026-09-30 review (AC-14 to AC-16), so these run again on it, the real scans included._
+
+### UI / manual
+- [ ] At `/tool`, open `tests/fixtures/read-pictures.pdf` → the scanned line names pages 9, 10, 12, 24 and 25 (24 and 25: layers of punctuation runs and of format character runs); the picture line names pages 1, 3, 16 to 18, 20 to 23, 26 and 27 (20 to 23: a photo over an OCR line drawn after it, before it, across a half page scan's edge, and a full page photo under a small OCR scan; 26 and 27: an invisible copy half a point from a visible sentence, and one drifting ahead of it); the note names pages 5 to 28 in its several page form → AC-3, AC-5, AC-14, AC-15, AC-16 (Value sourcing: a character's step, whether a line is a drawn copy, which pictures share a footprint, whether a character sits in a picture, bare and `scanned`)
+- [ ] In the same file, page 28 (a photo on a dense OCR layer that covers a third of it) is in the note only, never on the picture line: the recorded limit, taken up as scope feature 20 → AC-3
+- [ ] Open `tests/fixtures/read-short-ocr.pdf` → still the all clear line, AC-9's note and no warning callout; tick `jo@example.com`, redact, download → named `read-short-ocr-redacted.pdf` → AC-5, AC-8 (Value sourcing: whether a picture holds a run, the file name)
+- [ ] Open `tests/fixtures/read-scans.pdf` and `tests/fixtures/read-stamped.pdf` → each still refused as having no readable text; `tests/fixtures/read-slides.pdf` → both slides still named as having a picture with no text over it → AC-4, AC-5, INV-3 (Value sourcing: the refusal)
+- [ ] Real scans again, on the local simulated scans: `scan-straight.pdf` and `scan-crooked.pdf` refused; `scan-straight-ocr.pdf` opens with the all clear line and the note, no warning; `scan-crooked-ocr.pdf` the same plus the crooked scan line; each cleaned copy named `-redacted.pdf`. The same outcomes as the first run, since every word on their layers is letters and numbers with no drawn text beside it → AC-6, AC-13
+
+### Commands
+- [ ] `pnpm exec vitest run --project unit tests/unit/reading.test.ts tests/unit/reading-measures.test.ts tests/unit/page-findings.test.ts` → all pass: `runStep` over letters, digits, marks, punctuation, format characters and U+FFFD; the run edges with marks; the pin that page 25 keeps its nine format characters; a copy at the invisible line's origin stroked, filled white, filled at zero opacity, in `5 Tr` and in `6 Tr` each leaves the scan bare; visible text one line spacing above leaves it cleared, upright and on a `/Rotate 90` page → AC-1, AC-2, AC-14, AC-15 (Value sourcing: a character's step; its origin, quad and direction; purely invisible; whether a line is a drawn copy)
+- [ ] `pnpm exec vitest run --project unit tests/unit/cost.test.ts`, alone → 5 of 5 pass, each budget case under 2 seconds of CPU, the new one included (least of three at build: 688, 688 and 531 ms) → AC-12 (Value sourcing: whether the search runs at all, which pictures share a footprint)
+- [ ] `pnpm exec playwright test tests/e2e/design-system.spec.ts -g "short OCR"` → passes → AC-8, AC-9
+- [ ] `node scripts/make-fixture.mjs`, then `git status tests/fixtures` → clean → AC-3, AC-5, AC-14 to AC-16 (the fixtures are the script's)
+
+### Acceptance-criteria coverage (slice 3)
+- AC-3 … the `read-pictures.pdf` step (pages 20 to 23, and page 28's recorded limit)
+- AC-5 … the `read-pictures.pdf` step (pages 24 and 25), the `read-short-ocr.pdf` and refusal steps
+- AC-12 … the cost command
+- AC-13 … the real scans step
+- AC-14 … the `read-pictures.pdf` step (pages 24 and 25), the first command (`runStep`, the run edges, the format character pin)
+- AC-15 … the `read-pictures.pdf` step (pages 26 and 27), the first command (the five copies, the next line pin)
+- AC-16 … the `read-pictures.pdf` step (pages 20 to 23, and page 19 keeping its shared footprint)
