@@ -58,6 +58,16 @@ _Steps derived from spec 0007's acceptance criteria and its Value sourcing table
 - [x] `pnpm test:e2e tests/e2e/design-system.spec.ts` → axe, the keyboard walk and 320px reflow pass in every step state → AC-22
 - [x] Leave the page with a refusal showing → the browser warns; leave after a download → it does not; the lost callout's Try again still reopens the file → AC-23
 
+### After the review fixes (2026-09-30)
+
+_From [the review](../../reviews/2026-09-30-feat-redact-flow.md): Start over now asks like Choose another PDF (Minor 3), the two trim fixtures join the open failures (Minors 2 and 4), and the speed spec runs in its own project (Major)._
+
+- [ ] Tick something, press Redact, then press Start over while it runs → a confirm appears; Cancel keeps the run going and focus stays on Start over → AC-3
+- [ ] Finish a run without downloading, then press Start over → a confirm appears; OK shows the full drop zone → AC-3
+- [ ] Download, then press Start over or Redact another PDF → no confirm → AC-3, AC-13
+- [ ] Open `trim-refused.pdf`, then `trim-quote.pdf` → each shows its title and the "Printing it to a new PDF" line, with no mention of ticks → AC-15, AC-16
+- [ ] `pnpm test:e2e` → the `[speed]` test runs last, on its own (alone: `pnpm exec playwright test --project=speed --no-deps`) → AC-8
+
 ## Value sourcing
 
 - [x] Build with `NEXT_PUBLIC_FREE_PAGE_CAP=5` → the drop zone says "Up to 5 pages for now." → page cap in the drop zone helper
@@ -92,3 +102,4 @@ _Steps derived from spec 0007's acceptance criteria and its Value sourcing table
 ## Acceptance criteria coverage
 
 - AC-1 · one pass step, `pnpm test:e2e` · AC-2 · idle step · AC-3 · file bar steps · AC-4 · phase steps · AC-5 · order step · AC-6 · count line steps · AC-7 · select all steps · AC-8 · dense fixture step and speed spec · AC-9 · ellipsis step · AC-10 · Cancel steps · AC-11 · result card steps · AC-12 · cleaned and partly steps · AC-13 · after download steps · AC-14 · refusal steps · AC-15 · open failure step · AC-16 to AC-18 · failure words steps · AC-19 · edge line step · AC-20 · focus walk · AC-21 · 320px step · AC-22 · design system spec · AC-23 · leave warning step · AC-24 · worker client test · AC-25 · detectors test and typecheck · AC-26 · worker test and typecheck
+- After the review fixes · AC-3 · the three Start over steps · AC-8 · the speed project step · AC-13 · Redact another PDF with no confirm · AC-15, AC-16 · the two trim fixtures step
