@@ -36,6 +36,8 @@ function match(
     text,
     before: "Contact ",
     after: " today",
+    beforeCut: true,
+    afterCut: true,
     tickedByDefault: true,
     blocked: null,
     concealed: null,
@@ -62,6 +64,7 @@ function show(
     running?: boolean;
     partly?: boolean;
     onToggle?: (id: MatchId) => void;
+    onTicksSet?: (ids: readonly MatchId[], on: boolean) => void;
   } = {},
 ) {
   return render(
@@ -71,6 +74,7 @@ function show(
       running={overrides.running ?? false}
       partly={overrides.partly ?? false}
       onToggle={overrides.onToggle ?? (() => {})}
+      onTicksSet={overrides.onTicksSet ?? (() => {})}
     />,
   );
 }
@@ -97,7 +101,12 @@ describe("the groups (AC-3, AC-13)", () => {
         .getAllByRole("checkbox")
         .map((box) => box.getAttribute("aria-labelledby")),
     ).toEqual(["match-e1-text", "match-e2-text"]);
-    expect(within(phones).getAllByRole("checkbox")).toHaveLength(2);
+    // Two phone rows, after the group's select all row (spec 0007, AC-7).
+    expect(
+      within(phones)
+        .getAllByRole("checkbox")
+        .map((box) => box.getAttribute("aria-labelledby")),
+    ).toEqual(["select-all-phone-label", "match-p1-text", "match-p2-text"]);
   });
 
   it("counts a group of one with the singular noun", () => {
@@ -187,6 +196,7 @@ describe("a blocked match", () => {
       emails,
       screen.getByRole("checkbox", { name: "jane@example.com" }),
       phones,
+      screen.getByRole("checkbox", { name: "Select all 2 phone numbers" }),
       screen.getByRole("checkbox", { name: "020 7946 0958" }),
       screen.getByRole("checkbox", { name: "(212) 123 4567" }),
     ]) {
@@ -213,14 +223,14 @@ describe("the coverage note and the empty state", () => {
     expect(container.querySelector("[role]")).toBeNull();
   });
 
-  it("says nothing was found, and that Redact still cleans the file, when there is nothing", () => {
+  it("says nothing was found, and that a cleaned copy is still on offer, when there is nothing", () => {
     show({ matches: [] });
 
     expect(screen.getByTestId("coverage")).toBeInTheDocument();
     expect(screen.getByText(NOTHING_FOUND.title)).toBeVisible();
     expect(screen.getByText(NOTHING_FOUND.helper)).toBeVisible();
     expect(NOTHING_FOUND.helper).toBe(
-      "RedactNest found no email addresses or phone numbers. Redact still makes a cleaned copy, with metadata and hidden content removed.",
+      "RedactNest found no email addresses or phone numbers. Make a cleaned copy to remove metadata and hidden content.",
     );
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
@@ -244,7 +254,7 @@ describe("the coverage note and the empty state", () => {
     expect(screen.getByText(NOTHING_FOUND_PARTLY.title)).toBeVisible();
     expect(screen.getByText(NOTHING_FOUND_PARTLY.helper)).toBeVisible();
     expect(NOTHING_FOUND_PARTLY.helper).toBe(
-      "RedactNest found no email addresses or phone numbers on the pages it could read. Redact still makes a cleaned copy, with metadata and hidden content removed.",
+      "RedactNest found no email addresses or phone numbers on the pages it could read. Make a cleaned copy to remove metadata and hidden content.",
     );
     expect(screen.queryByText(NOTHING_FOUND.helper)).not.toBeInTheDocument();
   });
@@ -295,5 +305,125 @@ describe("concealed rows", () => {
     expect(plain).not.toHaveAccessibleDescription(/on the page\.$/);
     expect(covered).toBeEnabled();
     expect(hidden).toBeEnabled();
+  });
+});
+
+/** Spec 0007, AC-7. A group's select all, as its first row. */
+describe("select all", () => {
+  const P1 = asMatchId("p1");
+  const P2 = asMatchId("p2");
+
+  function selectAll(): HTMLElement {
+    return screen.getByRole("checkbox", { name: "Select all 2 phone numbers" });
+  }
+
+  it("is the first row of a group with two or more rows a tick can reach", () => {
+    const { container } = show();
+    const [emails, phones] = groups(container);
+
+    const first = phones.querySelector("ul > li");
+    expect(first).toHaveAttribute("data-testid", "select-all-phone");
+    expect(first).toContainElement(selectAll());
+    // One email can be ticked, the other is blocked, so no select all there.
+    expect(within(emails).queryByRole("checkbox", { name: /^Select all/ })).toBeNull();
+  });
+
+  it("counts only the rows a tick can reach, while the badge counts every row found", () => {
+    const { container } = show({
+      matches: [
+        match("e1", "email", "a@example.com"),
+        match("e2", "email", "b@example.com"),
+        match("e3", "email", "c@example.com", {
+          blocked: "slanted-text",
+          tickedByDefault: false,
+        }),
+      ],
+    });
+
+    expect(
+      screen.getByRole("checkbox", { name: "Select all 2 email addresses" }),
+    ).toBeInTheDocument();
+    expect(container.querySelector("summary")).toHaveTextContent("3 email addresses");
+  });
+
+  it.each([
+    ["clear", [], false, false],
+    ["mixed", [P1], false, true],
+    ["checked", [P1, P2], true, false],
+  ] as const)(
+    "shows %s by how many of its rows are ticked",
+    (_, ticked, checked, mixed) => {
+      show({ ticked });
+
+      expect(selectAll().matches(":checked")).toBe(checked);
+      expect((selectAll() as HTMLInputElement).indeterminate).toBe(mixed);
+      if (mixed) expect(selectAll()).toBePartiallyChecked();
+    },
+  );
+
+  it.each([
+    ["clear", [], true],
+    ["mixed", [P1], true],
+    ["checked", [P1, P2], false],
+  ] as const)(
+    "sends one action over its own rows when %s: ticked is %s",
+    async (_, ticked, on) => {
+      const onTicksSet = vi.fn();
+      const onToggle = vi.fn();
+      show({ ticked, onTicksSet, onToggle });
+
+      await userEvent.setup().click(selectAll());
+
+      expect(onTicksSet).toHaveBeenCalledTimes(1);
+      expect(onTicksSet).toHaveBeenCalledWith([P1, P2], on);
+      expect(onToggle).not.toHaveBeenCalled();
+    },
+  );
+
+  it("never names a blocked row", async () => {
+    const onTicksSet = vi.fn();
+    show({
+      matches: [
+        match("e1", "email", "a@example.com"),
+        match("e2", "email", "b@example.com"),
+        match("e3", "email", "c@example.com", {
+          blocked: "slanted-text",
+          tickedByDefault: false,
+        }),
+      ],
+      ticked: [],
+      onTicksSet,
+    });
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("checkbox", { name: "Select all 2 email addresses" }));
+
+    expect(onTicksSet).toHaveBeenCalledWith([asMatchId("e1"), asMatchId("e2")], true);
+  });
+
+  it("is disabled while a run is under way", () => {
+    show({ running: true });
+
+    expect(selectAll()).toBeDisabled();
+  });
+
+  it("works from the keyboard", async () => {
+    const onTicksSet = vi.fn();
+    show({ ticked: [], onTicksSet });
+    const user = userEvent.setup();
+
+    selectAll().focus();
+    await user.keyboard(" ");
+
+    expect(onTicksSet).toHaveBeenCalledWith([P1, P2], true);
+  });
+
+  it("passes axe in every state", async () => {
+    for (const ticked of [[], [P1], [P1, P2]]) {
+      const { container, unmount } = show({ ticked });
+      await expectNoAxeViolations(container);
+      unmount();
+    }
   });
 });

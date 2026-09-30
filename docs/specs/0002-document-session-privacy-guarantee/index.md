@@ -1,7 +1,7 @@
 # 0002. Document session and privacy guarantee
 
 **Date**: 2026-09-20
-**Updated**: 2026-09-21, reconciling the session ending rules with the warm engine (AC-1, AC-5a, AC-5b, INV-6, INV-6a); 2026-09-25, from spec [0004](../0004-redaction-engine/index.md): INV-1 and AC-6 reworded to say where the document really exists, `EngineSession.bytes` given its reader, `sanitized` defined as what was found; 2026-09-29, from spec [0006](../0006-scanned-page-detection-warnings/index.md): `DocumentSummary.pagesWithText` replaced by `pages` (one `PageReading` per page), `RedactionOutcome.pagesWithoutText` by `pagesByFinding`, `ReviewMatch` gains `concealed`, `ENGINE_ERROR_KINDS` gains `no-readable-text` and `edge-text`, and `outputName` is set again at `opened`
+**Updated**: 2026-09-21, reconciling the session ending rules with the warm engine (AC-1, AC-5a, AC-5b, INV-6, INV-6a); 2026-09-25, from spec [0004](../0004-redaction-engine/index.md): INV-1 and AC-6 reworded to say where the document really exists, `EngineSession.bytes` given its reader, `sanitized` defined as what was found; 2026-09-29, from spec [0006](../0006-scanned-page-detection-warnings/index.md): `DocumentSummary.pagesWithText` replaced by `pages` (one `PageReading` per page), `RedactionOutcome.pagesWithoutText` by `pagesByFinding`, `ReviewMatch` gains `concealed`, `ENGINE_ERROR_KINDS` gains `no-readable-text` and `edge-text`, and `outputName` is set again at `opened`; 2026-09-30, from spec [0007](../0007-redact-flow/index.md): a refused run returns to `reviewing` with its ticks kept and its kind in a new `runFailure`, so `failed` is an open failure only; `ticks-set` (a group's select all) and `rerun` (Make it again) join the machine; `outputName` is settled at `redacted`, with a `cleaned` form for a run that removed nothing; `hasUnsavedWork` counts a refusal on screen; `ReviewMatch` gains `beforeCut` and `afterCut`; and a replacement retires every pending operation, the same `jobId` included
 **Status**: Accepted
 
 ## Summary
@@ -64,13 +64,14 @@ Main thread, `ToolSession`, held by a reducer, frozen and replaced rather than m
 | `state` | `SessionState` | yes | the machine below |
 | `jobId` | `string` | yes | `crypto.randomUUID()`, correlates to the worker's session |
 | `file` | `File` | yes | the handle, not the bytes. The recovery path for AC-11 |
-| `outputName` | `string` | yes | derived from `file.name` at open, and again at `opened` from what the pages hold (spec 0006, AC-23). Never logged, never sent |
+| `outputName` | `string` | yes | derived from `file.name` at open, and again at `opened` from what the pages hold (spec 0006, AC-23). Settled at `redacted` from what the run removed: `-redacted`, `-partly-redacted`, or `-cleaned` when it removed nothing, so only its value at `complete` is ever used (spec 0007, AC-12). Never logged, never sent |
 | `entitlement` | `Readonly<EntitlementSnapshot>` | yes | frozen at open, never refreshed mid job |
 | `summary` | `DocumentSummary \| null` | null until `reviewing` | `pageCount`, `pages` (one `PageReading` per page, spec 0006) |
 | `matches` | `readonly ReviewMatch[]` | yes, may be empty | empty until feature 6 fills it |
 | `ticked` | `ReadonlySet<MatchId>` | yes | seeded from each match's own default |
 | `phase` | `ProgressPhase \| null` | null when not working | last phase the worker reported |
-| `failure` | `EngineErrorKind \| null` | null unless `failed` or `lost` | a kind from the closed set, nothing more |
+| `failure` | `EngineErrorKind \| null` | null unless `failed` or `lost` | a kind from the closed set, nothing more. Since spec 0007, an open failure (or the lost worker's) only |
+| `runFailure` | `EngineErrorKind \| null` | null except in `reviewing` after a refused run | added by spec 0007 (AC-14): the last run's refusal, kept through tick changes and cleared on every other edge |
 | `outcome` | `RedactionOutcome \| null` | null until `complete` | counts only |
 | `downloaded` | `boolean` | yes | true once a download has been handed over. Reset to false on leaving `complete` |
 
@@ -79,6 +80,7 @@ Main thread, `ToolSession`, held by a reducer, frozen and replaced rather than m
 - `state` is `redacting` → true
 - `state` is `complete` and `downloaded` is false → true
 - `state` is `reviewing` and `ticked` differs from the set seeded by `tickedByDefault` → true
+- `state` is `reviewing` and `runFailure` is set → true (spec 0007, AC-23: the refusal says what to untick, and a replacement would lose it)
 - otherwise false
 
 The tick comparison is what makes this honest. Someone who opened a file and read the checklist without touching it has lost nothing worth a warning; someone who spent ten minutes ticking has.
@@ -86,7 +88,7 @@ The tick comparison is what makes this honest. Someone who opened a file and rea
 | Type | Fields |
 |---|---|
 | `MatchId` | opaque branded `string`. Minted in the worker, meaningless to the main thread |
-| `ReviewMatch` | `id: MatchId` · `type: DetectorKind` · `page: number` (one based, for display) · `text: string` · `before: string` · `after: string` · `tickedByDefault: boolean` · `blocked` (spec 0005) · `concealed: Concealment \| null` (spec 0006). **No quads** |
+| `ReviewMatch` | `id: MatchId` · `type: DetectorKind` · `page: number` (one based, for display) · `text: string` · `before: string` · `after: string` · `tickedByDefault: boolean` · `blocked` (spec 0005) · `concealed: Concealment \| null` (spec 0006) · `beforeCut: boolean` · `afterCut: boolean` (spec 0007, AC-9: whether the page text goes on past each side). **No quads** |
 | `EntitlementSnapshot` | `tier: "free" \| "paid"` · `pageCap: number` · `maxFileBytes: number` |
 | `RedactionOutcome` | `pageCount: number` · `removedByType: Readonly<Partial<Record<DetectorKind, number>>>` · `pagesByFinding: Readonly<Partial<Record<PageFinding, number>>>` (spec 0006, which replaced `pagesWithoutText: number`) · `sanitized: readonly SanitizedKind[]` |
 | `DetectorKind` | declared here as the union feature 6 populates. Feature 3 needs the type to exist and needs `tickedByDefault` to ride on every match; it does not decide the members |
@@ -118,14 +120,15 @@ any state ──new file (replace in place, worker survives)──▶ opening
 any state ──worker error event──▶ lost ──retry, re-read the File──▶ opening
 ```
 
+- **Amended by spec [0007](../0007-redact-flow/index.md)**: the arrow from `redacting` to `failed` above now lands on `reviewing`. A refused run keeps the review, with every tick and the kind in `runFailure` (AC-14, INV-1), so `failed` is reached only from `opening`. Two edges join: `ticks-set` from `reviewing` or `complete`, a group's select all as one action, which returns the same session when it would change nothing; and `rerun` from `complete` once the file has been downloaded, back to `redacting` over the same ticks. A lost worker is still not a refusal.
 - `reviewing → reviewing` on a tick is main thread only. Nothing crosses the boundary until redaction starts.
 - `complete → reviewing` is what "keep the source, release the output" buys: change a tick, run again, no second trip to the file picker.
 - **A successful download is deliberately not a release trigger.** It frees the output buffer and sets `downloaded`, and the session stays alive at `complete`. Releasing here would terminate the worker and make the edge above impossible.
-- **Choosing a new file ends a session without releasing it, and that distinction is load bearing.** The engine is a multi megabyte WebAssembly download and compile, warmed the moment somebody hovers the drop area, and a second document usually arrives while that warming is still paying off. Terminating there would throw the engine away and buy it again on the one action the product exists for. A replacement takes the tidy path instead: the main thread retires every operation still in flight for the old job, and the worker closes the old document and clears its target map on the way in, before the new bytes are parsed. It ends on arrival rather than on success, so a second file that turns out to be unopenable still leaves the first one gone.
+- **Choosing a new file ends a session without releasing it, and that distinction is load bearing.** The engine is a multi megabyte WebAssembly download and compile, warmed the moment somebody hovers the drop area, and a second document usually arrives while that warming is still paying off. Terminating there would throw the engine away and buy it again on the one action the product exists for. A replacement takes the tidy path instead: the main thread retires every operation still in flight (since spec 0007, AC-24, the arriving `jobId`'s included, because the worker ends that job's run too), and the worker closes the old document and clears its target map on the way in, before the new bytes are parsed. It ends on arrival rather than on success, so a second file that turns out to be unopenable still leaves the first one gone.
 - **Ending a session and dropping a worker are two different things, and the word "release" is doing both jobs.** Say which one you mean:
   - **Ending a session** has three triggers and two mechanisms. The triggers are start over, `pagehide` and a second document. The mechanisms are **release** (the first two) and **replacement** (the third), which is the pair INV-6 names.
   - **Dropping the worker** (the `releaseEngine()` call) happens on those same two release triggers **and** on a worker that died, where it throws away a corpse so the retry builds a fresh one. That third call is not a session ending: the session survives in `lost`, keeping its `jobId`, its `File` handle and its frozen entitlement, which is exactly what makes the retry in AC-11 possible.
-- `lost` is reachable from any non idle state and is the only recoverable failure. `failed` is terminal for that document. The retry re-enters at `opening`, not at `reviewing`, because the replacement worker has never seen the old `MatchId`s.
+- `lost` is reachable from any non idle state and is the only recoverable failure. `failed` is terminal for that document, and since spec 0007 is reached only by an open that failed. The retry re-enters at `opening`, not at `reviewing`, because the replacement worker has never seen the old `MatchId`s.
 
 **API surface**
 

@@ -1,6 +1,6 @@
 # src/ui
 
-The design system primitives: fifteen small React components, each a thin layer over a native HTML element. The decision is [spec 0003](../../docs/specs/0003-design-system-ui-foundation/index.md), and the art direction is [`docs/design/design.md`](../../docs/design/design.md). A page that needs a piece these do not have adds it here, with its tests, rather than inline.
+The design system primitives: seventeen small React components, each a thin layer over a native HTML element. The decision is [spec 0003](../../docs/specs/0003-design-system-ui-foundation/index.md), and the art direction is [`docs/design/design.md`](../../docs/design/design.md). A page that needs a piece these do not have adds it here, with its tests, rather than inline.
 
 ## Files
 
@@ -10,7 +10,7 @@ The design system primitives: fifteen small React components, each a thin layer 
 ## Conventions
 
 - Render the native element: `button`, `a`, `input`, `details`, `section`, `mark`. No `div` plays a button, and no ARIA role repeats what the element already is. Spec 0003, INV-4.
-- Server components by default. Only a primitive that holds state or a ref is a client component (today `Checkbox`, `ChecklistItem` and `DropZone`).
+- Server components by default. Only a primitive that holds state or a ref is a client component (today `Checkbox`, `ChecklistItem`, `ChecklistSelectAll` and `DropZone`).
 - Each class list is a frozen `Record` keyed by variant or size, joined with `cx`. There is no class merging library, because a primitive's `className` is for layout only (margins, alignment, placement), never colour or size, so nothing needs resolving.
 - Focus is always visible: never remove the outline without replacing it with a 2px outline at a 2px offset, and never rely on a box shadow alone, because forced colours mode drops it. Spec 0003, INV-5.
 - On a focusable element, transition only the fill and the edge (`transition-[background-color,border-color]`), never `transition-colors`. That also fades `outline-color`, so the focus ring would arrive in the text colour. Every transition is 150ms with `motion-reduce:transition-none`.
@@ -22,6 +22,8 @@ The design system primitives: fifteen small React components, each a thin layer 
 - Document derived text reaches a primitive only as a prop and renders only as React text children. It never goes into `document.title` or the URL, because the browser writes both to history. Spec 0003, INV-7.
 - `Button` with `href` renders `next/link`; add `reload` for a plain `a` whenever the link enters `/tool`. The `SiteHeader` wordmark is a plain `a` for the way out, because only a real page load fires `pagehide`, which ends the session (spec 0002, INV-6).
 - `DropZone` owns the file input, so it carries a privacy rule from spec 0002, AC-2: it clears `input.value` after every choice. It also keeps the test ids `drop-area`, `file-input` and `choose-file`, and the input stays `tabIndex={-1}` and `aria-hidden`, so the button is the only tab stop.
+- `DropZone`'s `compact` form is the file bar (test id `file-bar`) shown once a document is chosen. It keeps the same input, the same cleared value and the `choose-file` button, and still takes a dropped file; the caller's `action` (Start over) sits beside the button. Spec 0007, AC-3.
+- A primitive a page may move focus to takes a ref for that target (`Button`'s `ref`, `Card`'s `headingRef`, `Callout`'s `titleRef`, `DropZone`'s `buttonRef`). A heading gets `tabIndex={-1}` only when its ref is passed, so it takes focus without joining the tab order. Spec 0007, *Focus*.
 
 ## Tests
 

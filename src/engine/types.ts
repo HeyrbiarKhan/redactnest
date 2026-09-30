@@ -146,6 +146,12 @@ export type FoundMatch = {
   /** Up to `contextChars` code points either side, whitespace collapsed (AC-5). */
   readonly before: string;
   readonly after: string;
+  /**
+   * Whether the page text goes on past `before` and `after` (spec 0007, AC-9),
+   * so the row shows "…" only where something was left out.
+   */
+  readonly beforeCut: boolean;
+  readonly afterCut: boolean;
   /** The detector's rule (AC-10), and false whenever blocked. */
   readonly tickedByDefault: boolean;
   /**

@@ -25,14 +25,17 @@ import type {
   ReviewMatch,
 } from "@/worker/protocol";
 
+import { countRemoved } from "@/lib/detectors";
 import { isPartly } from "@/lib/page-findings";
 
 /**
  * The steps a job passes through.
  *
- * `failed` is terminal for that document. `lost` is the one recoverable
- * failure, because the page still holds the `File` handle and can read it again
- * without sending anybody back to the file picker.
+ * `failed` is an open that failed, and is terminal for that document. A run
+ * that fails is not: it returns to `reviewing` with `runFailure` set and every
+ * tick kept (spec 0007, AC-14 and INV-1). `lost` is the one recoverable failure
+ * of the worker itself, because the page still holds the `File` handle and can
+ * read it again without sending anybody back to the file picker.
  */
 export type SessionState =
   "idle" | "opening" | "reviewing" | "redacting" | "complete" | "failed" | "lost";
@@ -49,7 +52,11 @@ export interface LiveSession {
   readonly jobId: string;
   /** The handle, not the bytes. The recovery path when a worker dies. */
   readonly file: File;
-  /** Derived from the file name at open. Never logged, never sent. */
+  /**
+   * Derived from the file name. Never logged, never sent. Provisional until a
+   * run completes: set again at `redacted` from what the run removed, and only
+   * its value at `complete` is ever used (spec 0007, AC-12).
+   */
   readonly outputName: string;
   /** Frozen at open and never refreshed mid job (INV-5). */
   readonly entitlement: EntitlementSnapshot;
@@ -60,8 +67,18 @@ export interface LiveSession {
   readonly ticked: ReadonlySet<MatchId>;
   /** The last phase the worker reported. Null when nothing is running. */
   readonly phase: ProgressPhase | null;
-  /** A kind from the closed set, nothing more. */
+  /**
+   * Why the open failed, or why the worker was lost: a kind from the closed
+   * set, nothing more. Set only in `failed` and `lost`.
+   */
   readonly failure: EngineErrorKind | null;
+  /**
+   * Why the last run was refused, while the review it came from stays open
+   * (spec 0007, AC-14). Null except in `reviewing` after a failed run; it
+   * survives tick changes, because it says what to untick, and clears on every
+   * other edge.
+   */
+  readonly runFailure: EngineErrorKind | null;
   /** Counts only. Null until the job completes. */
   readonly outcome: RedactionOutcome | null;
   /** True once a download has been handed over. */
@@ -85,9 +102,17 @@ export type SessionAction =
       readonly matches: readonly ReviewMatch[];
     }
   | { readonly type: "tick-toggled"; readonly id: MatchId }
+  /** A group's select all: every listed id ticked, or every one cleared. */
+  | {
+      readonly type: "ticks-set";
+      readonly ids: readonly MatchId[];
+      readonly on: boolean;
+    }
   | { readonly type: "redact-started" }
   | { readonly type: "redacted"; readonly outcome: RedactionOutcome }
   | { readonly type: "downloaded" }
+  /** Make it again: the same ticks, run once more after a download. */
+  | { readonly type: "rerun" }
   | { readonly type: "cancelled" }
   | { readonly type: "failed"; readonly failure: EngineErrorKind }
   | { readonly type: "worker-lost" }
@@ -97,7 +122,16 @@ export type SessionAction =
 export const IDLE: IdleSession = Object.freeze({ state: "idle" });
 
 /**
- * The name the redacted file is offered under.
+ * What the file's name says it is. Spec 0007, AC-12 and INV-2.
+ *
+ * `cleaned` is a run that removed nothing, whatever the pages hold, so it can
+ * never pass for a redaction. `partly-redacted` is a run that removed something
+ * from a file where some page carries a warning (spec 0006, AC-23).
+ */
+export type OutputForm = "redacted" | "partly-redacted" | "cleaned";
+
+/**
+ * The name the output is offered under.
  *
  * Strips a trailing `.pdf` case insensitively, trims, and falls back to the
  * literal `document` when nothing is left, so a file named `.pdf` or `   ` still
@@ -107,16 +141,34 @@ export const IDLE: IdleSession = Object.freeze({ state: "idle" });
  * Trimmed before the extension is stripped as well as after. A name with
  * trailing whitespace is legal on some file systems, and stripping first would
  * leave the `.pdf` attached to it and hand somebody `report.pdf-redacted.pdf`.
- *
- * Spec 0006, AC-23: `partly` is `isPartly(summary)`, true when any page
- * carries a warning, and the name then says so wherever the file goes.
  */
-export function outputNameFor(fileName: string, partly: boolean): string {
+export function outputNameFor(fileName: string, form: OutputForm): string {
   const stem = fileName
     .trim()
     .replace(/\.pdf$/i, "")
     .trim();
-  return `${stem === "" ? "document" : stem}-${partly ? "partly-redacted" : "redacted"}.pdf`;
+  return `${stem === "" ? "document" : stem}-${form}.pdf`;
+}
+
+/**
+ * The form a finished run's file takes. Spec 0007, *Value sourcing*: from what
+ * the run removed first, then from the readings, so a run that removed nothing
+ * is `cleaned` even on a partly readable file (AC-12).
+ */
+export function outputFormFor(
+  summary: DocumentSummary | null,
+  outcome: RedactionOutcome,
+): OutputForm {
+  if (countRemoved(outcome) === 0) return "cleaned";
+  return summary !== null && isPartly(summary) ? "partly-redacted" : "redacted";
+}
+
+/**
+ * The provisional form before any run: what the name would say if the run
+ * removed something. Spec 0006, AC-23.
+ */
+function provisionalForm(summary: DocumentSummary | null): OutputForm {
+  return summary !== null && isPartly(summary) ? "partly-redacted" : "redacted";
 }
 
 /**
@@ -145,12 +197,18 @@ export function seededTicks(matches: readonly ReviewMatch[]): ReadonlySet<MatchI
  * twice. The tick comparison is what makes it honest: somebody who opened a file
  * and read the checklist without touching it has lost nothing, while somebody
  * who spent ten minutes ticking has.
+ *
+ * A refusal on screen counts too (spec 0007, AC-23): it tells somebody what to
+ * untick, and replacing the file would throw that away with the review.
  */
 export function hasUnsavedWork(session: ToolSession): boolean {
   if (session.state === "redacting") return true;
   if (session.state === "complete") return !session.downloaded;
   if (session.state === "reviewing") {
-    return !sameTicks(session.ticked, seededTicks(session.matches));
+    return (
+      session.runFailure !== null ||
+      !sameTicks(session.ticked, seededTicks(session.matches))
+    );
   }
   return false;
 }
@@ -184,13 +242,14 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
         file: action.file,
         // What the pages hold is not known yet, so the plain name for now;
         // `opened` sets it again from the readings (spec 0006, AC-23).
-        outputName: outputNameFor(action.file.name, false),
+        outputName: outputNameFor(action.file.name, provisionalForm(null)),
         entitlement: Object.freeze({ ...action.entitlement }),
         summary: null,
         matches: [],
         ticked: new Set<MatchId>(),
         phase: null,
         failure: null,
+        runFailure: null,
         outcome: null,
         downloaded: false,
       });
@@ -209,8 +268,9 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
         state: "reviewing",
         summary: action.summary,
         // Spec 0006, AC-23 and INV-5: from the same predicate the download
-        // warning reads, over the same summary.
-        outputName: outputNameFor(session.file.name, isPartly(action.summary)),
+        // warning reads, over the same summary. Still provisional: `redacted`
+        // settles it from what the run removed (spec 0007, AC-12).
+        outputName: outputNameFor(session.file.name, provisionalForm(action.summary)),
         matches: action.matches,
         ticked: seededTicks(action.matches),
         phase: null,
@@ -229,6 +289,40 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
       const ticked = new Set(session.ticked);
       if (!ticked.delete(action.id)) ticked.add(action.id);
 
+      // `runFailure` survives: the refusal says what to untick, so it stays
+      // on screen while somebody does (spec 0007, AC-14).
+      return freeze({
+        ...session,
+        state: "reviewing",
+        ticked,
+        outcome: null,
+        downloaded: false,
+      });
+    }
+
+    case "ticks-set": {
+      // Spec 0007, AC-7. A group's select all, as one action and one render.
+      // The same rules as a single tick: only from `reviewing` or `complete`,
+      // and only for an id this session holds that is not blocked.
+      if (session.state !== "reviewing" && session.state !== "complete") return session;
+      const tickable = new Set(
+        session.matches
+          .filter((match) => match.blocked === null)
+          .map((match) => match.id),
+      );
+
+      const ticked = new Set(session.ticked);
+      let changed = false;
+      for (const id of action.ids) {
+        if (!tickable.has(id) || ticked.has(id) === action.on) continue;
+        if (action.on) ticked.add(id);
+        else ticked.delete(id);
+        changed = true;
+      }
+
+      // Nothing to change is the same session, so nothing renders again and a
+      // `complete` session keeps its outcome.
+      if (!changed) return session;
       return freeze({
         ...session,
         state: "reviewing",
@@ -243,14 +337,28 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
       // cleared here anyway. Counts from the previous run surviving into the
       // next one would be a summary that describes a file nobody downloaded, so
       // this one stays belt and braces rather than relying on the paths above.
+      // A new run is a new question, so the last one's refusal goes (AC-14).
       if (session.state !== "reviewing") return session;
-      return freeze({ ...session, state: "redacting", phase: null, outcome: null });
+      return freeze({
+        ...session,
+        state: "redacting",
+        phase: null,
+        outcome: null,
+        runFailure: null,
+      });
 
     case "redacted":
       if (session.state !== "redacting") return session;
       return freeze({
         ...session,
         state: "complete",
+        // Spec 0007, AC-12 and INV-2: the name the file is offered under is
+        // settled here, from what this run removed, so a run that removed
+        // nothing is never named as a redaction.
+        outputName: outputNameFor(
+          session.file.name,
+          outputFormFor(session.summary, action.outcome),
+        ),
         outcome: action.outcome,
         phase: null,
         downloaded: false,
@@ -259,9 +367,24 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
     case "downloaded":
       // Deliberately not a release trigger. The output buffer is freed by the
       // download helper, and the session stays alive at `complete` so the tick
-      // and rerun edge above is still reachable.
+      // and rerun edges are still reachable.
       if (session.state !== "complete") return session;
       return freeze({ ...session, downloaded: true });
+
+    case "rerun":
+      // Spec 0007, AC-13. Make it again: the output was let go at download on
+      // purpose (spec 0002, AC-4), so getting the same file back costs a run
+      // over the same ticks on the untouched original. Only once the file has
+      // been handed over; before that, Download still holds it.
+      if (session.state !== "complete" || !session.downloaded) return session;
+      return freeze({
+        ...session,
+        state: "redacting",
+        phase: null,
+        outcome: null,
+        runFailure: null,
+        downloaded: false,
+      });
 
     case "cancelled":
       // AC-10: back to the checklist, document still open. There is no such edge
@@ -270,7 +393,20 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
       return freeze({ ...session, state: "reviewing", phase: null });
 
     case "failed":
-      if (session.state !== "opening" && session.state !== "redacting") return session;
+      // Spec 0007, AC-14 and INV-1. A refused run keeps the review: the
+      // document stays open in the worker, and the matches and ticks stay here,
+      // so a refusal costs a tick change rather than the whole review. No
+      // output exists for it.
+      if (session.state === "redacting") {
+        return freeze({
+          ...session,
+          state: "reviewing",
+          runFailure: action.failure,
+          phase: null,
+        });
+      }
+      // An open that failed is terminal for that document.
+      if (session.state !== "opening") return session;
       return freeze({
         ...session,
         state: "failed",
@@ -281,7 +417,7 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
     case "worker-lost":
       // Reachable from any live step except the two that are already over.
       // `failed` stays terminal: a dead worker does not make a corrupt document
-      // openable.
+      // openable. A lost worker is not a refusal, so no refusal survives it.
       if (
         session.state === "idle" ||
         session.state === "failed" ||
@@ -293,6 +429,7 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
         ...session,
         state: "lost",
         failure: "engine-unavailable",
+        runFailure: null,
         phase: null,
       });
 
@@ -307,12 +444,13 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
         ...session,
         state: "opening",
         // Back to the plain name until the new worker has read the pages.
-        outputName: outputNameFor(session.file.name, false),
+        outputName: outputNameFor(session.file.name, provisionalForm(null)),
         summary: null,
         matches: [],
         ticked: new Set<MatchId>(),
         phase: null,
         failure: null,
+        runFailure: null,
         outcome: null,
         downloaded: false,
       });

@@ -3,25 +3,37 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useReducer,
   useRef,
   useState,
   useSyncExternalStore,
+  type RefObject,
 } from "react";
 
 import { config } from "@/config";
+import { resultCounts } from "@/lib/detectors";
 import { currentPath, loadedAt, loadGuard, reloadDocument } from "@/lib/document-load";
 import { offerDownload } from "@/lib/download";
 import { getEntitlement, prefetchEntitlement } from "@/lib/entitlement";
 import {
+  failureText,
+  isTickCaused,
+  LOST_TEXT,
+  PHASE_TEXT,
+  phaseLine,
+  redactLabel,
+  RUN_REFUSAL_LEAD,
+  runRefusalText,
+  tickCountLine,
+} from "@/lib/flow-text";
+import {
   ADVICE,
   ALL_CLEAR,
-  DOWNLOAD_WARNING_TITLE,
   isPartly,
   noteLines,
   OPEN_WARNING_TITLE,
-  PARTLY_REASON,
-  removedOffPageLine,
   showsAdvice,
   warningLines,
 } from "@/lib/page-findings";
@@ -34,16 +46,12 @@ import {
   type ToolSession,
 } from "@/lib/session";
 import { getSupport, SUPPORT_GAP_TEXT, type SupportReport } from "@/lib/support";
-import { Download } from "lucide-react";
 
 import {
   EngineError,
   OperationCancelled,
-  type EngineErrorKind,
   type EntitlementSnapshot,
-  type ProgressPhase,
-  type RedactionOutcome,
-  type SanitizedKind,
+  type MatchId,
 } from "@/worker/protocol";
 import {
   onEngineLost,
@@ -58,113 +66,10 @@ import { Card } from "@/ui/card";
 import { DropZone } from "@/ui/drop-zone";
 import { Spinner } from "@/ui/spinner";
 
+import { ActionPanel } from "./action-panel";
+import { FailureCallout } from "./failure-callout";
+import { ResultCard } from "./result-card";
 import { ReviewChecklist } from "./review-checklist";
-
-/**
- * Plain wording for each failure kind. Feature 8 owns the real treatment.
- *
- * A function of the job's own caps rather than a constant map, because the page
- * cap that applies is the one frozen into this session, not the paid ceiling.
- * Telling somebody they exceeded a limit that was never theirs is the confusion
- * spec 0002 closed.
- */
-function errorText(kind: EngineErrorKind, entitlement: EntitlementSnapshot): string {
-  switch (kind) {
-    case "engine-unavailable":
-      return "The PDF engine could not be loaded. Check your connection and try again.";
-    case "encrypted":
-      return "This PDF is encrypted, so its text cannot be read.";
-    case "password-required":
-      return "This PDF needs a password before it can be opened.";
-    case "corrupt":
-      return "This PDF could not be read. It may be damaged.";
-    case "too-large":
-      return `This file is larger than the ${formatBytes(entitlement.maxFileBytes)} limit.`;
-    case "too-many-pages":
-      return `This document has more than the ${entitlement.pageCap} page limit.`;
-    case "file-unreadable":
-      return "This file could not be read. It may have been moved, renamed or deleted since you chose it.";
-    case "unsupported":
-      return "Something went wrong while working on this file.";
-    case "not-pdf":
-      return "This file is not a PDF. RedactNest works on PDF documents only.";
-    case "hidden-layers":
-      return "This PDF has layers that can be switched on and off, and RedactNest cannot redact those yet.";
-    case "redaction-incomplete":
-      return "RedactNest could not confirm that everything was removed from this PDF, so it did not make a file.";
-    // Spec 0004, *Settled here*: the three lines are fixed until feature 8
-    // writes the real copy.
-    case "redaction-overreach":
-      return "Removing what you ticked would also remove words you did not tick, so no file was made.";
-    case "replacement-text":
-      return "A ticked item sits inside hidden replacement text that cannot be removed safely, so no file was made.";
-    case "slanted-text":
-      return "A ticked item is set at an angle too steep to redact safely, so no file was made.";
-    // Spec 0006, AC-26: built here and fixed until feature 8 writes the final
-    // copy for every failure kind. Each says why no file was made.
-    case "no-readable-text":
-      return "RedactNest can't read any text in this PDF. It looks like a scan, or its text is in a form RedactNest can't read, so nothing could be found and no file was made. If you have the original, run it through text recognition (OCR) first, then open the result here.";
-    case "edge-text":
-      return "This PDF has text at the edge of a page that RedactNest can't remove cleanly, so it can't be redacted and no file was made.";
-  }
-}
-
-const PHASE_TEXT: Record<ProgressPhase, string> = {
-  "checking-entitlement": "Checking your plan",
-  "loading-engine": "Loading the PDF engine",
-  opening: "Opening your document",
-  inspecting: "Checking each page",
-  detecting: "Looking for sensitive details",
-  redacting: "Removing the text you ticked",
-  writing: "Writing your clean file",
-  verifying: "Checking your clean file",
-};
-
-function formatBytes(bytes: number): string {
-  return `${Math.round(bytes / (1024 * 1024))} MB`;
-}
-
-/** Plain words for each thing a run strips. Feature 8 owns the real treatment. */
-const SANITIZED_TEXT: Record<SanitizedKind, string> = {
-  "document-info": "document info",
-  "xmp-metadata": "XMP metadata",
-  annotations: "annotations",
-  "form-fields": "form fields",
-  attachments: "attachments",
-  bookmarks: "bookmarks",
-  "hidden-layers": "hidden layers",
-  javascript: "JavaScript",
-  "incremental-versions": "earlier versions",
-  "page-thumbnails": "page thumbnails",
-  "accessibility-tags": "accessibility tags",
-};
-
-/** `a`, `a and b`, `a, b and c`. */
-function listOf(parts: readonly string[]): string {
-  if (parts.length <= 1) return parts.join("");
-  return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
-}
-
-/**
- * Spec 0004, AC-19. The one line outcome: how many items were removed and what
- * was stripped. Counts and kinds only, because that is all `outcome` carries.
- * Feature 8 restyles this, and makes a run with nothing removed impossible to
- * mistake for a redaction.
- */
-function outcomeText(outcome: RedactionOutcome): string {
-  const removed = Object.values(outcome.removedByType).reduce<number>(
-    (total, count) => total + (count ?? 0),
-    0,
-  );
-  const items = `${removed} ${removed === 1 ? "item" : "items"}`;
-
-  if (outcome.sanitized.length === 0) {
-    return `Removed ${items}. There was nothing else to strip.`;
-  }
-  return `Removed ${items} and stripped ${listOf(
-    outcome.sanitized.map((kind) => SANITIZED_TEXT[kind]),
-  )}.`;
-}
 
 /**
  * Did this session lose its worker before the engine had finished loading?
@@ -183,6 +88,66 @@ function loadNeverFinished(session: ToolSession): session is LiveSession {
   );
 }
 
+/** Where focus goes after a step change. Spec 0007, *Focus*. */
+type FocusTarget =
+  | "choose"
+  | "failure"
+  | "refusal"
+  | "result"
+  | "redact"
+  | "cancel"
+  | "redact-another"
+  | "retry";
+
+/**
+ * Spec 0007, AC-20. Focus moves only where the focused control has just gone,
+ * or where a result or a failure has just appeared, so it never lands on
+ * `body`. Judged from the step change alone, so the same change always moves
+ * it to the same place; null leaves it where it is.
+ *
+ * "choose" is the drop zone's button in whichever form is showing: the file
+ * bar's Choose another PDF once a file is chosen, and the full zone's button
+ * after Start over.
+ *
+ * Steps can land together in one render (an open that answers at once batches
+ * `file-chosen` with `opened`), so a new file is recognised by its job
+ * arriving, not by passing through `opening`.
+ */
+function focusAfter(previous: ToolSession, next: ToolSession): FocusTarget | null {
+  if (next.state === "idle") return previous.state === "idle" ? null : "choose";
+  if (next.state === "failed") {
+    return previous.state === "failed" && previous.jobId === next.jobId
+      ? null
+      : "failure";
+  }
+  if (next.state === "lost") return previous.state === "lost" ? null : "retry";
+
+  // A new file, or a retry: the file bar has just replaced the full zone or
+  // the lost callout. The same job reopening in place, the silent retry,
+  // changes nothing visible.
+  const arrived =
+    previous.state === "idle" ||
+    previous.state === "failed" ||
+    previous.state === "lost" ||
+    previous.jobId !== next.jobId;
+  if (arrived) return "choose";
+
+  switch (next.state) {
+    case "opening":
+      return null;
+    case "redacting":
+      return previous.state === "redacting" ? null : "cancel";
+    case "reviewing":
+      // Out of a run: Cancel went, so Redact; or the run was refused. An open
+      // that succeeds, or a tick changed from `complete`, leaves focus alone.
+      if (previous.state !== "redacting") return null;
+      return next.runFailure === null ? "redact" : "refusal";
+    case "complete":
+      if (previous.state !== "complete") return "result";
+      return !previous.downloaded && next.downloaded ? "redact-another" : null;
+  }
+}
+
 /** Browser support cannot change while the page is open, so there is nothing to
  * subscribe to and nothing to detect on the server. */
 const NEVER_CHANGES = () => () => {};
@@ -197,6 +162,9 @@ const TOOL_PATH_SERVER_SNAPSHOT = () => TOOL_PATH;
 
 const REPLACE_WARNING =
   "You have unsaved work on the document that is open. Opening a different file will discard it. Continue?";
+
+const START_OVER_WARNING =
+  "You have unsaved work on the document that is open. Starting over will discard it. Continue?";
 
 export function ToolClient() {
   /**
@@ -295,6 +263,50 @@ export function ToolClient() {
   const outputRef = useRef<ArrayBuffer | null>(null);
 
   /**
+   * The places focus can be sent after a step change (spec 0007, *Focus*).
+   * Each points at an element only while its step shows it.
+   */
+  const chooseRef = useRef<HTMLButtonElement>(null);
+  const failureRef = useRef<HTMLHeadingElement>(null);
+  const refusalRef = useRef<HTMLHeadingElement>(null);
+  const resultRef = useRef<HTMLHeadingElement>(null);
+  const redactRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const redactAnotherRef = useRef<HTMLButtonElement>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
+
+  /**
+   * AC-20. Focus moves in an effect after the render that mounts its target,
+   * keyed on the step change, never in the event handler, so the element it
+   * moves to is the one on screen. The session is replaced on every change and
+   * a no-op returns the same object, so this runs once per real change.
+   *
+   * A layout effect, so it runs before the browser paints whatever the update's
+   * priority. A step change dispatched from a promise (a run finishing or
+   * refused, Cancel landing, an open failing) would otherwise paint once with
+   * the old control gone and focus on `body`.
+   */
+  const shownRef = useRef<ToolSession>(IDLE);
+  useLayoutEffect(() => {
+    const previous = shownRef.current;
+    shownRef.current = session;
+    const target = focusAfter(previous, session);
+    if (target === null) return;
+
+    const targets: Readonly<Record<FocusTarget, RefObject<HTMLElement | null>>> = {
+      choose: chooseRef,
+      failure: failureRef,
+      refusal: refusalRef,
+      result: resultRef,
+      redact: redactRef,
+      cancel: cancelRef,
+      "redact-another": redactAnotherRef,
+      retry: retryRef,
+    };
+    targets[target].current?.focus();
+  }, [session]);
+
+  /**
    * Open a document, from a fresh choice or from a retry after a lost worker.
    *
    * The `File` is a handle to a file already on the visitor's disk, not a copy
@@ -311,7 +323,7 @@ export function ToolClient() {
         bytes = await job.file.arrayBuffer();
       } catch {
         // The file moved, was deleted, or had its permission revoked between
-        // being chosen and being read. Its own kind, so feature 8 can say
+        // being chosen and being read. Its own kind, so the page can say
         // something useful rather than falling through to `unsupported`.
         if (current()) dispatch({ type: "failed", failure: "file-unreadable" });
         return;
@@ -358,7 +370,8 @@ export function ToolClient() {
 
   const handleFile = useCallback(
     async (file: File) => {
-      // AC-1: one tab, one session. Replacing one with work in it asks first.
+      // AC-1: one tab, one session. Replacing one with work in it asks first,
+      // and a cancelled confirm changes nothing (spec 0007, AC-3).
       if (hasUnsavedWork(sessionRef.current) && !window.confirm(REPLACE_WARNING)) {
         return;
       }
@@ -397,7 +410,16 @@ export function ToolClient() {
     });
   }, [runOpen]);
 
+  /** Start over, and Redact another PDF under another label (spec 0007, AC-13). */
   const handleStartOver = useCallback(() => {
+    // It sits beside Choose another PDF in the file bar (AC-3), so it asks
+    // before throwing work away just as a replacement does (spec 0002, AC-1),
+    // and a cancelled confirm changes nothing. Redact another PDF shows only
+    // after a download, when nothing is unsaved, so it never asks.
+    if (hasUnsavedWork(sessionRef.current) && !window.confirm(START_OVER_WARNING)) {
+      return;
+    }
+
     // A genuine release trigger, so the worker goes. The attempt is superseded
     // with it, because a reply for the document just abandoned must not land on
     // whatever is opened next.
@@ -408,21 +430,27 @@ export function ToolClient() {
   }, []);
 
   /**
-   * Spec 0004, AC-19. Run a redaction over the current ticks.
+   * Spec 0004, AC-19, and spec 0007, AC-13. Run a redaction over the current
+   * ticks: Redact from review, or Make it again after a download, which is the
+   * same run over the same ticks on the untouched original.
    *
    * Guarded by the same attempt counter `runOpen` uses, without moving it: a
    * new file, a start over or a retry supersedes the document this run belongs
-   * to, and a reply for it must then be dropped rather than shown (AC-20).
+   * to, and a reply for it must then be dropped rather than shown (AC-20). The
+   * output is taken only from a `redacted` reply while the session is still
+   * `redacting`, so a reply after Cancel changes nothing.
    */
-  const handleRedact = useCallback(async () => {
+  const runRedaction = useCallback(async (start: "redact-started" | "rerun") => {
     const live = sessionRef.current;
     const opened = openedRef.current;
-    if (live.state !== "reviewing" || !opened) return;
+    if (!opened || live.state === "idle") return;
+    if (start === "redact-started" && live.state !== "reviewing") return;
+    if (start === "rerun" && !(live.state === "complete" && live.downloaded)) return;
 
     const attempt = attemptRef.current;
     const current = () => attemptRef.current === attempt;
 
-    dispatch({ type: "redact-started" });
+    dispatch({ type: start });
 
     try {
       const { output, outcome } = await opened.redact([...live.ticked], {
@@ -441,6 +469,8 @@ export function ToolClient() {
         // AC-17: back to the checklist, document still open.
         dispatch({ type: "cancelled" });
       } else if (error instanceof EngineError) {
+        // Spec 0007, AC-14: back to the checklist with every tick kept, and
+        // the refusal said above it. No output exists for it.
         dispatch({ type: "failed", failure: error.errorKind });
       }
     }
@@ -464,6 +494,16 @@ export function ToolClient() {
     outputRef.current = null;
     offerDownload(output, live.outputName);
     dispatch({ type: "downloaded" });
+  }, []);
+
+  /** One stable handler for every row, so a row renders again only when it changes. */
+  const handleToggle = useCallback((id: MatchId) => {
+    dispatch({ type: "tick-toggled", id });
+  }, []);
+
+  /** A group's select all, as one action and one render (spec 0007, AC-7). */
+  const handleTicksSet = useCallback((ids: readonly MatchId[], on: boolean) => {
+    dispatch({ type: "ticks-set", ids, on });
   }, []);
 
   /**
@@ -562,6 +602,18 @@ export function ToolClient() {
     };
   }, []);
 
+  /**
+   * The result card's counts (spec 0007, AC-25). The ticks cannot change while
+   * a session is `complete`, so they describe the run that made the file.
+   */
+  const counts = useMemo(
+    () =>
+      session.state === "complete" && session.outcome
+        ? resultCounts(session.matches, session.ticked, session.outcome)
+        : null,
+    [session],
+  );
+
   // Ahead of the support check, so nothing about this document is trusted
   // before it is known to be the tool's own. No drop zone also means nothing
   // warms the engine or asks for the entitlement.
@@ -609,156 +661,185 @@ export function ToolClient() {
     );
   }
 
+  const live = session.state === "idle" ? null : session;
+  // Spec 0007, AC-3: the file bar in every step with a file on the page, and
+  // the full zone when nothing is open, including under a failed open (AC-15).
+  const compact = live !== null && live.state !== "failed";
+  const reviewable =
+    session.state === "reviewing" ||
+    session.state === "redacting" ||
+    session.state === "complete";
+
   return (
     <div className="flex flex-col">
-      <DropZone
-        title="Drop a PDF here, or choose one"
-        helper={`Up to ${config.freePageCap} pages for now.`}
-        buttonLabel="Choose a PDF"
-        accept="application/pdf"
-        onFile={(file) => void handleFile(file)}
-        onWarm={warm}
-      />
+      {/*
+        Spec 0007, AC-15. An open that failed says so above the full drop zone,
+        so the next file is one drop away. Nothing of the failed document is
+        held beyond its name and its frozen caps.
+      */}
+      {session.state === "failed" && (
+        <div className="mb-6">
+          <FailureCallout
+            data-testid="error"
+            titleRef={failureRef}
+            {...failureText(session.failure ?? "unsupported", session.entitlement)}
+          />
+        </div>
+      )}
+
+      {live !== null && compact ? (
+        <DropZone
+          compact
+          fileName={live.file.name}
+          pageCount={live.summary?.pageCount ?? null}
+          buttonLabel="Choose another PDF"
+          accept="application/pdf"
+          onFile={(file) => void handleFile(file)}
+          onWarm={warm}
+          buttonRef={chooseRef}
+          action={
+            <Button variant="link" data-testid="start-over" onClick={handleStartOver}>
+              Start over
+            </Button>
+          }
+        />
+      ) : (
+        <DropZone
+          title="Drop a PDF here, or choose one"
+          helper={`Up to ${config.freePageCap} pages for now.`}
+          buttonLabel="Choose a PDF"
+          accept="application/pdf"
+          onFile={(file) => void handleFile(file)}
+          onWarm={warm}
+          buttonRef={chooseRef}
+        />
+      )}
 
       {/*
-        Spec 0003, AC-12. The polite region holds only what is worth hearing
-        as it changes: the phase text and the opened document. A failure is an
-        alert of its own and renders beside this, never inside it, or a screen
-        reader would announce it twice. The margin appears only once there is
-        something in here, because the region itself has to stay in the page
-        from the start for its first announcement to be heard.
+        Spec 0003, AC-12, and spec 0007, AC-4. The polite region holds only
+        what is worth hearing as it changes: the opened document card, heard
+        once with the open and then left alone, and the one phase line while a
+        document opens or a run works. A failure is an alert of its own and
+        renders beside this, never inside it, or a screen reader would announce
+        it twice. The margin appears only once there is something in here,
+        because the region itself has to stay in the page from the start for
+        its first announcement to be heard.
       */}
       <div aria-live="polite" className="flex flex-col gap-6 not-empty:mt-6">
+        {reviewable && <OpenedDocument session={session} />}
         {checkingEntitlement ? (
           <StatusLine text={PHASE_TEXT["checking-entitlement"]} />
         ) : (
-          <SessionStatus session={session} />
+          (session.state === "opening" || session.state === "redacting") &&
+          session.phase !== null && (
+            <StatusLine text={phaseLine(session.phase, session.ticked.size)} />
+          )
         )}
       </div>
 
-      <SessionAlert session={session} onRetry={handleRetry} />
+      {session.state === "lost" && (
+        <div className="mt-6">
+          <FailureCallout
+            data-testid="lost"
+            title={LOST_TEXT.title}
+            body={LOST_TEXT.body}
+            action={
+              <Button
+                ref={retryRef}
+                variant="secondary"
+                data-testid="retry"
+                onClick={handleRetry}
+              >
+                Try again
+              </Button>
+            }
+          />
+        </div>
+      )}
+
+      {/*
+        Spec 0007, AC-14. A refused run keeps the review, so the refusal sits
+        above the list it asks to change, and stays through tick changes.
+      */}
+      {session.state === "reviewing" && session.runFailure !== null && (
+        <div className="mt-6">
+          <FailureCallout
+            data-testid="run-refusal"
+            lead={RUN_REFUSAL_LEAD}
+            titleRef={refusalRef}
+            {...runRefusalText(
+              session.runFailure,
+              session.entitlement,
+              session.ticked.size,
+            )}
+            action={
+              isTickCaused(session.runFailure) ? undefined : (
+                <Button
+                  variant="secondary"
+                  data-testid="refusal-choose"
+                  onClick={() => chooseRef.current?.click()}
+                >
+                  Choose another PDF
+                </Button>
+              )
+            }
+          />
+        </div>
+      )}
+
+      {(session.state === "reviewing" || session.state === "redacting") && (
+        <div className="mt-6">
+          <ActionPanel
+            line={tickCountLine(
+              session.ticked.size,
+              session.matches.filter((match) => match.blocked === null).length,
+              session.matches.length,
+            )}
+            label={redactLabel(session.ticked.size)}
+            running={session.state === "redacting"}
+            onRedact={() => void runRedaction("redact-started")}
+            onCancel={handleCancel}
+            redactRef={redactRef}
+            cancelRef={cancelRef}
+          />
+        </div>
+      )}
+
+      {session.state === "complete" && counts !== null && (
+        <div className="mt-6">
+          <ResultCard
+            counts={counts}
+            summary={session.summary}
+            outputName={session.outputName}
+            downloaded={session.downloaded}
+            onDownload={handleDownload}
+            onRedactAnother={handleStartOver}
+            onMakeAgain={() => void runRedaction("rerun")}
+            headingRef={resultRef}
+            redactAnotherRef={redactAnotherRef}
+          />
+        </div>
+      )}
 
       {/*
         Spec 0005, AC-13. The checklist, outside the live region for the same
         reason the failure is: a list read out as it appears would drown the
         phase line. Shown for every step that has a document open to review.
       */}
-      {(session.state === "reviewing" ||
-        session.state === "redacting" ||
-        session.state === "complete") && (
-        <>
-          <div className="mt-6">
-            <ReviewChecklist
-              matches={session.matches}
-              ticked={session.ticked}
-              running={session.state === "redacting"}
-              partly={session.summary !== null && isPartly(session.summary)}
-              onToggle={(id) => dispatch({ type: "tick-toggled", id })}
-            />
-          </div>
-
-          {/*
-            Spec 0006, AC-22. The outcome card sits directly above the action
-            row that holds Download, so the download warning it ends with is
-            beside the one action it is about. Its own polite region, in the
-            page from the moment a document is open, so the outcome is still
-            heard once when it appears; the region above keeps to the phase
-            line and the opened document (spec 0003, AC-12).
-          */}
-          <div aria-live="polite" className="flex flex-col not-empty:mt-6">
-            {session.state === "complete" && session.outcome && (
-              <OutcomeCard session={session} outcome={session.outcome} />
-            )}
-          </div>
-        </>
-      )}
-
-      {session.state !== "idle" && (
-        <div className="mt-6 flex flex-wrap gap-3">
-          <SessionAction
-            session={session}
-            onRedact={() => void handleRedact()}
-            onCancel={handleCancel}
-            onDownload={handleDownload}
+      {reviewable && (
+        <div className="mt-6">
+          <ReviewChecklist
+            matches={session.matches}
+            ticked={session.ticked}
+            running={session.state === "redacting"}
+            partly={session.summary !== null && isPartly(session.summary)}
+            onToggle={handleToggle}
+            onTicksSet={handleTicksSet}
           />
-          <Button variant="secondary" data-testid="start-over" onClick={handleStartOver}>
-            Start over
-          </Button>
         </div>
       )}
     </div>
   );
-}
-
-/**
- * Spec 0004, AC-19. The one action the current step offers: Redact while
- * reviewing, Cancel while a run is under way, Download until the file has been
- * handed over. The thin working path; feature 8 restyles it.
- *
- * Outside the live region on purpose, so a button appearing is not read out as
- * news. What the run is doing is announced by the phase line instead.
- */
-function SessionAction({
-  session,
-  onRedact,
-  onCancel,
-  onDownload,
-}: {
-  session: LiveSession;
-  onRedact: () => void;
-  onCancel: () => void;
-  onDownload: () => void;
-}) {
-  switch (session.state) {
-    case "reviewing":
-      return (
-        <Button data-testid="redact" onClick={onRedact}>
-          Redact
-        </Button>
-      );
-
-    case "redacting":
-      return (
-        <Button variant="secondary" data-testid="cancel" onClick={onCancel}>
-          Cancel
-        </Button>
-      );
-
-    case "complete":
-      return session.downloaded ? null : (
-        <Button data-testid="download" icon={Download} onClick={onDownload}>
-          Download
-        </Button>
-      );
-
-    case "opening":
-    case "failed":
-    case "lost":
-      return null;
-  }
-}
-
-/**
- * What the current step looks like, for the polite live region.
- *
- * The checklist is `ReviewChecklist`, rendered outside this region (spec 0005,
- * AC-13). Feature 8 owns the final treatment of both.
- */
-function SessionStatus({ session }: { session: ToolSession }) {
-  switch (session.state) {
-    case "opening":
-    case "redacting":
-      return session.phase ? <StatusLine text={PHASE_TEXT[session.phase]} /> : null;
-
-    case "reviewing":
-    case "complete":
-      return <OpenedDocument session={session} />;
-
-    case "idle":
-    case "failed":
-    case "lost":
-      return null;
-  }
 }
 
 /** The phase text, with a spinner that carries no meaning of its own. */
@@ -771,60 +852,15 @@ function StatusLine({ text }: { text: string }) {
   );
 }
 
-/** A failure, announced once as an alert and kept out of the live region. */
-function SessionAlert({
-  session,
-  onRetry,
-}: {
-  session: ToolSession;
-  onRetry: () => void;
-}) {
-  switch (session.state) {
-    case "failed":
-      return (
-        <div className="mt-6">
-          <Callout tone="danger" role="alert" data-testid="error">
-            {errorText(session.failure ?? "unsupported", session.entitlement)}
-          </Callout>
-        </div>
-      );
-
-    case "lost":
-      return (
-        <div className="mt-6">
-          <Callout
-            tone="danger"
-            role="alert"
-            data-testid="lost"
-            action={
-              <Button variant="secondary" data-testid="retry" onClick={onRetry}>
-                Try again
-              </Button>
-            }
-          >
-            The PDF engine stopped unexpectedly. Your file is still on your machine, so
-            you can try again without choosing it a second time.
-          </Callout>
-        </div>
-      );
-
-    case "idle":
-    case "opening":
-    case "reviewing":
-    case "redacting":
-    case "complete":
-      return null;
-  }
-}
-
 /**
  * The opened document card. Spec 0006, AC-19 to AC-21: the all clear line
  * when no page carries a warning, otherwise the warning callout naming each
  * page RedactNest cannot fully check; then, after the warnings, an untitled
  * note callout for what is worth knowing but changes nothing. Inside the
- * polite live region, so all of it is heard once, with the open. The words
- * come from `src/lib/page-findings`, the same helpers the name and the
- * download warning read (INV-5).
+ * polite live region, so all of it is heard once, with the open, and it stays
+ * mounted through the run so it is not heard again. The page count is the file
+ * bar's (spec 0007, AC-3). The words come from `src/lib/page-findings`, the
+ * same helpers the name and the download warning read (INV-5).
  */
 function OpenedDocument({ session }: { session: LiveSession }) {
   const { summary } = session;
@@ -835,17 +871,11 @@ function OpenedDocument({ session }: { session: LiveSession }) {
 
   return (
     <Card title="Document opened">
-      <div className="flex flex-col gap-1">
-        <p data-testid="page-count" className="text-ink">
-          This document has {summary.pageCount}{" "}
-          {summary.pageCount === 1 ? "page" : "pages"}.
+      {!partly && (
+        <p data-testid="all-clear" className="text-ink-muted">
+          {ALL_CLEAR}
         </p>
-        {!partly && (
-          <p data-testid="all-clear" className="text-small text-ink-muted">
-            {ALL_CLEAR}
-          </p>
-        )}
-      </div>
+      )}
       {partly && (
         <Callout
           tone="warning"
@@ -864,52 +894,6 @@ function OpenedDocument({ session }: { session: LiveSession }) {
           {notes.map((line) => (
             <p key={line}>{line}</p>
           ))}
-        </Callout>
-      )}
-    </Card>
-  );
-}
-
-/**
- * Spec 0004, AC-19, and spec 0006, AC-22. The one line outcome; a note naming
- * the pages the trim removed content from; and, when any page carries a
- * warning, the warning again as the last thing in the card, so
- * it sits directly above Download and says why the file's name ends in partly
- * redacted. It stays while the session is `complete`, before and after the
- * download.
- */
-function OutcomeCard({
-  session,
-  outcome,
-}: {
-  session: LiveSession;
-  outcome: RedactionOutcome;
-}) {
-  const { summary } = session;
-  const partly = summary !== null && isPartly(summary);
-  const removed = summary === null ? null : removedOffPageLine(summary);
-
-  return (
-    <Card title="Your clean file is ready">
-      <p data-testid="outcome" className="text-ink">
-        {outcomeText(outcome)}
-      </p>
-      {removed !== null && (
-        <Callout tone="info" data-testid="off-page-removed">
-          <p>{removed}</p>
-        </Callout>
-      )}
-      {partly && (
-        <Callout
-          tone="warning"
-          title={DOWNLOAD_WARNING_TITLE}
-          headingLevel={3}
-          data-testid="download-warning"
-        >
-          {warningLines(summary).map((line) => (
-            <p key={line}>{line}</p>
-          ))}
-          <p>{PARTLY_REASON}</p>
         </Callout>
       )}
     </Card>

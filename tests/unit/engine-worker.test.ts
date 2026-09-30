@@ -302,6 +302,8 @@ describe("detecting", () => {
       text: "jane@example.com",
       before: "Contact: ",
       after: " or call",
+      beforeCut: true,
+      afterCut: true,
       tickedByDefault: true,
       blocked: null,
       concealed: null,
@@ -313,6 +315,8 @@ describe("detecting", () => {
       text: "020 7946 0958",
       before: "call ",
       after: ".",
+      beforeCut: true,
+      afterCut: true,
       tickedByDefault: true,
       blocked: "slanted-text",
       concealed: null,
@@ -350,7 +354,9 @@ describe("detecting", () => {
     const [email, phone] = result().matches;
     expect(Object.keys(email).sort()).toEqual([
       "after",
+      "afterCut",
       "before",
+      "beforeCut",
       "blocked",
       "concealed",
       "id",
@@ -365,6 +371,8 @@ describe("detecting", () => {
       text: "jane@example.com",
       before: "Contact: ",
       after: " or call",
+      beforeCut: true,
+      afterCut: true,
       tickedByDefault: true,
       blocked: null,
     });

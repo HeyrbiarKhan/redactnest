@@ -143,8 +143,8 @@ describe("the line for each finding", () => {
     ],
     [
       "off-page-content",
-      "Page 1 has text or drawings outside its visible area. RedactNest removes them when you redact, since nobody can see them.",
-      "Pages 1 and 2 have text or drawings outside their visible area. RedactNest removes them when you redact, since nobody can see them.",
+      "Page 1 has text or drawings outside its visible area. RedactNest removes them when you redact, since nobody can see them. A found item crossing a page's edge is listed by the part inside the page; the part outside is removed with the rest.",
+      "Pages 1 and 2 have text or drawings outside their visible area. RedactNest removes them when you redact, since nobody can see them. A found item crossing a page's edge is listed by the part inside the page; the part outside is removed with the rest.",
     ],
   ] as const)("words %s for one page and for several", (finding, one, many) => {
     expect(findingLine(summaryOf([finding], []), finding)).toBe(one);
@@ -207,7 +207,7 @@ describe("the fixed lines", () => {
     expect(ALL_CLEAR).toBe("RedactNest can read the text on every page.");
     expect(OPEN_WARNING_TITLE).toBe("Some pages can't be fully checked");
     expect(ADVICE).toBe(
-      "If you have the original, run it through text recognition (OCR) first, then open the result here.",
+      "Run this file through text recognition (OCR) first, then open the result here. That may let RedactNest read those pages.",
     );
     expect(DOWNLOAD_WARNING_TITLE).toBe("Not every page was checked");
     expect(PARTLY_REASON).toBe("That is why the file's name ends in partly redacted.");

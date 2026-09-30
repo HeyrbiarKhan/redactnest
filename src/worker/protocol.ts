@@ -79,16 +79,22 @@ export function isEngineErrorKind(value: unknown): value is EngineErrorKind {
  * redaction run reports `redacting`, `writing` and then `verifying`, the last
  * being the engine reopening its own output to prove it clean (spec 0004,
  * AC-16).
+ *
+ * A list as well as a type, so a test can walk every phase and find words for
+ * each (spec 0007, AC-16), as it walks `ENGINE_ERROR_KINDS`.
  */
-export type ProgressPhase =
-  | "checking-entitlement"
-  | "loading-engine"
-  | "opening"
-  | "inspecting"
-  | "detecting"
-  | "redacting"
-  | "writing"
-  | "verifying";
+export const PROGRESS_PHASES = Object.freeze([
+  "checking-entitlement",
+  "loading-engine",
+  "opening",
+  "inspecting",
+  "detecting",
+  "redacting",
+  "writing",
+  "verifying",
+] as const);
+
+export type ProgressPhase = (typeof PROGRESS_PHASES)[number];
 
 /**
  * The kinds of sensitive pattern a detector can find.
@@ -205,6 +211,14 @@ export interface ReviewMatch {
   readonly before: string;
   /** Up to `config.matchContextChars` of the text after the match. */
   readonly after: string;
+  /**
+   * Whether the page text goes on before `before` and after `after`. Spec
+   * 0007, AC-9: the row shows "…" only on a side that was cut, so a match at
+   * the start of its page shows none there. Two booleans, and the only thing
+   * spec 0007 adds to what crosses the boundary (AC-26).
+   */
+  readonly beforeCut: boolean;
+  readonly afterCut: boolean;
   /** The detector's own recommendation. Seeds the tick set. False when blocked. */
   readonly tickedByDefault: boolean;
   /**
@@ -230,6 +244,29 @@ export interface ReviewMatch {
 export interface DetectionCounts {
   readonly foundByType: Readonly<Partial<Record<DetectorKind, number>>>;
   readonly blockedByReason: Readonly<Partial<Record<BlockedReason, number>>>;
+}
+
+/**
+ * What a finished run did and did not remove, as counts. Spec 0007, AC-25.
+ *
+ * Derived on the main thread by `resultCounts` in `src/lib/detectors.ts` from
+ * the matches, the ticks and the outcome it already holds, and never sent
+ * across the boundary. It lives here beside `DetectionCounts` only so it can
+ * join `LoggablePayload`: counts and kinds only, so feature 11 may log it.
+ */
+export interface ResultCounts {
+  /** From `outcome.removedByType`. */
+  readonly removedByType: Readonly<Partial<Record<DetectorKind, number>>>;
+  /** Tickable matches left unticked, by kind. */
+  readonly untickedByType: Readonly<Partial<Record<DetectorKind, number>>>;
+  /** Blocked matches, by kind. They stay in the file whatever was ticked. */
+  readonly blockedByType: Readonly<Partial<Record<DetectorKind, number>>>;
+  /** Blocked matches, by reason. */
+  readonly blockedByReason: Readonly<Partial<Record<BlockedReason, number>>>;
+  /** The sum of `removedByType`. */
+  readonly removedTotal: number;
+  /** From `outcome.sanitized`. */
+  readonly sanitized: readonly SanitizedKind[];
 }
 
 /**
@@ -363,6 +400,7 @@ export type LoggablePayload =
   | DocumentSummary
   | RedactionOutcome
   | DetectionCounts
+  | ResultCounts
   | EngineErrorKind
   | ProgressPhase
   | DetectorKind

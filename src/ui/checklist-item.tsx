@@ -14,6 +14,12 @@ interface ChecklistItemProps {
   /** The characters either side of it, already capped by spec 0002, INV-9. */
   readonly before: string;
   readonly after: string;
+  /**
+   * Whether the page text went on past each side (spec 0007, AC-9). The "…"
+   * shows only there, so a match at the start of its page shows none before.
+   */
+  readonly beforeCut: boolean;
+  readonly afterCut: boolean;
   readonly page: number;
   readonly checked: boolean;
   /** Nothing can change for now, such as while a run is under way. */
@@ -44,12 +50,20 @@ interface ChecklistItemProps {
  * Every string here came out of somebody's PDF and is untrusted. It is rendered
  * only as React text, which escapes it (INV-7). Both lines wrap anywhere, so a
  * long unbroken email or file name wraps instead of being cut off.
+ *
+ * The row skips its layout and paint while it is off screen
+ * (`content-visibility: auto`, spec 0007, AC-8), holding a typical row's height
+ * so the scroll bar stays steady. It stays in the accessibility tree and the tab
+ * order, so a keyboard reaching it scrolls it into view as usual. A browser
+ * without support ignores both properties.
  */
 export function ChecklistItem({
   id,
   text,
   before,
   after,
+  beforeCut,
+  afterCut,
   page,
   checked,
   disabled = false,
@@ -67,7 +81,7 @@ export function ChecklistItem({
   const inactive = disabled || blocked;
 
   return (
-    <li>
+    <li className="[contain-intrinsic-size:auto_4.5rem] [content-visibility:auto]">
       <label
         htmlFor={id}
         className={cx(
@@ -100,12 +114,12 @@ export function ChecklistItem({
             </span>
           </span>
           <span id={contextId} className="text-small text-ink-muted wrap-anywhere">
-            {before && `…${before}`}
+            {before && `${beforeCut ? "…" : ""}${before}`}
             {/* Semibold as well as tinted, so the highlight is not colour alone (INV-8). */}
             <mark className="rounded-sm bg-accent-soft px-0.5 font-semibold text-ink">
               {text}
             </mark>
-            {after && `${after}…`}
+            {after && `${after}${afterCut ? "…" : ""}`}
           </span>
           {blocked && (
             <span id={reasonId} className="flex items-start gap-2 text-small text-ink">

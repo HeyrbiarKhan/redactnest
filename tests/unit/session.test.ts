@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   hasUnsavedWork,
   IDLE,
+  outputFormFor,
   outputNameFor,
   seededTicks,
   sessionReducer,
@@ -53,6 +54,14 @@ const OUTCOME: RedactionOutcome = {
   sanitized: ["xmp-metadata", "annotations"],
 };
 
+/** A run with nothing ticked: a cleaned copy, which removed nothing. */
+const NOTHING_REMOVED: RedactionOutcome = {
+  pageCount: 2,
+  removedByType: {},
+  pagesByFinding: { blank: 1 },
+  sanitized: ["xmp-metadata"],
+};
+
 const FREE: EntitlementSnapshot = { tier: "free", pageCap: 3, maxFileBytes: 26_214_400 };
 const PAID: EntitlementSnapshot = {
   tier: "paid",
@@ -71,6 +80,8 @@ const MATCHES: readonly ReviewMatch[] = [
     text: "jane@example.com",
     before: "contact ",
     after: " for details",
+    beforeCut: true,
+    afterCut: true,
     tickedByDefault: true,
     blocked: null,
     concealed: null,
@@ -82,6 +93,8 @@ const MATCHES: readonly ReviewMatch[] = [
     text: "555 0100",
     before: "call ",
     after: " any time",
+    beforeCut: true,
+    afterCut: true,
     tickedByDefault: false,
     blocked: null,
     concealed: null,
@@ -96,6 +109,8 @@ const BLOCKED: ReviewMatch = {
   text: "slanted@example.com",
   before: "write to ",
   after: " today",
+  beforeCut: true,
+  afterCut: true,
   tickedByDefault: false,
   blocked: "slanted-text",
   concealed: null,
@@ -164,6 +179,7 @@ describe("opening a document", () => {
       matches: [],
       phase: null,
       failure: null,
+      runFailure: null,
       outcome: null,
       downloaded: false,
     });
@@ -240,7 +256,7 @@ describe("the output name", () => {
     [".pdf", "document-redacted.pdf"],
     ["   ", "document-redacted.pdf"],
   ])("turns %s into %s", (input, expected) => {
-    expect(outputNameFor(input, false)).toBe(expected);
+    expect(outputNameFor(input, "redacted")).toBe(expected);
   });
 
   /** Spec 0006, AC-23. The same stem, with the caveat in the name. */
@@ -250,7 +266,17 @@ describe("the output name", () => {
     ["  spaced out.pdf  ", "spaced out-partly-redacted.pdf"],
     [".pdf", "document-partly-redacted.pdf"],
   ])("turns %s into %s when partly redacted", (input, expected) => {
-    expect(outputNameFor(input, true)).toBe(expected);
+    expect(outputNameFor(input, "partly-redacted")).toBe(expected);
+  });
+
+  /** Spec 0007, AC-12. A run that removed nothing never reads as a redaction. */
+  it.each([
+    ["quarterly-report.pdf", "quarterly-report-cleaned.pdf"],
+    ["REPORT.PDF", "REPORT-cleaned.pdf"],
+    ["  spaced out.pdf  ", "spaced out-cleaned.pdf"],
+    [".pdf", "document-cleaned.pdf"],
+  ])("turns %s into %s for a cleaned copy", (input, expected) => {
+    expect(outputNameFor(input, "cleaned")).toBe(expected);
   });
 
   it("is the plain name when a file is chosen, before any page is read", () => {
@@ -282,6 +308,70 @@ describe("the output name", () => {
       ),
     );
     expect(session.outputName).toBe("quarterly-report-redacted.pdf");
+  });
+
+  /**
+   * Spec 0007, AC-12 and INV-2. Settled at `redacted` from what the run
+   * removed first, then from the readings.
+   */
+  it.each([
+    [
+      "removed something from quiet pages",
+      SUMMARY,
+      OUTCOME,
+      "quarterly-report-redacted.pdf",
+    ],
+    [
+      "removed something from a partly readable file",
+      SCANNED,
+      OUTCOME,
+      "quarterly-report-partly-redacted.pdf",
+    ],
+    [
+      "removed nothing from quiet pages",
+      SUMMARY,
+      NOTHING_REMOVED,
+      "quarterly-report-cleaned.pdf",
+    ],
+    [
+      "removed nothing from a partly readable file",
+      SCANNED,
+      NOTHING_REMOVED,
+      "quarterly-report-cleaned.pdf",
+    ],
+  ] as const)("is set at complete when the run %s", (_, summary, outcome, expected) => {
+    const session = live(
+      drive(
+        CHOOSE,
+        { type: "opened", summary, matches: MATCHES },
+        { type: "redact-started" },
+        { type: "redacted", outcome },
+      ),
+    );
+    expect(session.outputName).toBe(expected);
+  });
+
+  it("names the form from the removed total before the readings", () => {
+    expect(outputFormFor(SCANNED, NOTHING_REMOVED)).toBe("cleaned");
+    expect(outputFormFor(SCANNED, OUTCOME)).toBe("partly-redacted");
+    expect(outputFormFor(SUMMARY, OUTCOME)).toBe("redacted");
+    expect(outputFormFor(null, OUTCOME)).toBe("redacted");
+  });
+
+  /** Make it again runs the same ticks, so the same name comes back. */
+  it("comes back the same after Make it again", () => {
+    const session = live(
+      drive(
+        CHOOSE,
+        { type: "opened", summary: SCANNED, matches: MATCHES },
+        { type: "redact-started" },
+        { type: "redacted", outcome: OUTCOME },
+        { type: "downloaded" },
+        { type: "rerun" },
+        { type: "redacted", outcome: OUTCOME },
+      ),
+    );
+    expect(session.outputName).toBe("quarterly-report-partly-redacted.pdf");
   });
 });
 
@@ -384,13 +474,239 @@ describe("redacting", () => {
     expect(hasUnsavedWork(session)).toBe(true);
   });
 
-  it("fails with a kind from the closed set and nothing else", () => {
+  /**
+   * Spec 0007, AC-14 and INV-1. A refused run keeps the review: the document
+   * stays open, the matches and ticks stay here, and the kind waits in
+   * `runFailure`. `failure` stays for an open that failed.
+   */
+  it("returns to the checklist on a refusal, with the review and its kind", () => {
     const session = live(
-      sessionReducer(AT.redacting(), { type: "failed", failure: "unsupported" }),
+      drive(
+        CHOOSE,
+        { type: "opened", summary: SUMMARY, matches: MATCHES },
+        { type: "tick-toggled", id: OFF },
+        { type: "redact-started" },
+        { type: "failed", failure: "redaction-overreach" },
+      ),
     );
 
-    expect(session.state).toBe("failed");
-    expect(session.failure).toBe("unsupported");
+    expect(session.state).toBe("reviewing");
+    expect(session.runFailure).toBe("redaction-overreach");
+    expect(session.failure).toBeNull();
+    expect(session.matches).toEqual(MATCHES);
+    expect(session.summary).toEqual(SUMMARY);
+    expect([...session.ticked].sort()).toEqual([OFF, ON].sort());
+    expect(session.outcome).toBeNull();
+    expect(session.phase).toBeNull();
+  });
+
+  /** A late reply after Cancel lands on `reviewing`, which takes no `failed`. */
+  it("ignores a refusal that arrives after a cancel", () => {
+    const cancelled = sessionReducer(AT.redacting(), { type: "cancelled" });
+
+    expect(sessionReducer(cancelled, { type: "failed", failure: "unsupported" })).toBe(
+      cancelled,
+    );
+  });
+});
+
+/** Spec 0007, AC-14. How long a refusal stays on screen. */
+describe("a refused run", () => {
+  const refused = () =>
+    sessionReducer(AT.redacting(), { type: "failed", failure: "slanted-text" });
+
+  it("survives a tick change, because it says what to untick", () => {
+    const session = live(sessionReducer(refused(), { type: "tick-toggled", id: ON }));
+
+    expect(session.runFailure).toBe("slanted-text");
+  });
+
+  it("survives a select all", () => {
+    const session = live(
+      sessionReducer(refused(), { type: "ticks-set", ids: [ON, OFF], on: false }),
+    );
+
+    expect(session.runFailure).toBe("slanted-text");
+  });
+
+  it("clears when the next run starts", () => {
+    const session = live(sessionReducer(refused(), { type: "redact-started" }));
+
+    expect(session.runFailure).toBeNull();
+  });
+
+  it("clears when a new file is chosen", () => {
+    const session = live(sessionReducer(refused(), { ...CHOOSE, jobId: "job-2" }));
+
+    expect(session.runFailure).toBeNull();
+  });
+
+  /** A lost worker is not a refusal, and its retry starts the review over. */
+  it("clears when the worker is lost, and stays clear through the retry", () => {
+    const lost = live(sessionReducer(refused(), { type: "worker-lost" }));
+    const retried = live(sessionReducer(lost, { type: "retry" }));
+
+    expect(lost.runFailure).toBeNull();
+    expect(retried.runFailure).toBeNull();
+    expect(retried.ticked.size).toBe(0);
+  });
+
+  it("goes with the session when it is released", () => {
+    expect(sessionReducer(refused(), { type: "released" })).toEqual(IDLE);
+  });
+
+  /** Replacing the file would lose what the refusal said, so it asks first. */
+  it("counts as unsaved work even with the seeded ticks", () => {
+    const session = live(refused());
+
+    expect(session.ticked).toEqual(seededTicks(MATCHES));
+    expect(hasUnsavedWork(session)).toBe(true);
+  });
+});
+
+/** Spec 0007, AC-7. A group's select all, as one action. */
+describe("setting several ticks at once", () => {
+  const WITH_BLOCKED = [...MATCHES, BLOCKED];
+  const reviewingWithBlocked = () =>
+    drive(CHOOSE, { type: "opened", summary: SUMMARY, matches: WITH_BLOCKED });
+
+  it("ticks every listed id", () => {
+    const session = live(
+      sessionReducer(AT.reviewing(), { type: "ticks-set", ids: [ON, OFF], on: true }),
+    );
+
+    expect([...session.ticked].sort()).toEqual([OFF, ON].sort());
+  });
+
+  it("clears every listed id", () => {
+    const session = live(
+      sessionReducer(AT.reviewing(), { type: "ticks-set", ids: [ON, OFF], on: false }),
+    );
+
+    expect(session.ticked.size).toBe(0);
+  });
+
+  it("leaves ids it was not given alone", () => {
+    const session = live(
+      sessionReducer(AT.reviewing(), { type: "ticks-set", ids: [OFF], on: false }),
+    );
+
+    expect([...session.ticked]).toEqual([ON]);
+  });
+
+  /** As `tick-toggled` does: a blocked or unknown id names nothing tickable. */
+  it("skips a blocked id and an id the session does not hold", () => {
+    const session = live(
+      sessionReducer(reviewingWithBlocked(), {
+        type: "ticks-set",
+        ids: [OFF, BLOCKED.id, asMatchId("never-minted")],
+        on: true,
+      }),
+    );
+
+    expect([...session.ticked].sort()).toEqual([OFF, ON].sort());
+  });
+
+  it("returns the same session when nothing would change", () => {
+    const before = AT.reviewing();
+
+    expect(sessionReducer(before, { type: "ticks-set", ids: [ON], on: true })).toBe(
+      before,
+    );
+    expect(sessionReducer(before, { type: "ticks-set", ids: [OFF], on: false })).toBe(
+      before,
+    );
+    expect(sessionReducer(before, { type: "ticks-set", ids: [], on: true })).toBe(before);
+    const withBlocked = reviewingWithBlocked();
+    expect(
+      sessionReducer(withBlocked, { type: "ticks-set", ids: [BLOCKED.id], on: true }),
+    ).toBe(withBlocked);
+  });
+
+  /** As a single tick does from `complete`: the output is gone, the review stays. */
+  it("returns to review from complete and drops the outcome", () => {
+    const session = live(
+      sessionReducer(sessionReducer(AT.complete(), { type: "downloaded" }), {
+        type: "ticks-set",
+        ids: [OFF],
+        on: true,
+      }),
+    );
+
+    expect(session.state).toBe("reviewing");
+    expect(session.outcome).toBeNull();
+    expect(session.downloaded).toBe(false);
+  });
+
+  it("keeps a complete session and its outcome when nothing would change", () => {
+    const before = AT.complete();
+
+    expect(sessionReducer(before, { type: "ticks-set", ids: [ON], on: true })).toBe(
+      before,
+    );
+  });
+
+  it("builds a new tick set rather than changing the old one", () => {
+    const reviewing = live(AT.reviewing());
+    const set = live(
+      sessionReducer(reviewing, { type: "ticks-set", ids: [OFF], on: true }),
+    );
+
+    expect(set.ticked).not.toBe(reviewing.ticked);
+    expect(reviewing.ticked.size).toBe(1);
+  });
+});
+
+/** Spec 0007, AC-13. Make it again, after the file has been handed over. */
+describe("running again after a download", () => {
+  const downloaded = () => sessionReducer(AT.complete(), { type: "downloaded" });
+
+  it("starts a run on the same ticks with no outcome", () => {
+    const before = live(downloaded());
+    const session = live(sessionReducer(before, { type: "rerun" }));
+
+    expect(session.state).toBe("redacting");
+    expect(session.ticked).toBe(before.ticked);
+    expect(session.outcome).toBeNull();
+    expect(session.downloaded).toBe(false);
+    expect(session.phase).toBeNull();
+  });
+
+  /** Before the download, Download still holds the file, so nothing reruns. */
+  it("is refused before the file has been handed over", () => {
+    const before = AT.complete();
+
+    expect(sessionReducer(before, { type: "rerun" })).toBe(before);
+  });
+
+  it("lands on plain review when cancelled", () => {
+    const session = live(
+      sessionReducer(sessionReducer(downloaded(), { type: "rerun" }), {
+        type: "cancelled",
+      }),
+    );
+
+    expect(session.state).toBe("reviewing");
+    expect(session.outcome).toBeNull();
+    expect(session.runFailure).toBeNull();
+  });
+
+  it("completes again with the new counts", () => {
+    const session = live(
+      drive(
+        CHOOSE,
+        { type: "opened", summary: SUMMARY, matches: MATCHES },
+        { type: "redact-started" },
+        { type: "redacted", outcome: OUTCOME },
+        { type: "downloaded" },
+        { type: "rerun" },
+        { type: "redacted", outcome: OUTCOME },
+      ),
+    );
+
+    expect(session.state).toBe("complete");
+    expect(session.outcome).toEqual(OUTCOME);
+    expect(session.downloaded).toBe(false);
   });
 });
 
@@ -536,12 +852,16 @@ describe("actions that do not belong in a state", () => {
     ["idle", { type: "worker-lost" }],
     ["idle", { type: "retry" }],
     ["idle", { type: "tick-toggled", id: ON }],
+    ["idle", { type: "ticks-set", ids: [OFF], on: true }],
+    ["idle", { type: "rerun" }],
     // A document that is not open yet cannot be reviewed, redacted or cancelled
     // back to a step that does not exist.
     ["opening", { type: "tick-toggled", id: ON }],
+    ["opening", { type: "ticks-set", ids: [OFF], on: true }],
     ["opening", { type: "redact-started" }],
     ["opening", { type: "redacted", outcome: OUTCOME }],
     ["opening", { type: "downloaded" }],
+    ["opening", { type: "rerun" }],
     ["opening", { type: "cancelled" }],
     ["opening", { type: "retry" }],
     // Reviewing is main thread only. Nothing arrives from the worker here.
@@ -549,18 +869,23 @@ describe("actions that do not belong in a state", () => {
     ["reviewing", { type: "progress", phase: "redacting" }],
     ["reviewing", { type: "redacted", outcome: OUTCOME }],
     ["reviewing", { type: "downloaded" }],
+    ["reviewing", { type: "rerun" }],
     ["reviewing", { type: "cancelled" }],
     ["reviewing", { type: "failed", failure: "corrupt" }],
     ["reviewing", { type: "retry" }],
     // A tick cannot be changed while the removal it describes is running.
     ["redacting", { type: "tick-toggled", id: ON }],
+    ["redacting", { type: "ticks-set", ids: [OFF], on: true }],
     ["redacting", { type: "opened", summary: SUMMARY, matches: MATCHES }],
     ["redacting", { type: "redact-started" }],
     ["redacting", { type: "downloaded" }],
+    ["redacting", { type: "rerun" }],
     ["redacting", { type: "retry" }],
-    // A finished job does not re-finish, and nothing restarts it in place.
+    // A finished job does not re-finish, and nothing restarts it in place
+    // until its file has been handed over.
     ["complete", { type: "redacted", outcome: OUTCOME }],
     ["complete", { type: "redact-started" }],
+    ["complete", { type: "rerun" }],
     ["complete", { type: "progress", phase: "writing" }],
     ["complete", { type: "cancelled" }],
     ["complete", { type: "failed", failure: "corrupt" }],
@@ -569,18 +894,22 @@ describe("actions that do not belong in a state", () => {
     ["failed", { type: "opened", summary: SUMMARY, matches: MATCHES }],
     ["failed", { type: "progress", phase: "opening" }],
     ["failed", { type: "tick-toggled", id: ON }],
+    ["failed", { type: "ticks-set", ids: [OFF], on: true }],
     ["failed", { type: "redact-started" }],
     ["failed", { type: "redacted", outcome: OUTCOME }],
     ["failed", { type: "downloaded" }],
+    ["failed", { type: "rerun" }],
     ["failed", { type: "cancelled" }],
     ["failed", { type: "retry" }],
     // Lost takes a retry or a release, and nothing else.
     ["lost", { type: "opened", summary: SUMMARY, matches: MATCHES }],
     ["lost", { type: "progress", phase: "opening" }],
     ["lost", { type: "tick-toggled", id: ON }],
+    ["lost", { type: "ticks-set", ids: [OFF], on: true }],
     ["lost", { type: "redact-started" }],
     ["lost", { type: "redacted", outcome: OUTCOME }],
     ["lost", { type: "downloaded" }],
+    ["lost", { type: "rerun" }],
     ["lost", { type: "cancelled" }],
     ["lost", { type: "failed", failure: "corrupt" }],
     ["lost", { type: "worker-lost" }],

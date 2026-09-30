@@ -187,7 +187,7 @@ function failAll(error: Error): void {
 }
 
 /**
- * Retire whatever an earlier job still had in flight, without touching this one.
+ * Retire whatever was still in flight before this open.
  *
  * AC-1: one tab holds at most one session, so a document arriving means every
  * older job is over. The worker is told to stop work on each abandoned
@@ -195,13 +195,18 @@ function failAll(error: Error): void {
  * chose a different file walked away from the first one, they did not hit an
  * error.
  *
+ * Every operation, the arriving `jobId` included (spec 0007, AC-24). The worker
+ * makes no exception for it: an open ends that job's session, run and all, and a
+ * cancelled run posts nothing, so a redact left pending here would never
+ * settle. The open that called this is added to `pending` only afterwards, so
+ * it never retires itself, and the worker keys a cancel on the operation id, so
+ * the new open is untouched.
+ *
  * This is what a replacement costs instead of `releaseEngine()`. Terminating
  * would also clear these, and would throw away the loaded engine with them.
  */
-function retireOtherJobs(jobId: string, engine: Worker): void {
+function retireOtherJobs(engine: Worker): void {
   for (const [id, operation] of pending) {
-    if (operation.jobId === jobId) continue;
-
     pending.delete(id);
     const message: RequestMessage = { id, jobId: operation.jobId, kind: "cancel" };
     engine.postMessage(message);
@@ -250,7 +255,7 @@ export function openSession(options: {
   // AC-1, and the reason a new document does not need a new worker. The session
   // this one replaces ends here on the main thread and, when the request lands,
   // inside the worker too. A late reply from it can no longer resolve anything.
-  retireOtherJobs(jobId, engine);
+  retireOtherJobs(engine);
 
   const id = crypto.randomUUID();
 

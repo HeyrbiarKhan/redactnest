@@ -4,8 +4,8 @@
  *
  * Typed as records over `DetectorKind` and `BlockedReason`, so a kind or a
  * reason added to the protocol without its words fails `pnpm typecheck`
- * (INV-9, AC-24). Feature 8 owns the final wording; this is the plain first
- * draft the spec wrote.
+ * (INV-9, AC-24). Spec 0007 reviewed the wording as it reads on the page; the
+ * empty state now points at Make a cleaned copy, the action its button names.
  */
 
 import { Mail, Phone, type LucideIcon } from "lucide-react";
@@ -15,6 +15,9 @@ import {
   type BlockedReason,
   type DetectionCounts,
   type DetectorKind,
+  type MatchId,
+  type RedactionOutcome,
+  type ResultCounts,
   type ReviewMatch,
 } from "@/worker/protocol";
 
@@ -57,8 +60,12 @@ export const BLOCKED_REASON_TEXT: Readonly<Record<BlockedReason, string>> = Obje
   },
 );
 
-/** Every kind looked for, as plural nouns joined for a sentence. */
-function lookedFor(type: "conjunction" | "disjunction"): string {
+/**
+ * Every kind looked for, as plural nouns joined for a sentence. Also the
+ * `detecting` phase line (spec 0007, *Phase copy*), so it names exactly what
+ * the coverage note does.
+ */
+export function lookedFor(type: "conjunction" | "disjunction"): string {
   return new Intl.ListFormat("en", { type }).format(
     DETECTOR_KINDS.map((kind) => DETECTOR_LABELS[kind].noun.other),
   );
@@ -74,7 +81,7 @@ export const COVERAGE_NOTE = `RedactNest looked for ${lookedFor("conjunction")}.
 /** The empty state, when detection found nothing at all (AC-14). */
 export const NOTHING_FOUND = Object.freeze({
   title: "Nothing found to remove",
-  helper: `RedactNest found no ${lookedFor("disjunction")}. Redact still makes a cleaned copy, with metadata and hidden content removed.`,
+  helper: `RedactNest found no ${lookedFor("disjunction")}. Make a cleaned copy to remove metadata and hidden content.`,
 });
 
 /**
@@ -85,7 +92,7 @@ export const COVERAGE_NOTE_PARTLY = `RedactNest looked for ${lookedFor("conjunct
 
 export const NOTHING_FOUND_PARTLY = Object.freeze({
   title: NOTHING_FOUND.title,
-  helper: `RedactNest found no ${lookedFor("disjunction")} on the pages it could read. Redact still makes a cleaned copy, with metadata and hidden content removed.`,
+  helper: `RedactNest found no ${lookedFor("disjunction")} on the pages it could read. Make a cleaned copy to remove metadata and hidden content.`,
 });
 
 /**
@@ -106,5 +113,71 @@ export function detectionCounts(matches: readonly ReviewMatch[]): DetectionCount
   return Object.freeze({
     foundByType: Object.freeze(foundByType),
     blockedByReason: Object.freeze(blockedByReason),
+  });
+}
+
+/**
+ * Counts by kind as words, in `DETECTOR_KINDS` order, each with its own noun:
+ * `["4 email addresses", "1 phone number"]`. A kind with no count is left out.
+ * The result card joins these into a sentence (spec 0007, AC-11).
+ */
+export function countedKinds(
+  byType: Readonly<Partial<Record<DetectorKind, number>>>,
+): readonly string[] {
+  return DETECTOR_KINDS.flatMap((kind) => {
+    const count = byType[kind] ?? 0;
+    if (count === 0) return [];
+    const { noun } = DETECTOR_LABELS[kind];
+    return [`${count} ${count === 1 ? noun.one : noun.other}`];
+  });
+}
+
+/**
+ * How many items a run removed, over every kind. The one sum behind the result
+ * card's title and the file's name (spec 0007, AC-12 and INV-2).
+ */
+export function countRemoved(outcome: RedactionOutcome): number {
+  return DETECTOR_KINDS.reduce(
+    (total, kind) => total + (outcome.removedByType[kind] ?? 0),
+    0,
+  );
+}
+
+/**
+ * What a finished run removed and what it left in the file. Spec 0007, AC-25
+ * and INV-4.
+ *
+ * Pure, and the only source of the result card's Removed and Left in the file
+ * lines. Removed comes from what the engine reports, never from the ticks, so
+ * the card cannot claim a removal the run did not make. Left in the file is
+ * every tickable match left unticked and every blocked one, by kind. The ticks
+ * cannot change while a session is `complete`, so they describe this run.
+ * Counts and kinds only, a `LoggablePayload`, so feature 11 may log it.
+ */
+export function resultCounts(
+  matches: readonly ReviewMatch[],
+  ticked: ReadonlySet<MatchId>,
+  outcome: RedactionOutcome,
+): ResultCounts {
+  const untickedByType: Partial<Record<DetectorKind, number>> = {};
+  const blockedByType: Partial<Record<DetectorKind, number>> = {};
+  const blockedByReason: Partial<Record<BlockedReason, number>> = {};
+
+  for (const match of matches) {
+    if (match.blocked !== null) {
+      blockedByType[match.type] = (blockedByType[match.type] ?? 0) + 1;
+      blockedByReason[match.blocked] = (blockedByReason[match.blocked] ?? 0) + 1;
+    } else if (!ticked.has(match.id)) {
+      untickedByType[match.type] = (untickedByType[match.type] ?? 0) + 1;
+    }
+  }
+
+  return Object.freeze({
+    removedByType: Object.freeze({ ...outcome.removedByType }),
+    untickedByType: Object.freeze(untickedByType),
+    blockedByType: Object.freeze(blockedByType),
+    blockedByReason: Object.freeze(blockedByReason),
+    removedTotal: countRemoved(outcome),
+    sanitized: Object.freeze([...outcome.sanitized]),
   });
 }

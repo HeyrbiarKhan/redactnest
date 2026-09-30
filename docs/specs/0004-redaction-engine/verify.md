@@ -23,7 +23,7 @@ Several steps open the output in a second reader. Use at least two of: Acrobat R
 - [x] With devtools Console open and "All levels" on, open a damaged PDF, then open and redact the metadata fixture → no line from MuPDF appears → AC-24
 - [x] In devtools, override `GET /api/entitlement` to return a paid snapshot, open the heavy 50 page fixture, press **Redact**, then **Cancel** at once → back on the counts with **Redact** showing and no **Download** → AC-17, AC-19
 - [x] With the same override, press **Redact** on the heavy fixture, then choose the two page fixture while it runs → the two page fixture opens, and no outcome or **Download** from the first file ever appears → AC-20, AC-23
-- [x] After a run, press **Start over** before downloading → the idle drop area, and no **Download** anywhere; choose the same file again and the page shows a fresh review, not the old result → AC-20
+- [x] After a run, press **Start over** before downloading, and accept the confirm that asks first (spec 0007, AC-3) → the idle drop area, and no **Download** anywhere; choose the same file again and the page shows a fresh review, not the old result → AC-20
 - [x] In devtools, terminate the `redactnest-engine` worker while **Download** is showing → the lost message, and after **Try again** no **Download** appears until a new run completes → AC-20
 - [x] **(after feature 6)** Tick a match, redact, download, open the output → a black box where the match was, no wider than the match and no taller than its own line; select all text in the reader and paste it somewhere → the match is absent and its neighbours are present → AC-4, AC-6
 - [x] **(after feature 6)** In a single spaced document, tick a match in the middle of a paragraph and redact → the lines above and below read exactly as before, in the reader and when pasted → AC-4, AC-6
@@ -170,3 +170,7 @@ _Slice 5 is built. One change from task 19 as written: the five cases are five o
 ### Recorded by /architect · 2026-09-27 · slice 5
 
 _Wording only. Task 19, the *Off the page* scenario, the build plan and the slice 5 section above now name `next-line-0.pdf` to `next-line-4.pdf`, one case per file, and say slice 5 is built. The Follow-up's upstream item and the AC-13 line above name the five files too. No design changed._
+
+### Recorded by /architect · 2026-09-30
+
+_Wording only. Since spec 0007's review (Minor 3), Start over asks before it discards a finished run nobody downloaded, so the Start over step in *UI / manual* now says to accept that confirm. Its tick stands: what it proves (AC-20, the held output dropped) is unchanged, and spec 0007's `verify.md` proves the confirm itself._

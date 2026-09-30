@@ -22,6 +22,9 @@ import {
 
 import {
   DETECT_BLOCKED,
+  DETECT_DENSE_PAGES,
+  DETECT_DENSE_PER_PAGE,
+  DETECT_STAMPED,
   DETECT_EMAIL,
   DETECT_MANY_COUNT,
   DETECT_PHONE,
@@ -30,6 +33,7 @@ import {
   DETECT_PHONE_SPACED,
   DETECT_UNICODE_EMAIL,
   DETECT_WRAPS,
+  denseRow,
   manyAddress,
 } from "../../scripts/lib/detection-fixtures.mjs";
 import { fixture } from "../support/bytes";
@@ -55,6 +59,33 @@ async function find(name: string, contextChars = 40): Promise<readonly FoundMatc
     return await doc.findMatches({ contextChars });
   } finally {
     doc.close();
+  }
+}
+
+/**
+ * A one page PDF whose text is `show`, one text showing operator in 12pt
+ * Helvetica. For a shape no committed fixture has, here a run of spaces
+ * inside a line, which MuPDF keeps as it is drawn.
+ */
+function onePage(show: string): ArrayBuffer {
+  const pdf = new mupdf.PDFDocument();
+  try {
+    const fonts = pdf.newDictionary();
+    fonts.put("F1", pdf.addSimpleFont(new mupdf.Font("Helvetica")));
+    const resources = pdf.newDictionary();
+    resources.put("Font", fonts);
+    pdf.insertPage(
+      -1,
+      pdf.addPage([0, 0, 612, 792], 0, resources, `BT /F1 12 Tf 72 700 Td ${show} ET\n`),
+    );
+    const buffer = pdf.saveToBuffer("");
+    try {
+      return buffer.asUint8Array().slice().buffer;
+    } finally {
+      buffer.destroy();
+    }
+  } finally {
+    pdf.destroy();
   }
 }
 
@@ -220,6 +251,115 @@ describe("context", () => {
       expect(Array.from(match.after).length).toBeLessThanOrEqual(7);
     }
   });
+
+  /**
+   * Spec 0007, AC-9. Each side says whether the page went on past it, so the
+   * row shows "…" only where something was left out.
+   */
+  it("says a side was cut only when the page text goes on past it", async () => {
+    const [first, second] = await find("detect-email.pdf", 20);
+
+    // The page's first words, so nothing was left out before it.
+    expect(first).toMatchObject({
+      before: "Contact: ",
+      beforeCut: false,
+      afterCut: true,
+    });
+    // Mid page: both sides stop short of the page's text.
+    expect(second).toMatchObject({ beforeCut: true, afterCut: true });
+  });
+
+  /**
+   * AC-9's two comparisons at their edge, the one place `> 0` and `>= 0`, or
+   * `<` and `<=`, part: a side holding exactly the reach is whole, and a side
+   * with one code point more is cut. The first match opens its page after
+   * "Contact: " (9 code points); the last on the first page is followed by the
+   * page's closing words.
+   */
+  it("cuts a side only when the page holds a code point past the reach", async () => {
+    const first = async (contextChars: number) =>
+      (await find("detect-email.pdf", contextChars))[0];
+    expect(await first(9)).toMatchObject({ before: "Contact: ", beforeCut: false });
+    expect(await first(8)).toMatchObject({ before: "ontact: ", beforeCut: true });
+
+    const tail =
+      " today Nothing here: user at example dot com Keep this sentence exactly as it is";
+    const reach = Array.from(tail).length;
+    const last = async (contextChars: number) =>
+      (await find("detect-email.pdf", contextChars)).find(
+        (match) => match.page === 0 && match.text === "josé.müller@exämple.de",
+      );
+    expect(await last(reach)).toMatchObject({ after: tail, afterCut: false });
+    expect(await last(reach - 1)).toMatchObject({
+      after: tail.slice(0, -1),
+      afterCut: true,
+    });
+  });
+
+  /**
+   * The flags count in the collapsed text, as the strings do: four spaces
+   * either side of the address are one code point of context each, so a reach
+   * of 6 holds "Mail: " whole where the raw text would have counted it cut.
+   */
+  it("counts a run of whitespace as the one space it shows when judging a cut", async () => {
+    const doc = await openDocumentWith(
+      mupdf,
+      onePage("(Mail:    jane@example.com    today) Tj"),
+      LIMITS,
+    );
+    const at = async (contextChars: number) => {
+      const [match] = await doc.findMatches({ contextChars });
+      return match;
+    };
+    try {
+      expect(await at(6)).toMatchObject({
+        before: "Mail: ",
+        after: " today",
+        beforeCut: false,
+        afterCut: false,
+      });
+      expect(await at(5)).toMatchObject({
+        before: "ail: ",
+        after: " toda",
+        beforeCut: true,
+        afterCut: true,
+      });
+    } finally {
+      doc.close();
+    }
+  });
+
+  it("never says a side was cut when its context stopped short of the reach", async () => {
+    const found = await find("detect-email.pdf", 200);
+
+    expect(found.length).toBeGreaterThan(0);
+    for (const match of found) {
+      if (Array.from(match.before).length < 200) expect(match.beforeCut).toBe(false);
+      if (Array.from(match.after).length < 200) expect(match.afterCut).toBe(false);
+    }
+    // The last match on a page reaches its end.
+    expect(found.some((match) => !match.afterCut)).toBe(true);
+  });
+
+  /**
+   * Spec 0007, AC-9: the reader with replacement text ignored sets them too, so
+   * a match found only that way shows "…" by the same rule as any other row.
+   * `hidden@…` sits mid page, between the replaced line and the plain one.
+   */
+  it("says a side was cut for a match found only with replacement text ignored", async () => {
+    const hidden = async (contextChars: number) =>
+      (await find("detect-blocked.pdf", contextChars)).find(
+        (match) => match.text === DETECT_BLOCKED.hidden,
+      );
+
+    expect(await hidden(3)).toMatchObject({
+      blocked: "replacement-text",
+      beforeCut: true,
+      afterCut: true,
+    });
+    // A reach wider than the page's text runs out before anything is cut.
+    expect(await hidden(200)).toMatchObject({ beforeCut: false, afterCut: false });
+  });
 });
 
 /** AC-7: the same geometry `page.search()` gives, on left to right text. */
@@ -357,6 +497,60 @@ describe("a page with more matches than search() returns", () => {
     );
 
     expect(packedText(output, 0)).not.toContain("@ex.io");
+  }, 120_000);
+});
+
+/**
+ * Spec 0007, AC-14. The refusal a tick causes, as the flow's browser suite
+ * reaches it: both addresses listed and tickable, a run over both refused for
+ * the stamp, and a run over the clear one alone clean.
+ */
+describe("an address under a stamp", () => {
+  it("is listed tickable, and refused in a run, while the one clear of it redacts", async () => {
+    const found = await find("detect-stamped.pdf");
+    expect(found.map((match) => match.text)).toEqual([
+      DETECT_STAMPED.stamped,
+      DETECT_STAMPED.clear,
+    ]);
+    expect(found.every((match) => match.blocked === null && match.tickedByDefault)).toBe(
+      true,
+    );
+
+    await expect(
+      redactDocumentWith(mupdf, fixture("detect-stamped.pdf"), targetsOf(found)),
+    ).rejects.toEqual(new EngineFailure("redaction-overreach"));
+
+    const clear = found.filter((match) => match.text === DETECT_STAMPED.clear);
+    const { output } = await redactDocumentWith(
+      mupdf,
+      fixture("detect-stamped.pdf"),
+      targetsOf(clear),
+    );
+    expect(packedText(output, 0)).not.toContain(DETECT_STAMPED.clear);
+    expect(packedText(output, 0)).toContain(DETECT_STAMPED.stamped);
+  }, 60_000);
+});
+
+/**
+ * Spec 0007, task 13. The dense document the checklist is measured against
+ * holds exactly what the measure assumes: every row's address and number,
+ * each tickable and ticked by default.
+ */
+describe("the dense staff directory", () => {
+  it("lists every address and number, in page and reading order, none blocked", async () => {
+    const found = await find("detect-dense.pdf");
+    const rows = DETECT_DENSE_PAGES * DETECT_DENSE_PER_PAGE;
+
+    expect(found).toHaveLength(rows * 2);
+    expect(found.map((match) => match.text)).toEqual(
+      Array.from({ length: rows }, (_, index) => {
+        const { email, phone } = denseRow(index);
+        return [email, phone];
+      }).flat(),
+    );
+    expect(found.every((match) => match.blocked === null && match.tickedByDefault)).toBe(
+      true,
+    );
   }, 120_000);
 });
 

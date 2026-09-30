@@ -447,6 +447,14 @@ function lineQuads(characters: readonly Character[]): readonly Quad[] {
   });
 }
 
+/** A match's context, and whether each side stopped short of the page's edge. */
+interface Context {
+  readonly before: string;
+  readonly after: string;
+  readonly beforeCut: boolean;
+  readonly afterCut: boolean;
+}
+
 /**
  * Cut `before` and `after` from the page text. Spec 0005, AC-5 and INV-6.
  *
@@ -454,11 +462,15 @@ function lineQuads(characters: readonly Character[]): readonly Quad[] {
  * runs of whitespace collapsed to one space. The page is collapsed once, with
  * an index from each position into the collapsed text, so each match costs
  * its context and not the page.
+ *
+ * Spec 0007, AC-9: each side also says whether the page text went on past
+ * it, so the row shows "…" only where something was really left out. Two
+ * booleans per match, the only new thing to cross the boundary (AC-26).
  */
 function contextReader(
   points: readonly string[],
   contextChars: number,
-): (target: Pick<RedactionTarget, "start" | "end">) => { before: string; after: string } {
+): (target: Pick<RedactionTarget, "start" | "end">) => Context {
   const collapsed: string[] = [];
   const at = new Uint32Array(points.length + 1);
 
@@ -474,5 +486,7 @@ function contextReader(
   return ({ start, end }) => ({
     before: collapsed.slice(Math.max(0, at[start] - reach), at[start]).join(""),
     after: collapsed.slice(at[end], at[end] + reach).join(""),
+    beforeCut: at[start] - reach > 0,
+    afterCut: at[end] + reach < collapsed.length,
   });
 }

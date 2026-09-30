@@ -14,6 +14,8 @@ import { join } from "node:path";
 
 import {
   detectBlocked,
+  detectDense,
+  detectStamped,
   detectEmail,
   detectMany,
   detectPhone,
@@ -417,6 +419,12 @@ const FIXTURES = [
     "email in running text, scripts, columns, reversed",
   ],
   ["detect-many.pdf", detectMany(), "600 email addresses on one page"],
+  ["detect-dense.pdf", detectDense(), "a 50 page staff directory, 2,200 matches"],
+  [
+    "detect-stamped.pdf",
+    detectStamped(),
+    "an address under a CONFIDENTIAL stamp, one clear of it",
+  ],
   ["detect-unicode.pdf", detectUnicode(), "an email holding letters above U+FFFF"],
   [
     "detect-phone.pdf",

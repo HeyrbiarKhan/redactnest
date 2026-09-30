@@ -162,6 +162,45 @@ test("a cancelled run keeps the ticks that were changed before it", async ({ pag
 });
 
 /**
+ * Spec 0007, AC-13. Make it again is the same run over the same ticks, so the
+ * heavy document again, for a second run long enough to catch: cancelled, it
+ * lands on plain review, with no result, no refusal and no file on offer.
+ */
+test("Make it again can be cancelled, landing on plain review", async ({ page }) => {
+  test.setTimeout(240_000);
+
+  await page.route("**/api/entitlement", (route) =>
+    route.fulfill({
+      json: { tier: "paid", pageCap: PAGES, maxFileBytes: 26_214_400 },
+    }),
+  );
+
+  await page.goto("/tool");
+  await page.getByTestId("file-input").setInputFiles({
+    name: "heavy.pdf",
+    mimeType: "application/pdf",
+    buffer: heavyPdf(),
+  });
+  await expect(page.getByTestId("page-count")).toHaveText(/50 pages/, {
+    timeout: ENGINE_TIMEOUT,
+  });
+
+  await page.getByTestId("redact").click();
+  const downloading = page.waitForEvent("download");
+  await page.getByTestId("download").click({ timeout: ENGINE_TIMEOUT });
+  expect((await downloading).suggestedFilename()).toBe("heavy-cleaned.pdf");
+
+  await page.getByTestId("make-again").click();
+  // Present only while the session is `redacting`, as in the first test above.
+  await page.getByTestId("cancel").click({ timeout: 5_000 });
+
+  await expect(page.getByTestId("redact")).toBeFocused();
+  await expect(page.getByTestId("result")).toHaveCount(0);
+  await expect(page.getByTestId("run-refusal")).toHaveCount(0);
+  await expect(page.getByTestId("download")).toHaveCount(0);
+});
+
+/**
  * Spec 0005's dense document: fifty pages of text, every line holding an
  * address and a phone number, so detection reads for long enough to be
  * interrupted. Built here for the same reason as the heavy one above.
@@ -235,9 +274,10 @@ test("detection gives way to a second document chosen while it reads", async ({
     mimeType: "application/pdf",
     buffer: densePdf(),
   });
-  await expect(page.getByTestId("progress")).toHaveText(/Looking for sensitive details/, {
-    timeout: ENGINE_TIMEOUT,
-  });
+  await expect(page.getByTestId("progress")).toHaveText(
+    /Looking for email addresses and phone numbers/,
+    { timeout: ENGINE_TIMEOUT },
+  );
 
   // Nothing ticked has changed, so the replacement asks nothing.
   await input.setInputFiles(resolve("tests/fixtures/two-pages.pdf"));
@@ -251,7 +291,6 @@ test("detection gives way to a second document chosen while it reads", async ({
   // The first document's review never arrives, now or late.
   await page.waitForTimeout(3_000);
   await expect(page.getByTestId("page-count")).toHaveText(/2 pages/);
-  expect(await page.evaluate(() => window.__redactnestPageCounts)).toEqual([
-    "This document has 2 pages.",
-  ]);
+  // The file bar's count (spec 0007, AC-3).
+  expect(await page.evaluate(() => window.__redactnestPageCounts)).toEqual(["2 pages"]);
 });
