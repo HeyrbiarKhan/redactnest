@@ -92,8 +92,10 @@ export const UNREADABLE_RUN = 3;
  * centred inside a picture and inside no picture of a different footprint, is
  * text recognition having read that picture: in practice one word. A stray
  * mark, a run of punctuation, or a word of one or two characters is not. Spec
- * 0008, AC-1 and AC-14. It counts characters in a row on one line as
- * `UNREADABLE_RUN` does, but it is a separate rule with its own number.
+ * 0008, AC-1 and AC-14. A line with drawn text within `COPY_REACH_RATIO` of
+ * its characters counts for nothing, however long its run (AC-15). It counts
+ * characters in a row on one line as `UNREADABLE_RUN` does, but it is a
+ * separate rule with its own number.
  */
 export const MACHINE_READ_RUN = 3;
 
@@ -611,6 +613,10 @@ function drawnOrigins(drawing: DrawingReading): DrawnOrigins {
  * line from the reach before its origin to the reach past its end (its origin
  * plus its quad's width). A character whose height, width, direction or origin
  * cannot be measured answers yes, so its line is a drawn copy and fails safe.
+ * The height and width checks are defence in depth: `machineReadRun` asks
+ * whether a quad's centre is inside the picture first, and a quad with a non
+ * finite corner has a centre inside nothing, so such a character never reaches
+ * here.
  */
 function withinReach(character: Character, drawn: DrawnOrigins): boolean {
   const height = quadHeight(character.quad);

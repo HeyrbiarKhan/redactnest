@@ -746,6 +746,44 @@ describe("sparse OCR scans", () => {
   );
 
   /**
+   * AC-15: a copy is caught along the line's own direction, not in plain x
+   * and y. The two copies of `read-pictures.pdf` (an invisible sentence half a
+   * point left of and below a visible one, and one drifting ahead of it with
+   * 0.6 pt character spacing) drawn on each turned page and on lines tilted 1,
+   * 3 and 10 degrees. Each stays bare, where the invisible line alone clears
+   * the scan. Each copy puts a drawn glyph within reach of some character's
+   * own origin, which no error in the direction maths moves out of range, so
+   * these pin the copy being caught; the next line test above pins the reach
+   * not running into a neighbour.
+   */
+  describe.each([
+    ["on a page turned 90 degrees", "/Rotate 90", 0],
+    ["on a page turned 180 degrees", "/Rotate 180", 0],
+    ["on a page turned 270 degrees", "/Rotate 270", 0],
+    ["on a line tilted 1 degree", "", 1],
+    ["on a line tilted 3 degrees", "", 3],
+    ["on a line tilted 10 degrees", "", 10],
+  ])("a hidden copy %s", (_label, keys, degrees) => {
+    const cos = Math.cos((degrees * Math.PI) / 180);
+    const sin = Math.sin((degrees * Math.PI) / 180);
+    const line = (mode: number, x: number, y: number, spacing = 0) =>
+      `BT ${mode} Tr /F1 12 Tf ${spacing} Tc ` +
+      `${cos} ${sin} ${-sin} ${cos} ${x} ${y} Tm (${SENTENCE}) Tj ET\n`;
+
+    it.each([
+      ["offset half a point", line(3, 71.5, 119.5)],
+      ["drifting ahead", line(3, 72, 120, 0.6)],
+    ])("is caught when %s", async (_label, copy) => {
+      const alone = await inspectBytes(scanUnder(copy, { keys }));
+      expect(alone.map(({ findings }) => findings)).toEqual([["machine-read-text"]]);
+
+      const [copied] = await inspectBytes(scanUnder(line(0, 72, 120) + copy, { keys }));
+      expect(copied.findings).toContain("bare-picture");
+      expect(copied.findings).toContain("machine-read-text");
+    });
+  });
+
+  /**
    * AC-1: each character in a run is readable (spec 0006, AC-3). A text layer
    * in a font with no character map reads as U+FFFD, so it never forms a run,
    * and the scan under it stays a scan. The same words in a mapped font make
