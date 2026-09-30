@@ -167,7 +167,7 @@ spec [0008](../specs/0008-sparse-ocr-scans/index.md) · code in `src/engine` (`i
   - [x] Proved and amended: the copies at one origin, the next line pin, `runStep` and the run edges, the second cost case, and spec 0006 amended again · AC-2, AC-12, AC-14, AC-15, AC-16
 - [x] Verify it: `/check verify sparse OCR scans`, including the real scan steps on the local scans (AC-13). Run once for the first build; run again for the review's fixes (spec task 11)
 - [x] Test it: `/test sparse OCR scans`, again for the review's fixes
-- [ ] Review it (fresh model): `/check review sparse OCR scans`, again for the review's fixes
+- [x] Review it (fresh model): `/check review sparse OCR scans`, again for the review's fixes
 - [ ] Document it: `/document sparse OCR scans`
 
 ### 20. Photos over dense OCR layers · needs a decision · GA · from spec 0008
