@@ -253,7 +253,7 @@ The `lost` callout keeps today's words, under the title "The PDF engine stopped"
 - Make it again: after download, Make it again runs, and Download offers the same name again; Cancel during it lands on plain review with no outcome. Verifies **AC-13**.
 - Refusal lifetime: a refusal survives a tick change and select all, clears on the next Redact, and replacing the file while it shows asks first. Verifies **AC-14**, **AC-23**.
 - Off screen rows: the keyboard walk tabs to a row far below the fold on the dense fixture, and it scrolls into view with its focus ring visible. Verifies **AC-8**, **AC-22**.
-- Open failure: `damaged.pdf`, a PNG renamed `.pdf`, an over cap file, and `owner-aes128.pdf` each show their copy above the full drop zone, focus on the callout heading. Verifies **AC-15**, **AC-16**, **AC-17**.
+- Open failure: a file whose header is `%PDF-1.7` followed by junk, a text file named `.pdf`, `detect-dense.pdf` on the free tier, and `layers-all-on.pdf` each show their copy above the full drop zone, focus on the callout heading. Verifies **AC-15**, **AC-16**, **AC-17**.
 - Copy completeness: a unit test walks `ENGINE_ERROR_KINDS` and `PROGRESS_PHASES` and finds non empty copy for each; a scan of `FAILURE_TEXT` finds no "OCR will" or "fixes"; the free and paid forms of `too-many-pages` render. Verifies **AC-16**, **AC-17**, **AC-18**.
 - Reducer: every new edge, the unchanged edges asserted unchanged, `ticks-set` skipping blocked and unknown ids, `rerun` refused unless `complete` and downloaded. Verifies **AC-7**, **AC-13**, **AC-14**.
 - Render count: toggling one row of 600 renders one row, one select all row and the count line. Verifies **AC-8**.
