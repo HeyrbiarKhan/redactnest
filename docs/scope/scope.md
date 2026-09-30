@@ -146,7 +146,7 @@ spec [0007](../specs/0007-redact-flow/index.md) · code in `src/app/tool` (`tool
   - [x] The checklist: select all rows, memoised rows, the cut flags for the ellipsis, the dense fixture measured · AC-7, AC-8, AC-9, AC-26
   - [x] The words: every failure kind, the phase lines, the stripped list, the OCR advice and the fragment line · AC-4, AC-16, AC-17, AC-18, AC-19
   - [x] The browser proof and the amends: every step state under axe, the keyboard walk and 320px reflow, then specs 0001 to 0006 amended · AC-1, AC-21, AC-22, AC-23, AC-26
-- [ ] Verify it: `/check verify redact flow`
+- [x] Verify it: `/check verify redact flow`
 - [ ] Test it: `/test redact flow`
 - [ ] Review it (fresh model): `/check review redact flow`
 
