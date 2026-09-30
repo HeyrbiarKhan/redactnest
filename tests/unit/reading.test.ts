@@ -57,8 +57,15 @@ beforeAll(() => {
 });
 
 /** Open a fixture the way the review copy is opened, prepare it, and read it. */
-async function inspect(name: string): Promise<readonly PageInspection[]> {
-  const doc = mupdf.Document.openDocument(fixture(name), "application/pdf");
+function inspect(name: string): Promise<readonly PageInspection[]> {
+  return inspectBytes(fixture(name));
+}
+
+/** The same, for a file built in the test. */
+async function inspectBytes(
+  bytes: ArrayBuffer | Uint8Array,
+): Promise<readonly PageInspection[]> {
+  const doc = mupdf.Document.openDocument(bytes, "application/pdf");
   try {
     const pdf = doc.asPDF();
     if (!pdf) throw new Error("expected a PDF document");
@@ -592,6 +599,91 @@ describe("sparse OCR scans", () => {
     } finally {
       doc.close();
     }
+  });
+
+  /** The sparse scans' one recognised sentence: 45 readable characters. */
+  const SENTENCE = "Signed for and on behalf of the company by its director";
+
+  /**
+   * One page: a full page grey scan, then `layer` over it. `/F1` is
+   * Helvetica. `/M` is a simple font whose glyph names map to no character
+   * and which has no ToUnicode map, so MuPDF reads each of its glyphs as
+   * U+FFFD, as it reads `read-unmapped.pdf`'s. Built here, because each is one
+   * line over one scan.
+   */
+  function scanUnder(layer: string): Uint8Array {
+    const names = Array.from({ length: 26 }, (_, at) => `/zz${65 + at}`).join(" ");
+    return writePdf({
+      objects: [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+          "/Resources << /Font << /F1 4 0 R /M 5 0 R >> /XObject << /Scan 7 0 R >> >> " +
+          "/Contents 8 0 R >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Mystery /FirstChar 32 /LastChar 90 " +
+          `/Widths [${Array(59).fill(600).join(" ")}] ` +
+          `/Encoding << /Type /Encoding /Differences [65 ${names}] >> /FontDescriptor 6 0 R >>`,
+        "<< /Type /FontDescriptor /FontName /Mystery /FontBBox [0 -200 1000 800] " +
+          "/Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 /ItalicAngle 0 /Flags 4 >>",
+        stream(
+          "/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8",
+          new Uint8Array(4).fill(200),
+        ),
+        stream("", `q 612 0 0 792 0 0 cm /Scan Do Q\n${layer}`),
+      ],
+      trailer: "/Root 1 0 R",
+    }).bytes;
+  }
+
+  /** One line in font `font` and render mode `mode`, at the sparse scans' place. */
+  function textLine(font: string, mode: number, text: string): string {
+    return `BT ${mode} Tr /${font} 12 Tf 72 120 Td (${text}) Tj ET\n`;
+  }
+
+  /**
+   * AC-2: a character is purely invisible only when no clipping glyph sits at
+   * its origin, whatever was painted inside that clip. The same sentence is
+   * drawn invisible (`3 Tr`) and then as a clip (`7 Tr`) at one place: with
+   * the scan painted again inside the clip, which only `clipGlyphs` records,
+   * and with nothing painted inside it, which `clipOnly` records too. Each
+   * stays bare, where the invisible line alone clears the scan.
+   */
+  it.each([
+    ["with the scan painted inside the clip", "612 0 0 792 0 0 cm /Scan Do "],
+    ["with nothing painted inside the clip", ""],
+  ])(
+    "never counts a character drawn invisible and as a clip at one place, %s",
+    async (_label, inside) => {
+      const alone = await inspectBytes(scanUnder(textLine("F1", 3, SENTENCE)));
+      expect(alone.map(({ findings }) => findings)).toEqual([["machine-read-text"]]);
+
+      const [clipped] = await inspectBytes(
+        scanUnder(
+          textLine("F1", 3, SENTENCE) + `q ${textLine("F1", 7, SENTENCE)}${inside}Q\n`,
+        ),
+      );
+      expect(clipped.findings).toContain("bare-picture");
+      expect(clipped.findings).toContain("machine-read-text");
+    },
+  );
+
+  /**
+   * AC-1: each character in a run is readable (spec 0006, AC-3). A text layer
+   * in a font with no character map reads as U+FFFD, so it never forms a run,
+   * and the scan under it stays a scan. The same words in a mapped font make
+   * a short OCR page, machine read and nothing more (AC-5).
+   */
+  it("never counts an invisible layer that reads as U+FFFD, and does count the same words mapped", async () => {
+    const words = "SIGNED FOR THE COMPANY";
+
+    const [mapped] = await inspectBytes(scanUnder(textLine("F1", 3, words)));
+    expect(mapped.findings).toEqual(["machine-read-text"]);
+
+    const [unmapped] = await inspectBytes(scanUnder(textLine("M", 3, words)));
+    expect(unmapped.readable).toBe(false);
+    expect(unmapped.findings).toContain("scanned");
+    expect(unmapped.findings).toContain("machine-read-text");
   });
 });
 
