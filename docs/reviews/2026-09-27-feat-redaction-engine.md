@@ -36,7 +36,7 @@ Very thorough, and aimed squarely at the risk this feature exists to manage. `te
 
 ### Owed to feature 8 (Redact flow): `retireOtherJobs` still skips the same `jobId`, `src/worker/client.ts:201`
 
-**Status**: open. Found while fixing the minor finding above in `eda4c3a`, and left alone there because it lives on the main thread, outside that fix.
+**Status**: fixed 2026-09-30 in `9af88d4` (spec 0007, AC-24), as suggested below: `retireOtherJobs` now settles every pending operation, the arriving `jobId` included, and `tests/unit/worker-client.test.ts` checks that a same `jobId` open settles a pending redact as cancelled. Found while fixing the minor finding above in `eda4c3a`, and left alone there because it lives on the main thread, outside that fix.
 
 **Problem**: `retireOtherJobs` cancels and settles every pending operation except those under the `jobId` being opened (`if (operation.jobId === jobId) continue;`). The worker makes no such exception. `handleOpen` always ended a same `jobId` session in its second eviction pass, and since `eda4c3a` it does so before parsing, cancelling that session's run in flight. A cancelled run posts nothing. So if an `open` with the same `jobId` ever reached a live worker while that job's redaction was pending, the worker would stop the run and the main thread's promise for it would never settle. The visitor would be left on a run that neither finishes nor fails.
 
