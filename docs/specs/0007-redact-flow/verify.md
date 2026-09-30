@@ -62,11 +62,11 @@ _Steps derived from spec 0007's acceptance criteria and its Value sourcing table
 
 _From [the review](../../reviews/2026-09-30-feat-redact-flow.md): Start over now asks like Choose another PDF (Minor 3), the two trim fixtures join the open failures (Minors 2 and 4), and the speed spec runs in its own project (Major)._
 
-- [ ] Tick something, press Redact, then press Start over while it runs → a confirm appears; Cancel keeps the run going and focus stays on Start over → AC-3
-- [ ] Finish a run without downloading, then press Start over → a confirm appears; OK shows the full drop zone → AC-3
-- [ ] Download, then press Start over or Redact another PDF → no confirm → AC-3, AC-13
-- [ ] Open `trim-refused.pdf`, then `trim-quote.pdf` → each shows its title and the "Printing it to a new PDF" line, with no mention of ticks → AC-15, AC-16
-- [ ] `pnpm test:e2e` → the `[speed]` test runs last, on its own (alone: `pnpm exec playwright test --project=speed --no-deps`) → AC-8
+- [x] Tick something, press Redact, then press Start over while it runs → a confirm appears; Cancel keeps the run going and focus stays on Start over → AC-3
+- [x] Finish a run without downloading, then press Start over → a confirm appears; OK shows the full drop zone → AC-3
+- [x] Download, then press Start over or Redact another PDF → no confirm → AC-3, AC-13
+- [x] Open `trim-refused.pdf`, then `trim-quote.pdf` → each shows its title and the "Printing it to a new PDF" line, with no mention of ticks → AC-15, AC-16
+- [x] `pnpm test:e2e` → the `[speed]` test runs last, on its own (alone: `pnpm exec playwright test --project=speed --no-deps`) → AC-8
 
 ## Value sourcing
 
