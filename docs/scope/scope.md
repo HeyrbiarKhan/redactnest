@@ -30,7 +30,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 17 | Data processing agreement | Release 6 | planned |
 | 18 | AGPL compliance & source publication | Release 1 | planned |
 | 19 | Sparse OCR scans | Release 1 | in-progress |
-| 20 | Photos over dense OCR layers | Release 1 | planned |
+| 20 | Dense text layers over pictures | Release 1 | planned |
 
 ## Foundations
 
@@ -170,10 +170,10 @@ spec [0008](../specs/0008-sparse-ocr-scans/index.md) · code in `src/engine` (`i
 - [x] Review it (fresh model): `/check review sparse OCR scans`, again for the review's fixes
 - [ ] Document it: `/document sparse OCR scans`
 
-### 20. Photos over dense OCR layers · needs a decision · GA · from spec 0008
-A photo pasted onto a dense OCR scan loses its warning when the scan's text layer covers at least 5% of the photo (`TEXT_OVER_PICTURE_MAX`), because spec 0006's coverage test counts invisible lines over any picture, whichever picture they belong to. It was true before spec 0008, which pins it (`read-pictures.pdf` page 28) and leaves the decision here. Found by the cross check of spec 0008's review fixes on 2026-09-30.
-**Done when:** it is decided whether spec 0008's rule that a character over two different pictures counts for neither also reaches the coverage test for machine read lines, measured for its effect on dense OCR scans and its cost, and page 28's expectation follows that decision.
-- [ ] Design it (spec): `/architect photos over dense OCR layers`
+### 20. Dense text layers over pictures · needs a decision · GA · from spec 0008
+A picture loses its warning once text lines cover at least 5% of it (`TEXT_OVER_PICTURE_MAX`), because spec 0006's coverage test counts any readable line, visible or hidden, punctuation included, over any picture, whichever picture it belongs to. So a photo pasted onto a dense OCR scan is cleared by the scan's layer, and a scan whose only layer is dense junk (six hidden lines of `|||` from a ruled form or table) is cleared although no letter or number was read. Both were true before spec 0008, which pins the photo case (`read-pictures.pdf` page 28) and leaves the decision here. Found by the cross check of spec 0008's review fixes and by its second review (minor 1), both on 2026-09-30.
+**Done when:** it is decided what the coverage test counts: whether spec 0008's rule that a character over two different pictures counts for neither reaches it for machine read lines, and whether a line holding no letter or number counts toward it at all. Each is measured for its effect on dense OCR scans and its cost, and page 28's expectation, and a dense punctuation page's, follow that decision.
+- [ ] Design it (spec): `/architect dense text layers over pictures`
 
 ## Release 2: Take money
 

@@ -5,7 +5,7 @@
 
 ## Summary
 
-Today a scan that has been through text recognition (OCR) but holds only a few lines is still named as a picture with no text over it, and a very short one is refused, so following RedactNest's own advice never clears the warning. From now on a picture counts as read once OCR left a word of three or more letters or digits in hidden text over that picture alone, with no drawn text beside it: such scans open with the machine read note only, and download as `-redacted.pdf`. Visible text, stray marks and punctuation, a photo pasted over a scan's text layer, and a hidden copy of visible text never clear a warning. Every OCR note also gains a sentence saying that words the recognition missed stay in the picture.
+Today a scan that has been through text recognition (OCR) but holds only a few lines is still named as a picture with no text over it, and a very short one is refused, so following RedactNest's own advice never clears the warning. From now on a picture counts as read once OCR left a word of three or more letters or digits in hidden text over that picture alone, with no drawn text beside it: such scans open with the machine read note only, and download as `-redacted.pdf`. Visible text, stray marks and punctuation, a photo pasted over a scan's text layer, and a hidden copy of visible text never form a run, so this rule never clears a warning for them. A picture with no run is judged by spec 0006's coverage test, as before, when text lines cover enough of the picture (`TEXT_OVER_PICTURE_MAX`). That test counts any readable line, visible or hidden, punctuation included, so a dense layer of junk (six hidden lines of `|||` over a ruled form) or a dense OCR layer over a pasted photo still clears it: a recorded limit, taken up as scope feature 20. Every OCR note also gains a sentence saying that words the recognition missed stay in the picture.
 
 ## Amends specs 0006 and 0007
 
@@ -20,7 +20,7 @@ Applied in place by the build (task 5, and task 10 for the review's changes).
 **User stories**:
 - As a visitor with a short scanned letter, I want running it through OCR, as RedactNest advises, to let RedactNest read it, so the file is not called partly redacted for pages it can read.
 - As a visitor with a one line scanned page, such as a signature page, I want it to open after OCR rather than be refused.
-- As a visitor, I want a picture that OCR never read, or read only as stray marks or punctuation, to stay named, even when a line of a scan's text layer runs over it or a hidden copy of visible text sits on it, so I never believe its words were checked.
+- As a visitor, I want a picture that OCR never read, or read only as stray marks or punctuation, to stay named, even when a line of a scan's text layer runs over it or a hidden copy of visible text sits on it, so I never believe its words were checked. This holds while those lines cover less than `TEXT_OVER_PICTURE_MAX` of the picture; a denser layer is judged by spec 0006's coverage test, as before, until scope feature 20 decides otherwise.
 - As a visitor with an OCR scan, I want to be told that words the recognition missed stay in the picture.
 
 **Acceptance criteria**:
@@ -265,14 +265,14 @@ Ordered by Skateboard. The fix is small enough that slice 1 is the whole usable 
 - A tilt no longer flips a scan between two different warnings for the same content.
 - One rule fixes both the `bare-picture` and the `scanned` misfire, with no new finding, no protocol change and no new cost on pages without pictures.
 - A photo pasted onto an OCR scan stays named when a line of the scan's text layer runs over it, and so does a large photo under a small pasted scan.
-- Punctuation and format characters, the commonest OCR junk on photos, form rules and table borders, never clear a warning, and neither does one letter carrying marks.
+- Punctuation and format characters, the commonest OCR junk on photos, form rules and table borders, never form a run, and neither does one letter carrying marks. Only a layer dense enough for spec 0006's coverage test still clears a picture (see *Negative*).
 - A hidden copy of visible text never clears a warning, whatever its offset or its drift along the line.
 
 **Negative / tradeoffs**:
 - OCR noise that happens to form a run of 3 letters or digits on a photo (`lll`, `111`) clears that photo's warning. The note still says only recognised text is found.
 - One recognised word over a picture full of words OCR missed, such as handwriting, clears `bare-picture` for it. The note's new sentence is the whole answer, and the file is named `-redacted.pdf`.
 - A crafted file can clear a photo's warning by drawing invisible text over it, away from any drawn text. This is a recorded limit, in the same family as spec 0006, INV-9. So can a hidden copy that sits a line or more away from its visible text, and one written a word at a time whose words each sit beyond the reach of their visible twins, since MuPDF may make each word its own line.
-- A photo pasted onto a dense OCR scan, whose text layer covers at least `TEXT_OVER_PICTURE_MAX` of the photo, is still cleared by spec 0006's coverage test, as it was before this spec. Page 28 pins it, and *Follow-up* takes it up.
+- A picture whose text lines cover at least `TEXT_OVER_PICTURE_MAX` of it is still cleared by spec 0006's coverage test before any run is asked, as it was before this spec, whatever those lines hold. That test counts any readable line, visible or hidden, punctuation included. So a photo pasted onto a dense OCR scan is cleared by the scan's layer (page 28 pins it), and so is a scan whose only layer is dense punctuation, such as six hidden lines of `|||` from a ruled form or table (one to three such lines stay bare). No letter or number was read there, and the note's sentence on missed words does not cover it. *Follow-up* takes both up.
 - A photo placed within about one grid cell of a full page scan's edges shares the scan's footprint (AC-16), so the scan's run clears it too.
 - A photo pasted onto an OCR scan stays warned even when OCR did read the photo's own words, since text over two different pictures cannot be told apart. So does a sparse scan stored as a page background plus smaller text masks, each at least `PICTURE_MIN_SHARE`, whose words lie over both.
 - A line of OCR text that runs within half a character's height of drawn text (a visible stamp, or a typed value on its baseline) counts for nothing, so a sparse scan whose only words sit beside such text stays warned.
@@ -290,4 +290,4 @@ Ordered by Skateboard. The fix is small enough that slice 1 is the whole usable 
 
 - [ ] Record for `/sync`: `MACHINE_READ_RUN` and `COPY_REACH_RATIO` among the page reading's thresholds in `src/engine/AGENTS.md`, and the rule that the machine read exemption counts only letters and numbers of purely invisible text over one picture, on lines no drawn text runs beside.
 - [ ] Feature 16's security page says that a picture counts as read once OCR left a word of 3 or more letters or digits on it, over that picture alone, and that words OCR missed stay in the picture.
-- [ ] Decide whether AC-16's veto should reach spec 0006's coverage test for machine read lines, so a photo pasted onto a dense OCR scan stays named (page 28 pins today's outcome). Enrolled on the scope as feature 20.
+- [ ] Decide what spec 0006's coverage test should count, since today any readable line clears a picture once the lines cover `TEXT_OVER_PICTURE_MAX` of it, not only a dense OCR layer over a photo. Two cases are known: whether AC-16's veto should reach the test for machine read lines, so a photo pasted onto a dense OCR scan stays named (page 28 pins today's outcome); and whether a line holding no letter or number (AC-14's junk, such as lines of `|||` or `___` from ruled forms and tables) should count toward coverage at all. Found by the second review on 2026-09-30 (minor 1). Enrolled on the scope as feature 20.
