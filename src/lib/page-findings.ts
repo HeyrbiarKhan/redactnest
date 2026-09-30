@@ -6,8 +6,9 @@
  * warning repeated at download and the coverage note's qualifier all come from
  * one predicate over one value and can never contradict each other (INV-5).
  * Typed as records over `PageFinding`, so a finding added to the protocol
- * without its words fails `pnpm typecheck`. Feature 8 owns the final wording;
- * this is the plain first draft the spec wrote.
+ * without its words fails `pnpm typecheck`. Spec 0007 reviewed the wording as
+ * it reads on the page, reworded `ADVICE` and added the edge line (AC-18,
+ * AC-19).
  */
 
 import {
@@ -118,6 +119,13 @@ interface Worded {
 }
 
 /**
+ * What happens to a found item that crosses a page's edge (spec 0007, AC-19,
+ * from the 2026-09-29 review of spec 0006, note 3).
+ */
+const EDGE_FRAGMENT =
+  "A found item crossing a page's edge is listed by the part inside the page; the part outside is removed with the rest.";
+
+/**
  * Each finding's line at open. Spec 0006, *Copy*. `blank` has none: it is
  * never shown.
  */
@@ -171,11 +179,13 @@ const FINDING_TEXT: Readonly<Record<Exclude<PageFinding, "blank">, Worded>> =
       many: (pages) =>
         `${pages} are scans with machine read text. RedactNest reads that text, so it can only find what the text recognition got right.`,
     },
+    // Spec 0007, AC-19: the last sentence says why a found item at the edge
+    // is listed shorter than it is drawn.
     "off-page-content": {
       one: (pages) =>
-        `${pages} has text or drawings outside its visible area. RedactNest removes them when you redact, since nobody can see them.`,
+        `${pages} has text or drawings outside its visible area. RedactNest removes them when you redact, since nobody can see them. ${EDGE_FRAGMENT}`,
       many: (pages) =>
-        `${pages} have text or drawings outside their visible area. RedactNest removes them when you redact, since nobody can see them.`,
+        `${pages} have text or drawings outside their visible area. RedactNest removes them when you redact, since nobody can see them. ${EDGE_FRAGMENT}`,
     },
   });
 
@@ -251,9 +261,14 @@ export const ALL_CLEAR = "RedactNest can read the text on every page.";
 /** The warning callout's title at open (AC-20). */
 export const OPEN_WARNING_TITLE = "Some pages can't be fully checked";
 
-/** The advice after the warning lines (AC-20). */
+/**
+ * The advice after the warning lines (AC-20). Spec 0007, AC-18: it says text
+ * recognition "may" help and promises nothing, because a sparse OCR page can
+ * still carry a warning afterwards (spec 0006's open Follow-up). It speaks to
+ * the file in hand, since somebody holding only the scan has no original.
+ */
 export const ADVICE =
-  "If you have the original, run it through text recognition (OCR) first, then open the result here.";
+  "Run this file through text recognition (OCR) first, then open the result here. That may let RedactNest read those pages.";
 
 /** The download warning's title (AC-22). */
 export const DOWNLOAD_WARNING_TITLE = "Not every page was checked";

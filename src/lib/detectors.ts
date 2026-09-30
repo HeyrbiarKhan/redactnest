@@ -4,8 +4,8 @@
  *
  * Typed as records over `DetectorKind` and `BlockedReason`, so a kind or a
  * reason added to the protocol without its words fails `pnpm typecheck`
- * (INV-9, AC-24). Feature 8 owns the final wording; this is the plain first
- * draft the spec wrote.
+ * (INV-9, AC-24). Spec 0007 reviewed the wording as it reads on the page; the
+ * empty state now points at Make a cleaned copy, the action its button names.
  */
 
 import { Mail, Phone, type LucideIcon } from "lucide-react";

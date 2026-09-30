@@ -79,16 +79,22 @@ export function isEngineErrorKind(value: unknown): value is EngineErrorKind {
  * redaction run reports `redacting`, `writing` and then `verifying`, the last
  * being the engine reopening its own output to prove it clean (spec 0004,
  * AC-16).
+ *
+ * A list as well as a type, so a test can walk every phase and find words for
+ * each (spec 0007, AC-16), as it walks `ENGINE_ERROR_KINDS`.
  */
-export type ProgressPhase =
-  | "checking-entitlement"
-  | "loading-engine"
-  | "opening"
-  | "inspecting"
-  | "detecting"
-  | "redacting"
-  | "writing"
-  | "verifying";
+export const PROGRESS_PHASES = Object.freeze([
+  "checking-entitlement",
+  "loading-engine",
+  "opening",
+  "inspecting",
+  "detecting",
+  "redacting",
+  "writing",
+  "verifying",
+] as const);
+
+export type ProgressPhase = (typeof PROGRESS_PHASES)[number];
 
 /**
  * The kinds of sensitive pattern a detector can find.

@@ -1415,7 +1415,7 @@ describe("the page readings (spec 0006)", () => {
       "Page 4 has no text RedactNest can read. Anything on it, such as words in a picture or drawn as shapes, can't be found or removed.",
     );
     expect(within(warning).getByTestId("page-advice")).toHaveTextContent(
-      "If you have the original, run it through text recognition (OCR) first, then open the result here.",
+      "Run this file through text recognition (OCR) first, then open the result here. That may let RedactNest read those pages.",
     );
     // The blank page is never named.
     expect(warning).not.toHaveTextContent("Page 3");
@@ -1553,7 +1553,7 @@ describe("the page readings (spec 0006)", () => {
       await openWith(run.session);
 
       expect(screen.getByTestId("page-notes")).toHaveTextContent(
-        "Page 1 has text or drawings outside its visible area. RedactNest removes them when you redact, since nobody can see them.",
+        "Page 1 has text or drawings outside its visible area. RedactNest removes them when you redact, since nobody can see them. A found item crossing a page's edge is listed by the part inside the page; the part outside is removed with the rest.",
       );
       expect(screen.getByTestId("page-warnings")).toHaveTextContent(
         "Page 2 has a picture that reaches outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.",
