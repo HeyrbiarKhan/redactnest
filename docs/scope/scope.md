@@ -18,7 +18,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 5 | Redaction engine | Release 1 | done |
 | 6 | Pattern detection | Release 1 | done |
 | 7 | Scanned page detection & warnings | Release 1 | done |
-| 8 | Redact flow | Release 1 | in-progress |
+| 8 | Redact flow | Release 1 | done |
 | 9 | Privacy policy & terms | Release 2 | planned |
 | 10 | Billing & paid plan | Release 2 | planned |
 | 11 | Telemetry & error monitoring | Release 3 | planned |
@@ -131,7 +131,7 @@ spec [0006](../specs/0006-scanned-page-detection-warnings/index.md) · code in `
 - [x] Review it (fresh model): `/check review scanned page detection & warnings`
 - [x] Document it: `/document scanned page detection & warnings`
 
-### 8. Redact flow · in-progress
+### 8. Redact flow · done
 The single page that is the product: drop a PDF, see what was found, tick what to remove, download the clean file, read the summary of what happened.
 **Done when:** an anonymous visitor can take a document up to the page cap from drop to download in one pass, the cap is a config value (3 to start), the scanned page warnings surface in the flow, the summary shows counts by detection type plus what was sanitized, and failure states say plainly what went wrong.
 spec [0007](../specs/0007-redact-flow/index.md) · code in `src/app/tool` (`tool-client.tsx`, `review-checklist.tsx`, new `action-panel.tsx`, `result-card.tsx`, `failure-callout.tsx`), `src/lib` (`session.ts`, `detectors.ts`, `page-findings.ts`, new `flow-text.ts`), `src/ui` (`drop-zone.tsx`, `checklist-item.tsx`, new `summary-list.tsx`, `checklist-select-all.tsx`), `src/worker` (`client.ts`, `protocol.ts`), `src/engine/find.ts`
