@@ -5,8 +5,10 @@
 
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { Button } from "@/ui/button";
 import { DropZone } from "@/ui/drop-zone";
 
 import { expectNoAxeViolations } from "../../setup/component";
@@ -142,6 +144,136 @@ describe("DropZone", () => {
 
   it("passes axe", async () => {
     const { container } = renderZone();
+
+    await expectNoAxeViolations(container);
+  });
+});
+
+/** Spec 0007, AC-3. The compact form, once a file is chosen. */
+describe("DropZone as the file bar", () => {
+  function renderBar(pageCount: number | null = 3, fileName = "quarterly report.pdf") {
+    const onFile = vi.fn();
+    const onWarm = vi.fn();
+    const onStartOver = vi.fn();
+    const view = render(
+      <DropZone
+        compact
+        fileName={fileName}
+        pageCount={pageCount}
+        buttonLabel="Choose another PDF"
+        accept="application/pdf"
+        onFile={onFile}
+        onWarm={onWarm}
+        action={
+          <Button variant="link" onClick={onStartOver}>
+            Start over
+          </Button>
+        }
+      />,
+    );
+    return { ...view, onFile, onWarm, onStartOver };
+  }
+
+  it("shows the file's name and its page count", () => {
+    renderBar(3);
+
+    const bar = screen.getByTestId("file-bar");
+    expect(bar).toHaveTextContent("quarterly report.pdf");
+    expect(screen.getByTestId("page-count")).toHaveTextContent("3 pages");
+    expect(screen.queryByTestId("drop-area")).not.toBeInTheDocument();
+  });
+
+  it("says one page, and nothing at all before the count is known", () => {
+    const { rerender } = renderBar(1);
+    expect(screen.getByTestId("page-count")).toHaveTextContent("1 page");
+    expect(screen.getByTestId("page-count")).not.toHaveTextContent("pages");
+
+    rerender(
+      <DropZone
+        compact
+        fileName="report.pdf"
+        pageCount={null}
+        buttonLabel="Choose another PDF"
+        accept="application/pdf"
+        onFile={() => {}}
+        onWarm={() => {}}
+      />,
+    );
+    expect(screen.queryByTestId("page-count")).not.toBeInTheDocument();
+  });
+
+  /** INV-7: a name from somebody's disk renders as text, never as markup. */
+  it("renders the file's name as text", () => {
+    const { container } = renderBar(2, "<img src=x onerror=alert(1)>.pdf");
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(screen.getByTestId("file-bar")).toHaveTextContent(
+      "<img src=x onerror=alert(1)>.pdf",
+    );
+  });
+
+  it("has one tab stop for its button, then the caller's action", async () => {
+    const user = userEvent.setup();
+    const { onStartOver } = renderBar();
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Choose another PDF" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Start over" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(onStartOver).toHaveBeenCalledTimes(1);
+    await user.tab();
+    expect(document.body).toHaveFocus();
+  });
+
+  it("still takes a dropped file, with the dragging look while one is over it", () => {
+    const { onFile, onWarm } = renderBar();
+    const bar = screen.getByTestId("file-bar");
+    const file = pdf("second.pdf");
+
+    fireEvent.dragOver(bar);
+    expect(bar).toHaveAttribute("data-state", "dragging");
+    expect(bar).toHaveClass("border-accent", "bg-accent-soft");
+    expect(onWarm).toHaveBeenCalled();
+
+    fireEvent.drop(bar, { dataTransfer: { files: [file] } });
+    expect(bar).toHaveAttribute("data-state", "idle");
+    expect(onFile).toHaveBeenCalledWith(file);
+  });
+
+  it("clears the input after a choice, as the full zone does (spec 0002, AC-2)", async () => {
+    const { onFile } = renderBar();
+    const file = pdf();
+
+    await userEvent.setup().upload(screen.getByTestId("file-input"), file);
+
+    expect(onFile).toHaveBeenCalledWith(file);
+    const input = screen.getByTestId<HTMLInputElement>("file-input");
+    expect(input.value).toBe("");
+    expect(input).toHaveAttribute("tabindex", "-1");
+    expect(input).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("hands its button to a caller that asks for it", () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <DropZone
+        compact
+        fileName="report.pdf"
+        pageCount={2}
+        buttonLabel="Choose another PDF"
+        accept="application/pdf"
+        onFile={() => {}}
+        onWarm={() => {}}
+        buttonRef={ref}
+      />,
+    );
+
+    expect(ref.current).toBe(screen.getByRole("button", { name: "Choose another PDF" }));
+  });
+
+  it("passes axe", async () => {
+    const { container } = renderBar();
 
     await expectNoAxeViolations(container);
   });

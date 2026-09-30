@@ -213,14 +213,14 @@ describe("the coverage note and the empty state", () => {
     expect(container.querySelector("[role]")).toBeNull();
   });
 
-  it("says nothing was found, and that Redact still cleans the file, when there is nothing", () => {
+  it("says nothing was found, and that a cleaned copy is still on offer, when there is nothing", () => {
     show({ matches: [] });
 
     expect(screen.getByTestId("coverage")).toBeInTheDocument();
     expect(screen.getByText(NOTHING_FOUND.title)).toBeVisible();
     expect(screen.getByText(NOTHING_FOUND.helper)).toBeVisible();
     expect(NOTHING_FOUND.helper).toBe(
-      "RedactNest found no email addresses or phone numbers. Redact still makes a cleaned copy, with metadata and hidden content removed.",
+      "RedactNest found no email addresses or phone numbers. Make a cleaned copy to remove metadata and hidden content.",
     );
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
@@ -244,7 +244,7 @@ describe("the coverage note and the empty state", () => {
     expect(screen.getByText(NOTHING_FOUND_PARTLY.title)).toBeVisible();
     expect(screen.getByText(NOTHING_FOUND_PARTLY.helper)).toBeVisible();
     expect(NOTHING_FOUND_PARTLY.helper).toBe(
-      "RedactNest found no email addresses or phone numbers on the pages it could read. Redact still makes a cleaned copy, with metadata and hidden content removed.",
+      "RedactNest found no email addresses or phone numbers on the pages it could read. Make a cleaned copy to remove metadata and hidden content.",
     );
     expect(screen.queryByText(NOTHING_FOUND.helper)).not.toBeInTheDocument();
   });

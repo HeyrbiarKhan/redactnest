@@ -71,7 +71,9 @@ const CONTRACT: readonly Pairing[] = Object.freeze([
   ...pairings(["ink", "ink-muted"], ["canvas", "surface", "subtle"], TEXT),
   ...pairings(["on-accent"], ["accent", "accent-strong"], TEXT),
   ...pairings(["accent-strong"], ["canvas", "surface", "subtle", "accent-soft"], TEXT),
-  ...pairings(["ink"], ["accent-soft"], TEXT),
+  // `ink-muted` on `accent-soft`: the drop zone's helper and the file bar's
+  // page count while a file is dragged over them (spec 0007, INV-6).
+  ...pairings(["ink", "ink-muted"], ["accent-soft"], TEXT),
   ...pairings(["ink", "ink-muted"], ["warning-bg", "info-bg", "danger-bg"], TEXT),
   ...pairings(["danger-ink"], ["canvas", "surface", "danger-bg"], TEXT),
   ...pairings(["accent"], ["canvas", "surface", "accent-soft"], GRAPHIC),

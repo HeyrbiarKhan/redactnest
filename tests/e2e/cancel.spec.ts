@@ -235,9 +235,10 @@ test("detection gives way to a second document chosen while it reads", async ({
     mimeType: "application/pdf",
     buffer: densePdf(),
   });
-  await expect(page.getByTestId("progress")).toHaveText(/Looking for sensitive details/, {
-    timeout: ENGINE_TIMEOUT,
-  });
+  await expect(page.getByTestId("progress")).toHaveText(
+    /Looking for email addresses and phone numbers/,
+    { timeout: ENGINE_TIMEOUT },
+  );
 
   // Nothing ticked has changed, so the replacement asks nothing.
   await input.setInputFiles(resolve("tests/fixtures/two-pages.pdf"));
@@ -251,7 +252,6 @@ test("detection gives way to a second document chosen while it reads", async ({
   // The first document's review never arrives, now or late.
   await page.waitForTimeout(3_000);
   await expect(page.getByTestId("page-count")).toHaveText(/2 pages/);
-  expect(await page.evaluate(() => window.__redactnestPageCounts)).toEqual([
-    "This document has 2 pages.",
-  ]);
+  // The file bar's count (spec 0007, AC-3).
+  expect(await page.evaluate(() => window.__redactnestPageCounts)).toEqual(["2 pages"]);
 });

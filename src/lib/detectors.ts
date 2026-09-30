@@ -81,7 +81,7 @@ export const COVERAGE_NOTE = `RedactNest looked for ${lookedFor("conjunction")}.
 /** The empty state, when detection found nothing at all (AC-14). */
 export const NOTHING_FOUND = Object.freeze({
   title: "Nothing found to remove",
-  helper: `RedactNest found no ${lookedFor("disjunction")}. Redact still makes a cleaned copy, with metadata and hidden content removed.`,
+  helper: `RedactNest found no ${lookedFor("disjunction")}. Make a cleaned copy to remove metadata and hidden content.`,
 });
 
 /**
@@ -92,7 +92,7 @@ export const COVERAGE_NOTE_PARTLY = `RedactNest looked for ${lookedFor("conjunct
 
 export const NOTHING_FOUND_PARTLY = Object.freeze({
   title: NOTHING_FOUND.title,
-  helper: `RedactNest found no ${lookedFor("disjunction")} on the pages it could read. Redact still makes a cleaned copy, with metadata and hidden content removed.`,
+  helper: `RedactNest found no ${lookedFor("disjunction")} on the pages it could read. Make a cleaned copy to remove metadata and hidden content.`,
 });
 
 /**
@@ -113,6 +113,22 @@ export function detectionCounts(matches: readonly ReviewMatch[]): DetectionCount
   return Object.freeze({
     foundByType: Object.freeze(foundByType),
     blockedByReason: Object.freeze(blockedByReason),
+  });
+}
+
+/**
+ * Counts by kind as words, in `DETECTOR_KINDS` order, each with its own noun:
+ * `["4 email addresses", "1 phone number"]`. A kind with no count is left out.
+ * The result card joins these into a sentence (spec 0007, AC-11).
+ */
+export function countedKinds(
+  byType: Readonly<Partial<Record<DetectorKind, number>>>,
+): readonly string[] {
+  return DETECTOR_KINDS.flatMap((kind) => {
+    const count = byType[kind] ?? 0;
+    if (count === 0) return [];
+    const { noun } = DETECTOR_LABELS[kind];
+    return [`${count} ${count === 1 ? noun.one : noun.other}`];
   });
 }
 

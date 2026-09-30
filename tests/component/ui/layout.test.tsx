@@ -7,6 +7,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FileText, Inbox } from "lucide-react";
+import { createRef } from "react";
 import { describe, expect, it } from "vitest";
 
 import { Button } from "@/ui/button";
@@ -19,6 +20,7 @@ import { SiteFooter } from "@/ui/site-footer";
 import { SiteHeader } from "@/ui/site-header";
 import { SkipLink } from "@/ui/skip-link";
 import { Spinner } from "@/ui/spinner";
+import { SummaryList } from "@/ui/summary-list";
 
 import { expectNoAxeViolations } from "../../setup/component";
 
@@ -64,12 +66,79 @@ describe("Card", () => {
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
   });
 
+  /** Spec 0007, *Focus*: a result card's heading takes focus when it appears. */
+  it("makes its heading focusable by script when given a ref, and only then", () => {
+    const ref = createRef<HTMLHeadingElement>();
+    render(
+      <>
+        <Card title="Your redacted file is ready" headingRef={ref}>
+          <p>Body</p>
+        </Card>
+        <Card title="Document opened">
+          <p>Body</p>
+        </Card>
+      </>,
+    );
+
+    const heading = screen.getByRole("heading", { name: "Your redacted file is ready" });
+    expect(ref.current).toBe(heading);
+    expect(heading).toHaveAttribute("tabindex", "-1");
+    expect(screen.getByRole("heading", { name: "Document opened" })).not.toHaveAttribute(
+      "tabindex",
+    );
+    // Still the region's name.
+    expect(
+      screen.getByRole("region", { name: "Your redacted file is ready" }),
+    ).toContainElement(heading);
+  });
+
   it("passes axe", async () => {
     const { container } = render(
       <Card title="Document opened">
         <p>This document has 2 pages.</p>
       </Card>,
     );
+
+    await expectNoAxeViolations(container);
+  });
+});
+
+/** Spec 0007, AC-11. Spec 0003's summary panel, as a definition list. */
+describe("SummaryList", () => {
+  const ITEMS = [
+    { term: "Removed", description: "4 email addresses and 2 phone numbers" },
+    { term: "Left in the file", description: "1 phone number you left unticked." },
+  ];
+
+  it("pairs each term with its description in a native definition list", () => {
+    render(<SummaryList items={ITEMS} data-testid="summary" />);
+
+    const list = screen.getByTestId("summary");
+    expect(list.tagName).toBe("DL");
+    const terms = [...list.querySelectorAll("dt")].map((term) => term.textContent);
+    const descriptions = [...list.querySelectorAll("dd")].map((d) => d.textContent);
+    expect(terms).toEqual(["Removed", "Left in the file"]);
+    expect(descriptions).toEqual([
+      "4 email addresses and 2 phone numbers",
+      "1 phone number you left unticked.",
+    ]);
+    // Each pair in its own row, term first.
+    for (const term of list.querySelectorAll("dt")) {
+      expect(term.nextElementSibling?.tagName).toBe("DD");
+    }
+  });
+
+  it("renders a description as text, never as markup", () => {
+    const { container } = render(
+      <SummaryList items={[{ term: "Removed", description: "<b>bold</b>" }]} />,
+    );
+
+    expect(container.querySelector("b")).toBeNull();
+    expect(screen.getByText("<b>bold</b>")).toBeInTheDocument();
+  });
+
+  it("passes axe", async () => {
+    const { container } = render(<SummaryList items={ITEMS} />);
 
     await expectNoAxeViolations(container);
   });

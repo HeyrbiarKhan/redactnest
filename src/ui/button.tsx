@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import type { ComponentPropsWithoutRef, ComponentPropsWithRef, ReactNode } from "react";
 
 import { cx } from "@/lib/cx";
 
@@ -18,7 +18,11 @@ interface ButtonOwnProps {
   readonly children: ReactNode;
 }
 
-type AsButton = Omit<ComponentPropsWithoutRef<"button">, keyof ButtonOwnProps> & {
+/**
+ * With a ref, so a page can move focus to the button that replaces the one
+ * that just went (spec 0007, *Focus*). React 19 passes `ref` as a prop.
+ */
+type AsButton = Omit<ComponentPropsWithRef<"button">, keyof ButtonOwnProps> & {
   readonly href?: undefined;
   readonly reload?: undefined;
 };
@@ -64,7 +68,7 @@ const VARIANT: Readonly<Record<ButtonVariant, string>> = Object.freeze({
   ),
   // Always underlined, so a link is never told apart by colour alone (INV-8).
   link: cx(
-    "inline-flex min-h-6 items-center gap-1.5 rounded-sm text-accent-strong",
+    "inline-flex items-center gap-1.5 rounded-sm text-accent-strong",
     "underline decoration-1 underline-offset-4 hover:decoration-2",
     "disabled:text-ink-muted",
   ),
@@ -87,9 +91,11 @@ const SIZE: Readonly<Record<ButtonVariant, Readonly<Record<ButtonSize, string>>>
       md: "min-h-10 px-4 py-2 text-small font-medium",
       lg: "min-h-12 px-6 py-2.5 text-body font-semibold",
     }),
+    // As tall as the other variants, so a link style button beside one (Start
+    // over in the file bar) is as easy a target and lines up with it (AC-7).
     link: Object.freeze({
-      md: "text-small font-medium",
-      lg: "text-body font-medium",
+      md: "min-h-10 text-small font-medium",
+      lg: "min-h-12 text-body font-medium",
     }),
   });
 

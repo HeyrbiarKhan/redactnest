@@ -1,5 +1,5 @@
 import { CircleAlert, Info, TriangleAlert, type LucideIcon } from "lucide-react";
-import type { AriaRole, ReactNode } from "react";
+import type { AriaRole, ReactNode, Ref } from "react";
 
 import { cx } from "@/lib/cx";
 
@@ -10,6 +10,17 @@ interface CalloutProps {
   readonly title?: ReactNode;
   /** The title becomes this heading when set, and a plain paragraph otherwise. */
   readonly headingLevel?: 2 | 3;
+  /**
+   * A short line above the title that says what kind of thing this is, such
+   * as "Your last run was stopped", so the title can say what happened.
+   */
+  readonly lead?: string;
+  /**
+   * Makes a heading title a place focus can be moved to, for a page that moves
+   * focus to a callout it has just shown (spec 0007, *Focus*). It gets
+   * `tabIndex={-1}`, so it stays out of the tab order.
+   */
+  readonly titleRef?: Ref<HTMLHeadingElement>;
   readonly children?: ReactNode;
   /** Usually a secondary `Button`. */
   readonly action?: ReactNode;
@@ -60,6 +71,8 @@ export function Callout({
   tone,
   title,
   headingLevel,
+  lead,
+  titleRef,
   children,
   action,
   role,
@@ -68,7 +81,20 @@ export function Callout({
   const style = TONE[tone];
   const Icon = style.icon;
   const titled = title !== undefined && title !== null;
-  const Title = headingLevel === 3 ? "h3" : headingLevel === 2 ? "h2" : "p";
+  const titleClass = "text-body font-semibold text-ink";
+  const focusable = titleRef ? { ref: titleRef, tabIndex: -1 } : {};
+  const heading =
+    headingLevel === 3 ? (
+      <h3 {...focusable} className={titleClass}>
+        {title}
+      </h3>
+    ) : headingLevel === 2 ? (
+      <h2 {...focusable} className={titleClass}>
+        {title}
+      </h2>
+    ) : (
+      <p className={titleClass}>{title}</p>
+    );
 
   return (
     <div
@@ -87,7 +113,10 @@ export function Callout({
         />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="sr-only">{`${style.word}: `}</span>
-          {titled && <Title className="text-body font-semibold text-ink">{title}</Title>}
+          {lead !== undefined && (
+            <p className="text-small font-medium text-ink-muted">{lead}</p>
+          )}
+          {titled && heading}
           {children !== undefined && children !== null && (
             <div
               className={cx(

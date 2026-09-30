@@ -26,6 +26,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToolClient } from "@/app/tool/tool-client";
+import { config } from "@/config";
 import {
   asMatchId,
   EngineError,
@@ -221,7 +222,16 @@ describe("the page cap (AC-9)", () => {
     await chooseFile(pdfFile());
 
     const error = await screen.findByRole("alert");
-    expect(error).toHaveTextContent("This document has more than the 3 page limit.");
+    expect(
+      within(error).getByRole("heading", {
+        level: 2,
+        name: "This PDF has more than 3 pages",
+      }),
+    ).toBeInTheDocument();
+    expect(error).toHaveTextContent("The free limit is 3 pages.");
+    expect(error).toHaveTextContent(
+      "Split it into parts of 3 pages or fewer in your PDF app, and redact each one.",
+    );
     // The bug spec 0002 closed: quoting a limit that was never this visitor's.
     expect(error).not.toHaveTextContent("50");
   });
@@ -233,8 +243,20 @@ describe("the page cap (AC-9)", () => {
 
     await chooseFile(pdfFile());
 
+    const error = await screen.findByRole("alert");
+    expect(error).toHaveTextContent("This PDF has more than 50 pages");
+    expect(error).toHaveTextContent("RedactNest handles up to 50 pages.");
+    expect(error).not.toHaveTextContent("free");
+  });
+
+  it("names the file size cap frozen into this job, in whole megabytes", async () => {
+    mocks.openSession.mockRejectedValue(new EngineError("too-large"));
+    render(<ToolClient />);
+
+    await chooseFile(pdfFile());
+
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "This document has more than the 50 page limit.",
+      "RedactNest takes files up to 20 MB.",
     );
   });
 
@@ -437,8 +459,10 @@ describe("a worker that dies (AC-11)", () => {
 
     await chooseFile(unreadableFile());
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "This file could not be read. It may have been moved, renamed or deleted since you chose it.",
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("The file couldn't be read");
+    expect(alert).toHaveTextContent(
+      "It may have been moved, renamed or deleted since you chose it.",
     );
   });
 
@@ -451,9 +475,23 @@ describe("a worker that dies (AC-11)", () => {
     await fireEngineLost();
 
     expect(screen.queryByTestId("lost")).not.toBeInTheDocument();
-    expect(screen.getByTestId("error")).toHaveTextContent(
-      "This PDF could not be read. It may be damaged.",
-    );
+    expect(screen.getByTestId("error")).toHaveTextContent("This PDF can't be read");
+  });
+
+  /** Spec 0007, AC-16: the lost callout keeps its own words. */
+  it("titles the lost callout with its own words, not the engine load failure's", async () => {
+    mocks.openSession.mockImplementation(hangsAt("opening"));
+    render(<ToolClient />);
+    await chooseFile(pdfFile());
+    await screen.findByTestId("progress");
+
+    await fireEngineLost();
+
+    const lost = await screen.findByTestId("lost");
+    expect(
+      within(lost).getByRole("heading", { level: 2, name: "The PDF engine stopped" }),
+    ).toBeInTheDocument();
+    expect(lost).not.toHaveTextContent("didn't load");
   });
 });
 
@@ -596,18 +634,18 @@ describe("the live regions (spec 0003, AC-12)", () => {
     const progress = await screen.findByTestId("progress");
 
     expect(container.querySelector(POLITE)).toContainElement(progress);
-    expect(progress).toHaveTextContent("Checking each page…");
+    expect(progress).toHaveTextContent("Reading each page…");
   });
 
   it("holds the opened document card", async () => {
     const { container } = render(<ToolClient />);
 
     await chooseFile(pdfFile());
-    const pageCount = await screen.findByTestId("page-count");
+    const allClear = await screen.findByTestId("all-clear");
 
-    expect(container.querySelector(POLITE)).toContainElement(pageCount);
+    expect(container.querySelector(POLITE)).toContainElement(allClear);
     expect(screen.getByRole("region", { name: "Document opened" })).toContainElement(
-      pageCount,
+      allClear,
     );
   });
 });
@@ -878,40 +916,61 @@ describe("the redaction path (spec 0004)", () => {
 
     expect(screen.queryByTestId("redact")).not.toBeInTheDocument();
     expect(screen.getByTestId("cancel")).toBeInTheDocument();
-    expect(screen.getByTestId("progress")).toHaveTextContent("Checking your clean file");
+    expect(screen.getByTestId("progress")).toHaveTextContent(
+      "Checking every page of your clean file…",
+    );
   });
 
-  it("shows the one line outcome and a Download button when the run completes", async () => {
-    const run = sessionWithRun();
+  it("shows what was removed, left and stripped, and a Download button, when the run completes", async () => {
+    const run = sessionWithRun(MATCHES);
     await openAndRedact(run);
     await run.finish();
 
-    expect(screen.getByTestId("outcome")).toHaveTextContent(
-      "Removed 3 items and stripped document info, XMP metadata and annotations.",
-    );
+    const outcome = screen.getByTestId("outcome");
+    expect(outcome.tagName).toBe("DL");
+    const terms = [...outcome.querySelectorAll("dt")].map((term) => term.textContent);
+    const descriptions = [...outcome.querySelectorAll("dd")].map((d) => d.textContent);
+    expect(terms).toEqual(["Removed", "Left in the file", "Also stripped"]);
+    expect(descriptions).toEqual([
+      "2 email addresses and 1 phone number",
+      "1 phone number you left unticked.",
+      "Document info, XMP metadata and annotations",
+    ]);
     expect(screen.getByTestId("download")).toBeInTheDocument();
     expect(screen.queryByTestId("cancel")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("action-panel")).not.toBeInTheDocument();
   });
 
   it.each([
     [
       { ...OUTCOME, removedByType: {}, sanitized: [] },
-      "Removed 0 items. There was nothing else to strip.",
+      ["Nothing", "Nothing RedactNest found.", "Nothing else needed stripping."],
     ],
     [
       { ...OUTCOME, removedByType: { email: 1 }, sanitized: ["bookmarks"] },
-      "Removed 1 item and stripped bookmarks.",
+      ["1 email address", "Nothing RedactNest found.", "Bookmarks"],
     ],
     [
-      { ...OUTCOME, removedByType: {}, sanitized: ["javascript", "page-thumbnails"] },
-      "Removed 0 items and stripped JavaScript and page thumbnails.",
+      {
+        ...OUTCOME,
+        removedByType: {},
+        sanitized: ["javascript", "page-thumbnails", "accessibility-tags"],
+      },
+      [
+        "Nothing",
+        "Nothing RedactNest found.",
+        "JavaScript, page thumbnails and accessibility tags (screen readers will read the clean file less well)",
+      ],
     ],
   ] as const)("words the outcome plainly: %j", async (outcome, expected) => {
     const run = sessionWithRun();
     await openAndRedact(run);
     await run.finish(new ArrayBuffer(8), outcome as RedactionOutcome);
 
-    expect(screen.getByTestId("outcome")).toHaveTextContent(expected);
+    const descriptions = [...screen.getByTestId("outcome").querySelectorAll("dd")].map(
+      (description) => description.textContent,
+    );
+    expect(descriptions).toEqual(expected);
   });
 
   it("hands the output over under the output name, then takes Download away", async () => {
@@ -923,6 +982,8 @@ describe("the redaction path (spec 0004)", () => {
     await userEvent.setup().click(screen.getByTestId("download"));
 
     expect(mocks.offerDownload).toHaveBeenCalledTimes(1);
+    // The engine reported three items removed, so the file is named as a
+    // redaction (spec 0007, AC-12).
     expect(mocks.offerDownload).toHaveBeenCalledWith(output, "report-redacted.pdf");
     expect(screen.queryByTestId("download")).not.toBeInTheDocument();
     // Still complete, so the outcome stays and the document stays open.
@@ -944,8 +1005,8 @@ describe("the redaction path (spec 0004)", () => {
   });
 
   it.each([
-    ["not-pdf", "This file is not a PDF."],
-    ["hidden-layers", "layers that can be switched on and off"],
+    ["not-pdf", "This isn't a PDF"],
+    ["hidden-layers", "layers a viewer can switch on and off"],
   ] as const)(
     "says what %s means when a document is refused at open",
     async (kind, words) => {
@@ -957,43 +1018,26 @@ describe("the redaction path (spec 0004)", () => {
     },
   );
 
-  it("says a run could not be proved clean, and offers no file", async () => {
-    const run = sessionWithRun();
-    await openAndRedact(run);
-    await run.fail(new EngineError("redaction-incomplete"));
-
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "could not confirm that everything was removed",
-    );
-    expect(screen.queryByTestId("download")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("outcome")).not.toBeInTheDocument();
-  });
-
   /**
-   * Spec 0004, AC-25 and AC-28, with the lines *Settled here* fixes until
-   * feature 8.
+   * Spec 0004, AC-25 and AC-28, in the words spec 0007 wrote for them. Each
+   * refusal returns to the checklist (spec 0007, AC-14) and says no file was
+   * made (INV-5).
    */
   it.each([
-    [
-      "redaction-overreach",
-      "Removing what you ticked would also remove words you did not tick, so no file was made.",
-    ],
-    [
-      "replacement-text",
-      "A ticked item sits inside hidden replacement text that cannot be removed safely, so no file was made.",
-    ],
-    [
-      "slanted-text",
-      "A ticked item is set at an angle too steep to redact safely, so no file was made.",
-    ],
+    ["redaction-incomplete", "RedactNest couldn't vouch for the clean file"],
+    ["redaction-overreach", "Removing what you ticked would remove more"],
+    ["replacement-text", "A ticked item can't be removed safely"],
+    ["slanted-text", "A ticked item is set at too steep an angle"],
   ] as const)(
     "says what %s means after a run, and offers no file",
-    async (kind, words) => {
+    async (kind, title) => {
       const run = sessionWithRun();
       await openAndRedact(run);
       await run.fail(new EngineError(kind));
 
-      expect(screen.getByRole("alert")).toHaveTextContent(words);
+      const alert = screen.getByRole("alert");
+      expect(within(alert).getByRole("heading", { level: 2, name: title })).toBeVisible();
+      expect(alert).toHaveTextContent(/made no file|no file was made/);
       expect(screen.queryByTestId("download")).not.toBeInTheDocument();
       expect(screen.queryByTestId("outcome")).not.toBeInTheDocument();
     },
@@ -1391,7 +1435,7 @@ describe("the page readings (spec 0006)", () => {
     await user.click(screen.getByTestId("redact"));
     await run.finish();
 
-    const card = screen.getByRole("region", { name: "Your clean file is ready" });
+    const card = screen.getByRole("region", { name: "Your redacted file is ready" });
     const warning = within(card).getByTestId("download-warning");
     expect(
       within(warning).getByRole("heading", {
@@ -1404,13 +1448,10 @@ describe("the page readings (spec 0006)", () => {
     expect(warning).toHaveTextContent(
       "That is why the file's name ends in partly redacted.",
     );
-    // The last thing in the outcome card, and the card sits right above the
-    // row that holds Download.
-    expect(card.lastElementChild).toBe(warning);
+    // Directly above Download, inside the same card (spec 0007, AC-11, INV-5).
     const download = screen.getByTestId("download");
-    expect(card.closest('[aria-live="polite"]')?.nextElementSibling).toContainElement(
-      download,
-    );
+    expect(warning.nextElementSibling).toContainElement(download);
+    expect(card.lastElementChild).toContainElement(download);
 
     await user.click(download);
     expect(mocks.offerDownload).toHaveBeenCalledWith(
@@ -1441,20 +1482,23 @@ describe("the page readings (spec 0006)", () => {
   it.each([
     [
       "no-readable-text",
-      "RedactNest can't read any text in this PDF. It looks like a scan, or its text is in a form RedactNest can't read, so nothing could be found and no file was made. If you have the original, run it through text recognition (OCR) first, then open the result here.",
+      "RedactNest can't read any text in this PDF",
+      "so nothing could be found and no file was made.",
     ],
     [
       "edge-text",
-      "This PDF has text at the edge of a page that RedactNest can't remove cleanly, so it can't be redacted and no file was made.",
+      "Text at a page's edge can't be removed cleanly",
+      "so it made no file.",
     ],
   ] as const)(
-    "says plainly why no file was made for %s, with only Start over (AC-26)",
-    async (kind, words) => {
+    "says plainly why no file was made for %s, above the full drop zone (AC-26)",
+    async (kind, title, words) => {
       mocks.openSession.mockRejectedValue(new EngineError(kind));
       const { container } = render(<ToolClient />);
       await chooseFile(pdfFile());
 
       const alert = await screen.findByRole("alert");
+      expect(within(alert).getByRole("heading", { level: 2, name: title })).toBeVisible();
       expect(alert).toHaveTextContent(words);
       expect(container.querySelector('[aria-live="polite"]')?.contains(alert)).toBe(
         false,
@@ -1462,7 +1506,9 @@ describe("the page readings (spec 0006)", () => {
       expect(screen.queryByTestId("review")).not.toBeInTheDocument();
       expect(screen.queryByTestId("redact")).not.toBeInTheDocument();
       expect(screen.queryByTestId("download")).not.toBeInTheDocument();
-      expect(screen.getByTestId("start-over")).toBeInTheDocument();
+      // Spec 0007, AC-15: the next file is one drop away.
+      expect(screen.getByTestId("drop-area")).toBeInTheDocument();
+      expect(screen.queryByTestId("start-over")).not.toBeInTheDocument();
     },
   );
 
@@ -1507,18 +1553,18 @@ describe("the page readings (spec 0006)", () => {
       await user.click(screen.getByTestId("redact"));
       await run.finish();
 
-      const card = screen.getByRole("region", { name: "Your clean file is ready" });
+      const card = screen.getByRole("region", { name: "Your redacted file is ready" });
       const removed = within(card).getByTestId("off-page-removed");
       expect(removed).toHaveTextContent(
         "Text and drawings outside the visible area of page 1 were removed.",
       );
       expect(removed).toHaveTextContent(/^Note:/);
-      // Before the download warning, which stays the last thing in the card.
+      // Before the download warning, which stays directly above Download.
       const warning = within(card).getByTestId("download-warning");
       expect(
         removed.compareDocumentPosition(warning) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
-      expect(card.lastElementChild).toBe(warning);
+      expect(warning.nextElementSibling).toContainElement(screen.getByTestId("download"));
 
       await user.click(screen.getByTestId("download"));
       expect(mocks.offerDownload).toHaveBeenCalledWith(
@@ -1624,6 +1670,712 @@ describe("the page readings (spec 0006)", () => {
       await openWith(openedSession());
 
       expect(screen.queryByTestId("page-notes")).not.toBeInTheDocument();
+    });
+  });
+});
+
+/**
+ * Spec 0007. The flow as one page: each step takes over the column, a refused
+ * run keeps the review, the result card says what happened, and focus lands
+ * where the step change put something new.
+ */
+describe("the redact flow (spec 0007)", () => {
+  const E1 = asMatchId("f-email-1");
+  const E2 = asMatchId("f-email-2");
+  const P1 = asMatchId("f-phone-1");
+  const B1 = asMatchId("f-blocked");
+
+  function row(
+    id: ReturnType<typeof asMatchId>,
+    type: ReviewMatch["type"],
+    text: string,
+    extra: Partial<ReviewMatch> = {},
+  ): ReviewMatch {
+    return {
+      id,
+      type,
+      page: 1,
+      text,
+      before: "near ",
+      after: " here",
+      tickedByDefault: true,
+      blocked: null,
+      concealed: null,
+      ...extra,
+    };
+  }
+
+  /** Two emails seeded ticked, a phone number seeded clear, and a blocked email. */
+  const FLOW_MATCHES: readonly ReviewMatch[] = Object.freeze([
+    row(E1, "email", "ann@example.com"),
+    row(E2, "email", "bob@example.com"),
+    row(P1, "phone", "020 7946 0958", { tickedByDefault: false }),
+    row(B1, "email", "tilted@example.com", {
+      tickedByDefault: false,
+      blocked: "slanted-text",
+    }),
+  ]);
+
+  const FLOW_OUTCOME: RedactionOutcome = Object.freeze<RedactionOutcome>({
+    pageCount: 2,
+    removedByType: { email: 2 },
+    pagesByFinding: { blank: 1 },
+    sanitized: ["document-info"],
+  });
+
+  const NOTHING_REMOVED: RedactionOutcome = Object.freeze<RedactionOutcome>({
+    ...FLOW_OUTCOME,
+    removedByType: {},
+  });
+
+  /** Page 2 a scan: the file is partly readable. */
+  const PARTLY: DocumentSummary = Object.freeze({
+    pageCount: 2,
+    pages: Object.freeze([
+      Object.freeze({ findings: [] }),
+      Object.freeze({ findings: ["scanned"] }),
+    ]) as DocumentSummary["pages"],
+  });
+
+  interface Run {
+    readonly resolve: (value: RedactedOutput) => void;
+    readonly reject: (error: unknown) => void;
+    readonly onProgress?: (phase: ProgressPhase) => void;
+  }
+
+  /** A session whose every run the test settles, one at a time. */
+  function controllable(
+    matches: readonly ReviewMatch[] = FLOW_MATCHES,
+    summary: DocumentSummary = SUMMARY,
+  ) {
+    const runs: Run[] = [];
+    const latest = () => {
+      const run = runs.at(-1);
+      if (!run) throw new Error("no run was started");
+      return run;
+    };
+    const session: OpenedSession = {
+      ...openedSession(),
+      summary,
+      matches,
+      redact: vi.fn(
+        (_ids, options?: { onProgress?: (phase: ProgressPhase) => void }) =>
+          new Promise<RedactedOutput>((resolve, reject) => {
+            runs.push({ resolve, reject, onProgress: options?.onProgress });
+          }),
+      ),
+      cancel: vi.fn(() => latest().reject(new OperationCancelled())),
+    };
+    return {
+      session,
+      finish: (outcome: RedactionOutcome = FLOW_OUTCOME) =>
+        act(async () => latest().resolve({ output: new ArrayBuffer(8), outcome })),
+      refuse: (kind: EngineError["errorKind"]) =>
+        act(async () => latest().reject(new EngineError(kind))),
+      progress: (phase: ProgressPhase) => act(async () => latest().onProgress?.(phase)),
+    };
+  }
+
+  async function openFlow(session: OpenedSession) {
+    mocks.openSession.mockResolvedValue(session);
+    const rendered = render(<ToolClient />);
+    await chooseFile(pdfFile());
+    await screen.findByTestId("review");
+    return rendered;
+  }
+
+  /** `a` comes before `b` in the page. */
+  function before(a: Element, b: Element): boolean {
+    return Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+  }
+
+  function box(name: string): HTMLElement {
+    return screen.getByRole("checkbox", { name });
+  }
+
+  describe("one step at a time (AC-2 to AC-6)", () => {
+    it("shows the full drop zone naming the free page cap while nothing is open (AC-2)", () => {
+      render(<ToolClient />);
+
+      expect(screen.getByTestId("drop-area")).toHaveTextContent(
+        `Up to ${config.freePageCap} pages for now.`,
+      );
+      expect(screen.queryByTestId("file-bar")).not.toBeInTheDocument();
+    });
+
+    it("turns the drop zone into the file bar once a file is chosen (AC-3)", async () => {
+      mocks.openSession.mockImplementation(hangsAt("opening"));
+      render(<ToolClient />);
+      await chooseFile(pdfFile("board minutes.pdf"));
+
+      const bar = await screen.findByTestId("file-bar");
+      expect(bar).toHaveTextContent("board minutes.pdf");
+      // No count before the document is open.
+      expect(screen.queryByTestId("page-count")).not.toBeInTheDocument();
+      expect(
+        within(bar).getByRole("button", { name: "Choose another PDF" }),
+      ).toBeEnabled();
+      expect(within(bar).getByRole("button", { name: "Start over" })).toBeEnabled();
+      expect(screen.queryByTestId("drop-area")).not.toBeInTheDocument();
+    });
+
+    it("gives the page count to the file bar, and only to it, once the document is open (AC-3)", async () => {
+      await openFlow(controllable().session);
+
+      const bar = screen.getByTestId("file-bar");
+      expect(within(bar).getByTestId("page-count")).toHaveTextContent("2 pages");
+      expect(
+        screen.getByRole("region", { name: "Document opened" }),
+      ).not.toHaveTextContent("2 pages");
+      // The old action row beneath the page is gone: one Start over, in the bar.
+      expect(screen.getAllByTestId("start-over")).toHaveLength(1);
+      expect(bar).toContainElement(screen.getByTestId("start-over"));
+    });
+
+    it("keeps both file bar buttons enabled through a run (AC-3)", async () => {
+      await openFlow(controllable().session);
+      await userEvent.setup().click(screen.getByTestId("redact"));
+
+      const bar = screen.getByTestId("file-bar");
+      expect(
+        within(bar).getByRole("button", { name: "Choose another PDF" }),
+      ).toBeEnabled();
+      expect(within(bar).getByRole("button", { name: "Start over" })).toBeEnabled();
+    });
+
+    it("asks before replacing a running document, and changes nothing on no (AC-3)", async () => {
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      await openFlow(controllable().session);
+      await userEvent.setup().click(screen.getByTestId("redact"));
+
+      await chooseFile(pdfFile("second.pdf"));
+
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(mocks.openSession).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("cancel")).toBeInTheDocument();
+      expect(screen.getByTestId("file-bar")).toHaveTextContent("report.pdf");
+    });
+
+    it("reads from the top: file bar, document, refusal, action panel, coverage note, checklist (AC-5)", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      await userEvent.setup().click(screen.getByTestId("redact"));
+      await run.refuse("slanted-text");
+
+      const order = [
+        screen.getByTestId("file-bar"),
+        screen.getByRole("region", { name: "Document opened" }),
+        screen.getByTestId("run-refusal"),
+        screen.getByTestId("action-panel"),
+        screen.getByTestId("coverage"),
+        screen.getByTestId("checklist"),
+      ];
+      for (let at = 1; at < order.length; at += 1) {
+        expect(before(order[at - 1], order[at])).toBe(true);
+      }
+    });
+
+    it("says what each phase is doing, and that a run with nothing ticked only strips (AC-4)", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      const user = userEvent.setup();
+
+      await user.click(screen.getByTestId("redact"));
+      await run.progress("redacting");
+      expect(screen.getByTestId("progress")).toHaveTextContent(
+        "Removing what you ticked…",
+      );
+      await user.click(screen.getByTestId("cancel"));
+
+      await user.click(box("ann@example.com"));
+      await user.click(box("bob@example.com"));
+      await user.click(screen.getByTestId("redact"));
+      await run.progress("redacting");
+      expect(screen.getByTestId("progress")).toHaveTextContent(
+        "Stripping hidden content…",
+      );
+      // One phase line, in the polite region.
+      expect(screen.getAllByTestId("progress")).toHaveLength(1);
+      expect(
+        screen.getByTestId("progress").closest('[aria-live="polite"]'),
+      ).not.toBeNull();
+    });
+
+    it("names what detection looks for while it runs (AC-4)", async () => {
+      mocks.openSession.mockImplementation(hangsAt("detecting"));
+      render(<ToolClient />);
+      await chooseFile(pdfFile());
+
+      expect(await screen.findByTestId("progress")).toHaveTextContent(
+        "Looking for email addresses and phone numbers…",
+      );
+    });
+
+    it("counts what will be removed, and labels the action to match (AC-6)", async () => {
+      await openFlow(controllable().session);
+      const user = userEvent.setup();
+      const line = () => screen.getByTestId("tick-count");
+      const action = () => screen.getByTestId("redact");
+
+      // Seeded: both emails ticked, of three that can be.
+      expect(line()).toHaveTextContent("2 of 3 found items will be removed.");
+      expect(action()).toHaveTextContent("Redact 2 items");
+
+      await user.click(box("ann@example.com"));
+      expect(line()).toHaveTextContent("1 of 3 found items will be removed.");
+      expect(action()).toHaveTextContent("Redact 1 item");
+
+      await user.click(box("bob@example.com"));
+      expect(line()).toHaveTextContent("Nothing is ticked, so nothing will be removed.");
+      expect(action()).toHaveTextContent("Make a cleaned copy");
+    });
+
+    it("says none can be removed when every found item is blocked (AC-6)", async () => {
+      await openFlow(
+        controllable([
+          row(B1, "email", "tilted@example.com", { blocked: "slanted-text" }),
+        ]).session,
+      );
+
+      expect(screen.getByTestId("tick-count")).toHaveTextContent(
+        "None of the found items can be removed.",
+      );
+      expect(screen.getByTestId("redact")).toHaveTextContent("Make a cleaned copy");
+    });
+
+    it("leaves the count out when nothing was found (AC-6)", async () => {
+      await openFlow(controllable([]).session);
+
+      expect(screen.queryByTestId("tick-count")).not.toBeInTheDocument();
+      expect(screen.getByTestId("redact")).toHaveTextContent("Make a cleaned copy");
+    });
+
+    it("holds Cancel in the action panel while a run works, and keeps the ticks on Cancel (AC-6, AC-10)", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      const user = userEvent.setup();
+      await user.click(box("020 7946 0958"));
+      await user.click(screen.getByTestId("redact"));
+
+      const panel = screen.getByTestId("action-panel");
+      expect(within(panel).getByTestId("cancel")).toBeInTheDocument();
+      expect(within(panel).queryByTestId("redact")).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId("cancel"));
+      expect(await screen.findByTestId("redact")).toHaveTextContent("Redact 3 items");
+      expect(box("020 7946 0958")).toBeChecked();
+    });
+  });
+
+  describe("the result (AC-11 to AC-13)", () => {
+    async function complete(
+      outcome: RedactionOutcome = FLOW_OUTCOME,
+      summary: DocumentSummary = SUMMARY,
+    ) {
+      const run = controllable(FLOW_MATCHES, summary);
+      const rendered = await openFlow(run.session);
+      await userEvent.setup().click(screen.getByTestId("redact"));
+      await run.finish(outcome);
+      return { ...rendered, run };
+    }
+
+    it("takes the action panel's place, above the checklist, outside every live region (AC-11)", async () => {
+      await complete();
+
+      const card = screen.getByTestId("result");
+      expect(screen.queryByTestId("action-panel")).not.toBeInTheDocument();
+      expect(card.closest("[aria-live]")).toBeNull();
+      expect(before(card, screen.getByTestId("coverage"))).toBe(true);
+      expect(before(screen.getByRole("region", { name: "Document opened" }), card)).toBe(
+        true,
+      );
+    });
+
+    it("lists what was removed, what is left and what was stripped (AC-11)", async () => {
+      await complete();
+
+      const descriptions = [...screen.getByTestId("outcome").querySelectorAll("dd")].map(
+        (description) => description.textContent,
+      );
+      expect(descriptions).toEqual([
+        "2 email addresses",
+        "1 phone number you left unticked. 1 email address RedactNest couldn't remove.",
+        "Document info",
+      ]);
+    });
+
+    it("is titled and named as a redaction when something was removed (AC-12)", async () => {
+      await complete();
+      await userEvent.setup().click(screen.getByTestId("download"));
+
+      expect(
+        screen.getByRole("heading", { level: 2, name: "Your redacted file is ready" }),
+      ).toBeInTheDocument();
+      expect(mocks.offerDownload).toHaveBeenCalledWith(
+        expect.any(ArrayBuffer),
+        "report-redacted.pdf",
+      );
+    });
+
+    it("is titled Nothing was removed and named a cleaned copy when nothing was, even on a partly readable file (AC-12)", async () => {
+      await complete(NOTHING_REMOVED, PARTLY);
+
+      expect(
+        screen.getByRole("heading", { level: 2, name: "Nothing was removed" }),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("outcome").querySelector("dd")).toHaveTextContent(
+        /^Nothing$/,
+      );
+      // The page lines still show; only the reason for a partly name goes.
+      const warning = screen.getByTestId("download-warning");
+      expect(warning).toHaveTextContent("Page 2 is a scanned image.");
+      expect(warning).not.toHaveTextContent("partly redacted");
+
+      await userEvent.setup().click(screen.getByTestId("download"));
+      expect(mocks.offerDownload).toHaveBeenCalledWith(
+        expect.any(ArrayBuffer),
+        "report-cleaned.pdf",
+      );
+    });
+
+    it("keeps the card after the download, with the browser line and two ways on (AC-13)", async () => {
+      await complete();
+      await userEvent.setup().click(screen.getByTestId("download"));
+
+      const card = screen.getByTestId("result");
+      const line = within(card).getByTestId("downloaded");
+      expect(line).toHaveTextContent("Your browser has the file.");
+      expect(line.closest('[aria-live="polite"]')).not.toBeNull();
+      expect(within(card).queryByTestId("download")).not.toBeInTheDocument();
+      expect(within(card).getByTestId("redact-another")).toHaveTextContent(
+        "Redact another PDF",
+      );
+      expect(within(card).getByTestId("make-again")).toHaveTextContent("Make it again");
+      expect(screen.getByTestId("outcome")).toBeInTheDocument();
+      // The checklist below stays enabled.
+      expect(box("020 7946 0958")).toBeEnabled();
+    });
+
+    it("goes back to the full drop zone and releases the engine on Redact another PDF (AC-13)", async () => {
+      await complete();
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("download"));
+
+      await user.click(screen.getByTestId("redact-another"));
+
+      expect(mocks.releaseEngine).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("drop-area")).toBeInTheDocument();
+      expect(screen.queryByTestId("result")).not.toBeInTheDocument();
+    });
+
+    it("runs the same ticks again on Make it again, and offers the same file afresh (AC-13)", async () => {
+      const { run } = await complete();
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("download"));
+
+      await user.click(screen.getByTestId("make-again"));
+      const calls = vi.mocked(run.session.redact).mock.calls;
+      expect(calls).toHaveLength(2);
+      expect(calls[1][0]).toEqual(calls[0][0]);
+      expect(screen.getByTestId("cancel")).toBeInTheDocument();
+
+      await run.finish();
+      await user.click(screen.getByTestId("download"));
+      expect(mocks.offerDownload).toHaveBeenCalledTimes(2);
+      expect(mocks.offerDownload).toHaveBeenLastCalledWith(
+        expect.any(ArrayBuffer),
+        "report-redacted.pdf",
+      );
+    });
+
+    it("lands on plain review when Make it again is cancelled (AC-13)", async () => {
+      await complete();
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("download"));
+      await user.click(screen.getByTestId("make-again"));
+
+      await user.click(screen.getByTestId("cancel"));
+
+      expect(await screen.findByTestId("redact")).toBeInTheDocument();
+      expect(screen.queryByTestId("result")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("run-refusal")).not.toBeInTheDocument();
+    });
+
+    it("returns to review when a tick changes after the download, focus staying on it (AC-11)", async () => {
+      await complete();
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("download"));
+
+      await user.click(box("020 7946 0958"));
+
+      expect(screen.queryByTestId("result")).not.toBeInTheDocument();
+      expect(screen.getByTestId("redact")).toHaveTextContent("Redact 3 items");
+      expect(box("020 7946 0958")).toHaveFocus();
+    });
+
+    it("has no accessibility violations before and after the download", async () => {
+      const { container } = await complete(NOTHING_REMOVED, PARTLY);
+      await expectNoAxeViolations(container);
+
+      await userEvent.setup().click(screen.getByTestId("download"));
+      await expectNoAxeViolations(container);
+    });
+  });
+
+  describe("a refused run (AC-14, AC-23)", () => {
+    async function refused(kind: EngineError["errorKind"] = "redaction-overreach") {
+      const run = controllable();
+      const rendered = await openFlow(run.session);
+      const user = userEvent.setup();
+      await user.click(box("020 7946 0958"));
+      await user.click(screen.getByTestId("redact"));
+      await run.refuse(kind);
+      return { ...rendered, run, user };
+    }
+
+    it("returns to the checklist with every tick kept and says why, as an alert (AC-14)", async () => {
+      await refused("redaction-overreach");
+
+      expect(box("ann@example.com")).toBeChecked();
+      expect(box("020 7946 0958")).toBeChecked();
+      const refusal = screen.getByTestId("run-refusal");
+      expect(refusal).toHaveAttribute("role", "alert");
+      expect(refusal).toHaveTextContent("Your last run was stopped");
+      expect(
+        within(refusal).getByRole("heading", {
+          level: 2,
+          name: "Removing what you ticked would remove more",
+        }),
+      ).toBeInTheDocument();
+      expect(refusal).toHaveTextContent("a stamp such as CONFIDENTIAL or DRAFT");
+      expect(refusal).toHaveTextContent("Untick items that sit under a stamp");
+      expect(screen.getByTestId("redact")).toBeEnabled();
+      expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+    });
+
+    it.each([
+      "redaction-overreach",
+      "replacement-text",
+      "slanted-text",
+      "redaction-incomplete",
+    ] as const)(
+      "offers no button of its own for %s, which a tick can cause (AC-14)",
+      async (kind) => {
+        await refused(kind);
+
+        expect(
+          within(screen.getByTestId("run-refusal")).queryByRole("button"),
+        ).toBeNull();
+      },
+    );
+
+    it.each(["unsupported", "edge-text"] as const)(
+      "offers Choose another PDF for %s, which a tick cannot cause (AC-14)",
+      async (kind) => {
+        const click = vi
+          .spyOn(HTMLInputElement.prototype, "click")
+          .mockImplementation(() => {});
+        const { user } = await refused(kind);
+
+        await user.click(
+          within(screen.getByTestId("run-refusal")).getByRole("button", {
+            name: "Choose another PDF",
+          }),
+        );
+        expect(click).toHaveBeenCalledTimes(1);
+        click.mockRestore();
+      },
+    );
+
+    it("stays through a tick change, and clears when the next run starts (AC-14)", async () => {
+      const { user } = await refused();
+
+      await user.click(box("ann@example.com"));
+      expect(screen.getByTestId("run-refusal")).toBeInTheDocument();
+
+      await user.click(screen.getByTestId("redact"));
+      expect(screen.queryByTestId("run-refusal")).not.toBeInTheDocument();
+    });
+
+    it("clears when the session is released", async () => {
+      const { user } = await refused();
+
+      await user.click(screen.getByTestId("start-over"));
+
+      expect(screen.queryByTestId("run-refusal")).not.toBeInTheDocument();
+    });
+
+    it("counts as unsaved work: leaving warns and replacing asks (AC-23)", async () => {
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      const run = controllable();
+      await openFlow(run.session);
+      // The seeded ticks, untouched, so only the refusal is worth warning about.
+      await userEvent.setup().click(screen.getByTestId("redact"));
+      await run.refuse("slanted-text");
+
+      expect(wouldWarnOnLeave()).toBe(true);
+      await chooseFile(pdfFile("second.pdf"));
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("run-refusal")).toBeInTheDocument();
+    });
+
+    it("is no refusal when the worker is lost during the run", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      await userEvent.setup().click(screen.getByTestId("redact"));
+
+      await fireEngineLost();
+
+      expect(screen.getByTestId("lost")).toBeInTheDocument();
+      expect(screen.queryByTestId("run-refusal")).not.toBeInTheDocument();
+    });
+
+    it("has no accessibility violations", async () => {
+      const { container } = await refused("unsupported");
+
+      await expectNoAxeViolations(container);
+    });
+  });
+
+  describe("an open that fails (AC-15)", () => {
+    it("says so above the full drop zone, holding nothing of the document", async () => {
+      mocks.openSession.mockRejectedValue(new EngineError("corrupt"));
+      const { container } = render(<ToolClient />);
+      await chooseFile(pdfFile());
+
+      const error = await screen.findByTestId("error");
+      const zone = screen.getByTestId("drop-area");
+      expect(before(error, zone)).toBe(true);
+      expect(error).toHaveTextContent("This PDF can't be read");
+      expect(error).toHaveTextContent("If you have another copy, try that one.");
+      expect(screen.queryByTestId("file-bar")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("review")).not.toBeInTheDocument();
+      await expectNoAxeViolations(container);
+    });
+  });
+
+  /** AC-20: after every step change, focus lands where *Focus* says. */
+  describe("focus", () => {
+    it("moves to the file bar's button when a file is chosen, and stays when it opens", async () => {
+      await openFlow(controllable().session);
+
+      expect(
+        within(screen.getByTestId("file-bar")).getByRole("button", {
+          name: "Choose another PDF",
+        }),
+      ).toHaveFocus();
+    });
+
+    it("moves to Cancel on Redact, and back to Redact on Cancel", async () => {
+      await openFlow(controllable().session);
+      const user = userEvent.setup();
+
+      await user.click(screen.getByTestId("redact"));
+      expect(screen.getByTestId("cancel")).toHaveFocus();
+
+      await user.click(screen.getByTestId("cancel"));
+      expect(await screen.findByTestId("redact")).toHaveFocus();
+    });
+
+    it("moves to the result card's heading when the run completes, then to Redact another PDF on Download", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("redact"));
+
+      await run.finish();
+      expect(
+        screen.getByRole("heading", { level: 2, name: "Your redacted file is ready" }),
+      ).toHaveFocus();
+
+      await user.click(screen.getByTestId("download"));
+      expect(screen.getByTestId("redact-another")).toHaveFocus();
+    });
+
+    it("moves to Cancel on Make it again", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("redact"));
+      await run.finish();
+      await user.click(screen.getByTestId("download"));
+
+      await user.click(screen.getByTestId("make-again"));
+
+      expect(screen.getByTestId("cancel")).toHaveFocus();
+    });
+
+    it("moves to the refusal's heading when a run is refused", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      await userEvent.setup().click(screen.getByTestId("redact"));
+
+      await run.refuse("slanted-text");
+
+      expect(
+        screen.getByRole("heading", {
+          level: 2,
+          name: "A ticked item is set at too steep an angle",
+        }),
+      ).toHaveFocus();
+    });
+
+    it("moves to the failure's heading when an open fails", async () => {
+      mocks.openSession.mockRejectedValue(new EngineError("not-pdf"));
+      render(<ToolClient />);
+      await chooseFile(pdfFile());
+
+      expect(
+        await screen.findByRole("heading", { level: 2, name: "This isn't a PDF" }),
+      ).toHaveFocus();
+    });
+
+    it("moves to Try again when the worker is lost, then to the file bar on Try again", async () => {
+      mocks.openSession.mockImplementation(hangsAt("opening"));
+      render(<ToolClient />);
+      await chooseFile(pdfFile());
+      await screen.findByTestId("progress");
+
+      await fireEngineLost();
+      expect(screen.getByTestId("retry")).toHaveFocus();
+
+      await userEvent.setup().click(screen.getByTestId("retry"));
+      expect(
+        within(screen.getByTestId("file-bar")).getByRole("button", {
+          name: "Choose another PDF",
+        }),
+      ).toHaveFocus();
+    });
+
+    it("moves to the full drop zone's button on Start over and on Redact another PDF", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      const user = userEvent.setup();
+
+      await user.click(screen.getByTestId("start-over"));
+      expect(screen.getByRole("button", { name: "Choose a PDF" })).toHaveFocus();
+
+      await chooseFile(pdfFile());
+      await screen.findByTestId("review");
+      await user.click(screen.getByTestId("redact"));
+      await run.finish();
+      await user.click(screen.getByTestId("download"));
+      await user.click(screen.getByTestId("redact-another"));
+      expect(screen.getByRole("button", { name: "Choose a PDF" })).toHaveFocus();
+    });
+
+    it("never leaves focus on the page body after a step change", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      const user = userEvent.setup();
+
+      await user.click(screen.getByTestId("redact"));
+      expect(document.activeElement).not.toBe(document.body);
+      await run.refuse("unsupported");
+      expect(document.activeElement).not.toBe(document.body);
+      await user.click(screen.getByTestId("redact"));
+      await run.finish();
+      expect(document.activeElement).not.toBe(document.body);
     });
   });
 });

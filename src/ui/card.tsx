@@ -1,10 +1,16 @@
-import { useId, type ComponentPropsWithoutRef, type ReactNode } from "react";
+import { useId, type ComponentPropsWithoutRef, type ReactNode, type Ref } from "react";
 
 import { cx } from "@/lib/cx";
 
 interface CardProps extends Omit<ComponentPropsWithoutRef<"section">, "title"> {
   readonly title?: ReactNode;
   readonly headingLevel?: 2 | 3;
+  /**
+   * Makes the heading a place focus can be moved to, for a card that appears
+   * as the result of something the visitor did (spec 0007, *Focus*). It gets
+   * `tabIndex={-1}`, so it stays out of the tab order.
+   */
+  readonly headingRef?: Ref<HTMLHeadingElement>;
   /** Sits at the end of the heading row, usually a `CountBadge`. */
   readonly badge?: ReactNode;
   /** Layout only. */
@@ -19,6 +25,7 @@ interface CardProps extends Omit<ComponentPropsWithoutRef<"section">, "title"> {
 export function Card({
   title,
   headingLevel = 2,
+  headingRef,
   badge,
   className,
   children,
@@ -27,6 +34,7 @@ export function Card({
   const headingId = useId();
   const Heading = headingLevel === 2 ? "h2" : "h3";
   const titled = title !== undefined && title !== null;
+  const focusable = headingRef ? { ref: headingRef, tabIndex: -1 } : {};
 
   return (
     <section
@@ -39,7 +47,7 @@ export function Card({
     >
       {titled && (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Heading id={headingId} className="text-heading text-ink">
+          <Heading {...focusable} id={headingId} className="text-heading text-ink">
             {title}
           </Heading>
           {badge}

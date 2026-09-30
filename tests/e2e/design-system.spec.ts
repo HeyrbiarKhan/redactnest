@@ -340,16 +340,23 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await expect(page.getByTestId("choose-file")).toBeFocused();
   });
 
-  // Spec 0004 put Redact first in the action row, the one main action in view,
-  // so the walk meets it before Start over. Spec 0005 put the checklist above
-  // that row: its group summary, then each row's checkbox, come first.
-  test("the checklist, Redact and Start over are reached and ringed like every other control", async ({
+  // Spec 0007, AC-5: the file bar's two buttons first, then the action panel's
+  // main action above the checklist, then the group summary and each row.
+  test("Start over, Redact and the checklist are reached and ringed like every other control", async ({
     page,
   }) => {
     await page.goto("/tool");
     await openDocument(page);
 
     await page.getByTestId("choose-file").focus();
+
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("start-over")).toBeFocused();
+    await expectFocusRing(page.getByTestId("start-over"));
+
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("redact")).toBeFocused();
+    await expectFocusRing(page.getByTestId("redact"));
 
     await page.keyboard.press("Tab");
     const summary = page.locator("summary", { hasText: "Email addresses" });
@@ -360,15 +367,6 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     const box = page.getByRole("checkbox", { name: "contact@example.com" });
     await expect(box).toBeFocused();
     await expectFocusRing(box);
-
-    await page.keyboard.press("Tab");
-    await expect(page.getByTestId("redact")).toBeFocused();
-    await expectFocusRing(page.getByTestId("redact"));
-
-    await page.keyboard.press("Tab");
-
-    await expect(page.getByTestId("start-over")).toBeFocused();
-    await expectFocusRing(page.getByTestId("start-over"));
   });
 
   /**
@@ -387,16 +385,16 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await page.getByTestId("choose-file").focus();
 
     await page.keyboard.press("Tab");
+    await expect(page.getByTestId("start-over")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("redact")).toBeFocused();
+    await expectFocusRing(page.getByTestId("redact"));
+    await page.keyboard.press("Tab");
     await expect(page.locator("summary", { hasText: "Email addresses" })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(
       page.getByRole("checkbox", { name: "jane.doe@example.com" }),
     ).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(page.getByTestId("redact")).toBeFocused();
-    await expectFocusRing(page.getByTestId("redact"));
-    await page.keyboard.press("Tab");
-    await expect(page.getByTestId("start-over")).toBeFocused();
   });
 
   test("draws the ring at full colour the moment focus lands", async ({ page }) => {

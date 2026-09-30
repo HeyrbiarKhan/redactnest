@@ -90,7 +90,8 @@ test("names a scanned page at open and at download, and the file partly redacted
 /**
  * Spec 0006, AC-10 and AC-26. A document with no page RedactNest can read is
  * refused at open with its plain line, announced once as an alert, with no
- * checklist, no Redact and no Download, and Start over still working.
+ * checklist, no Redact and no Download, and the full drop zone right beneath
+ * it (spec 0007, AC-15).
  */
 test("refuses a document with nothing readable, and says why no file was made", async ({
   page,
@@ -103,7 +104,7 @@ test("refuses a document with nothing readable, and says why no file was made", 
   // By its test id: Next.js's route announcer is an alert of its own.
   const alert = page.getByTestId("error");
   await expect(alert).toHaveText(
-    /^Error: RedactNest can't read any text in this PDF\. .*so nothing could be found and no file was made\./,
+    /^Error: RedactNest can't read any text in this PDF.*so nothing could be found and no file was made\./,
     { timeout: ENGINE_TIMEOUT },
   );
   await expect(alert).toHaveAttribute("role", "alert");
@@ -111,9 +112,9 @@ test("refuses a document with nothing readable, and says why no file was made", 
   await expect(page.getByTestId("redact")).toHaveCount(0);
   await expect(page.getByTestId("download")).toHaveCount(0);
 
-  await page.getByTestId("start-over").click();
-  await expect(page.getByTestId("error")).toHaveCount(0);
-  await expect(page.getByTestId("choose-file")).toBeVisible();
+  await expect(page.getByTestId("drop-area")).toBeVisible();
+  await expect(page.getByTestId("choose-file")).toHaveText("Choose a PDF");
+  await expect(page.getByTestId("start-over")).toHaveCount(0);
 });
 
 test("the page hydrates and runs with no policy violation", async ({ page }) => {
@@ -272,7 +273,7 @@ test("a file that is not a PDF fails with a kind, and says nothing about itself"
   await expect(error).toBeVisible({ timeout: ENGINE_TIMEOUT });
 
   // Spec 0004, AC-1: judged from the bytes, so it is `not-pdf`, not `corrupt`.
-  await expect(error).toContainText("This file is not a PDF.");
+  await expect(error).toContainText("This isn't a PDF");
 
   // The error must describe the failure, never the document. No file name, no
   // extracted content: that is what makes feature 11's scrubbing achievable.
@@ -336,7 +337,7 @@ test("a PNG named and typed as a PDF is refused before the engine loads", async 
   await page.goto("/tool");
   await page.getByTestId("file-input").setInputFiles(pngNamedPdf());
 
-  await expect(page.getByTestId("error")).toContainText("This file is not a PDF.", {
+  await expect(page.getByTestId("error")).toContainText("This isn't a PDF", {
     timeout: ENGINE_TIMEOUT,
   });
   expect(engineRequests).toEqual([]);
@@ -374,7 +375,8 @@ test("a redaction in the real worker hands over a file that is really clean", as
   await expect(outcome).toBeVisible({ timeout: ENGINE_TIMEOUT });
   // Spec 0005: page one's email address and phone number are found and ticked
   // by default, so the run removes both as well as stripping everything else.
-  await expect(outcome).toContainText("Removed 2 items and stripped document info");
+  await expect(outcome).toContainText("1 email address and 1 phone number");
+  await expect(outcome).toContainText("Document info");
 
   const downloading = page.waitForEvent("download");
   await page.getByTestId("download").click();
