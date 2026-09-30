@@ -3,7 +3,7 @@ import type { ReactNode, Ref } from "react";
 import { Callout } from "@/ui/callout";
 
 interface FailureCalloutProps {
-  /** What happened and what to do, from `failureText` or `LOST_TEXT`. */
+  /** What happened and what to do, from `failureText`, `runRefusalText` or `LOST_TEXT`. */
   readonly title: string;
   readonly body: string;
   readonly next?: string;
@@ -21,8 +21,9 @@ interface FailureCalloutProps {
  * do. Spec 0007, AC-14 to AC-16.
  *
  * Rendered beside the polite region, never inside it, or a screen reader would
- * announce it twice (spec 0003, AC-12). Every word comes from the kind and the
- * frozen entitlement alone (INV-3), never from the document.
+ * announce it twice (spec 0003, AC-12). Every word comes from the kind, the
+ * frozen entitlement and, for a run refusal, whether anything is ticked
+ * (INV-3), never from the document.
  */
 export function FailureCallout({
   title,

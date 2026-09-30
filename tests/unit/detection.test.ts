@@ -62,6 +62,33 @@ async function find(name: string, contextChars = 40): Promise<readonly FoundMatc
   }
 }
 
+/**
+ * A one page PDF whose text is `show`, one text showing operator in 12pt
+ * Helvetica. For a shape no committed fixture has, here a run of spaces
+ * inside a line, which MuPDF keeps as it is drawn.
+ */
+function onePage(show: string): ArrayBuffer {
+  const pdf = new mupdf.PDFDocument();
+  try {
+    const fonts = pdf.newDictionary();
+    fonts.put("F1", pdf.addSimpleFont(new mupdf.Font("Helvetica")));
+    const resources = pdf.newDictionary();
+    resources.put("Font", fonts);
+    pdf.insertPage(
+      -1,
+      pdf.addPage([0, 0, 612, 792], 0, resources, `BT /F1 12 Tf 72 700 Td ${show} ET\n`),
+    );
+    const buffer = pdf.saveToBuffer("");
+    try {
+      return buffer.asUint8Array().slice().buffer;
+    } finally {
+      buffer.destroy();
+    }
+  } finally {
+    pdf.destroy();
+  }
+}
+
 function targetsOf(matches: readonly FoundMatch[]): RedactionTarget[] {
   return matches.flatMap((match) => (match.target ? [match.target] : []));
 }
@@ -240,6 +267,66 @@ describe("context", () => {
     });
     // Mid page: both sides stop short of the page's text.
     expect(second).toMatchObject({ beforeCut: true, afterCut: true });
+  });
+
+  /**
+   * AC-9's two comparisons at their edge, the one place `> 0` and `>= 0`, or
+   * `<` and `<=`, part: a side holding exactly the reach is whole, and a side
+   * with one code point more is cut. The first match opens its page after
+   * "Contact: " (9 code points); the last on the first page is followed by the
+   * page's closing words.
+   */
+  it("cuts a side only when the page holds a code point past the reach", async () => {
+    const first = async (contextChars: number) =>
+      (await find("detect-email.pdf", contextChars))[0];
+    expect(await first(9)).toMatchObject({ before: "Contact: ", beforeCut: false });
+    expect(await first(8)).toMatchObject({ before: "ontact: ", beforeCut: true });
+
+    const tail =
+      " today Nothing here: user at example dot com Keep this sentence exactly as it is";
+    const reach = Array.from(tail).length;
+    const last = async (contextChars: number) =>
+      (await find("detect-email.pdf", contextChars)).find(
+        (match) => match.page === 0 && match.text === "josé.müller@exämple.de",
+      );
+    expect(await last(reach)).toMatchObject({ after: tail, afterCut: false });
+    expect(await last(reach - 1)).toMatchObject({
+      after: tail.slice(0, -1),
+      afterCut: true,
+    });
+  });
+
+  /**
+   * The flags count in the collapsed text, as the strings do: four spaces
+   * either side of the address are one code point of context each, so a reach
+   * of 6 holds "Mail: " whole where the raw text would have counted it cut.
+   */
+  it("counts a run of whitespace as the one space it shows when judging a cut", async () => {
+    const doc = await openDocumentWith(
+      mupdf,
+      onePage("(Mail:    jane@example.com    today) Tj"),
+      LIMITS,
+    );
+    const at = async (contextChars: number) => {
+      const [match] = await doc.findMatches({ contextChars });
+      return match;
+    };
+    try {
+      expect(await at(6)).toMatchObject({
+        before: "Mail: ",
+        after: " today",
+        beforeCut: false,
+        afterCut: false,
+      });
+      expect(await at(5)).toMatchObject({
+        before: "ail: ",
+        after: " toda",
+        beforeCut: true,
+        afterCut: true,
+      });
+    } finally {
+      doc.close();
+    }
   });
 
   it("never says a side was cut when its context stopped short of the reach", async () => {

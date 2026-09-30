@@ -4,9 +4,10 @@
  *
  * Typed as records over `EngineErrorKind`, `ProgressPhase` and `SanitizedKind`,
  * so a kind added to the protocol without its words fails `pnpm typecheck`
- * (AC-16). A failure's words are chosen by its kind alone and read caps only
- * from the job's frozen entitlement (spec 0002, INV-5), so no line can carry a
- * page, an item, a count from the document or the file name (INV-3).
+ * (AC-16). A failure's words are chosen by its kind alone (a run refusal's also
+ * by whether anything is ticked) and read caps only from the job's frozen
+ * entitlement (spec 0002, INV-5), so no line can carry a page, an item, a count
+ * from the document or the file name (INV-3).
  */
 
 import { countedKinds, lookedFor } from "@/lib/detectors";
@@ -37,6 +38,15 @@ export interface FailureText {
 function megabytes(bytes: number): string {
   return `${Math.max(1, Math.round(bytes / 1_048_576))} MB`;
 }
+
+/**
+ * The next step for the two refusals no tick causes and no setting changes.
+ * Said at an open as well as after a run, so it speaks of the file, never of
+ * ticks: at an open there is no list to have ticked. A new copy is suggested,
+ * never promised.
+ */
+const NEW_COPY =
+  "Printing it to a new PDF from your PDF app, then opening that copy here, may help.";
 
 /**
  * Each kind's words (AC-16, AC-17). A function of the job's own caps, because
@@ -73,7 +83,7 @@ export const FAILURE_TEXT: Readonly<
   unsupported: () => ({
     title: "RedactNest stopped to be safe",
     body: "This file holds something RedactNest can't handle safely, so it stopped rather than guess, and made no file. Two common causes: lines of text written in a way RedactNest can't rewrite, and content near a page's edge it couldn't prove it removed.",
-    next: "Changing what's ticked won't help with this file.",
+    next: NEW_COPY,
   }),
   "too-large": ({ maxFileBytes }) => ({
     title: "This file is too big",
@@ -114,7 +124,7 @@ export const FAILURE_TEXT: Readonly<
   "edge-text": () => ({
     title: "Text at a page's edge can't be removed cleanly",
     body: "Some text crosses the edge of a page, and RedactNest can't prove it removes it cleanly, so it made no file.",
-    next: "Changing what's ticked won't help with this file.",
+    next: NEW_COPY,
   }),
   // The four a tick can cause. Each names the likely cause, because a
   // refusal cannot say which item it was (spec 0007, *Follow-up*).
@@ -164,6 +174,27 @@ const TICK_CAUSED: readonly EngineErrorKind[] = Object.freeze([
 
 export function isTickCaused(kind: EngineErrorKind): boolean {
   return TICK_CAUSED.includes(kind);
+}
+
+/** Said before a run refusal's next step when a tick could not have caused it. */
+export const TICKS_WONT_HELP = "Changing what's ticked won't help with this file.";
+
+/**
+ * A run refusal's words (AC-14): its kind's own, and for a kind no tick can
+ * cause, a first line saying changing the ticks won't help. Only while
+ * something is ticked, so the line never advises on a choice nobody made; an
+ * open failure reads `failureText`, which never mentions ticks. Whether any
+ * tick is set is all it reads, never how many (INV-3).
+ */
+export function runRefusalText(
+  kind: EngineErrorKind,
+  entitlement: EntitlementSnapshot,
+  tickedCount: number,
+): FailureText {
+  const text = failureText(kind, entitlement);
+  return tickedCount > 0 && !isTickCaused(kind)
+    ? { ...text, next: `${TICKS_WONT_HELP} ${text.next}` }
+    : text;
 }
 
 /** The line above a run refusal's title (AC-14). */

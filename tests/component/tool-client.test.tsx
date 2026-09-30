@@ -332,8 +332,11 @@ describe("replacing the open document (AC-1)", () => {
     await chooseFile(pdfFile());
     await screen.findByTestId("page-count");
 
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     await userEvent.setup().click(screen.getByRole("button", { name: "Start over" }));
 
+    // An untouched review has nothing to lose, so it goes without asking.
+    expect(confirm).not.toHaveBeenCalled();
     expect(mocks.releaseEngine).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId("page-count")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Start over" })).not.toBeInTheDocument();
@@ -1048,10 +1051,13 @@ describe("the redaction path (spec 0004)", () => {
   );
 
   it("drops a reply that arrives after starting over", async () => {
+    // A run in flight is unsaved work, so Start over asks first.
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const run = sessionWithRun();
     await openAndRedact(run);
 
     await userEvent.setup().click(screen.getByTestId("start-over"));
+    expect(confirm).toHaveBeenCalledTimes(1);
     await run.finish();
 
     expect(screen.queryByTestId("outcome")).not.toBeInTheDocument();
@@ -1917,6 +1923,71 @@ describe("the redact flow (spec 0007)", () => {
       expect(screen.getByTestId("file-bar")).toHaveTextContent("report.pdf");
     });
 
+    /**
+     * Start over sits beside Choose another PDF, so it asks about the same
+     * loss the same way, and a no leaves the run, the worker and focus alone.
+     */
+    it("asks before Start over drops a running document, and changes nothing on no", async () => {
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      await openFlow(controllable().session);
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("redact"));
+
+      await user.click(screen.getByTestId("start-over"));
+
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(confirm.mock.calls[0]?.[0]).toMatch(/Starting over will discard it/);
+      expect(mocks.releaseEngine).not.toHaveBeenCalled();
+      expect(screen.getByTestId("cancel")).toBeInTheDocument();
+      expect(screen.getByTestId("start-over")).toHaveFocus();
+    });
+
+    it("asks before Start over drops a result nobody has downloaded, and starts over on yes", async () => {
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+      const run = controllable();
+      await openFlow(run.session);
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("redact"));
+      await run.finish();
+
+      await user.click(screen.getByTestId("start-over"));
+
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(mocks.releaseEngine).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("file-bar")).not.toBeInTheDocument();
+    });
+
+    it("starts over without asking when nothing would be lost, and so does Redact another PDF", async () => {
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      const run = controllable();
+      await openFlow(run.session);
+      const user = userEvent.setup();
+
+      // An untouched review.
+      await user.click(screen.getByTestId("start-over"));
+      expect(screen.queryByTestId("file-bar")).not.toBeInTheDocument();
+
+      // A result already downloaded.
+      await chooseFile(pdfFile());
+      await screen.findByTestId("review");
+      await user.click(screen.getByTestId("redact"));
+      await run.finish();
+      await user.click(screen.getByTestId("download"));
+      await user.click(screen.getByTestId("start-over"));
+      expect(screen.queryByTestId("file-bar")).not.toBeInTheDocument();
+
+      await chooseFile(pdfFile());
+      await screen.findByTestId("review");
+      await user.click(screen.getByTestId("redact"));
+      await run.finish();
+      await user.click(screen.getByTestId("download"));
+      await user.click(screen.getByTestId("redact-another"));
+      expect(screen.queryByTestId("file-bar")).not.toBeInTheDocument();
+
+      expect(confirm).not.toHaveBeenCalled();
+    });
+
     it("reads from the top: file bar, document, refusal, action panel, coverage note, checklist (AC-5)", async () => {
       const run = controllable();
       await openFlow(run.session);
@@ -2322,10 +2393,13 @@ describe("the redact flow (spec 0007)", () => {
     });
 
     it("clears when the session is released", async () => {
+      // A refusal on screen is unsaved work (AC-23), so Start over asks first.
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
       const { user } = await refused();
 
       await user.click(screen.getByTestId("start-over"));
 
+      expect(confirm).toHaveBeenCalledTimes(1);
       expect(screen.queryByTestId("run-refusal")).not.toBeInTheDocument();
     });
 
@@ -2333,11 +2407,26 @@ describe("the redact flow (spec 0007)", () => {
       await refused("edge-text");
 
       expect(screen.getByTestId("run-refusal")).toHaveTextContent(
-        "Changing what's ticked won't help with this file.",
+        "Changing what's ticked won't help with this file. Printing it to a new PDF",
       );
       expect(screen.getByTestId("redact")).toBeEnabled();
       expect(screen.queryByTestId("download")).not.toBeInTheDocument();
       expect(screen.queryByTestId("result")).not.toBeInTheDocument();
+    });
+
+    /** Nothing was ticked, so there is no choice of ticks to advise on. */
+    it("says nothing about ticks after a refused run with nothing ticked", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      const user = userEvent.setup();
+      await user.click(box("ann@example.com"));
+      await user.click(box("bob@example.com"));
+      await user.click(screen.getByRole("button", { name: "Make a cleaned copy" }));
+      await run.refuse("unsupported");
+
+      const refusal = screen.getByTestId("run-refusal");
+      expect(refusal).toHaveTextContent("Printing it to a new PDF");
+      expect(refusal).not.toHaveTextContent(/ticked/);
     });
 
     it("clears when a new file replaces the document", async () => {
@@ -2416,6 +2505,26 @@ describe("the redact flow (spec 0007)", () => {
       expect(screen.queryByTestId("review")).not.toBeInTheDocument();
       await expectNoAxeViolations(container);
     });
+
+    /** No list has been shown, so no failure at the open speaks of ticks. */
+    it.each([
+      ["unsupported", "RedactNest stopped to be safe"],
+      ["edge-text", "Text at a page's edge can't be removed cleanly"],
+    ] as const)(
+      "says what %s means at the open without a word about ticks",
+      async (kind, title) => {
+        mocks.openSession.mockRejectedValue(new EngineError(kind));
+        render(<ToolClient />);
+        await chooseFile(pdfFile());
+
+        const error = await screen.findByTestId("error");
+        expect(
+          within(error).getByRole("heading", { level: 2, name: title }),
+        ).toBeVisible();
+        expect(error).toHaveTextContent("Printing it to a new PDF");
+        expect(error).not.toHaveTextContent(/ticked/);
+      },
+    );
   });
 
   /** AC-20: after every step change, focus lands where *Focus* says. */

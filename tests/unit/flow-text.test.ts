@@ -21,9 +21,11 @@ import {
   RESULT_TERMS,
   resultTitle,
   RUN_REFUSAL_LEAD,
+  runRefusalText,
   SANITIZED_TEXT,
   strippedLine,
   tickCountLine,
+  TICKS_WONT_HELP,
 } from "@/lib/flow-text";
 import {
   ADVICE,
@@ -180,6 +182,40 @@ describe("failure copy (AC-16, AC-17)", () => {
     ] as const) {
       expect(failureText(kind, FREE).body, kind).toMatch(/made no file|no file was made/);
     }
+  });
+
+  /**
+   * An open failure has no list above it, so the words a failure shows there
+   * never speak of ticks. Only the four kinds a tick can cause do, and those
+   * come from a run alone.
+   */
+  it("never speaks of ticks in the words an open failure can show", () => {
+    for (const { kind, text } of EVERY_FAILURE) {
+      if (isTickCaused(kind)) continue;
+      expect(`${text.title} ${text.body} ${text.next}`, kind).not.toMatch(/tick/i);
+    }
+  });
+
+  it("suggests a new copy of the file, without promising it, for the two refusals no setting changes", () => {
+    for (const kind of ["unsupported", "edge-text"] as const) {
+      const { next } = failureText(kind, FREE);
+      expect(next, kind).toContain("Printing it to a new PDF from your PDF app");
+      expect(next, kind).toMatch(/\bmay\b/);
+    }
+  });
+
+  /** AC-14: said before the next step only while something is ticked. */
+  it("says changing the ticks won't help only after a run over some ticks, and only where no tick is the cause", () => {
+    for (const kind of ENGINE_ERROR_KINDS) {
+      const own = failureText(kind, FREE);
+      expect(runRefusalText(kind, FREE, 0), kind).toEqual(own);
+      expect(runRefusalText(kind, FREE, 3), kind).toEqual(
+        isTickCaused(kind) ? own : { ...own, next: `${TICKS_WONT_HELP} ${own.next}` },
+      );
+    }
+    expect(runRefusalText("edge-text", PAID, 1).next).toBe(
+      "Changing what's ticked won't help with this file. Printing it to a new PDF from your PDF app, then opening that copy here, may help.",
+    );
   });
 
   it("offers no button for exactly the four kinds a tick can cause (AC-14)", () => {

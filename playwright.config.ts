@@ -11,6 +11,9 @@ import { defineConfig, devices } from "@playwright/test";
  * production.
  */
 
+/** The one spec that times the page, run in a project of its own. */
+const SPEED_SPEC = /checklist-speed\.spec\.ts$/;
+
 const PORT = 3000;
 const BASE_URL = `http://localhost:${PORT}`;
 
@@ -47,7 +50,30 @@ export default defineConfig({
     trace: { mode: "retain-on-failure", screenshots: false },
   },
 
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+      testIgnore: SPEED_SPEC,
+    },
+    /**
+     * Spec 0007, AC-8. The checklist's speed is a stopwatch, so it runs alone:
+     * after every other test has finished, on one worker. Beside the parallel
+     * pool it timed the machine, not the page (a 140 ms first render took 7.6 s
+     * there while other workers opened documents), and a gate that fails on a
+     * healthy tree is one people learn to ignore.
+     *
+     * A dependency, so if any other test fails this one is reported as not run
+     * rather than timed. To run it on its own, pass `--project=speed --no-deps`.
+     */
+    {
+      name: "speed",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: SPEED_SPEC,
+      dependencies: ["chromium"],
+      workers: 1,
+    },
+  ],
 
   webServer: {
     command: "pnpm build && pnpm start",

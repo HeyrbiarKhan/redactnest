@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
@@ -24,6 +25,7 @@ import {
   phaseLine,
   redactLabel,
   RUN_REFUSAL_LEAD,
+  runRefusalText,
   tickCountLine,
 } from "@/lib/flow-text";
 import {
@@ -161,6 +163,9 @@ const TOOL_PATH_SERVER_SNAPSHOT = () => TOOL_PATH;
 const REPLACE_WARNING =
   "You have unsaved work on the document that is open. Opening a different file will discard it. Continue?";
 
+const START_OVER_WARNING =
+  "You have unsaved work on the document that is open. Starting over will discard it. Continue?";
+
 export function ToolClient() {
   /**
    * Spec 0003, AC-21 and INV-10. Was this document loaded at `/tool`?
@@ -275,9 +280,14 @@ export function ToolClient() {
    * keyed on the step change, never in the event handler, so the element it
    * moves to is the one on screen. The session is replaced on every change and
    * a no-op returns the same object, so this runs once per real change.
+   *
+   * A layout effect, so it runs before the browser paints whatever the update's
+   * priority. A step change dispatched from a promise (a run finishing or
+   * refused, Cancel landing, an open failing) would otherwise paint once with
+   * the old control gone and focus on `body`.
    */
   const shownRef = useRef<ToolSession>(IDLE);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previous = shownRef.current;
     shownRef.current = session;
     const target = focusAfter(previous, session);
@@ -402,6 +412,14 @@ export function ToolClient() {
 
   /** Start over, and Redact another PDF under another label (spec 0007, AC-13). */
   const handleStartOver = useCallback(() => {
+    // It sits beside Choose another PDF in the file bar (AC-3), so it asks
+    // before throwing work away just as a replacement does (spec 0002, AC-1),
+    // and a cancelled confirm changes nothing. Redact another PDF shows only
+    // after a download, when nothing is unsaved, so it never asks.
+    if (hasUnsavedWork(sessionRef.current) && !window.confirm(START_OVER_WARNING)) {
+      return;
+    }
+
     // A genuine release trigger, so the worker goes. The attempt is superseded
     // with it, because a reply for the document just abandoned must not land on
     // whatever is opened next.
@@ -749,7 +767,11 @@ export function ToolClient() {
             data-testid="run-refusal"
             lead={RUN_REFUSAL_LEAD}
             titleRef={refusalRef}
-            {...failureText(session.runFailure, session.entitlement)}
+            {...runRefusalText(
+              session.runFailure,
+              session.entitlement,
+              session.ticked.size,
+            )}
             action={
               isTickCaused(session.runFailure) ? undefined : (
                 <Button

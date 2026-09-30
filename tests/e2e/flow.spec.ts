@@ -276,7 +276,12 @@ test("makes the same file again after a download", async ({ page }) => {
 /**
  * AC-15, AC-16, AC-17 and AC-20. An open that fails says so in its kind's
  * words above the full drop zone, with focus on its heading, and holds nothing
- * of the document.
+ * of the document. No list has been shown, so none of it speaks of ticks.
+ *
+ * `trim-refused.pdf` and `trim-quote.pdf` are the only committed fixtures that
+ * reach `edge-text` and `unsupported`, and both reach them at the open: a run
+ * trims the same bytes the open did, so neither can refuse a run instead
+ * (spec 0006, AC-16). Their run refusal is the component suite's to prove.
  */
 const OPEN_FAILURES: readonly (readonly [
   string,
@@ -316,6 +321,18 @@ const OPEN_FAILURES: readonly (readonly [
     "This PDF has layers RedactNest can't redact yet",
     "Save a flattened copy",
   ],
+  [
+    "a document whose text crosses a page's edge",
+    () => resolve("tests/fixtures/trim-refused.pdf"),
+    "Text at a page's edge can't be removed cleanly",
+    "Some text crosses the edge of a page",
+  ],
+  [
+    "a document the trim cannot prove away from the edge",
+    () => resolve("tests/fixtures/trim-quote.pdf"),
+    "RedactNest stopped to be safe",
+    "content near a page's edge it couldn't prove it removed",
+  ],
 ];
 
 for (const [label, file, title, words] of OPEN_FAILURES) {
@@ -328,6 +345,7 @@ for (const [label, file, title, words] of OPEN_FAILURES) {
       timeout: ENGINE_TIMEOUT,
     });
     await expect(error).toContainText(words);
+    await expect(error).not.toContainText("ticked");
     await expect(error).toHaveAttribute("role", "alert");
 
     const zone = page.getByTestId("drop-area");
