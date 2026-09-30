@@ -166,7 +166,7 @@ spec [0008](../specs/0008-sparse-ocr-scans/index.md) · code in `src/engine` (`i
   - [x] The review's fixes (2026-09-30, slice 3): nine new pages on `read-pictures.pdf`, then only letters and numbers counting with marks carried, a line beside drawn text counting for nothing, and a character over two different pictures counting for neither · AC-1, AC-2, AC-3, AC-5, AC-11, AC-14, AC-15, AC-16
   - [x] Proved and amended: the copies at one origin, the next line pin, `runStep` and the run edges, the second cost case, and spec 0006 amended again · AC-2, AC-12, AC-14, AC-15, AC-16
 - [x] Verify it: `/check verify sparse OCR scans`, including the real scan steps on the local scans (AC-13). Run once for the first build; run again for the review's fixes (spec task 11)
-- [ ] Test it: `/test sparse OCR scans`, again for the review's fixes
+- [x] Test it: `/test sparse OCR scans`, again for the review's fixes
 - [ ] Review it (fresh model): `/check review sparse OCR scans`, again for the review's fixes
 - [ ] Document it: `/document sparse OCR scans`
 

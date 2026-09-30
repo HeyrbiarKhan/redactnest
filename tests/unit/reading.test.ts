@@ -13,6 +13,7 @@ import {
   readsAsNothing,
   RunCancelled,
   silenceEngineLog,
+  STAMP_MAX_CHARS,
   walkCharacters,
   walkDrawing,
   WRITE_OPTIONS,
@@ -628,8 +629,9 @@ describe("sparse OCR scans", () => {
    * Helvetica. `/M` is a simple font whose glyph names map to no character
    * and which has no ToUnicode map, so MuPDF reads each of its glyphs as
    * U+FFFD, as it reads `read-unmapped.pdf`'s. `/Clear` sets the fill opacity
-   * to zero. `keys` are more page keys, such as `/Rotate 90`. Built here,
-   * because each is a line or two over one scan.
+   * to zero. `/Logo` is a second image, drawn only where `layer` says so.
+   * `keys` are more page keys, such as `/Rotate 90`. Built here, because each
+   * is a line or two over one scan.
    */
   function scanUnder(layer: string, { keys = "" } = {}): Uint8Array {
     const names = Array.from({ length: 26 }, (_, at) => `/zz${65 + at}`).join(" ");
@@ -638,7 +640,7 @@ describe("sparse OCR scans", () => {
         "<< /Type /Catalog /Pages 2 0 R >>",
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
         `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ${keys} ` +
-          "/Resources << /Font << /F1 4 0 R /M 5 0 R >> /XObject << /Scan 7 0 R >> " +
+          "/Resources << /Font << /F1 4 0 R /M 5 0 R >> /XObject << /Scan 7 0 R /Logo 9 0 R >> " +
           "/ExtGState << /Clear << /ca 0 >> >> >> /Contents 8 0 R >>",
         "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
         "<< /Type /Font /Subtype /Type1 /BaseFont /Mystery /FirstChar 32 /LastChar 90 " +
@@ -651,6 +653,10 @@ describe("sparse OCR scans", () => {
           new Uint8Array(4).fill(200),
         ),
         stream("", `q 612 0 0 792 0 0 cm /Scan Do Q\n${layer}`),
+        stream(
+          "/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8",
+          new Uint8Array(4).fill(40),
+        ),
       ],
       trailer: "/Root 1 0 R",
     }).bytes;
@@ -755,6 +761,54 @@ describe("sparse OCR scans", () => {
     expect(unmapped.readable).toBe(false);
     expect(unmapped.findings).toContain("scanned");
     expect(unmapped.findings).toContain("machine-read-text");
+  });
+
+  /**
+   * AC-16: "picture" is spec 0006's, so an image under `PICTURE_MIN_SHARE`
+   * takes no character from the scan beneath. The whole sentence (x 72 to
+   * about 370) lies over a logo 320 by 60 pt, about 4% of the page, and still
+   * clears the scan. The near miss is the same image 160 pt tall, about 11%:
+   * a picture of a different footprint, which takes every character, so the
+   * scan is left bare.
+   */
+  it.each([
+    ["a small logo, no picture, leaves the scan cleared", 60, ["machine-read-text"]],
+    [
+      "a picture the same width, taller, leaves the scan bare",
+      160,
+      ["bare-picture", "machine-read-text"],
+    ],
+  ])(
+    "counts a line over an image on a scan by its size: %s",
+    async (_label, height, findings) => {
+      const logo = `q 320 0 0 ${height} 60 100 cm /Logo Do Q\n`;
+      const [inspection] = await inspectBytes(
+        scanUnder(logo + textLine("F1", 3, SENTENCE)),
+      );
+      expect(inspection.findings).toEqual(findings);
+    },
+  );
+
+  /**
+   * AC-14: the readable count is unchanged, so punctuation that ends every run
+   * still counts toward the stamp cap. A layer of `STAMP_MAX_CHARS` marks with
+   * no letter or number holds no run, so the scan is bare, but the page is too
+   * full of readable characters to be a stamped scan. One mark fewer, and it
+   * is `scanned`.
+   */
+  it("counts punctuation toward the stamp cap, though it never forms a run", async () => {
+    const marks = (count: number) => "|.~,".repeat(count).slice(0, count);
+
+    const [atCap] = await inspectBytes(
+      scanUnder(textLine("F1", 3, marks(STAMP_MAX_CHARS))),
+    );
+    expect(atCap.readable).toBe(true);
+    expect(atCap.findings).toEqual(["bare-picture", "machine-read-text"]);
+
+    const [underCap] = await inspectBytes(
+      scanUnder(textLine("F1", 3, marks(STAMP_MAX_CHARS - 1))),
+    );
+    expect(underCap.findings).toEqual(["scanned", "machine-read-text"]);
   });
 });
 
