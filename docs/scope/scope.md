@@ -159,12 +159,12 @@ A scan that has been through text recognition (OCR) but holds only a few lines i
 **Done when:** a picture with a run of three readable, purely invisible characters over it is no longer bare, so sparse and short OCR scans open with the machine read note only and download as `-redacted.pdf`; a scan whose text layer holds only stray marks stays warned; visible text over a picture is judged as before; every OCR note says that words the recognition missed stay in the picture; and the local scans are refused before OCR and open with the note only after it.
 spec [0008](../specs/0008-sparse-ocr-scans/index.md) · code in `src/engine` (`inspect.ts`, `index.ts`), `src/lib/page-findings.ts`, `scripts/lib/reading-fixtures.mjs`, `scripts/make-fixture.mjs`
 - [x] Design it (spec): `/architect sparse OCR scans`
-- [ ] Build it: `/develop sparse OCR scans`
+- [x] Build it: `/develop sparse OCR scans`
   - [x] The fixtures: eleven new pages on `read-pictures.pdf`, two expectations moved, and `read-short-ocr.pdf` · AC-1 to AC-8
   - [x] The rule, proved: the machine read run per picture with every clipping glyph's origin, the shared painted index and the guarded, lazy search; the pins, the run edges, the cost case and the browser check · AC-1 to AC-8, AC-11, AC-12
   - [x] The words and the amends: the machine read note's new sentence, the advice comment, and specs 0006 and 0007 amended · AC-9, AC-10
-  - [ ] The review's fixes (2026-09-30, slice 3): nine new pages on `read-pictures.pdf`, then only letters and numbers counting with marks carried, a line beside drawn text counting for nothing, and a character over two different pictures counting for neither · AC-1, AC-2, AC-3, AC-5, AC-11, AC-14, AC-15, AC-16
-  - [ ] Proved and amended: the copies at one origin, the next line pin, `runStep` and the run edges, the second cost case, and spec 0006 amended again · AC-2, AC-12, AC-14, AC-15, AC-16
+  - [x] The review's fixes (2026-09-30, slice 3): nine new pages on `read-pictures.pdf`, then only letters and numbers counting with marks carried, a line beside drawn text counting for nothing, and a character over two different pictures counting for neither · AC-1, AC-2, AC-3, AC-5, AC-11, AC-14, AC-15, AC-16
+  - [x] Proved and amended: the copies at one origin, the next line pin, `runStep` and the run edges, the second cost case, and spec 0006 amended again · AC-2, AC-12, AC-14, AC-15, AC-16
 - [ ] Verify it: `/check verify sparse OCR scans`, including the real scan steps on the local scans (AC-13). Run once for the first build; run again for the review's fixes (spec task 11)
 - [ ] Test it: `/test sparse OCR scans`, again for the review's fixes
 - [ ] Review it (fresh model): `/check review sparse OCR scans`, again for the review's fixes

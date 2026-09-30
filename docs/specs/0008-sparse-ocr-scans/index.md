@@ -224,7 +224,7 @@ Ordered by Skateboard. The fix is small enough that slice 1 is the whole usable 
 
 6. Run `/check verify` for this spec on the local scans, per AC-13, and record the findings in this spec's `verify.md`. Satisfies **AC-6**, **AC-13**.
 
-**Slice 3: the review's fixes**
+**Slice 3: the review's fixes** (tasks 7 to 10 built; task 11 is `/check verify`'s)
 
 7. Fixtures. Append these pages to `READ_PICTURES`, so every existing page keeps its index and its findings (if any existing page's findings change, stop and bring it back to `/architect`). Each is over a full page scan unless it says otherwise. `SPARSE_SENTENCE` is 55 characters, 45 of them readable, and the glyphless font advances 6 pt a glyph at 12 pt, so from x 60 the words "by its director" start at x 300. A new photo helper is not needed: `photo` from `readPictures` serves.
    - 20, a photo drawn after an OCR line that runs over it: `invisibleLine(12, 60, 400, SPARSE_SENTENCE)`, then `q 300 0 0 300 300 250 cm /Photo Do Q`. "by its director" centres over the photo and the scan, the words before it over the scan alone, and the line covers under 3% of the photo's grid points: `["bare-picture", "machine-read-text"]`
