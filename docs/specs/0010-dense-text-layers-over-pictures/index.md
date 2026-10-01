@@ -1,7 +1,7 @@
 # 0010. Dense text layers over pictures
 
 **Date**: 2026-10-01
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 
