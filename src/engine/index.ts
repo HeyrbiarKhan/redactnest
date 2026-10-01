@@ -111,6 +111,7 @@ export {
   COPY_REACH_RATIO,
   COVER_MIN_OVERLAP,
   HIDDEN_CONTRAST_MAX,
+  coverageLines,
   inspectPages,
   MACHINE_READ_RUN,
   machineReadRun,

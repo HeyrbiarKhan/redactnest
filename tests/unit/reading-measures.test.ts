@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   contrastWithWhite,
   COPY_REACH_RATIO,
+  coverageLines,
   HIDDEN_CONTRAST_MAX,
   intersect,
   MACHINE_READ_RUN,
@@ -35,7 +36,8 @@ import { clipToConvex, polygonArea } from "@/engine/geometry";
  * glyph meets its extracted character, and which page counts toward nothing
  * readable. `reading.test.ts` proves the same rules on real pages; this pins
  * the edges no fixture reaches. Spec 0008 adds the machine read run's edges
- * and each character's step in it.
+ * and each character's step in it, and spec 0010 the lines that count toward a
+ * picture's coverage.
  */
 
 function paint(space: ColorSpaceType, ...components: number[]): Paint {
@@ -534,5 +536,173 @@ describe("the machine read run", () => {
 
     expect(machineReadRun(characters, counting, inside)).toBe(true);
     expect(asked).toEqual([2, 3, 4]);
+  });
+});
+
+/**
+ * Spec 0010, AC-1: a line counts toward a picture's coverage when it holds a
+ * letter or number, every readable character on it is drawn at its origin,
+ * and none is hidden there. Whitespace and unreadable characters are never
+ * asked.
+ */
+describe("the lines that count toward a picture's coverage", () => {
+  /** How the page draws a character: a drawn glyph, an invisible one, both, or none. */
+  type Drawn = "drawn" | "hidden" | "both" | "none";
+
+  /**
+   * Characters 6 pt apart on one baseline, one list per line, each with how
+   * the page draws it, and the origins `coverageLines` asked about.
+   */
+  function judge(lines: readonly (readonly (readonly [string | number, Drawn])[])[]) {
+    const characters: {
+      line: number;
+      code: number;
+      origin: readonly [number, number];
+    }[] = [];
+    const drawn = new Set<number>();
+    const hidden = new Set<number>();
+    lines.forEach((glyphs, line) => {
+      for (const [character, how] of glyphs) {
+        const x = 6 * characters.length;
+        const code =
+          typeof character === "number" ? character : (character.codePointAt(0) ?? -1);
+        characters.push({ line, code, origin: [x, 100] });
+        if (how === "drawn" || how === "both") drawn.add(x);
+        if (how === "hidden" || how === "both") hidden.add(x);
+      }
+    });
+    const asked = new Set<number>();
+    const counting = coverageLines(
+      characters,
+      ([x]) => {
+        asked.add(x / 6);
+        return drawn.has(x);
+      },
+      ([x]) => {
+        asked.add(x / 6);
+        return hidden.has(x);
+      },
+    );
+    const ascending = (a: number, b: number) => a - b;
+    return { counting: [...counting].sort(ascending), asked: [...asked].sort(ascending) };
+  }
+
+  it.each<readonly [string, readonly (readonly [string | number, Drawn])[]]>([
+    ["one drawn letter", [["A", "drawn"]]],
+    ["a drawn digit", [["7", "drawn"]]],
+    ["a drawn CJK letter", [["漢", "drawn"]]],
+    [
+      "a drawn letter with drawn punctuation",
+      [
+        ["A", "drawn"],
+        [",", "drawn"],
+      ],
+    ],
+    [
+      "drawn letters around unmatched whitespace",
+      [
+        ["N", "drawn"],
+        [" ", "none"],
+        ["o", "drawn"],
+      ],
+    ],
+    [
+      "a drawn letter beside an unmatched U+FFFD",
+      [
+        ["A", "drawn"],
+        [0xfffd, "none"],
+      ],
+    ],
+  ])("counts %s", (_label, line) => {
+    expect(judge([line]).counting).toEqual([0]);
+  });
+
+  it.each<readonly [string, readonly (readonly [string | number, Drawn])[]]>([
+    [
+      "a line of only drawn punctuation",
+      [
+        ["_", "drawn"],
+        [".", "drawn"],
+        ["|", "drawn"],
+      ],
+    ],
+    [
+      "a drawn letter with an unmatched comma",
+      [
+        ["A", "drawn"],
+        [",", "none"],
+      ],
+    ],
+    [
+      "a drawn letter with a hidden letter",
+      [
+        ["A", "drawn"],
+        ["B", "hidden"],
+      ],
+    ],
+    ["a letter drawn invisible and visible at one place", [["A", "both"]]],
+    [
+      "a hidden word",
+      [
+        ["Y", "hidden"],
+        ["e", "hidden"],
+        ["s", "hidden"],
+      ],
+    ],
+    ["a letter at no glyph's origin", [["A", "none"]]],
+    ["a lone drawn combining mark", [[0x0301, "drawn"]]],
+    [
+      "a line of only drawn format characters",
+      [
+        [0x200b, "drawn"],
+        [0x200d, "drawn"],
+        [0x00ad, "drawn"],
+      ],
+    ],
+    [
+      "a drawn letter with a format character at no glyph's origin",
+      [
+        ["A", "drawn"],
+        [0x200b, "none"],
+      ],
+    ],
+  ])("does not count %s", (_label, line) => {
+    expect(judge([line]).counting).toEqual([]);
+  });
+
+  it("judges each line alone", () => {
+    const { counting } = judge([
+      [["A", "drawn"]],
+      [["B", "hidden"]],
+      [[",", "drawn"]],
+      [
+        ["C", "drawn"],
+        ["D", "drawn"],
+      ],
+      [],
+    ]);
+    expect(counting).toEqual([0, 3]);
+  });
+
+  it("counts nothing on a page with no characters", () => {
+    expect(judge([]).counting).toEqual([]);
+  });
+
+  it("never asks about whitespace or U+FFFD, and stops asking once a line fails", () => {
+    const { counting, asked } = judge([
+      [
+        ["A", "drawn"],
+        [" ", "none"],
+        [0xfffd, "none"],
+      ],
+      [
+        ["B", "none"],
+        ["C", "drawn"],
+        ["D", "drawn"],
+      ],
+      [["E", "drawn"]],
+    ]);
+    expect(counting).toEqual([0, 2]);
+    expect(asked).toEqual([0, 3, 6]);
   });
 });

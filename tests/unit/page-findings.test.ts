@@ -126,10 +126,11 @@ describe("the line for each finding", () => {
       "Page 1 has text in a font RedactNest can't read, so that text can't be found or removed.",
       "Pages 1 and 2 have text in a font RedactNest can't read, so that text can't be found or removed.",
     ],
+    // Spec 0010, AC-9: true whether or not text lies over the picture.
     [
       "bare-picture",
-      "Page 1 has a picture with no text over it. Words inside a picture can't be found or removed.",
-      "Pages 1 and 2 have pictures with no text over them. Words inside a picture can't be found or removed.",
+      "Page 1 has a picture RedactNest can't read. Words inside a picture can't be found or removed.",
+      "Pages 1 and 2 have pictures RedactNest can't read. Words inside a picture can't be found or removed.",
     ],
     [
       "off-page-picture",

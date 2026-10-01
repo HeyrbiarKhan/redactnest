@@ -13,6 +13,7 @@ import {
 
 import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
 import { scanPages } from "../../scripts/lib/reading-fixtures.mjs";
+import { IDENTITY_UNICODE } from "../../scripts/lib/redaction-fixtures.mjs";
 import { documentImages, LIMITS, mupdf } from "../support/mupdf";
 
 /**
@@ -33,6 +34,11 @@ import { documentImages, LIMITS, mupdf } from "../support/mupdf";
  * the run is searched on every page, over every character; and fifty pages of
  * typed text, each with a photo carrying a sparse layer of its own, so every
  * test the 2026-09-30 review added runs on every page.
+ *
+ * Spec 0010, AC-11 adds its slowest path: every line of fifty pages judged
+ * against the drawn and invisible glyph origins, and a scan and a photo under
+ * a dense layer with no word both searched to the end. The three cases above
+ * still pass, though their scans now take the run search too.
  */
 
 const PAGES = 50;
@@ -112,6 +118,24 @@ function ocrWithPhotoPdf(): Uint8Array {
 }
 
 /**
+ * Thirty lines of typed text over the top half of a page, from y 780 down to
+ * y 432: about 2,000 visible Helvetica glyphs.
+ */
+function typedText(page: number): string {
+  const rows = 30;
+  return Array.from({ length: rows }, (_, row) => {
+    const n = page * rows + row;
+    return (
+      `BT 0 Tr /F1 9 Tf 36 ${780 - row * 12} Td ` +
+      `(Row ${n}: typed words about account ${n} and the person who holds it) Tj ET`
+    );
+  }).join("\n");
+}
+
+/** Two letter words and numbers, so no run of three forms. */
+const NO_WORD = "No 12 at 45 an if so up to me we go by it on as or is";
+
+/**
  * Spec 0008, AC-12, the case that reaches every test the review added. Fifty
  * pages, each with thirty lines of typed text over the top half (about 2,000
  * visible Helvetica glyphs) and a photo of about a fifth of the page in the
@@ -123,17 +147,8 @@ function ocrWithPhotoPdf(): Uint8Array {
  * run forms, and each page is `bare-picture`.
  */
 function typedWithPhotoPdf(): Uint8Array {
-  const rows = 30;
   const pageNumbers = Array.from({ length: PAGES }, (_, index) => index);
   const pageObject = (index: number) => 4 + index * 2;
-  const content = (page: number) =>
-    Array.from({ length: rows }, (_, row) => {
-      const n = page * rows + row;
-      return (
-        `BT 0 Tr /F1 9 Tf 36 ${780 - row * 12} Td ` +
-        `(Row ${n}: typed words about account ${n} and the person who holds it) Tj ET`
-      );
-    }).join("\n");
 
   return writePdf({
     objects: [
@@ -149,9 +164,61 @@ function typedWithPhotoPdf(): Uint8Array {
           `/XObject << /Photo 3 0 R >> >> /Contents ${pageObject(index) + 1} 0 R >>`,
         stream(
           "",
-          `${content(index)}\nq 360 0 0 270 126 40 cm /Photo Do Q\n` +
-            "BT 3 Tr /F1 9 Tf 140 170 Td " +
-            "(No 12 at 45 an if so up to me we go by it on as or is) Tj ET\n",
+          `${typedText(index)}\nq 360 0 0 270 126 40 cm /Photo Do Q\n` +
+            `BT 3 Tr /F1 9 Tf 140 170 Td (${NO_WORD}) Tj ET\n`,
+        ),
+      ]),
+    ],
+    trailer: "/Root 1 0 R",
+  }).bytes;
+}
+
+/**
+ * Spec 0010, AC-11, the slowest path. Fifty pages, each with the typed text of
+ * the case above over the top half; a scan over the bottom half under a dense
+ * hidden layer that forms no run (37 lines of two letter words in Tesseract's
+ * glyphless font at 9 pt, about 2,000 glyphs); and a 300 by 300 pt photo over
+ * the layer. Every line of the page is judged against the drawn and invisible
+ * glyph origins, both pictures fail the area test, since hidden lines count
+ * for nothing, and both are searched to the end. Each page is `bare-picture`.
+ */
+function denseLayerWithPhotoPdf(): Uint8Array {
+  const pageNumbers = Array.from({ length: PAGES }, (_, index) => index);
+  const pageObject = (index: number) => 8 + index * 2;
+  const hex = [...NO_WORD]
+    .map((letter) => (letter.codePointAt(0) ?? 0).toString(16).padStart(4, "0"))
+    .join("");
+  const layer = Array.from(
+    { length: 37 },
+    (_, row) => `BT 3 Tr /Fg 9 Tf 60 ${380 - row * 10} Td <${hex}> Tj ET`,
+  ).join("\n");
+
+  return writePdf({
+    objects: [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      `<< /Type /Pages /Kids [${pageNumbers.map((index) => `${pageObject(index)} 0 R`).join(" ")}] /Count ${PAGES} >>`,
+      // One grey picture, drawn as the scan and again as the photo.
+      stream(
+        "/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8",
+        new Uint8Array(4).fill(200),
+      ),
+      // The glyphless font, as `reading-fixtures.mjs` writes it.
+      stream("", IDENTITY_UNICODE),
+      "<< /Type /FontDescriptor /FontName /GlyphLessFont /FontBBox [0 0 500 1000] " +
+        "/Ascent 1000 /Descent -1 /CapHeight 1000 /StemV 80 /ItalicAngle 0 /Flags 5 >>",
+      "<< /Type /Font /Subtype /CIDFontType2 /BaseFont /GlyphLessFont /CIDToGIDMap /Identity " +
+        "/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> " +
+        "/FontDescriptor 5 0 R /DW 500 >>",
+      "<< /Type /Font /Subtype /Type0 /BaseFont /GlyphLessFont /Encoding /Identity-H " +
+        "/DescendantFonts [6 0 R] /ToUnicode 4 0 R >>",
+      ...pageNumbers.flatMap((index) => [
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ` +
+          `/Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /Fg 7 0 R >> ` +
+          `/XObject << /Scan 3 0 R >> >> /Contents ${pageObject(index) + 1} 0 R >>`,
+        stream(
+          "",
+          `${typedText(index)}\nq 612 0 0 396 0 0 cm /Scan Do Q\n${layer}\n` +
+            "q 300 0 0 300 156 50 cm /Scan Do Q\n",
         ),
       ]),
     ],
@@ -256,6 +323,22 @@ describe("the cost of reading every page", () => {
     await withPrepared(typedWithPhotoPdf(), async (pdf) => {
       // The case is what it says: every photo searched and still bare, beside
       // a page of typed text, so the drawn glyph origins are built each time.
+      const inspections = await inspectPages(mupdf, pdf);
+      expect(inspections).toHaveLength(PAGES);
+      for (const { findings } of inspections)
+        expect(findings).toEqual(["bare-picture", "machine-read-text"]);
+
+      const { least, passes } = await leastCpu(pdf);
+      expect(least, `CPU per pass: ${passes.map(Math.round).join(", ")} ms`).toBeLessThan(
+        2000,
+      );
+    });
+  }, 120_000);
+
+  it("adds at most 2 seconds with every line judged and a dense layer searched to the end, on every page of 50", async () => {
+    await withPrepared(denseLayerWithPhotoPdf(), async (pdf) => {
+      // The case is what it says: the scan and the photo both left bare by a
+      // dense hidden layer with no word, every page machine read.
       const inspections = await inspectPages(mupdf, pdf);
       expect(inspections).toHaveLength(PAGES);
       for (const { findings } of inspections)
