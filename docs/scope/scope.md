@@ -30,7 +30,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 17 | Data processing agreement | Release 6 | planned |
 | 18 | AGPL compliance & source publication | Release 1 | in-progress |
 | 19 | Sparse OCR scans | Release 1 | done |
-| 20 | Dense text layers over pictures | Release 1 | planned |
+| 20 | Dense text layers over pictures | Release 1 | in-progress |
 
 ## Foundations
 
@@ -176,10 +176,20 @@ spec [0008](../specs/0008-sparse-ocr-scans/index.md) · code in `src/engine` (`i
 - [x] Review it (fresh model): `/check review sparse OCR scans`, again for the review's fixes
 - [x] Document it: `/document sparse OCR scans`
 
-### 20. Dense text layers over pictures · needs a decision · GA · from spec 0008
+### 20. Dense text layers over pictures · in-progress · GA · from spec 0008
 A picture loses its warning once text lines cover at least 5% of it (`TEXT_OVER_PICTURE_MAX`), because spec 0006's coverage test counts any readable line, visible or hidden, punctuation included, over any picture, whichever picture it belongs to. So a photo pasted onto a dense OCR scan is cleared by the scan's layer, and a scan whose only layer is dense junk (six hidden lines of `|||` from a ruled form or table) is cleared although no letter or number was read. Both were true before spec 0008, which pins the photo case (`read-pictures.pdf` page 28) and leaves the decision here. Found by the cross check of spec 0008's review fixes and by its second review (minor 1), both on 2026-09-30.
 **Done when:** it is decided what the coverage test counts: whether spec 0008's rule that a character over two different pictures counts for neither reaches it for machine read lines, and whether a line holding no letter or number counts toward it at all. Each is measured for its effect on dense OCR scans and its cost, and page 28's expectation, and a dense punctuation page's, follow that decision.
-- [ ] Design it (spec): `/architect dense text layers over pictures`
+spec [0010](../specs/0010-dense-text-layers-over-pictures/index.md) · code in `src/engine` (`inspect.ts`, `index.ts`), `src/lib/page-findings.ts`, `scripts/lib/reading-fixtures.mjs`, `scripts/make-fixture.mjs`
+- [x] Design it (spec): `/architect dense text layers over pictures`
+- [ ] Build it: `/develop dense text layers over pictures`
+  - [ ] The fixtures: page 28's expectation moved and nine new pages on `read-pictures.pdf` (a photo after the layer, junk layers, MRC pieces, a vertical layer, typed underscores, replacement text) · AC-3 to AC-7
+  - [ ] The rule, proved: `coverageLines`, the lookups shared with the run, the MuPDF pins, the stronger warning at the stamp cap, and the fourth cost case · AC-1, AC-2, AC-8, AC-10, AC-11
+  - [ ] The words and the amends: the `bare-picture` line, and specs 0006 and 0008 amended · AC-1 to AC-3, AC-9
+  - [ ] Real dense scans made locally: a dense page, a photo pasted before and after OCR, a ruled table and an empty form (slice 2) · AC-12
+- [ ] Verify it: `/check verify dense text layers over pictures`, including the real dense scans (AC-12)
+- [ ] Test it: `/test dense text layers over pictures`
+- [ ] Review it (fresh model): `/check review dense text layers over pictures`
+- [ ] Document it: `/document dense text layers over pictures`
 
 ## Release 2: Take money
 
