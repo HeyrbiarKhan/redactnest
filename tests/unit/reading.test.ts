@@ -31,6 +31,9 @@ import {
 import { isPartly, showsCrookedLine } from "@/lib/page-findings";
 import { outputFormFor, outputNameFor } from "@/lib/session";
 import { countPagesByFinding } from "@/worker/protocol";
+// Not on the engine's index, since nothing past the wall needs it; a test of
+// the walled module imports it where it lives.
+import { withinReach } from "@/engine/inspect";
 
 import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
 import {
@@ -1180,14 +1183,24 @@ describe("dense text layers over pictures", () => {
     }
   }
 
-  /** Whether the frozen reach finds a copy of the hidden line among `filled`. */
-  function copiedBefore(hidden: readonly Character[], filled: readonly At[]): boolean {
-    const sorted = [...filled].sort(([a], [b]) => a - b);
-    const drawn = {
+  /** Glyph origins as the engine keeps them for the reach: sorted by x. */
+  function drawnAt(origins: readonly At[]) {
+    const sorted = [...origins].sort(([a], [b]) => a - b);
+    return {
       xs: Float64Array.from(sorted, ([x]) => x),
       ys: Float64Array.from(sorted, ([, y]) => y),
     };
+  }
+
+  /** Whether the frozen reach finds a copy of the hidden line among `filled`. */
+  function copiedBefore(hidden: readonly Character[], filled: readonly At[]): boolean {
+    const drawn = drawnAt(filled);
     return hidden.some((character) => reachBefore(character, drawn));
+  }
+
+  /** How far a character's reach goes, as both versions measure it. */
+  function reachOf({ quad }: Character): number {
+    return Math.max(COPY_REACH_RATIO * quadHeight(quad), POSITION_TOLERANCE);
   }
 
   /**
@@ -1217,8 +1230,6 @@ describe("dense text layers over pictures", () => {
       const [dx, dy] = first.direction;
       const length = Math.hypot(dx, dy);
       const [ux, uy] = [dx / length, dy / length];
-      const reach = ({ quad }: Character) =>
-        Math.max(COPY_REACH_RATIO * quadHeight(quad), POSITION_TOLERANCE);
       const at = ([x, y]: At, along: number, across: number): At => [
         x + along * ux - across * uy,
         y + along * uy + across * ux,
@@ -1230,8 +1241,8 @@ describe("dense text layers over pictures", () => {
         { glyph: first.origin, inside: true },
       ];
       for (const [side, origin, edge, sideReach] of [
-        [-1, first.origin, -reach(first), reach(first)],
-        [1, last.origin, quadWidth(last.quad) + reach(last), reach(last)],
+        [-1, first.origin, -reachOf(first), reachOf(first)],
+        [1, last.origin, quadWidth(last.quad) + reachOf(last), reachOf(last)],
       ] as const) {
         const step = (inside: boolean) => edge + side * (inside ? -NEAR : NEAR);
         for (const across of [-1, 1]) {
@@ -1257,7 +1268,7 @@ describe("dense text layers over pictures", () => {
             glyph: at(
               middle.origin,
               quadWidth(middle.quad) / 2,
-              across * (reach(middle) + (inside ? -NEAR : NEAR)),
+              across * (reachOf(middle) + (inside ? -NEAR : NEAR)),
             ),
             inside,
           });
@@ -1293,6 +1304,265 @@ describe("dense text layers over pictures", () => {
       );
     },
   );
+
+  /**
+   * A character for the reach alone, which reads only its origin, its direction
+   * and its quad's height and width. The quad stands on the origin along the
+   * direction, as a glyph's does.
+   */
+  function reachCharacter(
+    origin: At,
+    direction: At,
+    width: number,
+    height: number,
+  ): Character {
+    const length = Math.hypot(...direction);
+    const [ux, uy] = [direction[0] / length, direction[1] / length];
+    // Up the glyph, with y running down the page.
+    const [upX, upY] = [uy * height, -ux * height];
+    const [ox, oy] = origin;
+    const [ex, ey] = [ox + ux * width, oy + uy * width];
+    return {
+      code: 0x52,
+      origin,
+      quad: [ox + upX, oy + upY, ex + upX, ey + upY, ox, oy, ex, ey],
+      angle: Math.atan2(uy, ux),
+      direction,
+      block: 0,
+      line: 0,
+    };
+  }
+
+  /**
+   * Where the frozen reach puts a point `along` a character's line and `across`
+   * it from its origin: the same sums in the same order, so a corner lands
+   * exactly on the bounds it builds.
+   */
+  function reachPoint(
+    { origin: [ox, oy], direction: [dx, dy] }: Character,
+    along: number,
+    across: number,
+  ): At {
+    const length = Math.hypot(dx, dy);
+    const [ux, uy] = [dx / length, dy / length];
+    return [ox + along * ux - across * uy, oy + along * uy + across * ux];
+  }
+
+  /**
+   * The points where a bound of a character's reach decides: its four corners,
+   * then the middle of each of its four edges.
+   */
+  function reachTies(character: Character): readonly At[] {
+    const reach = reachOf(character);
+    const before = -reach;
+    const past = quadWidth(character.quad) + reach;
+    const middle = (before + past) / 2;
+    const ties: readonly At[] = [
+      [before, -reach],
+      [before, reach],
+      [past, -reach],
+      [past, reach],
+      [before, 0],
+      [past, 0],
+      [middle, -reach],
+      [middle, reach],
+    ];
+    return ties.map(([along, across]) => reachPoint(character, along, across));
+  }
+
+  /**
+   * The double next to `value`, one step up or down, so a glyph can sit a hair
+   * either side of a bound with no rounding to hide which side it is on.
+   */
+  function nextDouble(value: number, up: boolean): number {
+    if (value === 0) return up ? Number.MIN_VALUE : -Number.MIN_VALUE;
+    const bits = new BigInt64Array(Float64Array.of(value).buffer);
+    // A double's size grows with its bits read as an integer, whatever its sign.
+    bits[0] += value > 0 === up ? BigInt(1) : BigInt(-1);
+    return new Float64Array(bits.buffer)[0];
+  }
+
+  /** A point, and its eight neighbours one double away on either axis or both. */
+  function withNeighbours([x, y]: At): readonly At[] {
+    const near = (value: number) => [
+      nextDouble(value, false),
+      value,
+      nextDouble(value, true),
+    ];
+    return near(x).flatMap((nx) => near(y).map((ny): At => [nx, ny]));
+  }
+
+  /** A seeded generator (mulberry32), so every run asks the same cases. */
+  function seeded(seed: number): () => number {
+    let state = seed >>> 0;
+    return () => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let mixed = Math.imul(state ^ (state >>> 15), state | 1);
+      mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+      return ((mixed ^ (mixed >>> 14)) >>> 0) / 2 ** 32;
+    };
+  }
+
+  /** The four ways a line runs along an axis, each a unit vector with no rounding. */
+  const AXES: readonly At[] = [
+    [1, 0],
+    [0, 1],
+    [-1, 0],
+    [0, -1],
+  ];
+
+  /**
+   * Random characters across a page: one in four running along an axis, one in
+   * eight too small for its reach to pass `POSITION_TOLERANCE`, and one in
+   * eight with no width, as a space has.
+   */
+  function randomCharacters(random: () => number, count: number): readonly Character[] {
+    const between = (low: number, high: number) => low + random() * (high - low);
+    return Array.from({ length: count }, () => {
+      const angle = between(0, 2 * Math.PI);
+      const direction: At =
+        random() < 0.25
+          ? AXES[Math.floor(random() * AXES.length)]
+          : [Math.cos(angle), Math.sin(angle)];
+      const height = random() < 0.125 ? between(0.001, 0.02) : between(0.5, 40);
+      const width = random() < 0.125 ? 0 : between(0.1, 30);
+      return reachCharacter([between(0, 612), between(0, 792)], direction, width, height);
+    });
+  }
+
+  /** Both versions' answers for one character and the glyphs drawn on its page. */
+  function askBoth(character: Character, glyphs: readonly At[]) {
+    const drawn = drawnAt(glyphs);
+    return {
+      character,
+      glyphs,
+      now: withinReach(character, drawn),
+      before: reachBefore(character, drawn),
+    };
+  }
+
+  /**
+   * AC-11's promise asked of `withinReach` itself, where it is sharpest: a
+   * glyph exactly on each corner and edge of a character's reach, and one
+   * double either side of it on each axis. A bound moved by the smallest amount
+   * parts from the old one only at a tie like these. Each glyph is asked about
+   * alone, so no answer hides behind another's.
+   */
+  it("answers as the reach before spec 0010 did for a glyph on each corner and edge of it, and a double either side", () => {
+    // Along an axis, with every value a whole number, each tie is computed with
+    // no rounding, so it lies exactly on the reach.
+    const exact = [...AXES, [2, 0] as const].map((direction) =>
+      reachCharacter([300, 400], direction, 8, 12),
+    );
+    // Turned, or not whole: a tie may round to either side here, and the two
+    // versions must round it alike.
+    const rounded = [
+      ...[3, 30, 90, 135, 200, 315].map((degrees) => {
+        const angle = (degrees * Math.PI) / 180;
+        return reachCharacter(
+          [300.3, 400.7],
+          [Math.cos(angle), Math.sin(angle)],
+          7.3,
+          11.9,
+        );
+      }),
+      reachCharacter([300.3, 400.7], [3, 4], 7.3, 11.9),
+      reachCharacter([300.3, 400.7], [0.6, 0.8], 0, 11.9),
+      // So small its reach is `POSITION_TOLERANCE`.
+      reachCharacter([300.3, 400.7], [1, 0], 7.3, 0.015),
+      ...randomCharacters(seeded(1), 200),
+    ];
+
+    const answers = [...exact, ...rounded].flatMap((character) =>
+      reachTies(character)
+        .flatMap(withNeighbours)
+        .map((glyph) => askBoth(character, [glyph])),
+    );
+    expect(answers.filter(({ now, before }) => now !== before)).toEqual([]);
+
+    // The ties really are ties: on an exact character a glyph on a bound is
+    // within reach and one a double past it is not, so four of the nine at
+    // each corner answer yes, and six of the nine at each edge.
+    expect(
+      exact.map((character) =>
+        reachTies(character).map(
+          (tie) =>
+            withNeighbours(tie).filter((glyph) => askBoth(character, [glyph]).before)
+              .length,
+        ),
+      ),
+    ).toEqual(exact.map(() => [4, 4, 4, 4, 6, 6, 6, 6]));
+  });
+
+  /**
+   * A character whose height, width, origin or direction cannot be measured
+   * answers yes, so its line is a drawn copy and fails safe (spec 0008, AC-15).
+   * The only glyph is far away, so only that guard can answer yes.
+   */
+  it("answers yes, as the reach before spec 0010 did, for a character it cannot measure", () => {
+    const far: readonly At[] = [[10, 10]];
+    const sound = reachCharacter([300, 400], [1, 0], 8, 12);
+    expect(askBoth(sound, far)).toMatchObject({ now: false, before: false });
+
+    const unmeasured: readonly Character[] = [
+      reachCharacter([300, 400], [1, 0], 8, Number.NaN),
+      reachCharacter([300, 400], [1, 0], Number.POSITIVE_INFINITY, 12),
+      { ...sound, origin: [Number.NaN, 400] },
+      { ...sound, origin: [300, Number.NEGATIVE_INFINITY] },
+      { ...sound, direction: [0, 0] },
+      { ...sound, direction: [Number.NaN, 1] },
+      { ...sound, direction: [Number.POSITIVE_INFINITY, 0] },
+    ];
+    expect(
+      unmeasured.map((character) => {
+        const { now, before } = askBoth(character, far);
+        return [now, before];
+      }),
+    ).toEqual(unmeasured.map(() => [true, true]));
+  });
+
+  /**
+   * AC-11's promise over random characters and random glyphs around each
+   * one's reach, some sharing an x as a column of glyphs does. Each glyph is
+   * asked about alone; then the glyphs outside the reach together, alone and
+   * with each glyph inside it added in turn, so the walk along the sorted list,
+   * where it starts and where it stops, is held too.
+   */
+  it("answers as the reach before spec 0010 did for random characters and glyph lists", () => {
+    const random = seeded(2);
+    const between = (low: number, high: number) => low + random() * (high - low);
+
+    const answers = randomCharacters(random, 400).flatMap((character) => {
+      const reach = reachOf(character);
+      const past = quadWidth(character.quad) + reach;
+      const scattered = Array.from({ length: 20 }, () =>
+        reachPoint(
+          character,
+          between(-2 * reach, past + reach),
+          between(-2 * reach, 2 * reach),
+        ),
+      );
+      const column = scattered
+        .slice(0, 4)
+        .map(([x, y]): At => [x, y + between(-2 * reach, 2 * reach)]);
+      const glyphs = [...scattered, ...column];
+
+      const alone = glyphs.map((glyph) => askBoth(character, [glyph]));
+      const outside = glyphs.filter((_, index) => !alone[index].before);
+      const inside = glyphs.filter((_, index) => alone[index].before);
+      return [
+        ...alone,
+        askBoth(character, outside),
+        ...inside.map((glyph) => askBoth(character, [...outside, glyph])),
+      ];
+    });
+    expect(answers.filter(({ now, before }) => now !== before)).toEqual([]);
+
+    // Both answers are common, so the comparison is not empty.
+    const yes = answers.filter(({ before }) => before).length;
+    expect(yes).toBeGreaterThan(answers.length / 5);
+    expect(answers.length - yes).toBeGreaterThan(answers.length / 5);
+  });
 });
 
 /** Slice 2: AC-25. The crooked scan line, from the real engine's readings and blocks. */

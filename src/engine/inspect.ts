@@ -711,8 +711,12 @@ function isDrawnAt(drawn: DrawnOrigins, [x, y]: Point): boolean {
  * whether a quad's centre is inside the picture first, and a quad with a non
  * finite corner has a centre inside nothing, so such a character never reaches
  * here.
+ *
+ * Exported only so `reading.test.ts` can hold it, answer for answer, to the
+ * reach as it was before spec 0010 rewrote its bounds (AC-11). Nothing outside
+ * this file calls it.
  */
-function withinReach(character: Character, drawn: DrawnOrigins): boolean {
+export function withinReach(character: Character, drawn: DrawnOrigins): boolean {
   const height = quadHeight(character.quad);
   const width = quadWidth(character.quad);
   const [ox, oy] = character.origin;
