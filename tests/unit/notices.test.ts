@@ -14,6 +14,7 @@ import {
   readSpdxIds,
   walkClosure,
 } from "../../scripts/lib/notices.mjs";
+import { manifest, memoryReader } from "../support/memory-reader";
 
 /**
  * The third party notices. Spec 0009, AC-13 and AC-14.
@@ -24,45 +25,6 @@ import {
  */
 
 const SPDX_IDS = readSpdxIds(readFileSync("scripts/legal/spdx-licence-ids.txt", "utf8"));
-
-type Tree = Record<string, string>;
-
-/**
- * A file system in memory, POSIX paths only. `links` maps a path to the real
- * folder it points at, which is how pnpm lays out `node_modules`.
- */
-function memoryReader(files: Tree, links: Record<string, string> = {}) {
-  const real = (path: string): string => {
-    for (const [link, target] of Object.entries(links)) {
-      if (path === link || path.startsWith(`${link}/`)) {
-        return real(target + path.slice(link.length));
-      }
-    }
-    return path;
-  };
-  const children = (dir: string) =>
-    Object.keys(files)
-      .filter((path) => path.startsWith(`${real(dir)}/`))
-      .map((path) => path.slice(real(dir).length + 1).split("/"));
-
-  return {
-    readText: (path: string) => files[real(path)],
-    listFiles: (dir: string) =>
-      children(dir)
-        .filter((parts) => parts.length === 1)
-        .map(([name]) => name),
-    listDirs: (dir: string) => [
-      ...new Set(
-        children(dir)
-          .filter((parts) => parts.length > 1)
-          .map(([name]) => name),
-      ),
-    ],
-    realPath: real,
-  };
-}
-
-const manifest = (fields: Record<string, unknown>) => JSON.stringify(fields);
 
 describe("the closure walk", () => {
   /** covers: AC-13 */
@@ -338,19 +300,18 @@ describe("each package's entry", () => {
 
 describe("the notices for the installed tree", () => {
   const root = toPosix(process.cwd());
-  const mupdfSection = (pkg: { version: string }) => `mupdf ${pkg.version}`;
 
   /** covers: AC-13, INV-5. No date, no commit, no order from the walk. */
   it("are the same bytes every time", () => {
-    const first = buildNotices(root, diskReader, mupdfSection);
-    const second = buildNotices(root, diskReader, mupdfSection);
+    const first = buildNotices(root, diskReader);
+    const second = buildNotices(root, diskReader);
 
     expect(second).toBe(first);
   });
 
   /** covers: AC-13. The sections, in order, and the entries the spec names. */
   it("hold the five sections in order", () => {
-    const notices = buildNotices(root, diskReader, mupdfSection);
+    const notices = buildNotices(root, diskReader);
     const headings = [...notices.matchAll(/^# (\d)\. /gm)].map((match) => match[1]);
 
     expect(headings).toEqual(["1", "2", "3", "4", "5"]);
@@ -373,7 +334,7 @@ describe("the notices for the installed tree", () => {
       ),
     ).version;
 
-    expect(buildNotices(root, diskReader, mupdfSection)).toContain(
+    expect(buildNotices(root, diskReader)).toContain(
       `libphonenumber-js ${installed}\nLicence: MIT for the package`,
     );
   });

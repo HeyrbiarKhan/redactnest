@@ -22,7 +22,7 @@
   "dependencies": {
     "libphonenumber-js": "1.13.14",
     "lucide-react": "^1.47.0",
-    "mupdf": "^1.28.1",
+    "mupdf": "1.28.1",
     "next": "16.3.5",
     "react": "19.2.8",
     "react-dom": "19.2.8"

@@ -16,13 +16,10 @@
 
 import { posix } from "node:path";
 
-/** An expected failure: the build stops and says why, with no stack trace. */
-export class NoticesError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "NoticesError";
-  }
-}
+import { checkMupdfVersion, mupdfSection, readMupdfLegal } from "./mupdf-source.mjs";
+import { NoticesError } from "./notices-error.mjs";
+
+export { NoticesError };
 
 /**
  * The licences a package in the closure may come under, as SPDX identifiers.
@@ -461,7 +458,7 @@ costs more than listing them.`;
 /**
  * The whole file, from what the shell gathered.
  *
- * `inputs` holds the MuPDF section's text, the installed libphonenumber-js
+ * `inputs` holds section 1's text (from `mupdfSection`), the installed libphonenumber-js
  * version, the hand written texts (`phoneMetadata`, `inter`, `carlito`), the
  * sorted packages and the vendored licences.
  */
@@ -531,15 +528,14 @@ function required(path, reader) {
 /**
  * The notices for the tree at `rootDir`, or a `NoticesError` saying why not.
  *
- * `mupdfSection` turns the installed MuPDF package into section 1's text. It is
- * passed in because that section has its own rules (AC-15, AC-16).
+ * MuPDF's version is checked first, against `scripts/legal/mupdf.txt`, so an
+ * upgrade stops here before anything else is judged (AC-16, INV-6).
  */
-export function buildNotices(rootDir, reader, mupdfSection) {
+export function buildNotices(rootDir, reader) {
   const at = (path) => posix.join(rootDir, path);
   const spdxIds = readSpdxIds(required(at("scripts/legal/spdx-licence-ids.txt"), reader));
 
   const packages = walkClosure(rootDir, reader);
-  checkLicences(packages, spdxIds);
 
   const named = (name) => {
     const pkg = packages.find((candidate) => candidate.name === name);
@@ -549,9 +545,13 @@ export function buildNotices(rootDir, reader, mupdfSection) {
     return pkg;
   };
 
+  const mupdf = readMupdfLegal(required(at("scripts/legal/mupdf.txt"), reader));
+  checkMupdfVersion(mupdf, named("mupdf").version);
+  checkLicences(packages, spdxIds);
+
   return formatNotices(
     {
-      mupdf: mupdfSection(named("mupdf"), reader),
+      mupdf: mupdfSection(mupdf),
       phoneVersion: named("libphonenumber-js").version,
       phoneMetadata: required(at("scripts/legal/libphonenumber-metadata.txt"), reader),
       inter: required(at("scripts/legal/inter.txt"), reader),

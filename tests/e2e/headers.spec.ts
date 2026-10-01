@@ -130,3 +130,45 @@ test.describe("the licence files", () => {
     expect(notices).toMatch(/^Carlito\nLicence: OFL-1\.1$/m);
   });
 });
+
+/**
+ * Spec 0009, AC-15 and AC-17. MuPDF's source is offered beside the engine
+ * itself (AGPL section 6(d)) and in the notices, with the archive's checksum.
+ */
+test.describe("MuPDF's source offer", () => {
+  const ARCHIVE = "https://mupdf.com/downloads/archive/mupdf-1.28.1-source.tar.gz";
+
+  test("the engine's VERSION file names the source archive and the tagged tree", async ({
+    request,
+    baseURL,
+  }) => {
+    const response = await request.get("/engine/VERSION");
+    expect(response.status()).toBe(200);
+    expect(response.url().startsWith(baseURL!)).toBe(true);
+
+    // No extension, so a header rule makes it text rather than a download.
+    const type = (response.headers()["content-type"] ?? "").toLowerCase();
+    expect(type).toContain("text/plain");
+    expect(type).toContain("charset=utf-8");
+
+    const lines = (await response.text()).trimEnd().split("\n");
+    expect(lines).toEqual([
+      "mupdf 1.28.1",
+      "AGPL-3.0-or-later",
+      "Copyright (C) 2004-2026 Artifex Software, Inc.",
+      `Source: ${ARCHIVE}`,
+      "Browse: https://github.com/ArtifexSoftware/mupdf/tree/1.28.1",
+    ]);
+  });
+
+  test("the notices carry what is compiled into the engine", async ({ request }) => {
+    const notices = await (await request.get("/third-party-notices.txt")).text();
+
+    expect(notices).toContain(ARCHIVE);
+    expect(notices).toContain(
+      "dc94c60b2537e2ac9a2d379dd3801545f84a3a302d15c9da358362a1270707c3",
+    );
+    expect(notices).toContain("Independent JPEG Group");
+    expect(notices).toContain("Emscripten");
+  });
+});
