@@ -66,8 +66,11 @@ export const READING_GRID = 64;
 export const PICTURE_MIN_SHARE = 0.05;
 
 /**
- * The share of a picture that readable text lines may cover and still leave
- * it bare. An OCR scan's text layer covers far more than this.
+ * The share of a picture that visible lines of words may cover and still
+ * leave it bare. Spec 0010, AC-1: only a line holding a letter or number, with
+ * every readable character on it drawn where the text says, counts
+ * (`coverageLines`). Machine read text counts toward no picture's coverage,
+ * and clears a picture only through a machine read run (AC-2).
  */
 export const TEXT_OVER_PICTURE_MAX = 0.05;
 
@@ -196,8 +199,12 @@ interface TextReading {
   readonly readableCount: number;
   /** A line holds a run of `UNREADABLE_RUN` U+FFFD or private use characters. */
   readonly unreadableRun: boolean;
-  /** The boxes of lines holding a readable character, visible or invisible. */
-  readonly readableLines: readonly Rect[];
+  /**
+   * Each line's box, the union of its characters' quads, by its line number,
+   * finite boxes only. `coverageLines` decides which of them count (spec
+   * 0010, AC-1).
+   */
+  readonly lineBoxes: ReadonlyMap<number, Rect>;
   /**
    * The extracted character at a glyph's origin, within `POSITION_TOLERANCE`,
    * or null. Its quad is the glyph's box (AC-9).
@@ -206,7 +213,8 @@ interface TextReading {
   /**
    * The page's characters in reading order, each with its line: the ones
    * `characterAt` matches glyphs to, handed out for the machine read run
-   * (spec 0008, AC-11), so nothing more of the page is held (INV-8).
+   * (spec 0008, AC-11) and the lines that count (spec 0010, AC-10), so
+   * nothing more of the page is held (INV-8).
    */
   readonly characters: readonly Character[];
 }
@@ -317,12 +325,6 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
   const drawing = readDrawing(mupdf, page);
   const grid = sampleGrid(area);
 
-  // Which grid points readable text lines cover, visible or invisible, so an
-  // OCR layer counts and an unmapped font does not.
-  const underText = new Uint8Array(grid.count);
-  for (const box of text.readableLines)
-    grid.mark(underText, (point) => inRect(box, point), box);
-
   // Every picture with the points its footprint holds, gathered before any is
   // judged, so a search can ask which other pictures hold a character's
   // centre, whether drawn before it or after (spec 0008, AC-16).
@@ -337,7 +339,28 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
     if (count >= PICTURE_MIN_SHARE * grid.count)
       pictures.push({ footprint, held, count });
   }
-  const machineRead = machineReadTest(text.characters, drawing);
+
+  // Which grid points the lines that count cover (spec 0006, AC-4): visible
+  // lines of words, every readable character drawn where the text says, so an
+  // OCR layer, a line of marks and text the page never draws count for
+  // nothing (spec 0010, AC-1 and AC-2). The invisible glyphs and the drawn
+  // glyph origins are gathered once here and shared with the machine read
+  // run, and only on a page with a picture, so a page with none pays nothing
+  // new (AC-10, AC-11).
+  const glyphs = pictures.length > 0 ? glyphOrigins(drawing) : null;
+  const underText = new Uint8Array(grid.count);
+  if (glyphs !== null) {
+    const counting = coverageLines(
+      text.characters,
+      (origin) => isDrawnAt(glyphs.drawn, origin),
+      (origin) => glyphs.invisible.find(origin) !== null,
+    );
+    for (const line of counting) {
+      const box = text.lineBoxes.get(line);
+      if (box !== undefined) grid.mark(underText, (point) => inRect(box, point), box);
+    }
+  }
+  const machineRead = glyphs === null ? null : machineReadTest(text.characters, glyphs);
   const runArea = runAreas(pictures);
 
   // Then each picture, and whether it has readable text over it.
@@ -354,8 +377,10 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
     // Spec 0008, AC-1 to AC-3: a picture text recognition read a word on is
     // not bare, judged picture by picture. Searched only when the coverage
     // test failed and the page draws enough invisible glyphs to hold a run,
-    // so a born digital page pays nothing (AC-12).
+    // so a born digital page pays nothing (AC-12). Since spec 0010 this is
+    // the only way machine read text clears a picture, dense or sparse (AC-2).
     if (
+      machineRead !== null &&
       drawing.invisible.length >= MACHINE_READ_RUN &&
       machineReadRun(text.characters, machineRead, runArea(index))
     ) {
@@ -387,8 +412,9 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
     found.add("unreadable-text");
   }
 
-  // AC-4. A picture with next to no readable text over it, on a page that is
-  // not already a scan: a pasted ID card, a photo, a slide's background.
+  // AC-4. A picture with next to no visible lines of words over it and no
+  // machine read run (spec 0010, AC-1 and AC-2), on a page that is not
+  // already a scan: a pasted ID card, a photo, a slide's background.
   if (!scanned && anyBare) found.add("bare-picture");
 
   // AC-5. Invisible text whose centre lies over an image, whichever the
@@ -491,6 +517,46 @@ export function machineReadRun(
 }
 
 /**
+ * The lines of the ordinary read whose boxes count toward a picture's
+ * coverage (spec 0006, AC-4). Spec 0010, AC-1: a line counts when it holds a
+ * letter or number (a character `runStep` counts), every readable character
+ * on it (`isReadable`) has a drawn glyph at its origin, and none has an
+ * invisible one there. So a line of machine read text, a line mixing hidden
+ * and drawn characters, text drawn invisible and visible at one place, a line
+ * holding a readable character the page draws no glyph for, and a line of only
+ * punctuation, symbols or format characters each count for nothing (INV-1,
+ * INV-3). Whitespace and unreadable characters are never asked whether they
+ * match.
+ *
+ * Pure, over the page's characters in reading order, where a line's
+ * characters are contiguous, so its edges are proved as plain logic. Once a
+ * character fails a line, the rest of that line is not asked about.
+ */
+export function coverageLines(
+  characters: readonly Pick<Character, "line" | "code" | "origin">[],
+  isDrawn: (origin: Point) => boolean,
+  isHidden: (origin: Point) => boolean,
+): ReadonlySet<number> {
+  const counting = new Set<number>();
+  let line = -1;
+  let word = false;
+  let failed = false;
+  for (const character of characters) {
+    if (character.line !== line) {
+      if (word && !failed) counting.add(line);
+      line = character.line;
+      word = false;
+      failed = false;
+    }
+    if (failed || !isReadable(character.code)) continue;
+    if (!isDrawn(character.origin) || isHidden(character.origin)) failed = true;
+    else if (runStep(character.code) === "counts") word = true;
+  }
+  if (word && !failed) counting.add(line);
+  return counting;
+}
+
+/**
  * A character's step, or a line's copy answer, as `machineReadTest` keeps it.
  * 0 is not yet asked, which is what a fresh `Uint8Array` holds.
  */
@@ -511,25 +577,20 @@ const NO_COPY = 2;
  *
  * Neither answer depends on the picture, so each character's step is decided
  * once per page, and each line's copy answer once per line, the first time a
- * picture needs it. The index and the list behind them are made on first need
- * too, so a page no picture asks about pays nothing (AC-12).
+ * picture needs it (AC-12). The invisible glyphs and the drawn glyph origins
+ * it asks are `inspectPage`'s, built once and shared with `coverageLines`
+ * (spec 0010, AC-10).
  */
 function machineReadTest(
   characters: readonly Character[],
-  drawing: DrawingReading,
+  { invisible, drawn }: GlyphOrigins,
 ): (at: number) => RunStep {
-  let asked: {
-    readonly steps: Uint8Array;
-    readonly lines: Uint8Array;
-    readonly invisible: ReturnType<typeof originIndex<true>>;
-  } | null = null;
-  let drawn: DrawnOrigins | null = null;
+  let asked: { readonly steps: Uint8Array; readonly lines: Uint8Array } | null = null;
 
   /** Is the line of the character at `at` a drawn copy? Decided once per line. */
   const isCopy = (at: number, lines: Uint8Array): boolean => {
     const { line } = characters[at];
     if (lines[line] === UNASKED) {
-      drawn ??= drawnOrigins(drawing);
       // A line's characters are contiguous in reading order.
       let from = at;
       while (from > 0 && characters[from - 1].line === line) from -= 1;
@@ -548,18 +609,15 @@ function machineReadTest(
 
   return (at) => {
     if (asked === null) {
-      const invisible = originIndex<true>();
-      for (const { origin } of drawing.invisible) invisible.add(origin, true);
       // Lines are counted from 0 in reading order, so the last is the highest.
       const lineCount =
         characters.length === 0 ? 0 : characters[characters.length - 1].line + 1;
       asked = {
         steps: new Uint8Array(characters.length),
         lines: new Uint8Array(lineCount),
-        invisible,
       };
     }
-    const { steps, lines, invisible } = asked;
+    const { steps, lines } = asked;
     if (steps[at] === UNASKED) {
       const { code, origin } = characters[at];
       // The code point first: it is the cheapest, and whitespace and
@@ -606,6 +664,42 @@ function drawnOrigins(drawing: DrawingReading): DrawnOrigins {
 }
 
 /**
+ * Where a page draws its glyphs, as the lines that count and the machine read
+ * run both ask (spec 0010, AC-10): the invisible glyphs (render mode 3) by
+ * origin, and every drawn one in `DrawnOrigins`. Built once per page with a
+ * picture, and dropped with the page.
+ */
+interface GlyphOrigins {
+  readonly invisible: ReturnType<typeof originIndex<true>>;
+  readonly drawn: DrawnOrigins;
+}
+
+function glyphOrigins(drawing: DrawingReading): GlyphOrigins {
+  const invisible = originIndex<true>();
+  for (const { origin } of drawing.invisible) invisible.add(origin, true);
+  return { invisible, drawn: drawnOrigins(drawing) };
+}
+
+/**
+ * Is a glyph drawn at this origin? Spec 0010, AC-1: a drawn glyph's origin
+ * within `POSITION_TOLERANCE` of it on each axis, the same match spec 0006's
+ * AC-9 makes between a glyph and its character. A binary search on x, then a
+ * check of y. An origin that is not finite matches nothing, so the line it
+ * sits on does not count.
+ */
+function isDrawnAt(drawn: DrawnOrigins, [x, y]: Point): boolean {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  for (
+    let at = firstAtLeast(drawn.xs, x - POSITION_TOLERANCE);
+    at < drawn.xs.length && drawn.xs[at] <= x + POSITION_TOLERANCE;
+    at += 1
+  ) {
+    if (Math.abs(drawn.ys[at] - y) <= POSITION_TOLERANCE) return true;
+  }
+  return false;
+}
+
+/**
  * Does a drawn glyph's origin lie within this character's reach? Spec 0008,
  * AC-15. The reach is `COPY_REACH_RATIO` of the character's quad height, never
  * less than `POSITION_TOLERANCE`, measured from its baseline along its
@@ -641,15 +735,20 @@ function withinReach(character: Character, drawn: DrawnOrigins): boolean {
   const before = -reach;
   const past = width + reach;
 
-  // The bounds of that area in page space, to ask the list with.
-  const xs = [before, past].flatMap((along) =>
-    [-reach, reach].map((across) => ox + along * ux - across * uy),
-  );
-  const ys = [before, past].flatMap((along) =>
-    [-reach, reach].map((across) => oy + along * uy + across * ux),
-  );
-  const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
-  const [y0, y1] = [Math.min(...ys), Math.max(...ys)];
+  // The bounds of that area in page space, to ask the list with: its four
+  // corners, `along` from the origin and `across` either side, written out
+  // rather than built as arrays, since a dense layer with no word asks this of
+  // every character it holds (spec 0010, AC-11).
+  const startX = ox + before * ux;
+  const endX = ox + past * ux;
+  const startY = oy + before * uy;
+  const endY = oy + past * uy;
+  const acrossX = reach * uy;
+  const acrossY = reach * ux;
+  const x0 = Math.min(startX + acrossX, startX - acrossX, endX + acrossX, endX - acrossX);
+  const x1 = Math.max(startX + acrossX, startX - acrossX, endX + acrossX, endX - acrossX);
+  const y0 = Math.min(startY - acrossY, startY + acrossY, endY - acrossY, endY + acrossY);
+  const y1 = Math.max(startY - acrossY, startY + acrossY, endY - acrossY, endY + acrossY);
 
   for (let at = firstAtLeast(drawn.xs, x0); at < drawn.xs.length; at += 1) {
     const x = drawn.xs[at];
@@ -1058,14 +1157,11 @@ function readText(page: PDFPage): TextReading {
   let unreadableRun = false;
   let run = 0;
   let line = -1;
-  // Each line's box, from its characters' quads, and whether it holds a
-  // readable character.
-  const boxes = new Map<
-    number,
-    { box: [number, number, number, number]; readable: boolean }
-  >();
-  // Held for this page only, to match glyphs to and for the machine read run
-  // (INV-8; spec 0008, AC-11).
+  // Each line's box, from its characters' quads. Which lines count is
+  // `coverageLines`' to decide (spec 0010, AC-1).
+  const boxes = new Map<number, [number, number, number, number]>();
+  // Held for this page only, to match glyphs to, for the machine read run and
+  // for the lines that count (INV-8; spec 0008, AC-11; spec 0010, AC-10).
   const characters: Character[] = [];
 
   walkCharacters(page, EXTRACTION_OPTIONS[0], (character: Character) => {
@@ -1075,32 +1171,30 @@ function readText(page: PDFPage): TextReading {
       run = 0;
     }
 
-    const readable = isReadable(character.code);
-    if (readable) readableCount += 1;
+    if (isReadable(character.code)) readableCount += 1;
     run = isUnmapped(character.code) ? run + 1 : 0;
     if (run >= UNREADABLE_RUN) unreadableRun = true;
 
     const [x0, y0, x1, y1] = quadBounds(character.quad);
-    const entry = boxes.get(character.line);
-    if (entry === undefined) {
-      boxes.set(character.line, { box: [x0, y0, x1, y1], readable });
+    const box = boxes.get(character.line);
+    if (box === undefined) {
+      boxes.set(character.line, [x0, y0, x1, y1]);
     } else {
-      entry.box[0] = Math.min(entry.box[0], x0);
-      entry.box[1] = Math.min(entry.box[1], y0);
-      entry.box[2] = Math.max(entry.box[2], x1);
-      entry.box[3] = Math.max(entry.box[3], y1);
-      entry.readable ||= readable;
+      box[0] = Math.min(box[0], x0);
+      box[1] = Math.min(box[1], y0);
+      box[2] = Math.max(box[2], x1);
+      box[3] = Math.max(box[3], y1);
     }
   });
 
-  const readableLines = [...boxes.values()]
-    .filter(({ readable, box }) => readable && box.every(Number.isFinite))
-    .map(({ box }): Rect => [box[0], box[1], box[2], box[3]]);
+  const lineBoxes = new Map<number, Rect>();
+  for (const [each, box] of boxes)
+    if (box.every(Number.isFinite)) lineBoxes.set(each, [box[0], box[1], box[2], box[3]]);
 
   return {
     readableCount,
     unreadableRun,
-    readableLines,
+    lineBoxes,
     characterAt: indexByOrigin(characters),
     characters,
   };

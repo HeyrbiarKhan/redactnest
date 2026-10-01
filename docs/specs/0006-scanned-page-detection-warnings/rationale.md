@@ -212,7 +212,7 @@ No fixture needed a different value. Each constant, and the fixture pages that h
 |---|---|---|
 | `READING_GRID` | 64 a side | every share the fixtures test sits well clear of its threshold at this spacing (the nearest: an ID card at 7.7% of the page against 5%) |
 | `PICTURE_MIN_SHARE` | 0.05 | the ID card (7.7%) and the photo (a fifth of the page) are pictures; the 40 pt logo and the headshot clipped to a 120 pt frame (3%) are not |
-| `TEXT_OVER_PICTURE_MAX` | 0.05 | the ID card and the photo are bare; a scan under a full OCR layer, in either order, is not |
+| `TEXT_OVER_PICTURE_MAX` | 0.05 | the ID card and the photo are bare; a scan under a full OCR layer, in either order, is not bare because its layer holds words (spec 0008's run), not because of its area (spec 0010) |
 | `SCAN_MIN_SHARE` | 0.5 | a full page image, a stencil scan and the stamped scans are `scanned`; the photo at a fifth of the page is not |
 | `STAMP_MAX_CHARS` | 40 | a Bates number over a scan is a stamp (`scanned`); a 45 character sentence over one, and each slide's title and bullets, are not. A stamp is visible text, or machine read text with no run: "Signed John Smith" (15 readable characters) as machine read text holds a run, so since spec 0008 its scan is not bare and it is no stamp |
 | `UNREADABLE_RUN` | 3 | the unmapped and private use pages are `unreadable-text`; one unmapped bullet among typed text is nothing |

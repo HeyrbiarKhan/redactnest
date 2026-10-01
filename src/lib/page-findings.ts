@@ -161,11 +161,13 @@ const FINDING_TEXT: Readonly<Record<Exclude<PageFinding, "blank">, Worded>> =
       many: (pages) =>
         `${pages} have text in a font RedactNest can't read, so that text can't be found or removed.`,
     },
+    // Spec 0010, AC-9: true whether or not text lies over the picture, since
+    // an OCR layer, a line of marks or text the page never draws can.
     "bare-picture": {
       one: (pages) =>
-        `${pages} has a picture with no text over it. Words inside a picture can't be found or removed.`,
+        `${pages} has a picture RedactNest can't read. Words inside a picture can't be found or removed.`,
       many: (pages) =>
-        `${pages} have pictures with no text over them. Words inside a picture can't be found or removed.`,
+        `${pages} have pictures RedactNest can't read. Words inside a picture can't be found or removed.`,
     },
     "off-page-picture": {
       one: (pages) =>

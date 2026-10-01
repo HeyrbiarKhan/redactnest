@@ -302,8 +302,10 @@ export function readMixed() {
  * codes are code points by its identity map, and whose glyphs draw nothing.
  * The tiny program Tesseract embeds is left out, as `ocrPage` in the
  * redaction matrix leaves it out, because the text is invisible anyway.
+ * `vertical` writes the same font for vertical writing (`/Identity-V`), with
+ * the same character map, so each glyph advances one em down the page.
  */
-function glyphlessFont(add) {
+function glyphlessFont(add, { vertical = false } = {}) {
   const unicode = add(stream("", IDENTITY_UNICODE));
   const descriptor = add(
     "<< /Type /FontDescriptor /FontName /GlyphLessFont /FontBBox [0 0 500 1000] " +
@@ -315,17 +317,20 @@ function glyphlessFont(add) {
       `/FontDescriptor ${descriptor} 0 R /DW 500 >>`,
   );
   return add(
-    "<< /Type /Font /Subtype /Type0 /BaseFont /GlyphLessFont /Encoding /Identity-H " +
+    `<< /Type /Font /Subtype /Type0 /BaseFont /GlyphLessFont /Encoding /Identity-${vertical ? "V" : "H"} ` +
       `/DescendantFonts [${cidFont} 0 R] /ToUnicode ${unicode} 0 R >>`,
   );
 }
 
-/** One line of invisible text (render mode 3) in the glyphless font. */
-function invisibleLine(size, x, y, text) {
+/**
+ * One line of invisible text (render mode 3) in the glyphless font, `/Fg`
+ * unless `font` names its vertical copy.
+ */
+function invisibleLine(size, x, y, text, { font = "Fg" } = {}) {
   const hex = [...text]
     .map((letter) => letter.codePointAt(0).toString(16).padStart(4, "0"))
     .join("");
-  return `BT 3 Tr /Fg ${size} Tf ${x} ${y} Td <${hex}> Tj ET\n`;
+  return `BT 3 Tr /${font} ${size} Tf ${x} ${y} Td <${hex}> Tj ET\n`;
 }
 
 /** The text layer of a full page OCR scan: twenty lines of words, 32 pt apart. */
@@ -435,10 +440,51 @@ export const READ_PICTURES = Object.freeze([
     name: "a sentence and an invisible copy drifting ahead of it",
     findings: ["bare-picture", "machine-read-text"],
   },
-  // AC-3's recorded limit, taken up as scope feature 20.
+  // Spec 0010, AC-3: machine read text clears a picture only through a run,
+  // and the layer's runs lie over the photo and the scan, so they clear
+  // neither; the scan is cleared by the words over it alone. Page 29 draws
+  // the photo after the layer.
   {
     name: "a photo pasted onto a dense OCR layer",
-    findings: ["machine-read-text"],
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  {
+    name: "a photo pasted onto a dense OCR layer, drawn after it",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  // Spec 0010, AC-4: a dense hidden layer holding no word.
+  {
+    name: "a scan whose dense layer is rows of bars",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  {
+    name: "a scan whose dense layer is bars, letters and digits with no word",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  // Spec 0010, AC-7: two recorded limits, each failing safe.
+  {
+    name: "a dense scan stored as a background and two pieces",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  {
+    name: "a scan with a dense layer in vertical writing",
+    findings: ["bare-picture", "machine-read-text"],
+  },
+  // Spec 0010, AC-5: visible lines count only when they hold a word.
+  { name: "a scan behind rows of typed underscores", findings: ["bare-picture"] },
+  {
+    name: "a scan behind rows of typed underscores, each led by a word",
+    findings: [],
+  },
+  // Spec 0010, AC-6: a visible line holding a character at no glyph's origin
+  // counts for nothing.
+  {
+    name: "a scan behind lines whose replacement text adds a word",
+    findings: ["bare-picture"],
+  },
+  {
+    name: "a scan behind lines whose replacement text matches its glyphs",
+    findings: [],
   },
 ]);
 
@@ -466,7 +512,7 @@ function letterText() {
 
 /**
  * Spec 0006, AC-2, AC-4 and AC-5, and spec 0008, AC-1 to AC-7 and, from page
- * 20, AC-14 to AC-16. One page per picture rule and near miss. The glyphless font joins each page through
+ * 20, AC-14 to AC-16. From page 28, spec 0010, AC-3 to AC-7. One page per picture rule and near miss. The glyphless font joins each page through
  * `fonts`, so a page that also draws Helvetica has one `/Font` dictionary
  * holding both.
  */
@@ -478,6 +524,7 @@ export function readPictures() {
     const scan = scanImage(add);
     const stencil = stencilScan(add);
     const glyphless = glyphlessFont(add);
+    const vertical = glyphlessFont(add, { vertical: true });
     const fonts = `/Fg ${glyphless} 0 R`;
     const scanned = `/XObject << /Scan ${scan} 0 R >>`;
 
@@ -693,17 +740,127 @@ export function readPictures() {
           modeLine(0, 12, 72, 120, SPARSE_SENTENCE) +
           modeLine(3, 12, 72, 120, SPARSE_SENTENCE, { spacing: 0.6 }),
       },
-      // Spec 0008, AC-3's recorded limit. The full text layer covers about a
-      // third of the photo (x 156 to 456, y 300 to 600), so spec 0006's
-      // coverage test clears the photo before any run is asked, as it did
-      // before spec 0008. Accepted, and taken up as scope feature 20.
+      // Spec 0010, AC-3. The full text layer covers about a third of the photo
+      // (x 156 to 456, y 300 to 600), which cleared it before spec 0010. Now
+      // machine read text counts toward no picture's coverage, and the runs
+      // over the photo lie over the scan too, so the photo is bare (spec 0008,
+      // AC-16), while the words over the scan alone clear the scan.
       {
         fonts,
         resources: `/XObject << /Scan ${scan} 0 R /Photo ${photo} 0 R >>`,
         content: fullPage("Scan") + "q 300 0 0 300 156 300 cm /Photo Do Q\n" + ocrLayer(),
       },
+      // Spec 0010, AC-3: the same, with the photo drawn after the layer, as an
+      // editor appends a pasted photo. Its lines covered 18.6% of the scan and
+      // 35.2% of the photo before spec 0010.
+      {
+        fonts,
+        resources: `/XObject << /Scan ${scan} 0 R /Photo ${photo} 0 R >>`,
+        content: fullPage("Scan") + ocrLayer() + "q 300 0 0 300 156 300 cm /Photo Do Q\n",
+      },
+      // Spec 0010, AC-4: six hidden lines of 70 bars, as OCR reads a ruled
+      // table's borders. They covered 6.4% of the scan before spec 0010 (three
+      // such lines covered 3.2%, and were already bare).
+      {
+        fonts,
+        resources: scanned,
+        content:
+          fullPage("Scan") +
+          [700, 668, 636, 604, 572, 540]
+            .map((y) => invisibleLine(12, 60, y, "|".repeat(70)))
+            .join(""),
+      },
+      // Spec 0010, AC-4: the same lines of bars, letters and digits, never 3
+      // that count in a row, so no run forms. 6.4% before spec 0010.
+      {
+        fonts,
+        resources: scanned,
+        content:
+          fullPage("Scan") +
+          [700, 668, 636, 604, 572, 540]
+            .map((y) => invisibleLine(12, 60, y, "|l|I|1".repeat(12).slice(0, 70)))
+            .join(""),
+      },
+      // Spec 0010, AC-7's first limit: a dense scan stored as a background and
+      // two stencil pieces (one kind of MRC compression), every line of the
+      // layer over a piece and the scan, which have different footprints, so
+      // no run clears either (spec 0008, AC-16). Before spec 0010 the lines
+      // covered 18.6% of the scan, and 31.5% and 35.0% of the pieces.
+      {
+        fonts,
+        resources: `/XObject << /Scan ${scan} 0 R /Mask ${stencil} 0 R >>`,
+        content:
+          fullPage("Scan") +
+          "0 0 0 rg\n" +
+          "q 420 0 0 320 50 436 cm /Mask Do Q\n" +
+          "q 420 0 0 320 50 116 cm /Mask Do Q\n" +
+          ocrLayer(),
+      },
+      // Spec 0010, AC-7's second limit: ten columns of vertical writing, 260
+      // readable characters. MuPDF reads each vertical character as a line of
+      // its own (pinned in `reading.test.ts`), so no run forms. 6.1% before
+      // spec 0010.
+      {
+        fonts: `/Fv ${vertical} 0 R`,
+        resources: scanned,
+        content:
+          fullPage("Scan") +
+          [80, 128, 176, 224, 272, 320, 368, 416, 464, 512]
+            .map((x) =>
+              invisibleLine(12, x, 740, "Recognised words down the page", { font: "Fv" }),
+            )
+            .join(""),
+      },
+      // Spec 0010, AC-5: six visible rows of typed underscores, holding no
+      // letter or number, so they count for nothing. 9.4% before spec 0010.
+      {
+        resources: scanned,
+        content:
+          fullPage("Scan") +
+          [700, 668, 636, 604, 572, 540]
+            .map((y) => line("F1", 12, 72, y, "_".repeat(70)))
+            .join(""),
+      },
+      // Spec 0010, AC-5: the same rows, each led by a word, clear the scan.
+      {
+        resources: scanned,
+        content:
+          fullPage("Scan") +
+          [700, 668, 636, 604, 572, 540]
+            .map((y) => line("F1", 12, 72, y, `Name ${"_".repeat(64)}`))
+            .join(""),
+      },
+      // Spec 0010, AC-6: 24 visible lines, each wrapped in replacement text
+      // three characters longer than its glyphs, which MuPDF reads at no
+      // glyph's origin (pinned in `reading.test.ts`). 7.8% before spec 0010.
+      {
+        resources: scanned,
+        content: fullPage("Scan") + replacedLines("Payment received by"),
+      },
+      // Spec 0010, AC-6: the same lines, with replacement text equal to the
+      // glyphs, so every character is at a glyph's origin and they clear it.
+      {
+        resources: scanned,
+        content: fullPage("Scan") + replacedLines("Payment received"),
+      },
     ];
   });
+}
+
+/**
+ * Spec 0010, AC-6: 24 lines of "Payment received" in Helvetica, 28 pt apart
+ * from y 740 down to y 96, each wrapped in replacement text (`/ActualText`)
+ * around its own text object.
+ */
+function replacedLines(actual) {
+  let lines = "";
+  for (let row = 0; row < 24; row += 1) {
+    lines +=
+      `/Span << /ActualText ${literal(actual)} >> BDC\n` +
+      line("F1", 12, 60, 740 - row * 28, "Payment received") +
+      "EMC\n";
+  }
+  return lines;
 }
 
 /** The address in `read-short-ocr.pdf`'s text layer. */

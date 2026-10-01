@@ -1,7 +1,7 @@
 # 0010. Dense text layers over pictures
 
 **Date**: 2026-10-01
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 
@@ -152,7 +152,7 @@ Reasoning, options and the measurements: see [rationale.md](rationale.md).
 
 Ordered by Skateboard. The fix is small enough that slice 1 is the whole usable change: the rule, its fixtures, the words and the amends land together, because the rule names pages whose old `bare-picture` line ("no text over it") would be untrue there. Slice 2 measures it on real dense scans.
 
-**Slice 1: dense layers judged by their words**
+**Slice 1: dense layers judged by their words** (built)
 
 1. Fixtures, through `scripts/lib/reading-fixtures.mjs` and `node scripts/make-fixture.mjs`, which regenerates `read-pictures.pdf`. `glyphlessFont(add, { vertical })` gains an option that writes `/Encoding /Identity-V` in place of `/Identity-H`, with the same `ToUnicode` map; `readPictures` calls it a second time for page 33. In `READ_PICTURES`, page 28 keeps its name ("a photo pasted onto a dense OCR layer"), its findings become `["bare-picture", "machine-read-text"]`, and its comment drops "Accepted, and taken up as scope feature 20" for this spec's AC-3. Append these pages, each over `fullPage("Scan")` unless it says otherwise, so every other page keeps its index. Each page that draws hidden text takes `fonts` (the glyphless `/Fg`); each comment gives the share of the scan's grid points its lines covered before this spec, as measured:
    - 29, "a photo pasted onto a dense OCR layer, drawn after it": resources `/XObject << /Scan … /Photo … >>`; `ocrLayer()`, then the photo `q 300 0 0 300 156 300 cm /Photo Do Q`: `["bare-picture", "machine-read-text"]` (18.6% of the scan, 35.2% of the photo)

@@ -182,9 +182,9 @@ A picture loses its warning once text lines cover at least 5% of it (`TEXT_OVER_
 spec [0010](../specs/0010-dense-text-layers-over-pictures/index.md) · code in `src/engine` (`inspect.ts`, `index.ts`), `src/lib/page-findings.ts`, `scripts/lib/reading-fixtures.mjs`, `scripts/make-fixture.mjs`
 - [x] Design it (spec): `/architect dense text layers over pictures`
 - [ ] Build it: `/develop dense text layers over pictures`
-  - [ ] The fixtures: page 28's expectation moved and nine new pages on `read-pictures.pdf` (a photo after the layer, junk layers, MRC pieces, a vertical layer, typed underscores, replacement text) · AC-3 to AC-7
-  - [ ] The rule, proved: `coverageLines`, the lookups shared with the run, the MuPDF pins, the stronger warning at the stamp cap, and the fourth cost case · AC-1, AC-2, AC-8, AC-10, AC-11
-  - [ ] The words and the amends: the `bare-picture` line, and specs 0006 and 0008 amended · AC-1 to AC-3, AC-9
+  - [x] The fixtures: page 28's expectation moved and nine new pages on `read-pictures.pdf` (a photo after the layer, junk layers, MRC pieces, a vertical layer, typed underscores, replacement text) · AC-3 to AC-7
+  - [x] The rule, proved: `coverageLines`, the lookups shared with the run, the MuPDF pins, the stronger warning at the stamp cap, and the fourth cost case · AC-1, AC-2, AC-8, AC-10, AC-11
+  - [x] The words and the amends: the `bare-picture` line, and specs 0006 and 0008 amended · AC-1 to AC-3, AC-9
   - [ ] Real dense scans made locally: a dense page, a photo pasted before and after OCR, a ruled table and an empty form (slice 2) · AC-12
 - [ ] Verify it: `/check verify dense text layers over pictures`, including the real dense scans (AC-12)
 - [ ] Test it: `/test dense text layers over pictures`

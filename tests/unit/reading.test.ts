@@ -9,11 +9,13 @@ import {
   openDocumentWith,
   POSITION_TOLERANCE,
   prepareDocument,
+  READING_GRID,
   redactDocumentWith,
   readsAsNothing,
   RunCancelled,
   silenceEngineLog,
   STAMP_MAX_CHARS,
+  TEXT_OVER_PICTURE_MAX,
   walkCharacters,
   walkDrawing,
   WRITE_OPTIONS,
@@ -114,6 +116,13 @@ function onPage<T>(name: string, index: number, read: (page: PDFPage) => T): T {
   } finally {
     doc.destroy();
   }
+}
+
+/** The index of the `read-pictures.pdf` page `READ_PICTURES` names. */
+function picture(name: string): number {
+  const index = READ_PICTURES.findIndex((page) => page.name === name);
+  if (index < 0) throw new Error(`no page named ${name}`);
+  return index;
 }
 
 /** AC-1, AC-2 and AC-3: each page gives exactly its findings, and no more. */
@@ -459,13 +468,6 @@ describe("pictures and machine read text", () => {
  * `read-slides.pdf` keep their findings in the blocks above (AC-4, AC-5).
  */
 describe("sparse OCR scans", () => {
-  /** The index of the `read-pictures.pdf` page `READ_PICTURES` names. */
-  function picture(name: string): number {
-    const index = READ_PICTURES.findIndex((page) => page.name === name);
-    if (index < 0) throw new Error(`no page named ${name}`);
-    return index;
-  }
-
   /**
    * AC-2's pin, which the clipped letter case rests on: the ordinary read
    * drops a glyph a clip hides wholly, and keeps one the clip only cuts, so
@@ -847,6 +849,146 @@ describe("sparse OCR scans", () => {
       scanUnder(textLine("F1", 3, marks(STAMP_MAX_CHARS - 1))),
     );
     expect(underCap.findings).toEqual(["scanned", "machine-read-text"]);
+  });
+
+  /**
+   * Spec 0010, AC-8: a picture the area test cleared can now be bare, so a
+   * page under the stamp cap can turn `scanned`, the stronger warning. Three
+   * hidden lines of 13 bars at 60 pt, 39 readable characters and no word. The
+   * share of the grid their boxes cover is measured here with MuPDF's reader
+   * alone, so the case is what it says: over `TEXT_OVER_PICTURE_MAX`, which
+   * cleared the scan before spec 0010.
+   */
+  it("names a scan under a few large hidden bars scanned, though their lines cover over 5% of it", async () => {
+    const bars = [600, 450, 300]
+      .map((y) => `BT 3 Tr /F1 60 Tf 72 ${y} Td (${"|".repeat(13)}) Tj ET\n`)
+      .join("");
+    const bytes = scanUnder(bars);
+
+    const doc = mupdf.Document.openDocument(bytes, "application/pdf");
+    const boxes = new Map<number, Rect>();
+    let readable = 0;
+    try {
+      const page = doc.loadPage(0) as PDFPage;
+      try {
+        walkCharacters(page, EXTRACTION_OPTIONS[0], ({ code, line, quad }) => {
+          if (code === 0x7c) readable += 1;
+          const xs = [quad[0], quad[2], quad[4], quad[6]];
+          const ys = [quad[1], quad[3], quad[5], quad[7]];
+          const [x0, y0, x1, y1] = boxes.get(line) ?? [
+            Infinity,
+            Infinity,
+            -Infinity,
+            -Infinity,
+          ];
+          boxes.set(line, [
+            Math.min(x0, ...xs),
+            Math.min(y0, ...ys),
+            Math.max(x1, ...xs),
+            Math.max(y1, ...ys),
+          ]);
+        });
+      } finally {
+        page.destroy();
+      }
+    } finally {
+      doc.destroy();
+    }
+    let covered = 0;
+    for (let row = 0; row < READING_GRID; row += 1) {
+      for (let column = 0; column < READING_GRID; column += 1) {
+        const x = ((column + 0.5) * 612) / READING_GRID;
+        const y = ((row + 0.5) * 792) / READING_GRID;
+        if (
+          [...boxes.values()].some(
+            ([x0, y0, x1, y1]) => x >= x0 && x <= x1 && y >= y0 && y <= y1,
+          )
+        )
+          covered += 1;
+      }
+    }
+    expect(readable).toBe(STAMP_MAX_CHARS - 1);
+    expect(covered / READING_GRID ** 2).toBeGreaterThan(TEXT_OVER_PICTURE_MAX);
+
+    const [inspection] = await inspectBytes(bytes);
+    expect(inspection.findings).toEqual(["scanned", "machine-read-text"]);
+  });
+});
+
+/**
+ * Spec 0010: dense text layers over pictures. A picture's coverage counts only
+ * visible lines of words, every readable character drawn where the text says,
+ * and machine read text clears a picture only through a run. The table above
+ * reads `read-pictures.pdf`'s pages 28 to 37; these pin what MuPDF does that
+ * two of them rest on, found with its readers alone, nothing from the rule.
+ */
+describe("dense text layers over pictures", () => {
+  /**
+   * Each line of a page's ordinary read, as whether it holds a character that
+   * is not whitespace or U+FFFD with no glyph of any kind (filled, stroked,
+   * clipping or invisible) drawn at its origin within `POSITION_TOLERANCE`.
+   */
+  function unmatchedLines(index: number): readonly boolean[] {
+    return onPage("read-pictures.pdf", index, (page) => {
+      const glyphs: (readonly [number, number])[] = [];
+      walkDrawing(mupdf, page, (drawing) => {
+        if (drawing.kind !== "text") return;
+        for (const { origin } of drawing.glyphs) glyphs.push(origin);
+      });
+      const lines: boolean[] = [];
+      walkCharacters(page, EXTRACTION_OPTIONS[0], ({ code, line, origin: [x, y] }) => {
+        lines[line] ??= false;
+        if (code === 0xfffd || /\s/u.test(String.fromCodePoint(code))) return;
+        const matched = glyphs.some(
+          ([gx, gy]) =>
+            Math.abs(gx - x) <= POSITION_TOLERANCE &&
+            Math.abs(gy - y) <= POSITION_TOLERANCE,
+        );
+        if (!matched) lines[line] = true;
+      });
+      return lines;
+    });
+  }
+
+  /**
+   * AC-6's pin: replacement text wrapped around its own text object and
+   * longer than its glyphs leaves its extra characters at no glyph's origin,
+   * on every line, so no line of page 36 counts. Replacement text equal to its
+   * glyphs matches every character, so every line of page 37 does.
+   */
+  it("reads longer replacement text at no glyph's origin, and equal replacement text at every glyph's (pin)", () => {
+    const longer = unmatchedLines(
+      picture("a scan behind lines whose replacement text adds a word"),
+    );
+    expect(longer).toHaveLength(24);
+    expect(longer.every(Boolean)).toBe(true);
+
+    const equal = unmatchedLines(
+      picture("a scan behind lines whose replacement text matches its glyphs"),
+    );
+    expect(equal).toHaveLength(24);
+    expect(equal.some(Boolean)).toBe(false);
+  });
+
+  /**
+   * AC-7's pin: MuPDF reads each character of vertical writing as a line of
+   * its own, so a dense vertical layer forms no run and its scan is named, a
+   * recorded limit.
+   */
+  it("reads each character of a vertical layer as a line of its own (pin)", () => {
+    const perLine = onPage(
+      "read-pictures.pdf",
+      picture("a scan with a dense layer in vertical writing"),
+      (page) => {
+        const counts: number[] = [];
+        walkCharacters(page, EXTRACTION_OPTIONS[0], ({ line }) => {
+          counts[line] = (counts[line] ?? 0) + 1;
+        });
+        return counts;
+      },
+    );
+    expect(perLine.length).toBeGreaterThanOrEqual(260);
+    expect(perLine.every((count) => count === 1)).toBe(true);
   });
 });
 
