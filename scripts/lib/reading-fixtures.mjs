@@ -512,7 +512,8 @@ function letterText() {
 
 /**
  * Spec 0006, AC-2, AC-4 and AC-5, and spec 0008, AC-1 to AC-7 and, from page
- * 20, AC-14 to AC-16. From page 28, spec 0010, AC-3 to AC-7. One page per picture rule and near miss. The glyphless font joins each page through
+ * 20, AC-14 to AC-16. From page 28, spec 0010, AC-3 to AC-7. One page per
+ * picture rule and near miss. The glyphless font joins each page through
  * `fonts`, so a page that also draws Helvetica has one `/Font` dictionary
  * holding both.
  */
