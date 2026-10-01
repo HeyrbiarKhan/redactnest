@@ -185,7 +185,7 @@ Ordered by Skateboard. The fix is small enough that slice 1 is the whole usable 
 4. The words in `src/lib/page-findings.ts`: both forms of the `bare-picture` line. Update `tests/unit/page-findings.test.ts`. Satisfies **AC-9**.
 5. The amends to specs 0006 and 0008, as *Amends* says. Satisfies **AC-1**, **AC-2**, **AC-3**, **AC-9**.
 
-**Slice 2: real dense scans**
+**Slice 2: real dense scans** (task 6 built; task 7 is `/check verify`'s)
 
 6. Extend the local scan maker beside the existing scans (outside the repository, never committed; ask the engineer where they live, and keep the path out of the repository), in the same environment: render a dense page (the first page of `tests/fixtures/detect-dense.pdf`, or a denser one if its layer holds 500 hidden glyphs or fewer) at 300 dpi with the existing softening and noise; draw a made up card image holding printed made up words with Pillow and paste it as its own image with PyMuPDF's `insert_image`, onto the image only PDF before OCR and onto the OCR output after it; draw a ruled table with short made up words in its cells, and a ruled form with empty cells, with PyMuPDF, then render them the same way. OCR each with OCRmyPDF as the others were. Satisfies **AC-12**.
 7. Run `/check verify` for this spec: the fixture pages in a real browser (the `bare-picture` words, the partly redacted name) and AC-12's real scans, recorded in this spec's `verify.md`. If a real scan contradicts an expectation, record the measurement and take it to `/architect`. Satisfies **AC-7**, **AC-9**, **AC-12**.
