@@ -1,7 +1,7 @@
 # 0001. Browser only redaction stack
 
 **Date**: 2026-09-19
-**Updated**: 2026-09-30, from spec [0007](../0007-redact-flow/index.md): three Follow-ups met (every failure kind's copy, the entitlement in flight for the free tier, and what mobile visitors see). No design changed.
+**Updated**: 2026-09-30, from spec [0007](../0007-redact-flow/index.md): three Follow-ups met (every failure kind's copy, the entitlement in flight for the free tier, and what mobile visitors see). No design changed; 2026-10-01, from spec [0009](../0009-agpl-compliance-source-publication/index.md): `NEXT_PUBLIC_SOURCE_URL` is derived on Vercel and must name one full commit in production, and the Follow-up to prepare the public repository is met by spec 0009 once feature 18 is done.
 **Status**: Accepted
 
 ## Summary
@@ -118,7 +118,7 @@ The scaffold has to exercise a real protocol, so the minimal envelope is fixed h
 - `NEXT_PUBLIC_MAX_PAGES`: the paid ceiling. Default `50`, raised only after the real browser limit has been measured.
 - `NEXT_PUBLIC_MAX_FILE_BYTES`: the paid size ceiling. Default `26214400` (25 MB).
 - `NEXT_PUBLIC_SITE_URL`: canonical origin, for the metadata and sitemap work in feature 15. Defaults to `http://localhost:3000` in development, required in production.
-- `NEXT_PUBLIC_SOURCE_URL`: the AGPL source offer link shown in the footer and on the tool page. Points at the **tag or commit for this deploy**, not the repository root, because section 13 requires source corresponding to the exact deployed version. Optional in development, required in production.
+- `NEXT_PUBLIC_SOURCE_URL`: the AGPL source offer link shown in the footer of every page, the tool page included. Points at the **commit for this deploy**, not the repository root, because section 13 requires source corresponding to the exact deployed version. On Vercel the link is derived from the Git system variables, and the build refuses this variable when it is set there by hand. Off Vercel it is still required in production. In production the link must end in `/tree/` and a full 40 character commit. Optional in development. _Amended by spec [0009](../0009-agpl-compliance-source-publication/index.md), AC-4 to AC-6._
 
 All are read through one typed config module that parses and validates them at module load, imported early enough that `next build` fails rather than shipping a bad value. Numeric values are parsed strictly and range checked, including that the free cap does not exceed the paid ceiling. A present but malformed value fails the build exactly as a missing one does; neither may become `NaN` or `undefined` at runtime. Changing a ceiling needs a redeploy but no code change, which is the relaxed form of the engineer's original "without a rebuild" requirement, accepted knowingly.
 
@@ -165,7 +165,7 @@ All are read through one typed config module that parses and validates them at m
 
 ## Follow-up
 
-- [ ] Prepare the public repository and get the AGPL notices, licence file and source offer right before launch. Tag every production deploy and point `NEXT_PUBLIC_SOURCE_URL` at the tag or commit, since a repository root link does not satisfy the corresponding source obligation. Artifex enforce, so this deserves care rather than a last minute commit.
+- [ ] Prepare the public repository and get the AGPL notices, licence file and source offer right before launch. Tag every production deploy and point `NEXT_PUBLIC_SOURCE_URL` at the tag or commit, since a repository root link does not satisfy the corresponding source obligation. Artifex enforce, so this deserves care rather than a last minute commit. _Met by spec [0009](../0009-agpl-compliance-source-publication/index.md) once feature 18 is done: the licence file, the generated third party notices, a tag per production deploy, and a source link derived from the commit being built._
 - [ ] Get a commercial licence quote from Artifex and record it, so relicensing later is a known number rather than an emergency negotiation.
 - [ ] Design feature 10 as an honesty based paywall. The page cap cannot be technically enforced under this architecture, and pricing, copy and expectations should reflect that.
 - [ ] Write features 5, 6 and 13 knowing redaction is geometric. Feature 6 needs a text match to quad mapping, and feature 5's acceptance criteria should test the geometric edges rather than assume string level precision.

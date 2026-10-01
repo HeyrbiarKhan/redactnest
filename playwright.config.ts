@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { SOURCE_URL } from "./tests/e2e/build-env";
+
 /**
  * Browser tests run against a production build, never `next dev`.
  *
@@ -27,7 +29,7 @@ const BUILD_ENV = {
   NEXT_PUBLIC_MAX_PAGES: "50",
   NEXT_PUBLIC_MAX_FILE_BYTES: "26214400",
   NEXT_PUBLIC_SITE_URL: "https://redactnest.test",
-  NEXT_PUBLIC_SOURCE_URL: "https://example.invalid/redactnest/tree/test",
+  NEXT_PUBLIC_SOURCE_URL: SOURCE_URL,
 };
 
 export default defineConfig({

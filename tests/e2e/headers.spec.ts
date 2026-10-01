@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
 /**
@@ -90,4 +92,83 @@ test("the wasm asset is served as application/wasm from our own origin", async (
 
   // Self hosted, never a content delivery network.
   expect(response.url().startsWith(baseURL!)).toBe(true);
+});
+
+/**
+ * Spec 0009, AC-12, AC-13 and AC-22. The licence and the third party notices
+ * come from our own origin as plain text. The content type is matched without
+ * regard to case, since `next start` and Vercel may spell it differently.
+ */
+test.describe("the licence files", () => {
+  for (const path of ["/licence.txt", "/third-party-notices.txt"]) {
+    test(`${path} is plain text from our own origin`, async ({ request, baseURL }) => {
+      const response = await request.get(path);
+      expect(response.status()).toBe(200);
+      expect(response.url().startsWith(baseURL!)).toBe(true);
+
+      const type = (response.headers()["content-type"] ?? "").toLowerCase();
+      expect(type).toContain("text/plain");
+      expect(type).toContain("charset=utf-8");
+    });
+  }
+
+  /** INV-7: byte for byte, so nobody reads a licence we reworded. */
+  test("the licence is the repository's LICENSE, byte for byte", async ({ request }) => {
+    const response = await request.get("/licence.txt");
+    expect((await response.body()).equals(readFileSync("LICENSE"))).toBe(true);
+  });
+
+  test("the notices name what the build installed", async ({ request }) => {
+    const notices = await (await request.get("/third-party-notices.txt")).text();
+
+    expect(notices).toContain("RedactNest: third party notices");
+    expect(notices).toMatch(/^libphonenumber-js \d+\.\d+\.\d+\nLicence: MIT\n/m);
+    expect(notices).toMatch(
+      /^libphonenumber-js \d+\.\d+\.\d+\nLicence: MIT for the package/m,
+    );
+    expect(notices).toMatch(/^Inter\nLicence: OFL-1\.1$/m);
+    expect(notices).toMatch(/^Carlito\nLicence: OFL-1\.1$/m);
+  });
+});
+
+/**
+ * Spec 0009, AC-15 and AC-17. MuPDF's source is offered beside the engine
+ * itself (AGPL section 6(d)) and in the notices, with the archive's checksum.
+ */
+test.describe("MuPDF's source offer", () => {
+  const ARCHIVE = "https://mupdf.com/downloads/archive/mupdf-1.28.1-source.tar.gz";
+
+  test("the engine's VERSION file names the source archive and the tagged tree", async ({
+    request,
+    baseURL,
+  }) => {
+    const response = await request.get("/engine/VERSION");
+    expect(response.status()).toBe(200);
+    expect(response.url().startsWith(baseURL!)).toBe(true);
+
+    // No extension, so a header rule makes it text rather than a download.
+    const type = (response.headers()["content-type"] ?? "").toLowerCase();
+    expect(type).toContain("text/plain");
+    expect(type).toContain("charset=utf-8");
+
+    const lines = (await response.text()).trimEnd().split("\n");
+    expect(lines).toEqual([
+      "mupdf 1.28.1",
+      "AGPL-3.0-or-later",
+      "Copyright (C) 2004-2026 Artifex Software, Inc.",
+      `Source: ${ARCHIVE}`,
+      "Browse: https://github.com/ArtifexSoftware/mupdf/tree/1.28.1",
+    ]);
+  });
+
+  test("the notices carry what is compiled into the engine", async ({ request }) => {
+    const notices = await (await request.get("/third-party-notices.txt")).text();
+
+    expect(notices).toContain(ARCHIVE);
+    expect(notices).toContain(
+      "dc94c60b2537e2ac9a2d379dd3801545f84a3a302d15c9da358362a1270707c3",
+    );
+    expect(notices).toContain("Independent JPEG Group");
+    expect(notices).toContain("Emscripten");
+  });
 });

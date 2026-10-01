@@ -21,7 +21,7 @@ Decided in [spec 0001](docs/specs/0001-browser-only-redaction-stack/index.md), t
 
 ```bash
 pnpm install
-pnpm dev          # syncs the engine into public/engine first
+pnpm dev          # syncs the engine into public/engine and writes the licence and notices first
 pnpm build
 pnpm test         # Vitest: the unit project (node) and the component project (jsdom)
 pnpm test:e2e     # Playwright, in a real browser
@@ -43,6 +43,7 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md`.
 - Expected failures are a closed set of kinds, never free text. The worker never throws across the boundary, and an error payload carries a kind and nothing derived from the document: no file name, no stack trace, no extracted text.
 - Page findings are a closed set of kinds too: `PAGE_FINDINGS` in `src/worker/protocol.ts`. A finding says which rule held on a page, never what the page holds or where. Their words live in `src/lib/page-findings.ts` as records over `PageFinding`, so a finding added without its words fails `pnpm typecheck`. Spec 0006, AC-28, INV-1.
 - Every word the redact flow shows for a step, a failure or a result lives in `src/lib/flow-text.ts`, as records over `EngineErrorKind`, `ProgressPhase` and `SanitizedKind`, so a kind added to the protocol without its words fails `pnpm typecheck`. A failure's words come from its kind and the job's frozen entitlement only, never from the document. Spec 0007, AC-16.
+- The footer's licence notice takes every word from `src/lib/legal.ts` and every path from `src/lib/routes.ts` (`LICENCE_PATH`, `NOTICES_PATH`), never a literal in a component. Spec 0009, AC-1.
 - The engine wall: only `src/worker/engine.worker.ts` may import `@/engine`, and only `src/engine` may touch `mupdf`. One PDF parser, ever. Document bytes live only inside the worker, so transfer the `ArrayBuffer` rather than copying it. The one exception is the checked output: it crosses to the main thread once, transferred, and waits in a `useRef` in `tool-client` (never in the session reducer) until Download, dropped whenever the session stops being `complete` with nothing downloaded. Spec 0004, INV-8 and AC-20.
 - The detector wall: `src/detect` holds the pattern detectors, pure text in and offsets out, with no page, config, network, storage or console, and nothing from the worker but types from `@/worker/protocol` (spec 0005, INV-5). Only `src/engine` may import `@/detect`, and only `src/detect` may import `libphonenumber-js`, so detection and the phone metadata ship in the worker's chunk and never in a page's (INV-8). The `redactnest/detect` zone in `eslint.config.mjs` holds both, and bans `search()` there as in the engine (INV-11).
 - `src/ui` holds the design system primitives and is presentation only. Its ESLint zone (`redactnest/ui`) bans imports from `@/worker`, `@/engine`, `@/config`, `@/lib/session` and `@/lib/entitlement`, and bans `dangerouslySetInnerHTML`. The caller reads state and passes what a primitive shows as props. Spec 0003, INV-7.
@@ -57,6 +58,8 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md`.
 - The detectors' constants (`PHONE_READINGS`, `MAX_WINDOW_DIGITS`, `MAX_PARSES_PER_GROUP`, `EXTENSION_MARKERS`, `PRECEDENCE`, `KEYWORD_REACH` and the rest) follow the same exception: they are rules about a pattern, not caps on the visitor, so they live in `src/detect`, each commented as such. Spec 0005.
 - The page reading's thresholds (`STAMP_MAX_CHARS`, `PICTURE_MIN_SHARE`, `PICTURE_REACH_MIN` and the rest) follow the same exception: they are rules about pages, not caps on the visitor, so they live in `src/engine` (`inspect.ts`, `trim.ts`), each commented as such. Spec 0006, INV-7.
 - `NEXT_PUBLIC_MATCH_CONTEXT_CHARS` (default 40, ceiling 200) sets how many characters of surrounding text travel with a match. That ceiling is a privacy limit rather than a display one: the text crosses the worker boundary, so a typo must not be able to widen it to a whole page. Spec 0002, INV-9.
+- The AGPL source link (`config.sourceUrl`) is the tree of the exact commit that was built. On Vercel it is derived from the Git system variables, and the build fails if `NEXT_PUBLIC_SOURCE_URL` is set there as well. Off Vercel a production build needs `NEXT_PUBLIC_SOURCE_URL` ending in `/tree/` and a full 40 character lowercase commit, so a repository root or branch link fails `pnpm build`. Playwright's value is defined once in `tests/e2e/build-env.ts`. Spec 0009, AC-4 to AC-6.
+- Only `.github/workflows/tag-deploy.yml` may write to the repository: one job with `contents: write`, no checkout and no third party action. Every other workflow stays read only, and `tests/unit/workflows.test.ts` reads each workflow as text to hold that. Spec 0009, INV-3.
 - Comments explain why, and name the spec invariant they uphold. Match the density already in `src/`.
 - Accessibility: WCAG 2.2 AA on the core path. Keyboard reachable, visible focus, sufficient contrast.
 
@@ -75,6 +78,7 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md`.
 ## Things that will trip you up
 
 - MuPDF is never bundled. Turbopack fails on its Node-only branch, so `scripts/sync-engine.mjs` copies it to `public/engine` on predev and prebuild, and it loads through a dynamic import marked `turbopackIgnore` and `webpackIgnore`. Do not "fix" this with a normal import.
+- `scripts/sync-legal.mjs` runs after `sync-engine.mjs` on predev and prebuild, writing `public/licence.txt` (a byte for byte copy of `LICENSE`) and `public/third-party-notices.txt`, both gitignored. It stops `pnpm dev` and `pnpm build` on purpose in two cases, each needing a person: a shipped package whose licence `LICENCE_ALLOWLIST` in `scripts/lib/notices.mjs` does not satisfy (every GPL variant included), and an installed `mupdf` other than the one `scripts/legal/mupdf.txt` covers. That is why `mupdf` is pinned exact: an upgrade means redoing `mupdf.txt` from that version's source archive, Emscripten and musl included, and `tests/unit/mupdf-notices.test.ts` fails until you do. Spec 0009, AC-14, AC-16.
 - No cross-origin isolation (COOP/COEP) is needed. Do not add it; it would break Polar checkout and other embeds.
 - The tool page is prerendered static, so its CSP needs `'unsafe-inline'` for scripts. Never add a nonce or hash there: a nonce disables `'unsafe-inline'` and breaks hydration.
 - The `.wasm` file must be served as `application/wasm`.

@@ -9,6 +9,7 @@ on: push
 
 # The repository goes public under AGPL in feature 18. Read only by default, so
 # a workflow can never be talked into writing to the repository it checks.
+# The one write, a tag per production deploy, lives in tag-deploy.yml (spec 0009, INV-3).
 permissions:
   contents: read
 

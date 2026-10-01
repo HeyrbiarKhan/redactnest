@@ -100,6 +100,14 @@ const nextConfig: NextConfig = {
         source: "/((?!tool$).*)",
         headers: [{ key: "Content-Security-Policy", value: STANDARD_POLICY }],
       },
+      {
+        // The engine's record of what shipped and where its source is (spec
+        // 0009, AC-17 and AC-21). It has no extension, so it would otherwise go
+        // out as `application/octet-stream` and download instead of being read.
+        // A content type only, so the one policy header above stays the one.
+        source: "/engine/VERSION",
+        headers: [{ key: "Content-Type", value: "text/plain; charset=utf-8" }],
+      },
     ];
   },
 };

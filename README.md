@@ -9,11 +9,31 @@ Architecture and the reasoning behind it:
 
 ## Licence
 
-AGPL 3.0 or later. The PDF engine is [MuPDF](https://mupdf.com/) by Artifex
-Software, which is copyleft, so RedactNest itself is AGPL and its source is
-published. Feature 18 finishes that obligation: the licence file, third party
-notices, and a source offer link that resolves to the exact deployed commit
-rather than the repository root.
+© 2026 Heyrbiar Khan. RedactNest is licensed under the GNU Affero General Public
+License 3.0 or later, which lets you share and change it. It comes with no
+warranty. The full text is in [`LICENSE`](LICENSE).
+
+The PDF engine is [MuPDF](https://mupdf.com/) by Artifex Software, which is
+copyleft, so RedactNest is AGPL too and its source is published. Every page's
+footer links to the exact commit that is running, never the repository root.
+
+The build writes two files for the site to serve, so they always match the
+code behind a deploy (`scripts/sync-legal.mjs`, before every `pnpm dev` and
+`pnpm build`):
+
+- `/licence.txt`: this repository's `LICENSE`, byte for byte.
+- `/third-party-notices.txt`: the licence of everything the site ships or
+  builds with, from MuPDF and the libraries compiled into it to every package
+  installed for production. A package whose licence is not on the allowlist in
+  `scripts/lib/notices.mjs` stops the build until someone has judged it.
+
+MuPDF's own source, for the version this repository pins (1.28.1), is Artifex's
+complete archive:
+<https://mupdf.com/downloads/archive/mupdf-1.28.1-source.tar.gz>. The notices
+and `/engine/VERSION` always name the archive for the version that ships.
+
+Code contributions are not accepted yet, but issues are welcome. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Getting started
 
@@ -28,7 +48,8 @@ pnpm dev                     # http://localhost:3000
 `pnpm dev` and `pnpm build` both run `scripts/sync-engine.mjs` first, which
 copies the MuPDF engine out of `node_modules` into `public/engine/`. That folder
 is generated and gitignored, so the engine can never drift from the version
-pinned in `package.json`.
+pinned in `package.json`. Then `scripts/sync-legal.mjs` writes the licence and
+the third party notices into `public/` the same way (see Licence above).
 
 | Command | What it does |
 |---|---|
@@ -120,8 +141,10 @@ Every value is read and validated by `src/config/index.ts` at module load, which
 the root layout imports. A missing or malformed value fails `next build` rather
 than becoming `undefined` at runtime, which on a cap would mean no cap at all.
 
-See `.env.example`. `NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_SOURCE_URL` are
-required in production and must be https.
+See `.env.example`. `NEXT_PUBLIC_SITE_URL` is required in production and must
+be https. The source link is worked out on Vercel from the commit being built,
+so `NEXT_PUBLIC_SOURCE_URL` is only for a production build somewhere else, and
+it must link to one commit's tree (`…/tree/<full commit>`).
 
 ## The content security policy
 

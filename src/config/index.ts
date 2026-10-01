@@ -12,6 +12,10 @@
  * Next.js inlines these into the client bundle by static text substitution, so a
  * computed lookup like `process.env[name]` would come back undefined in the
  * browser even when the variable is set.
+ *
+ * `VERCEL` is the one name here without the prefix, so it is never inlined: the
+ * build and the server see it, and the browser's copy of this module reads it
+ * as absent. It is read literally all the same, beside the rest.
  */
 
 const RAW = {
@@ -21,6 +25,13 @@ const RAW = {
   NEXT_PUBLIC_MATCH_CONTEXT_CHARS: process.env.NEXT_PUBLIC_MATCH_CONTEXT_CHARS,
   NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   NEXT_PUBLIC_SOURCE_URL: process.env.NEXT_PUBLIC_SOURCE_URL,
+  // Vercel's system variables, set on every Vercel build once "Automatically
+  // expose System Environment Variables" is on (spec 0009, AC-4).
+  NEXT_PUBLIC_VERCEL_GIT_PROVIDER: process.env.NEXT_PUBLIC_VERCEL_GIT_PROVIDER,
+  NEXT_PUBLIC_VERCEL_GIT_REPO_OWNER: process.env.NEXT_PUBLIC_VERCEL_GIT_REPO_OWNER,
+  NEXT_PUBLIC_VERCEL_GIT_REPO_SLUG: process.env.NEXT_PUBLIC_VERCEL_GIT_REPO_SLUG,
+  NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA,
+  VERCEL: process.env.VERCEL,
 } as const;
 
 type RawName = keyof typeof RAW;
@@ -63,23 +74,12 @@ function readInt(name: RawName, fallback: number, min: number, max: number): num
   return value;
 }
 
-function readUrl(
-  name: RawName,
-  fallback: string | undefined,
-  requiredInProduction: boolean,
-): string {
-  const raw = RAW[name]?.trim();
+/** A value that is set and not blank, trimmed, else `undefined`. */
+const present = (value: string | undefined): string | undefined =>
+  value?.trim() || undefined;
 
-  if (!raw) {
-    if (requiredInProduction && IS_PRODUCTION) {
-      throw new ConfigError(`${name} is required in production and was not set.`);
-    }
-    if (fallback === undefined) {
-      throw new ConfigError(`${name} is required and was not set.`);
-    }
-    return fallback;
-  }
-
+/** An absolute http or https address, and https only in production. */
+function parseUrl(name: RawName, raw: string): URL {
   let parsed: URL;
   try {
     parsed = new URL(raw);
@@ -93,9 +93,137 @@ function readUrl(
   if (IS_PRODUCTION && parsed.protocol !== "https:") {
     throw new ConfigError(`${name} must be https in production, got ${parsed.protocol}.`);
   }
+  return parsed;
+}
 
-  // Normalised without a trailing slash so callers can join paths safely.
-  return parsed.origin + parsed.pathname.replace(/\/$/, "") + parsed.search;
+/** Normalised without a trailing slash so callers can join paths safely. */
+const normalise = (url: URL): string =>
+  url.origin + url.pathname.replace(/\/$/, "") + url.search;
+
+function readUrl(
+  name: RawName,
+  fallback: string | undefined,
+  requiredInProduction: boolean,
+): string {
+  const raw = present(RAW[name]);
+
+  if (raw === undefined) {
+    if (requiredInProduction && IS_PRODUCTION) {
+      throw new ConfigError(`${name} is required in production and was not set.`);
+    }
+    if (fallback === undefined) {
+      throw new ConfigError(`${name} is required and was not set.`);
+    }
+    return fallback;
+  }
+
+  return normalise(parseUrl(name, raw));
+}
+
+/** A full commit, as git and Vercel write it. */
+const COMMIT_SHA = /^[0-9a-f]{40}$/;
+
+/** What GitHub allows in an owner or repository name. */
+const GIT_NAME = /^[A-Za-z0-9._-]+$/;
+
+/** One commit's tree, never a repository root or a branch (spec 0009, AC-6). */
+const COMMIT_TREE = /\/tree\/[0-9a-f]{40}$/;
+
+/**
+ * The AGPL source offer link. Spec 0009, AC-4 to AC-6.
+ *
+ * On Vercel it is derived from the commit being built, and nothing set by hand
+ * can replace it (INV-2). Off Vercel it is `NEXT_PUBLIC_SOURCE_URL`. Either way
+ * a production build refuses any link that is not one full commit's tree, so a
+ * repository root or a branch can never ship (INV-1). The rules run in AC-5's
+ * order, and each error names the variable it is about.
+ *
+ * The `VERCEL` rule can only fire where `VERCEL` is visible, at build and on
+ * the server. The browser never sees it, so there that rule is skipped, by
+ * design: the browser gets the same inlined Git values and derives the same
+ * link the build did.
+ */
+function readSourceUrl(): string {
+  const sha = present(RAW.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA);
+  const handSet = present(RAW.NEXT_PUBLIC_SOURCE_URL);
+
+  let name: RawName = "NEXT_PUBLIC_SOURCE_URL";
+  let raw = handSet;
+
+  if (sha !== undefined) {
+    const owner = present(RAW.NEXT_PUBLIC_VERCEL_GIT_REPO_OWNER);
+    const slug = present(RAW.NEXT_PUBLIC_VERCEL_GIT_REPO_SLUG);
+    const provider = present(RAW.NEXT_PUBLIC_VERCEL_GIT_PROVIDER);
+
+    if (handSet !== undefined) {
+      throw new ConfigError(
+        "NEXT_PUBLIC_SOURCE_URL must not be set on Vercel. The source link is derived " +
+          "from the commit being built, so remove it from every Vercel environment.",
+      );
+    }
+    if (owner === undefined) {
+      throw new ConfigError(
+        "NEXT_PUBLIC_VERCEL_GIT_REPO_OWNER is missing while NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA is set.",
+      );
+    }
+    if (slug === undefined) {
+      throw new ConfigError(
+        "NEXT_PUBLIC_VERCEL_GIT_REPO_SLUG is missing while NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA is set.",
+      );
+    }
+    if (provider !== "github") {
+      throw new ConfigError(
+        `NEXT_PUBLIC_VERCEL_GIT_PROVIDER must be github, got ${JSON.stringify(provider ?? "")}.`,
+      );
+    }
+    if (!COMMIT_SHA.test(sha)) {
+      throw new ConfigError(
+        `NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA must be a full commit, 40 lowercase hex characters, got ${JSON.stringify(sha)}.`,
+      );
+    }
+    for (const [key, value] of [
+      ["NEXT_PUBLIC_VERCEL_GIT_REPO_OWNER", owner],
+      ["NEXT_PUBLIC_VERCEL_GIT_REPO_SLUG", slug],
+    ] as const) {
+      if (!GIT_NAME.test(value)) {
+        throw new ConfigError(
+          `${key} may hold only letters, digits, ".", "_" and "-", got ${JSON.stringify(value)}.`,
+        );
+      }
+    }
+
+    name = "NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA";
+    raw = `https://github.com/${owner}/${slug}/tree/${sha}`;
+  } else if (present(RAW.VERCEL) === "1") {
+    throw new ConfigError(
+      "NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA is missing on Vercel (VERCEL is 1). Turn on " +
+        '"Automatically expose System Environment Variables" and deploy from Git.',
+    );
+  }
+
+  if (raw === undefined) {
+    if (IS_PRODUCTION) {
+      throw new ConfigError(
+        "NEXT_PUBLIC_SOURCE_URL is required in production and was not set.",
+      );
+    }
+    // AC-3: a development build with no commit to link to.
+    return "";
+  }
+
+  const url = parseUrl(name, raw);
+  const link = normalise(url);
+
+  if (
+    IS_PRODUCTION &&
+    (url.search !== "" || url.hash !== "" || !COMMIT_TREE.test(link))
+  ) {
+    throw new ConfigError(
+      `${name} must link to one commit's tree in production: https, no query, no hash, ` +
+        `ending in /tree/ and 40 lowercase hex characters. Got ${JSON.stringify(raw)}.`,
+    );
+  }
+  return link;
 }
 
 // Ceilings chosen to be generous but finite. They exist so a typo in an
@@ -145,11 +273,12 @@ export const config = Object.freeze({
   /** Canonical origin, for metadata and the sitemap. */
   siteUrl: readUrl("NEXT_PUBLIC_SITE_URL", "http://localhost:3000", true),
   /**
-   * The AGPL source offer link. Points at the tag or commit for this deploy,
-   * never the repository root: section 13 wants source matching the exact
-   * deployed version.
+   * The AGPL source offer link: the tree of the exact commit this deploy was
+   * built from, never the repository root, because section 13 wants the source
+   * of the version that is running. Empty in a development build with no
+   * commit to name. Spec 0009, AC-4 to AC-6.
    */
-  sourceUrl: readUrl("NEXT_PUBLIC_SOURCE_URL", "", true),
+  sourceUrl: readSourceUrl(),
 });
 
 export type Config = typeof config;

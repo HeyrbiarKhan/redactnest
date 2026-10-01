@@ -17,6 +17,8 @@ import { createRequire } from "node:module";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
+import { MUPDF_COPYRIGHT, mupdfSourceLinks } from "./lib/mupdf-source.mjs";
+
 const require = createRequire(import.meta.url);
 
 const ENGINE_FILES = ["mupdf.js", "mupdf-wasm.js", "mupdf-wasm.wasm"];
@@ -37,10 +39,20 @@ for (const file of ENGINE_FILES) {
   await cp(join(distDir, file), join(outDir, file));
 }
 
-// A marker the engine loader can check, and a plain record of what shipped.
+// A plain record of what shipped. The last two lines are AGPL section 6(d)'s
+// "clear directions next to the object code": where to get the source of this
+// exact version, in the same folder as the wasm and its glue (spec 0009, AC-17).
+const { archive, tree } = mupdfSourceLinks(version);
 await writeFile(
   join(outDir, "VERSION"),
-  `mupdf ${version}\nAGPL-3.0-or-later\nCopyright (C) 2004-2026 Artifex Software, Inc.\n`,
+  [
+    `mupdf ${version}`,
+    "AGPL-3.0-or-later",
+    MUPDF_COPYRIGHT,
+    `Source: ${archive}`,
+    `Browse: ${tree}`,
+    "",
+  ].join("\n"),
   "utf8",
 );
 

@@ -28,7 +28,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 15 | Marketing site | Release 6 | planned |
 | 16 | Security & how it works page | Release 6 | planned |
 | 17 | Data processing agreement | Release 6 | planned |
-| 18 | AGPL compliance & source publication | Release 1 | planned |
+| 18 | AGPL compliance & source publication | Release 1 | in-progress |
 | 19 | Sparse OCR scans | Release 1 | done |
 | 20 | Dense text layers over pictures | Release 1 | planned |
 
@@ -148,10 +148,16 @@ spec [0007](../specs/0007-redact-flow/index.md) · code in `src/app/tool` (`tool
 - [x] Test it: `/test redact flow`
 - [x] Review it (fresh model): `/check review redact flow`
 
-### 18. AGPL compliance & source publication · Alpha · from spec 0001
+### 18. AGPL compliance & source publication · in-progress · Alpha · from spec 0001
 Spec 0001 chose MuPDF, which is copyleft, so RedactNest's own source is licensed AGPL 3.0 and published. The obligation attaches the moment the tool is publicly available and shipping the engine to visitors' browsers, which is this release rather than a later one. Artifex enforce their licence, so this is a real deliverable and not a formality.
 **Done when:** the repository is public under AGPL 3.0, the licence file and third party notices are in place, every production deploy is tagged, and the source offer link in the footer and on the tool page resolves to the exact deployed commit rather than the repository root.
+spec [0009](../specs/0009-agpl-compliance-source-publication/index.md)
+- [x] Design it (spec): `/architect AGPL compliance & source publication`
 - [ ] Build it: `/develop AGPL compliance & source publication`
+  - [x] The notice and the commit link: `LICENSE`, the notices script with its licence allowlist, the derived and checked source link, the footer notice, the amends to specs 0001 and 0003, and the browser checks · AC-1 to AC-6, AC-11 to AC-14, AC-22
+  - [x] What is inside MuPDF: the exact pin, `scripts/legal/mupdf.txt` from the 1.28.1 archive with Emscripten and musl, the version and wasm signature checks, and the source lines in `VERSION` · AC-15, AC-16, AC-17
+  - [x] Deploy tags and the repository's documents: `tag-deploy.yml` with its text scan test, the README licence section, `CONTRIBUTING.md` and `.env.example` · AC-5, AC-6, AC-7 to AC-10, AC-18
+  - [ ] Going public (your steps): gitleaks over every ref, the noreply address, the Vercel settings, public with secret scanning, push protection and rulesets, then the first tagged deploy checked. Deferred to launch, after feature 20 · AC-7, AC-19, AC-20, AC-21
 - [ ] Verify it: `/check verify AGPL compliance & source publication`
 
 ### 19. Sparse OCR scans · done · GA · from spec 0006
@@ -247,6 +253,8 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **A memory limit for blanking scan pixels**: spec 0004's padded pass rewrites every scan page it touches as Flate. One ticked match on each page of a 50 page 300 dpi grey scan measured 917 MB and a file 4.9 times larger. Settle a limit before the paid page cap applies to scans · needs a decision · from spec 0006
 - **Name the item behind a refused run**: carry the `MatchId` with a run refusal where the engine can trace one, so the checklist can point at it. Waits for feature 11's refusal counts, alongside spec 0005's Follow-up on `replacement-text` · needs a decision · from spec 0007
 - **Page preview in review**: page images on the main thread are a new kind of document data (spec 0002, INV-1). Decide with feature 14, which renders pages for rectangles · needs a decision · from spec 0007
+- **Host MuPDF's source ourselves**: attach each shipped version's source archive as a release asset on our own repository, if Artifex ever stop serving one we still ship. AGPL section 6(d) keeps its availability our duty (spec 0009, Option 4) · from spec 0009
+- **Open outside contributions**: choose a CLA or DCO, and look again at who can get a commit deployed before approving any fork deployment, since the tag workflow's copy that runs may be the contributor's (spec 0009, INV-3) · needs a decision · from spec 0009
 - **Cookie consent banner**: deliberately not built. The only cookies are the strictly necessary auth ones and analytics is cookieless, so no consent is required. Kept here so it does not get added later out of habit.
 
 ## Legend
