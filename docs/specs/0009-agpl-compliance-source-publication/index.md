@@ -1,7 +1,7 @@
 # 0009. AGPL compliance and source publication
 
 **Date**: 2026-10-01
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 
