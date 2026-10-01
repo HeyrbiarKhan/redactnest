@@ -14,8 +14,9 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "sync-engine": "node scripts/sync-engine.mjs",
-    "predev": "node scripts/sync-engine.mjs",
-    "prebuild": "node scripts/sync-engine.mjs",
+    "sync-legal": "node scripts/sync-legal.mjs",
+    "predev": "node scripts/sync-engine.mjs && node scripts/sync-legal.mjs",
+    "prebuild": "node scripts/sync-engine.mjs && node scripts/sync-legal.mjs",
     "prepare": "husky"
   },
   "dependencies": {

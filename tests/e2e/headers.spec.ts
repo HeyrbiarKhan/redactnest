@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
 /**
@@ -90,4 +92,41 @@ test("the wasm asset is served as application/wasm from our own origin", async (
 
   // Self hosted, never a content delivery network.
   expect(response.url().startsWith(baseURL!)).toBe(true);
+});
+
+/**
+ * Spec 0009, AC-12, AC-13 and AC-22. The licence and the third party notices
+ * come from our own origin as plain text. The content type is matched without
+ * regard to case, since `next start` and Vercel may spell it differently.
+ */
+test.describe("the licence files", () => {
+  for (const path of ["/licence.txt", "/third-party-notices.txt"]) {
+    test(`${path} is plain text from our own origin`, async ({ request, baseURL }) => {
+      const response = await request.get(path);
+      expect(response.status()).toBe(200);
+      expect(response.url().startsWith(baseURL!)).toBe(true);
+
+      const type = (response.headers()["content-type"] ?? "").toLowerCase();
+      expect(type).toContain("text/plain");
+      expect(type).toContain("charset=utf-8");
+    });
+  }
+
+  /** INV-7: byte for byte, so nobody reads a licence we reworded. */
+  test("the licence is the repository's LICENSE, byte for byte", async ({ request }) => {
+    const response = await request.get("/licence.txt");
+    expect((await response.body()).equals(readFileSync("LICENSE"))).toBe(true);
+  });
+
+  test("the notices name what the build installed", async ({ request }) => {
+    const notices = await (await request.get("/third-party-notices.txt")).text();
+
+    expect(notices).toContain("RedactNest: third party notices");
+    expect(notices).toMatch(/^libphonenumber-js \d+\.\d+\.\d+\nLicence: MIT\n/m);
+    expect(notices).toMatch(
+      /^libphonenumber-js \d+\.\d+\.\d+\nLicence: MIT for the package/m,
+    );
+    expect(notices).toMatch(/^Inter\nLicence: OFL-1\.1$/m);
+    expect(notices).toMatch(/^Carlito\nLicence: OFL-1\.1$/m);
+  });
 });

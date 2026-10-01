@@ -1,17 +1,21 @@
-import { expect, test } from "@playwright/test";
+import { resolve } from "node:path";
+
+import { expect, test, type Page } from "@playwright/test";
+
+import { SOURCE_URL } from "./build-env";
 
 /**
  * The routes around the tool: the landing page and the layout every page shares.
  *
- * Deliberately thin. Feature 15 builds the real landing page and feature 18 owns
- * the full AGPL obligation, so nothing here asserts wording that those features
- * will replace. What is asserted is what the scaffold genuinely decided: there
- * is a route to the tool that a keyboard reaches, and the source offer link
- * reads its address from the typed config module rather than a literal.
+ * Deliberately thin. Feature 15 builds the real landing page, so nothing here
+ * asserts wording it will replace. What is asserted is what the scaffold
+ * genuinely decided: there is a route to the tool that a keyboard reaches. And
+ * the licence notice spec 0009 settled, word for word, on every page.
  */
 
-/** Set by `playwright.config.ts`, so the link has a known address to resolve to. */
-const SOURCE_URL = "https://example.invalid/redactnest/tree/test";
+/** One address and one number, both found and ticked by default. */
+const TEXT_PAGE = resolve("tests/fixtures/text-page.pdf");
+const PHONE = "020 7946 0958";
 
 test.describe("getting to the tool", () => {
   test("the landing page offers a route to it", async ({ page }) => {
@@ -156,28 +160,76 @@ test.describe("every way into the tool is a real page load", () => {
   });
 });
 
-test.describe("the AGPL source offer", () => {
+/**
+ * Spec 0009, AC-1 and AC-2. AGPL section 5(d)'s notice and section 13's source
+ * offer, on the page doing the work as on every other.
+ */
+test.describe("the licence notice", () => {
+  const NOTICE = [
+    "© 2026 Heyrbiar Khan",
+    "Licensed under the GNU AGPL 3.0 or later, which lets you share and change it",
+    "No warranty",
+    "Source code for this version",
+    "Licence",
+    "Third party notices",
+  ].join(" · ");
+
+  for (const path of ["/", "/tool"]) {
+    /**
+     * INV-1 in the shape the layout uses it. The address comes from the config
+     * module, so building with one nothing else would produce is what makes a
+     * hardcoded repository link fail here.
+     */
+    test(`reads in full on ${path}, with its three links`, async ({ page }) => {
+      await page.goto(path);
+      const footer = page.getByRole("contentinfo");
+
+      await expect(footer.locator("p")).toHaveText(NOTICE);
+      await expect(
+        footer.getByRole("link", { name: "Source code for this version" }),
+      ).toHaveAttribute("href", SOURCE_URL);
+      await expect(
+        footer.getByRole("link", { name: "Licence", exact: true }),
+      ).toHaveAttribute("href", "/licence.txt");
+      await expect(
+        footer.getByRole("link", { name: "Third party notices" }),
+      ).toHaveAttribute("href", "/third-party-notices.txt");
+    });
+  }
+
   /**
-   * INV-7 in the shape the layout uses it. The address comes from the config
-   * module, so setting it to something nothing else would produce is what makes
-   * a hardcoded repository link fail here.
+   * AC-2. A footer link is a plain link in the same tab, so it is a real page
+   * load, and spec 0007's leave warning still guards ticked work on `/tool`.
    */
-  test("links to the address configured for this deploy", async ({ page }) => {
-    await page.goto("/");
+  test("following a link from ticked work brings the leave warning", async ({ page }) => {
+    await openWithChangedTick(page);
 
-    await expect(page.getByRole("link", { name: /source code/i })).toHaveAttribute(
-      "href",
-      SOURCE_URL,
-    );
-  });
+    const asked: string[] = [];
+    page.on("dialog", async (dialog) => {
+      asked.push(dialog.type());
+      await dialog.dismiss();
+    });
+    await page
+      .getByRole("contentinfo")
+      .getByRole("link", { name: "Licence", exact: true })
+      .click();
 
-  /** Section 13 wants the offer reachable from the page doing the work. */
-  test("is present on the tool route too", async ({ page }) => {
-    await page.goto("/tool");
-
-    await expect(page.getByRole("link", { name: /source code/i })).toBeVisible();
+    await expect.poll(() => asked).toEqual(["beforeunload"]);
+    await expect(page).toHaveURL(/\/tool$/);
+    await expect(page.getByRole("checkbox", { name: PHONE })).not.toBeChecked();
   });
 });
+
+/** Open a document on `/tool` and change a tick, which is work worth a warning. */
+async function openWithChangedTick(page: Page): Promise<void> {
+  await page.goto("/tool");
+  await page.getByTestId("file-input").setInputFiles(TEXT_PAGE);
+  // A 10 MB WebAssembly payload has to arrive and compile first.
+  await expect(page.getByRole("checkbox", { name: PHONE })).toBeChecked({
+    timeout: 60_000,
+  });
+  await page.getByRole("checkbox", { name: PHONE }).click();
+}
 
 test.describe("the document title", () => {
   test("names the tool and the product", async ({ page }) => {

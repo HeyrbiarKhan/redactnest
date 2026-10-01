@@ -8,6 +8,8 @@ import { config } from "@/config";
 import { SiteFooter } from "@/ui/site-footer";
 import { SkipLink } from "@/ui/skip-link";
 
+import { LicenceNotice } from "./licence-notice";
+
 import "./globals.css";
 
 /**
@@ -35,21 +37,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {children}
         <SiteFooter>
           {/*
-            The AGPL source offer. Feature 18 owns the full obligation (licence
-            file, third party notices, a tag per deploy). This link is here
-            because the config module already carries the value, and it must
-            resolve to the exact deployed commit rather than the repository root.
+            The AGPL notice and the source offer, on every page, /tool included
+            (spec 0009, AC-1). The link names the exact commit this deploy was
+            built from, never the repository root (AC-4 to AC-6).
           */}
-          {config.sourceUrl ? (
-            <a
-              href={config.sourceUrl}
-              className="inline-flex min-h-6 items-center rounded-sm underline underline-offset-4 hover:text-ink"
-            >
-              Source code (AGPL 3.0)
-            </a>
-          ) : (
-            <span>Source code (AGPL 3.0) · link set per deploy</span>
-          )}
+          <LicenceNotice sourceUrl={config.sourceUrl} />
         </SiteFooter>
       </body>
     </html>

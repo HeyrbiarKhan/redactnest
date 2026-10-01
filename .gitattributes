@@ -6,6 +6,11 @@
 # and CI down with it.
 * text=auto eol=lf
 
+# The AGPL text, verbatim (spec 0009, AC-11). Named on its own so the licence
+# stays byte for byte the FSF's even if the rule above is ever loosened, because
+# `/licence.txt` is served as an exact copy of it (INV-7).
+LICENSE text eol=lf
+
 # Binary. Never converted, never diffed as text.
 *.pdf binary
 *.ico binary
