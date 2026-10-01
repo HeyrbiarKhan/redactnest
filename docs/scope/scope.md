@@ -157,7 +157,7 @@ spec [0009](../specs/0009-agpl-compliance-source-publication/index.md)
   - [x] The notice and the commit link: `LICENSE`, the notices script with its licence allowlist, the derived and checked source link, the footer notice, the amends to specs 0001 and 0003, and the browser checks · AC-1 to AC-6, AC-11 to AC-14, AC-22
   - [x] What is inside MuPDF: the exact pin, `scripts/legal/mupdf.txt` from the 1.28.1 archive with Emscripten and musl, the version and wasm signature checks, and the source lines in `VERSION` · AC-15, AC-16, AC-17
   - [x] Deploy tags and the repository's documents: `tag-deploy.yml` with its text scan test, the README licence section, `CONTRIBUTING.md` and `.env.example` · AC-5, AC-6, AC-7 to AC-10, AC-18
-  - [ ] Going public (your steps): gitleaks over every ref, the noreply address, the Vercel settings, public with secret scanning, push protection and rulesets, then the first tagged deploy checked · AC-7, AC-19, AC-20, AC-21
+  - [ ] Going public (your steps): gitleaks over every ref, the noreply address, the Vercel settings, public with secret scanning, push protection and rulesets, then the first tagged deploy checked. Deferred to launch, after feature 20 · AC-7, AC-19, AC-20, AC-21
 - [ ] Verify it: `/check verify AGPL compliance & source publication`
 
 ### 19. Sparse OCR scans · done · GA · from spec 0006

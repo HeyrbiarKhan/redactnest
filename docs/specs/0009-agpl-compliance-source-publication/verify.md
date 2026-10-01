@@ -1,5 +1,5 @@
 # Verify: AGPL compliance and source publication · spec 0009 · updated 2026-10-01
-_Steps derived from spec 0009 acceptance criteria and its Value sourcing table. `/check verify` runs these; `/test` locks the durable ones. "A production build" means `pnpm build && pnpm start` with Playwright's values (`NEXT_PUBLIC_SITE_URL=https://redactnest.test` and `NEXT_PUBLIC_SOURCE_URL` from `tests/e2e/build-env.ts`) unless a step says otherwise. Steps marked "after merge" are slice 4, your steps, and run only once the repository is public._
+_Steps derived from spec 0009 acceptance criteria and its Value sourcing table. `/check verify` runs these; `/test` locks the durable ones. "A production build" means `pnpm build && pnpm start` with Playwright's values (`NEXT_PUBLIC_SITE_URL=https://redactnest.test` and `NEXT_PUBLIC_SOURCE_URL` from `tests/e2e/build-env.ts`) unless a step says otherwise. Steps marked "after merge" prove slice 3's workflow and run once it is on `main`, while the repository is still private. Steps marked "at launch" are slice 4, your steps, deferred to launch after feature 20 (dense text layers over pictures)._
 
 ## UI / manual
 - [x] On a production build, visit `/` → the footer reads "© 2026 Heyrbiar Khan · Licensed under the GNU AGPL 3.0 or later, which lets you share and change it · No warranty · Source code for this version · Licence · Third party notices", in that order, as one paragraph → AC-1 (Value sourcing: holder, year, the three statements and three labels from `src/lib/legal.ts`)
@@ -21,9 +21,9 @@ _Steps derived from spec 0009 acceptance criteria and its Value sourcing table. 
 - [ ] After merge: the first production deploy's `tag-deploy` run log shows "Tagged <sha> as prod-YYYY-MM-DD-<sha7>"; `git fetch --tags && git show prod-…` shows the three line message and the `github-actions[bot]` tagger; a redeploy of the same commit logs "Already tagged" → AC-7 (Value sourcing: tag name date, sha7, target, message URL, tagger, already tagged)
 - [ ] After merge: a preview deploy's run logs "Skipped: environment 'Preview', state 'success', created by 'vercel[bot]'." and adds no tag → AC-7, AC-10
 - [ ] After merge: run the workflow by hand with a short SHA → refused; with a commit not on `main` → refused; with an untagged commit on `main` → tagged, message ending "Added by hand <time>" → AC-9 (Value sourcing: dispatch "on main?")
-- [ ] After merge: before going public, `gitleaks git -v` (8.30 or later) over a fresh `git clone --mirror` reports no finding, and `git log --all --diff-filter=A --name-only --format=` shows no `.env*` but `.env.example`, no `*.pem`, no PDF outside `tests/fixtures`; the counts go in the pull request → AC-19
-- [ ] After merge: secret scanning and push protection on; the `main` and `prod-*` rulesets in place; the noreply address set for this repository; Vercel's system variables exposed, `NEXT_PUBLIC_SOURCE_URL` absent from every Vercel environment, and Git Fork Protection on → AC-20
-- [ ] After merge: on the first production deploy after going public, the footer's source link returns 200 and shows that commit's tree, and `/licence.txt`, `/third-party-notices.txt` and `/engine/VERSION` return 200 as text → AC-21
+- [ ] At launch: before going public, `gitleaks git -v` (8.30 or later) over a fresh `git clone --mirror` reports no finding, and `git log --all --diff-filter=A --name-only --format=` shows no `.env*` but `.env.example`, no `*.pem`, no PDF outside `tests/fixtures`; the counts go in the pull request → AC-19
+- [ ] At launch: secret scanning and push protection on; the `main` and `prod-*` rulesets in place; the noreply address set for this repository; Vercel's system variables exposed, `NEXT_PUBLIC_SOURCE_URL` absent from every Vercel environment, and Git Fork Protection on → AC-20
+- [ ] At launch: on the first production deploy after going public, the footer's source link returns 200 and shows that commit's tree, and `/licence.txt`, `/third-party-notices.txt` and `/engine/VERSION` return 200 as text → AC-21
 
 ## Commands
 - [x] `pnpm test` → all pass, including `tests/unit/config.test.ts` (each AC-5 and AC-6 rule), `notices.test.ts` (the walk, the licence rules, determinism), `mupdf-notices.test.ts` (version and wasm signatures) and `workflows.test.ts` (the write access scan) → AC-4, AC-5, AC-6, AC-8, AC-13, AC-14, AC-16
@@ -32,7 +32,7 @@ _Steps derived from spec 0009 acceptance criteria and its Value sourcing table. 
 - [x] Add a dependency whose `package.json` declares `GPL-2.0-only` (or edit an installed one's licence in `node_modules` for the test), then `node scripts/sync-legal.mjs` → exits 1 naming the package, its version and its licence; undo it → AC-14
 - [x] Change line 1 of `scripts/legal/mupdf.txt` to `mupdf 1.28.0`, then `node scripts/sync-legal.mjs` and `pnpm exec vitest run tests/unit/mupdf-notices.test.ts` → both fail, naming 1.28.0 and 1.28.1; undo it → AC-16, INV-6
 - [x] `git check-ignore public/licence.txt public/third-party-notices.txt public/engine/VERSION` → all three ignored; `git ls-files --eol LICENSE` → `i/lf w/lf` → AC-11, AC-12, AC-13
-- [x] `grep -c "contents: write" .github/workflows/*.yml` → 1 in `tag-deploy.yml`, 0 in `ci.yml` → AC-8, INV-3
+- [x] `grep -cE "^\s+contents: write" .github/workflows/*.yml` → 1 in `tag-deploy.yml`, 0 in `ci.yml` (anchored to an indented key, so the header comment on line 5 of `tag-deploy.yml` is not counted) → AC-8, INV-3
 
 ## Acceptance-criteria coverage
 - AC-1 … the three footer steps, the browser command
@@ -53,7 +53,7 @@ _Steps derived from spec 0009 acceptance criteria and its Value sourcing table. 
 - AC-16 … the version mismatch command, the first command
 - AC-17 … the `/engine/VERSION` step, the browser command
 - AC-18 … the README and `CONTRIBUTING.md` step
-- AC-19 … the gitleaks step (after merge)
-- AC-20 … the settings step (after merge)
-- AC-21 … the `/engine/VERSION` step, the live link step (after merge)
+- AC-19 … the gitleaks step (at launch)
+- AC-20 … the settings step (at launch)
+- AC-21 … the `/engine/VERSION` step, the live link step (at launch)
 - AC-22 … the network panel step, the browser command
