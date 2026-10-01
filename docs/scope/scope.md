@@ -188,7 +188,7 @@ spec [0010](../specs/0010-dense-text-layers-over-pictures/index.md) · code in `
   - [x] Real dense scans made locally: a dense page, a photo pasted before and after OCR, a ruled table and an empty form (slice 2) · AC-12
 - [x] Verify it: `/check verify dense text layers over pictures`, including the real dense scans (AC-12)
 - [x] Test it: `/test dense text layers over pictures`
-- [ ] Review it (fresh model): `/check review dense text layers over pictures`
+- [x] Review it (fresh model): `/check review dense text layers over pictures`
 - [ ] Document it: `/document dense text layers over pictures`
 
 ## Release 2: Take money
