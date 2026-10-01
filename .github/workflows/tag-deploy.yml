@@ -1,0 +1,135 @@
+# Tags each production deploy with the commit it was built from.
+#
+# Spec 0009, AC-7 to AC-10 and INV-3. This is the only workflow that may write
+# to the repository, which is why it lives apart from ci.yml: CI checks every
+# push and stays read only. Here one job holds `contents: write` and nothing
+# else, checks out nothing and uses no third party action. It runs GitHub's own
+# `gh` against values passed in through `env:`, so no repository code and no
+# event text ever runs with the write token.
+#
+# What really guards the write is who can get a commit deployed at all. GitHub
+# only fires `deployment_status` once this file is on the default branch, but
+# the copy that runs may be the deployed commit's own. Branches need write
+# access, and Vercel's Git Fork Protection holds a fork's pull request until it
+# is approved, which it will not be while contributions are closed (AC-20).
+#
+# A missed tag is filled in by hand: run this workflow with the commit's full
+# SHA (AC-9). It refuses one that is not on main.
+name: Tag deploy
+
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: The full commit (40 lowercase hex characters) of a production deploy that has no tag
+        required: true
+        type: string
+
+# Nothing by default. The one job below asks for exactly what it needs.
+permissions: {}
+
+# Two runs for one commit, from either trigger, wait for each other rather than
+# racing to write two tags.
+concurrency:
+  group: tag-deploy-${{ github.event.deployment.sha || inputs.sha }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag the deployed commit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Tag the commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          INPUT_SHA: ${{ inputs.sha }}
+          DEPLOY_SHA: ${{ github.event.deployment.sha }}
+          ENVIRONMENT: ${{ github.event.deployment.environment }}
+          CREATOR: ${{ github.event.deployment.creator.login }}
+          STATE: ${{ github.event.deployment_status.state }}
+          CREATED_AT: ${{ github.event.deployment_status.created_at }}
+          ENVIRONMENT_URL: ${{ github.event.deployment_status.environment_url }}
+          TARGET_URL: ${{ github.event.deployment_status.target_url }}
+        run: |
+          set -euo pipefail
+
+          full_commit() {
+            printf '%s' "$1" | grep -Eq '^[0-9a-f]{40}$'
+          }
+
+          # 1. Decide which commit, and the tag's date and message.
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            sha="$INPUT_SHA"
+            if ! full_commit "$sha"; then
+              echo "::error::The sha must be a full commit, 40 lowercase hex characters."
+              exit 1
+            fi
+            on_main="$(gh api "repos/$REPO/compare/$sha...main" --jq .status)"
+            if [ "$on_main" != "ahead" ] && [ "$on_main" != "identical" ]; then
+              echo "::error::$sha is not on main (compared with main: $on_main)."
+              exit 1
+            fi
+            day="$(date -u +%Y-%m-%d)"
+            message="$(printf 'Production deploy of %s\nAdded by hand %s' \
+              "$sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)")"
+          else
+            if [ "$STATE" != "success" ] || [[ "$ENVIRONMENT" != Production* ]] \
+              || [ "$CREATOR" != "vercel[bot]" ]; then
+              echo "Skipped: environment '$ENVIRONMENT', state '$STATE', created by '$CREATOR'."
+              exit 0
+            fi
+            sha="$DEPLOY_SHA"
+            if ! full_commit "$sha"; then
+              echo "::error::The deployment names '$sha', which is not a full commit."
+              exit 1
+            fi
+            day="$(date -u -d "$CREATED_AT" +%Y-%m-%d)"
+            url="${ENVIRONMENT_URL:-${TARGET_URL:-not reported}}"
+            message="$(printf 'Production deploy of %s\nDeployed %s\nVercel %s' \
+              "$sha" "$(date -u -d "$CREATED_AT" +%Y-%m-%dT%H:%M:%SZ)" "$url")"
+          fi
+          name="prod-$day-${sha:0:7}"
+
+          # 2. One tag per commit, so a redeploy, promotion or rollback adds nothing.
+          existing="$(gh api --paginate "repos/$REPO/tags" \
+            --jq '.[] | select(.name | startswith("prod-")) | "\(.commit.sha) \(.name)"' \
+            | awk -v sha="$sha" '$1 == sha && !found { print $2; found = 1 }')"
+          if [ -n "$existing" ]; then
+            echo "Already tagged: $sha is $existing."
+            exit 0
+          fi
+
+          # 3. The annotated tag object, then the ref that names it.
+          tag_object="$(gh api "repos/$REPO/git/tags" \
+            -f tag="$name" \
+            -f message="$message" \
+            -f object="$sha" \
+            -f type=commit \
+            -f 'tagger[name]=github-actions[bot]' \
+            -f 'tagger[email]=41898282+github-actions[bot]@users.noreply.github.com' \
+            -f "tagger[date]=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --jq .sha)"
+
+          if ! output="$(gh api "repos/$REPO/git/refs" \
+            -f ref="refs/tags/$name" -f sha="$tag_object" 2>&1)"; then
+            # Another run got there first. Fine only if it tagged the same commit;
+            # the tag object written above is then left unreferenced, which is harmless.
+            if printf '%s' "$output" | grep -q "already exists"; then
+              points_at="$(gh api "repos/$REPO/commits/tags/$name" --jq .sha)"
+              if [ "$points_at" = "$sha" ]; then
+                echo "Already tagged: $name names $sha."
+                exit 0
+              fi
+              echo "::error::$name already exists and names $points_at, not $sha."
+            else
+              echo "::error::$output"
+            fi
+            exit 1
+          fi
+
+          echo "Tagged $sha as $name."
