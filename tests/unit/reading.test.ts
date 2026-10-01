@@ -2,6 +2,7 @@ import type { PDFDocument, PDFPage } from "mupdf";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
+  COPY_REACH_RATIO,
   EngineFailure,
   EXTRACTION_OPTIONS,
   inspectPages,
@@ -9,6 +10,8 @@ import {
   openDocumentWith,
   POSITION_TOLERANCE,
   prepareDocument,
+  quadHeight,
+  quadWidth,
   READING_GRID,
   redactDocumentWith,
   readsAsNothing,
@@ -19,6 +22,7 @@ import {
   walkCharacters,
   walkDrawing,
   WRITE_OPTIONS,
+  type Character,
   type Drawing,
   type PageInspection,
   type Rect,
@@ -851,6 +855,11 @@ describe("sparse OCR scans", () => {
     expect(underCap.findings).toEqual(["scanned", "machine-read-text"]);
   });
 
+  /** Three hidden lines of 13 bars at 60 pt: 39 readable characters and no word. */
+  const LARGE_BARS = [600, 450, 300]
+    .map((y) => `BT 3 Tr /F1 60 Tf 72 ${y} Td (${"|".repeat(13)}) Tj ET\n`)
+    .join("");
+
   /**
    * Spec 0010, AC-8: a picture the area test cleared can now be bare, so a
    * page under the stamp cap can turn `scanned`, the stronger warning. Three
@@ -860,10 +869,7 @@ describe("sparse OCR scans", () => {
    * cleared the scan before spec 0010.
    */
   it("names a scan under a few large hidden bars scanned, though their lines cover over 5% of it", async () => {
-    const bars = [600, 450, 300]
-      .map((y) => `BT 3 Tr /F1 60 Tf 72 ${y} Td (${"|".repeat(13)}) Tj ET\n`)
-      .join("");
-    const bytes = scanUnder(bars);
+    const bytes = scanUnder(LARGE_BARS);
 
     const doc = mupdf.Document.openDocument(bytes, "application/pdf");
     const boxes = new Map<number, Rect>();
@@ -912,6 +918,39 @@ describe("sparse OCR scans", () => {
 
     const [inspection] = await inspectBytes(bytes);
     expect(inspection.findings).toEqual(["scanned", "machine-read-text"]);
+  });
+
+  /**
+   * Spec 0010, AC-8: so a document made only of such pages is refused
+   * `no-readable-text`, where it opened before, since nothing on it can be
+   * found.
+   */
+  it("refuses a document made only of a scan under a few large hidden bars", async () => {
+    const bytes = scanUnder(LARGE_BARS).slice().buffer as ArrayBuffer;
+    await expect(openDocumentWith(mupdf, bytes, LIMITS)).rejects.toEqual(
+      new EngineFailure("no-readable-text"),
+    );
+  });
+
+  /**
+   * Spec 0010, AC-1: a drawn glyph is spec 0008's, filled, stroked or
+   * clipping, so visible lines of words clear a scan by area however they are
+   * drawn. 24 lines of "Payment received" over the scan, as on
+   * `read-pictures.pdf` page 37, and none invisible, so no run can clear it:
+   * only the area test does, and a line whose glyphs it did not count as drawn
+   * would leave the scan bare.
+   */
+  it.each([
+    ["filled (0 Tr)", (y: number) => textLine("F1", 0, "Payment received", y)],
+    ["stroked (1 Tr)", (y: number) => textLine("F1", 1, "Payment received", y)],
+    [
+      "as a clip (7 Tr)",
+      (y: number) => `q ${textLine("F1", 7, "Payment received", y)}Q\n`,
+    ],
+  ])("clears a scan under visible lines of words drawn %s", async (_label, draw) => {
+    const lines = Array.from({ length: 24 }, (_, row) => draw(740 - row * 28)).join("");
+    const [inspection] = await inspectBytes(scanUnder(lines));
+    expect(inspection.findings).not.toContain("bare-picture");
   });
 });
 
@@ -990,6 +1029,270 @@ describe("dense text layers over pictures", () => {
     expect(perLine.length).toBeGreaterThanOrEqual(260);
     expect(perLine.every((count) => count === 1)).toBe(true);
   });
+
+  /**
+   * The copy reach exactly as spec 0008 built it: `withinReach` on `main`
+   * before spec 0010, its bounds built as arrays and spread. AC-11 wrote those
+   * bounds out by hand, since a dense layer with no word asks this of every
+   * character it holds, which must change no answer. This frozen copy is the
+   * reference the engine is held to below. Never keep it in step with the
+   * engine: its worth is that it does not move.
+   */
+  function reachBefore(
+    character: Character,
+    drawn: { readonly xs: Float64Array; readonly ys: Float64Array },
+  ): boolean {
+    const firstAtLeast = (sorted: Float64Array, value: number): number => {
+      let low = 0;
+      let high = sorted.length;
+      while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (sorted[middle] < value) low = middle + 1;
+        else high = middle;
+      }
+      return low;
+    };
+
+    const height = quadHeight(character.quad);
+    const width = quadWidth(character.quad);
+    const [ox, oy] = character.origin;
+    const [dx, dy] = character.direction;
+    const length = Math.hypot(dx, dy);
+    if (
+      !Number.isFinite(height) ||
+      !Number.isFinite(width) ||
+      !Number.isFinite(ox) ||
+      !Number.isFinite(oy) ||
+      !(length > 0 && Number.isFinite(length))
+    ) {
+      return true;
+    }
+
+    const ux = dx / length;
+    const uy = dy / length;
+    const reach = Math.max(COPY_REACH_RATIO * height, POSITION_TOLERANCE);
+    const before = -reach;
+    const past = width + reach;
+
+    const xs = [before, past].flatMap((along) =>
+      [-reach, reach].map((across) => ox + along * ux - across * uy),
+    );
+    const ys = [before, past].flatMap((along) =>
+      [-reach, reach].map((across) => oy + along * uy + across * ux),
+    );
+    const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
+    const [y0, y1] = [Math.min(...ys), Math.max(...ys)];
+
+    for (let at = firstAtLeast(drawn.xs, x0); at < drawn.xs.length; at += 1) {
+      const x = drawn.xs[at];
+      if (x > x1) break;
+      const y = drawn.ys[at];
+      if (y < y0 || y > y1) continue;
+      const along = (x - ox) * ux + (y - oy) * uy;
+      const across = (y - oy) * ux - (x - ox) * uy;
+      if (along >= before && along <= past && Math.abs(across) <= reach) return true;
+    }
+    return false;
+  }
+
+  type At = readonly [number, number];
+
+  /** The one word the hidden layer holds: 10 letters, so it forms a run. */
+  const HIDDEN_WORD = "Recognised";
+
+  /**
+   * One page per entry, each a full page grey scan under `HIDDEN_WORD`, drawn
+   * invisible in Helvetica at 12 pt from (300, 400), turned `degrees`. An
+   * entry that names a point adds one visible "x" whose origin sits there, in
+   * MuPDF's page space (y down). The "x" is turned a further quarter turn, so
+   * MuPDF never reads it onto the hidden word's line.
+   */
+  function reachPdf(degrees: number, glyphs: readonly (At | null)[]): Uint8Array {
+    const place = (turn: number, [x, y]: At) => {
+      const angle = (turn * Math.PI) / 180;
+      const [cos, sin] = [Math.cos(angle), Math.sin(angle)];
+      // Fixed point: a PDF number is never written with an exponent.
+      return [cos, sin, -sin, cos, x, y].map((value) => value.toFixed(6)).join(" ");
+    };
+    const pageObject = (index: number) => 5 + index * 2;
+    return writePdf({
+      objects: [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        `<< /Type /Pages /Kids [${glyphs.map((_, index) => `${pageObject(index)} 0 R`).join(" ")}] /Count ${glyphs.length} >>`,
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        stream(
+          "/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8",
+          new Uint8Array(4).fill(200),
+        ),
+        ...glyphs.flatMap((glyph, index) => [
+          `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ` +
+            `/Resources << /Font << /F1 3 0 R >> /XObject << /Scan 4 0 R >> >> ` +
+            `/Contents ${pageObject(index) + 1} 0 R >>`,
+          stream(
+            "",
+            "q 612 0 0 792 0 0 cm /Scan Do Q\n" +
+              `BT 3 Tr /F1 12 Tf ${place(degrees, [300, 400])} Tm (${HIDDEN_WORD}) Tj ET\n` +
+              (glyph === null
+                ? ""
+                : `BT 0 Tr /F1 12 Tf ${place(degrees + 90, [glyph[0], 792 - glyph[1]])} Tm (x) Tj ET\n`),
+          ),
+        ]),
+      ],
+      trailer: "/Root 1 0 R",
+    }).bytes;
+  }
+
+  /**
+   * Each page of `bytes`, opened and prepared as the open does it: its
+   * findings, the hidden word's line, and the origins of the glyphs it fills,
+   * read with MuPDF's readers alone.
+   */
+  async function readReach(bytes: Uint8Array) {
+    const doc = mupdf.Document.openDocument(bytes, "application/pdf");
+    try {
+      const pdf = doc.asPDF();
+      if (!pdf) throw new Error("expected a PDF document");
+      prepareDocument(mupdf, pdf);
+      const inspections = await inspectPages(mupdf, pdf);
+      return inspections.map(({ findings }, index) => {
+        const page = pdf.loadPage(index) as PDFPage;
+        try {
+          const characters: Character[] = [];
+          walkCharacters(page, EXTRACTION_OPTIONS[0], (character) => {
+            characters.push(character);
+          });
+          const first = characters.find(
+            ({ code }) => code === HIDDEN_WORD.codePointAt(0),
+          );
+          const hidden = characters.filter(({ line }) => line === first?.line);
+          const filled: At[] = [];
+          walkDrawing(mupdf, page, (drawing) => {
+            if (drawing.kind === "text" && drawing.mode === "fill")
+              for (const { origin } of drawing.glyphs) filled.push(origin);
+          });
+          return { findings, hidden, filled };
+        } finally {
+          page.destroy();
+        }
+      });
+    } finally {
+      doc.destroy();
+    }
+  }
+
+  /** Whether the frozen reach finds a copy of the hidden line among `filled`. */
+  function copiedBefore(hidden: readonly Character[], filled: readonly At[]): boolean {
+    const sorted = [...filled].sort(([a], [b]) => a - b);
+    const drawn = {
+      xs: Float64Array.from(sorted, ([x]) => x),
+      ys: Float64Array.from(sorted, ([, y]) => y),
+    };
+    return hidden.some((character) => reachBefore(character, drawn));
+  }
+
+  /**
+   * Spec 0010, AC-11 rewrote `withinReach`'s bounds (spec 0008, AC-15) and
+   * must give the same answers as before. The bounds only narrow which drawn
+   * glyphs the exact test is asked about, so a rewrite that drew them too
+   * tight would miss a copy near the reach's corners and edges. Each turn puts
+   * a visible glyph a quarter point inside and outside each corner and each
+   * edge of the hidden line's reach, found from that line's own reading, and
+   * holds the engine's findings to the frozen reach's answer on each page:
+   * a copy leaves the scan bare under 11 readable characters, so `scanned`,
+   * and no copy lets the word's run clear it.
+   */
+  it.each([0, 3, 30, 90, 135, 200, 315])(
+    "finds a copy of a hidden line turned %i degrees exactly where the reach before spec 0010 did",
+    async (degrees) => {
+      const [base] = await readReach(reachPdf(degrees, [null]));
+      const { hidden } = base;
+      expect(String.fromCodePoint(...hidden.map(({ code }) => code))).toBe(HIDDEN_WORD);
+
+      // The reach's rectangle from the line's reading: along the line from the
+      // reach before the first character to the reach past the last one's
+      // end, and the reach across it either side.
+      const first = hidden[0];
+      const last = hidden[hidden.length - 1];
+      const middle = hidden[hidden.length >> 1];
+      const [dx, dy] = first.direction;
+      const length = Math.hypot(dx, dy);
+      const [ux, uy] = [dx / length, dy / length];
+      const reach = ({ quad }: Character) =>
+        Math.max(COPY_REACH_RATIO * quadHeight(quad), POSITION_TOLERANCE);
+      const at = ([x, y]: At, along: number, across: number): At => [
+        x + along * ux - across * uy,
+        y + along * uy + across * ux,
+      ];
+
+      const NEAR = 0.25;
+      const sweep: { readonly glyph: At | null; readonly inside: boolean }[] = [
+        { glyph: null, inside: false },
+        { glyph: first.origin, inside: true },
+      ];
+      for (const [side, origin, edge, sideReach] of [
+        [-1, first.origin, -reach(first), reach(first)],
+        [1, last.origin, quadWidth(last.quad) + reach(last), reach(last)],
+      ] as const) {
+        const step = (inside: boolean) => edge + side * (inside ? -NEAR : NEAR);
+        for (const across of [-1, 1]) {
+          for (const alongInside of [true, false]) {
+            for (const acrossInside of [true, false]) {
+              sweep.push({
+                glyph: at(
+                  origin,
+                  step(alongInside),
+                  across * (sideReach + (acrossInside ? -NEAR : NEAR)),
+                ),
+                inside: alongInside && acrossInside,
+              });
+            }
+          }
+        }
+        for (const inside of [true, false])
+          sweep.push({ glyph: at(origin, step(inside), 0), inside });
+      }
+      for (const across of [-1, 1]) {
+        for (const inside of [true, false]) {
+          sweep.push({
+            glyph: at(
+              middle.origin,
+              quadWidth(middle.quad) / 2,
+              across * (reach(middle) + (inside ? -NEAR : NEAR)),
+            ),
+            inside,
+          });
+        }
+      }
+
+      const pages = await readReach(
+        reachPdf(
+          degrees,
+          sweep.map(({ glyph }) => glyph),
+        ),
+      );
+
+      // The case is what it says: the word reads as one line of its own, each
+      // glyph lands where it was put, and the frozen reach answers inside or
+      // outside as the sweep meant.
+      const copied = pages.map(({ hidden: line, filled }, index) => {
+        const { glyph } = sweep[index];
+        expect(String.fromCodePoint(...line.map(({ code }) => code))).toBe(HIDDEN_WORD);
+        expect(filled).toHaveLength(glyph === null ? 0 : 1);
+        if (glyph !== null) {
+          expect(Math.abs(filled[0][0] - glyph[0])).toBeLessThan(0.01);
+          expect(Math.abs(filled[0][1] - glyph[1])).toBeLessThan(0.01);
+        }
+        return copiedBefore(line, filled);
+      });
+      expect(copied).toEqual(sweep.map(({ inside }) => inside));
+
+      expect(pages.map(({ findings }) => findings)).toEqual(
+        copied.map((copy) =>
+          copy ? ["scanned", "machine-read-text"] : ["machine-read-text"],
+        ),
+      );
+    },
+  );
 });
 
 /** Slice 2: AC-25. The crooked scan line, from the real engine's readings and blocks. */
