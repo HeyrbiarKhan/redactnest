@@ -1,7 +1,7 @@
 # 0001. Browser only redaction stack
 
 **Date**: 2026-09-19
-**Updated**: 2026-09-30, from spec [0007](../0007-redact-flow/index.md): three Follow-ups met (every failure kind's copy, the entitlement in flight for the free tier, and what mobile visitors see). No design changed; 2026-10-01, from spec [0009](../0009-agpl-compliance-source-publication/index.md): `NEXT_PUBLIC_SOURCE_URL` is derived on Vercel and must name one full commit in production, and the Follow-up to prepare the public repository is met by spec 0009 once feature 18 is done.
+**Updated**: 2026-09-30, from spec [0007](../0007-redact-flow/index.md): three Follow-ups met (every failure kind's copy, the entitlement in flight for the free tier, and what mobile visitors see). No design changed; 2026-10-01, from spec [0009](../0009-agpl-compliance-source-publication/index.md): `NEXT_PUBLIC_SOURCE_URL` is derived on Vercel and must name one full commit in production, and the Follow-up to prepare the public repository is met by spec 0009 once feature 18 is done; 2026-10-02, from spec [0011](../0011-privacy-policy-terms/index.md), wording only: the standard regime's outside origins now come from one list, `OUTSIDE_SERVICES` in `src/config/privacy.ts`, through `buildPolicies` in `src/config/csp.ts`, which builds both regimes. The tool regime is unchanged and takes nothing from that list.
 **Status**: Accepted
 
 ## Summary
@@ -62,7 +62,7 @@ frame-ancestors 'none';
 form-action 'self'
 ```
 
-**Every other route**: the same shape, with the auth and analytics origins features 10 and 11 need added to `script-src` and `connect-src`.
+**Every other route**: the same shape, with the auth and analytics origins features 10 and 11 need added to `script-src` and `connect-src`. Those origins come only from `OUTSIDE_SERVICES` in `src/config/privacy.ts`, which `buildPolicies` in `src/config/csp.ts` adds to this regime's `script-src` and `connect-src` and to no other directive. Today the list names none, so the two regimes are the same. The tool route's policy above takes nothing from the list, whatever it holds, and `tests/unit/csp.test.ts` fails if a listed origin ever reaches it. _Amended by spec [0011](../0011-privacy-policy-terms/index.md), AC-13 and AC-14._
 
 Notes that matter when implementing this:
 

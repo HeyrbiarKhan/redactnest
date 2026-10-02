@@ -1,6 +1,7 @@
 # 0007. Redact flow
 
 **Date**: 2026-09-30
+**Updated**: 2026-10-02, from spec [0011](../0011-privacy-policy-terms/index.md), wording only: wherever the full drop zone shows (at idle, and under a failed open), spec 0011's terms notice sits directly under it and goes with it once the file bar takes its place (AC-2). No step of the flow changed.
 **Status**: Accepted
 
 ## Summary
@@ -33,7 +34,7 @@ Applied to each spec in place by task 17, once the flow is built, so no spec des
 *One pass, step by step*
 
 - **AC-1**: An anonymous visitor at `/tool` with a PDF of up to the session's `entitlement.pageCap` pages (free tier: `config.freePageCap`, 3 to start) goes from drop to review to Redact to Download with no other page load, no sign in, and no network request carrying document data (spec 0002's privacy suite stays green).
-- **AC-2**: With nothing open, the page shows the full drop zone, whose helper names the page cap from `config.freePageCap`. It is the same after Start over, after Redact another PDF, and under a failed open (AC-15).
+- **AC-2**: With nothing open, the page shows the full drop zone, whose helper names the page cap from `config.freePageCap`. It is the same after Start over, after Redact another PDF, and under a failed open (AC-15). Directly under the full drop zone sits the terms notice: one `text-small` line in `ink-muted` saying that choosing a PDF is agreeing to the Terms of use, with plain links to the terms and the privacy policy. It sits outside the polite live region and goes once the file bar replaces the drop zone. _Amended by spec [0011](../0011-privacy-policy-terms/index.md), AC-5._
 - **AC-3**: In `opening`, `reviewing`, `redacting`, `complete` and `lost`, the drop zone shows in its compact form, the file bar: the file's name (React text only), the page count once `summary` is not null ("3 pages"; nothing before that), a secondary "Choose another PDF" button, and a link button "Start over". In `idle` and `failed` it shows in full. The file bar still takes a dropped file, and shows the drop zone's existing dragging tokens (`border-accent`, `bg-accent-soft`) while a file is over it. Both buttons stay enabled in every state, a run included; choosing another file or pressing Start over while `hasUnsavedWork` is true asks first (spec 0002, AC-1), and a cancelled confirm changes nothing. Start over lives only in the file bar: the old action row beneath the page goes, and the opened document card no longer states the page count.
 - **AC-4**: While a document opens or a run works, one phase line with the spinner shows in the polite live region, in the words of *Phase copy* (the strings hold no "…"; `StatusLine` adds it). The `redacting` phase says "Stripping hidden content" when nothing is ticked.
 - **AC-5**: While reviewing, the column reads from the top: the file bar; the opened document card (all clear line, or warnings and notes, per spec 0006); the run refusal callout, when there is one (AC-14); the action panel (AC-6); the coverage note; the checklist.
