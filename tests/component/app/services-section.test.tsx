@@ -110,7 +110,7 @@ describe("ServicesSection", () => {
     expect(screen.getByText("One day")).toBeVisible();
     expect(screen.getByRole("link", { name: "Vercel’s privacy policy" })).toHaveAttribute(
       "href",
-      "https://vercel.com/legal/privacy",
+      "https://vercel.com/legal/privacy-notice",
     );
   });
 

@@ -124,7 +124,7 @@ The one entry `OUTSIDE_SERVICES` holds today:
 | `safeguard` | The Data Privacy Framework between the EU and the US, and standard contractual clauses |
 | `retention` | One day |
 | `ownUse` | Vercel may also use some of this data, such as for platform security, as a controller in its own right under its own privacy policy |
-| `policyUrl` | `https://vercel.com/legal/privacy` |
+| `policyUrl` | `https://vercel.com/legal/privacy-notice` (checked to resolve with no redirect on 2 October 2026) |
 | `scriptOrigins`, `connectOrigins` | none |
 
 **State transitions**: none at runtime. The two launch facts move one way, by hand, in `src/lib/legal.ts`: `contactEmail` from the placeholder to the real address, and `representatives` from `pending` to `decided`.

@@ -62,7 +62,9 @@ export const OUTSIDE_SERVICES: readonly OutsideService[] = Object.freeze([
     retention: "One day",
     ownUse:
       "Vercel may also use some of this data, such as for platform security, as a controller in its own right under its own privacy policy.",
-    policyUrl: "https://vercel.com/legal/privacy",
+    // The final address, checked to resolve with no redirect on 2 October
+    // 2026. `/legal/privacy` redirects here, a courtesy Vercel may drop.
+    policyUrl: "https://vercel.com/legal/privacy-notice",
     scriptOrigins: Object.freeze([]),
     connectOrigins: Object.freeze([]),
   }),
