@@ -2685,3 +2685,68 @@ describe("the redact flow (spec 0007)", () => {
     });
   });
 });
+
+/**
+ * Spec 0011, AC-5. Choosing a PDF is agreeing to the terms, so the line saying
+ * so sits under the full drop zone whenever it shows, outside the polite live
+ * region, and goes once the file bar replaces the zone.
+ */
+describe("the terms notice (spec 0011, AC-5)", () => {
+  const NOTICE =
+    "By choosing a PDF you agree to the Terms of use. The Privacy policy explains what happens to your data.";
+
+  it("reads in full under the drop zone while nothing is open, with its two links", async () => {
+    const { container } = render(<ToolClient />);
+
+    const notice = screen.getByTestId("terms-notice");
+    expect(notice).toHaveTextContent(NOTICE);
+    expect(notice.previousElementSibling).toBe(screen.getByTestId("drop-area"));
+    expect(
+      within(notice)
+        .getAllByRole("link")
+        .map((link) => [link.textContent, link.getAttribute("href")]),
+    ).toEqual([
+      ["Terms of use", "/terms"],
+      ["Privacy policy", "/privacy"],
+    ]);
+    for (const link of within(notice).getAllByRole("link")) {
+      expect(link).not.toHaveAttribute("target");
+    }
+    expect(notice.closest("[aria-live]")).toBeNull();
+    expect(notice).toHaveClass("text-small", "text-ink-muted");
+    await expectNoAxeViolations(container);
+  });
+
+  it("goes once a file is chosen and the file bar takes the zone's place", async () => {
+    mocks.openSession.mockImplementation(hangsAt("opening"));
+    render(<ToolClient />);
+    await chooseFile(pdfFile());
+
+    await screen.findByTestId("file-bar");
+    expect(screen.queryByTestId("terms-notice")).not.toBeInTheDocument();
+  });
+
+  it("stays gone once the document is open", async () => {
+    render(<ToolClient />);
+    await chooseFile(pdfFile());
+
+    await within(await screen.findByTestId("file-bar")).findByTestId("page-count");
+    expect(screen.queryByTestId("terms-notice")).not.toBeInTheDocument();
+  });
+
+  it("comes back with the full drop zone after Start over and under a failed open", async () => {
+    render(<ToolClient />);
+    await chooseFile(pdfFile());
+    await within(await screen.findByTestId("file-bar")).findByTestId("page-count");
+
+    await userEvent.setup().click(screen.getByTestId("start-over"));
+    expect(screen.getByTestId("terms-notice")).toHaveTextContent(NOTICE);
+
+    mocks.openSession.mockRejectedValue(new EngineError("corrupt"));
+    await chooseFile(pdfFile());
+    await screen.findByTestId("error");
+    expect(screen.getByTestId("terms-notice").previousElementSibling).toBe(
+      screen.getByTestId("drop-area"),
+    );
+  });
+});

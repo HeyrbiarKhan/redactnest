@@ -14,3 +14,11 @@ export const TOOL_PATH = "/tool";
  */
 export const LICENCE_PATH = "/licence.txt";
 export const NOTICES_PATH = "/third-party-notices.txt";
+
+/**
+ * The privacy policy and the terms of use (spec 0011, AC-1). The footer's
+ * Legal nav and the line under the drop zone link here, and the pages live at
+ * these paths, so the links and the routes cannot drift apart.
+ */
+export const PRIVACY_PATH = "/privacy";
+export const TERMS_PATH = "/terms";

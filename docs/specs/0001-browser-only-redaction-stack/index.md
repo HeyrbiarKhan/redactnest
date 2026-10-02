@@ -1,7 +1,7 @@
 # 0001. Browser only redaction stack
 
 **Date**: 2026-09-19
-**Updated**: 2026-09-30, from spec [0007](../0007-redact-flow/index.md): three Follow-ups met (every failure kind's copy, the entitlement in flight for the free tier, and what mobile visitors see). No design changed; 2026-10-01, from spec [0009](../0009-agpl-compliance-source-publication/index.md): `NEXT_PUBLIC_SOURCE_URL` is derived on Vercel and must name one full commit in production, and the Follow-up to prepare the public repository is met by spec 0009 once feature 18 is done.
+**Updated**: 2026-09-30, from spec [0007](../0007-redact-flow/index.md): three Follow-ups met (every failure kind's copy, the entitlement in flight for the free tier, and what mobile visitors see). No design changed; 2026-10-01, from spec [0009](../0009-agpl-compliance-source-publication/index.md): `NEXT_PUBLIC_SOURCE_URL` is derived on Vercel and must name one full commit in production, and the Follow-up to prepare the public repository is met by spec 0009 once feature 18 is done; 2026-10-02, from spec [0011](../0011-privacy-policy-terms/index.md), wording only: the standard regime's outside origins now come from one list, `OUTSIDE_SERVICES` in `src/config/privacy.ts`, through `buildPolicies` in `src/config/csp.ts`, which builds both regimes. The tool regime is unchanged and takes nothing from that list; 2026-10-02, the licence decision: a quote for an Artifex commercial licence was requested and is out of budget, so RedactNest stays AGPL 3.0 and the Follow-up to get a quote is closed. No design changed.
 **Status**: Accepted
 
 ## Summary
@@ -62,7 +62,7 @@ frame-ancestors 'none';
 form-action 'self'
 ```
 
-**Every other route**: the same shape, with the auth and analytics origins features 10 and 11 need added to `script-src` and `connect-src`.
+**Every other route**: the same shape, with the auth and analytics origins features 10 and 11 need added to `script-src` and `connect-src`. Those origins come only from `OUTSIDE_SERVICES` in `src/config/privacy.ts`, which `buildPolicies` in `src/config/csp.ts` adds to this regime's `script-src` and `connect-src` and to no other directive. Today the list names none, so the two regimes are the same. The tool route's policy above takes nothing from the list, whatever it holds, and `tests/unit/csp.test.ts` fails if a listed origin ever reaches it. _Amended by spec [0011](../0011-privacy-policy-terms/index.md), AC-13 and AC-14._
 
 Notes that matter when implementing this:
 
@@ -166,7 +166,7 @@ All are read through one typed config module that parses and validates them at m
 ## Follow-up
 
 - [ ] Prepare the public repository and get the AGPL notices, licence file and source offer right before launch. Tag every production deploy and point `NEXT_PUBLIC_SOURCE_URL` at the tag or commit, since a repository root link does not satisfy the corresponding source obligation. Artifex enforce, so this deserves care rather than a last minute commit. _Met by spec [0009](../0009-agpl-compliance-source-publication/index.md) once feature 18 is done: the licence file, the generated third party notices, a tag per production deploy, and a source link derived from the commit being built._
-- [ ] Get a commercial licence quote from Artifex and record it, so relicensing later is a known number rather than an emergency negotiation.
+- [x] Get a commercial licence quote from Artifex and record it, so relicensing later is a known number rather than an emergency negotiation. _Closed 2026-10-02: a quote was requested from Artifex and is out of budget, so RedactNest stays AGPL 3.0 with its source published._
 - [ ] Design feature 10 as an honesty based paywall. The page cap cannot be technically enforced under this architecture, and pricing, copy and expectations should reflect that.
 - [ ] Write features 5, 6 and 13 knowing redaction is geometric. Feature 6 needs a text match to quad mapping, and feature 5's acceptance criteria should test the geometric edges rather than assume string level precision.
 - [x] Feature 8 owns the user facing treatment of every failure kind in the worker contract, including the encrypted and password protected cases that feature 7 does not cover. _Met by spec 0007: `FAILURE_TEXT` in `src/lib/flow-text.ts` gives every kind a title, a body and a next step (AC-16, AC-17), and the page never asks for a password._

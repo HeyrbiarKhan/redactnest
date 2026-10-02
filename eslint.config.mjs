@@ -331,12 +331,46 @@ const noInnerHtml = [
   },
 ];
 
+const LOG_MESSAGE =
+  "RedactNest's own code writes no log (spec 0011, AC-15, the privacy " +
+  "policy's claim C8). A line written here can carry document detail, and " +
+  "the policy promises there is none to carry. Feature 11 lifts this for its " +
+  "one reporter, in the same change as the policy update.";
+
+/**
+ * The two streams `no-console` cannot see, in each spelling: a member
+ * (`process.stdout.write`), a computed member (`process["stderr"]`), and a
+ * destructured name (`const { stdout } = process`).
+ *
+ * These match the name `process` as written, and `no-console` the global
+ * `console`, so an alias (`const p = process; p.stdout.write()`) or
+ * `globalThis.console.log()` slips past both. That is the intent: a guard
+ * against an honest slip, not against code written to evade it.
+ */
+const noProcessStreams = [
+  {
+    selector:
+      'MemberExpression[object.name="process"][property.name=/^(stdout|stderr)$/]',
+    message: LOG_MESSAGE,
+  },
+  {
+    selector:
+      'MemberExpression[object.name="process"][property.value=/^(stdout|stderr)$/]',
+    message: LOG_MESSAGE,
+  },
+  {
+    selector:
+      'VariableDeclarator[init.name="process"] > ObjectPattern > Property[key.name=/^(stdout|stderr)$/]',
+    message: LOG_MESSAGE,
+  },
+];
+
 /**
  * A zone's rules, from the restrictions it does not get to relax.
  *
- * The storage ban and the colour patterns are applied to every zone here rather
- * than passed in, so a zone can only ever relax what it explicitly names, and no
- * zone can name these.
+ * The storage ban, the colour patterns and the log ban are applied to every
+ * zone here rather than passed in, so a zone can only ever relax what it
+ * explicitly names, and no zone can name these.
  */
 const zone = (imports, syntax) => ({
   "no-restricted-imports": ["error", { patterns: imports }],
@@ -345,7 +379,9 @@ const zone = (imports, syntax) => ({
     ...syntax,
     ...noStorageAnywhere,
     ...noUncheckedColour,
+    ...noProcessStreams,
   ],
+  "no-console": "error",
 });
 
 const eslintConfig = defineConfig([
@@ -413,9 +449,9 @@ const eslintConfig = defineConfig([
   },
   {
     // The detectors (spec 0005, INV-5 and INV-8). Pure text in, offsets out:
-    // no page, no interface, no config, no worker but the protocol's types, and
-    // no console, since a detector holds document text. The one place the
-    // phone library may be imported.
+    // no page, no interface, no config, and no worker but the protocol's types.
+    // The console ban every zone carries matters most here, since a detector
+    // holds document text. The one place the phone library may be imported.
     name: "redactnest/detect",
     files: ["src/detect/**/*.{ts,mts}"],
     rules: {
@@ -455,7 +491,6 @@ const eslintConfig = defineConfig([
           ],
         },
       ],
-      "no-console": "error",
     },
   },
   {

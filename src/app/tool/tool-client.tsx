@@ -70,6 +70,7 @@ import { ActionPanel } from "./action-panel";
 import { FailureCallout } from "./failure-callout";
 import { ResultCard } from "./result-card";
 import { ReviewChecklist } from "./review-checklist";
+import { TermsNotice } from "./terms-notice";
 
 /**
  * Did this session lose its worker before the engine had finished loading?
@@ -704,15 +705,24 @@ export function ToolClient() {
           }
         />
       ) : (
-        <DropZone
-          title="Drop a PDF here, or choose one"
-          helper={`Up to ${config.freePageCap} pages for now.`}
-          buttonLabel="Choose a PDF"
-          accept="application/pdf"
-          onFile={(file) => void handleFile(file)}
-          onWarm={warm}
-          buttonRef={chooseRef}
-        />
+        <>
+          <DropZone
+            title="Drop a PDF here, or choose one"
+            helper={`Up to ${config.freePageCap} pages for now.`}
+            buttonLabel="Choose a PDF"
+            accept="application/pdf"
+            onFile={(file) => void handleFile(file)}
+            onWarm={warm}
+            buttonRef={chooseRef}
+          />
+          {/*
+            Spec 0011, AC-5. Choosing a PDF is agreeing to the terms, so the
+            line sits under the full drop zone and goes with it once the file
+            bar takes its place. Outside the polite region below, so it is
+            never announced as news.
+          */}
+          <TermsNotice className="mt-3" />
+        </>
       )}
 
       {/*

@@ -1,0 +1,145 @@
+import type { Metadata } from "next";
+
+import { LEGAL } from "@/lib/legal";
+import { TERMS_CHANGES } from "@/lib/policy-changes";
+import { TERMS_SECTIONS } from "@/lib/policy-sections";
+
+import { ChangeList, ContactLink, LegalPage } from "../legal-page";
+
+/**
+ * The terms of use. Spec 0011, AC-1, AC-3 and AC-10.
+ *
+ * Each point of the terms outline, in its order. The free tier's limits are
+ * "the limits shown in the tool", never a number, because the caps live in
+ * `src/config` and change by environment (INV-6). The liability floor and its
+ * 12 months are not limits on the visitor, so they are written here. Nothing
+ * here limits rights under the software licence, whichever licence that is
+ * (INV-10).
+ *
+ * Prerendered static, with no client component and no script of its own
+ * (INV-7).
+ */
+export const dynamic = "force-static";
+
+export const metadata: Metadata = {
+  title: LEGAL.termsLabel,
+  description:
+    "The terms for using RedactNest to remove text from PDFs in your browser, including checking the cleaned file before you share it.",
+};
+
+export default function TermsPage() {
+  return (
+    <LegalPage title={LEGAL.termsLabel} changes={TERMS_CHANGES}>
+      <section>
+        <h2>{TERMS_SECTIONS.about}</h2>
+        <p>
+          These terms are an agreement between you and {LEGAL.operatorLine} (“we”, “us”).
+          By choosing a PDF in the tool, or by using this site at all, you agree to them.
+          If you do not agree, please do not use RedactNest.
+        </p>
+        <p>
+          You can reach us about these terms at <ContactLink />.
+        </p>
+      </section>
+
+      <section>
+        <h2>{TERMS_SECTIONS.whatItDoes}</h2>
+        <p>
+          RedactNest is a tool that runs in your browser to find text in a PDF and remove
+          it from the file. It is free to use within the limits shown in the tool.
+        </p>
+        <p>We may change, limit or stop it at any time.</p>
+      </section>
+
+      <section>
+        <h2>{TERMS_SECTIONS.checkingTheResult}</h2>
+        <p>
+          RedactNest suggests what to remove. You choose, and it removes only what you
+          tick. It warns you about parts it cannot read, such as text in pictures and
+          scanned pages.
+        </p>
+        <p>
+          Review the cleaned file before you share it. You decide whether it is fit for
+          your purpose.
+        </p>
+      </section>
+
+      <section>
+        <h2>{TERMS_SECTIONS.usingItFairly}</h2>
+        <p>
+          Use RedactNest lawfully, and only on documents you are entitled to handle. Do
+          not attack, overload or disrupt the site, or try to get around its limits.
+        </p>
+      </section>
+
+      <section>
+        <h2>{TERMS_SECTIONS.softwareLicence}</h2>
+        <p>
+          RedactNest’s software is licensed separately, under the licence linked at the
+          foot of every page. These terms cover your use of this website, and nothing in
+          them limits your rights under that licence.
+        </p>
+      </section>
+
+      <section>
+        <h2>{TERMS_SECTIONS.noWarranty}</h2>
+        <p>
+          RedactNest is provided as is and as available. We do not promise that it finds
+          every sensitive item, that it is free of errors, or that it is always available.
+        </p>
+      </section>
+
+      <section>
+        <h2>{TERMS_SECTIONS.liability}</h2>
+        <p>
+          Our total liability to you is capped at the greater of what you paid us in the
+          12 months before the claim, or US$100.
+        </p>
+        <p>
+          Where the law allows, we are not liable for indirect or consequential loss, such
+          as lost profits, lost business or lost data.
+        </p>
+        <p>
+          Nothing in these terms limits our liability for fraud, for death or personal
+          injury caused by our negligence, or for anything else the law does not let us
+          limit.
+        </p>
+      </section>
+
+      <section>
+        <h2>{TERMS_SECTIONS.consumers}</h2>
+        <p>Nothing in these terms removes rights you have by law where you live.</p>
+      </section>
+
+      <section>
+        <h2>{TERMS_SECTIONS.ending}</h2>
+        <p>
+          You can stop using RedactNest at any time. We may block anyone who breaks these
+          terms.
+        </p>
+      </section>
+
+      <section>
+        <h2>{TERMS_SECTIONS.lawAndCourts}</h2>
+        <p>
+          These terms are governed by the law of {LEGAL.country}, and the courts of{" "}
+          {LEGAL.country} deal with any dispute about them.
+        </p>
+        <p>
+          If you are a consumer in the UK or the EU, you keep the protection of your own
+          country’s mandatory laws, and you may bring a claim in your own country’s
+          courts.
+        </p>
+      </section>
+
+      <section>
+        <h2>{TERMS_SECTIONS.changes}</h2>
+        <p>
+          When we change these terms, we update the date at the top and add a line below
+          saying what changed. Using the site after a change means you accept it.
+        </p>
+        <ChangeList changes={TERMS_CHANGES} />
+      </section>
+    </LegalPage>
+  );
+}

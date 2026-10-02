@@ -34,8 +34,15 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
  */
 const eslint = new ESLint({ cwd: ROOT });
 
-/** The two rules the wall is built from. Anything else ESLint says is noise. */
-const WALL_RULES = new Set(["no-restricted-imports", "no-restricted-syntax"]);
+/**
+ * The rules the wall is built from, and the log ban every zone carries (spec
+ * 0011, AC-15). Anything else ESLint says is noise.
+ */
+const WALL_RULES = new Set([
+  "no-restricted-imports",
+  "no-restricted-syntax",
+  "no-console",
+]);
 
 /**
  * Lint a snippet as if it were the file at `path`, and return only what the
@@ -68,6 +75,8 @@ const DETECT = /Only src\/engine may import @\/detect/;
 const PHONE_LIBRARY = /Only src\/detect may import libphonenumber-js/;
 const SEARCH = /it never calls search\(\)/;
 const DETECT_ZONE = /src\/detect is pure text in, offsets out/;
+const CONSOLE = /Unexpected console statement/;
+const STREAM = /RedactNest's own code writes no log/;
 
 /** Ordinary main thread code: a route and a shared library, fully walled. */
 const ROUTE = "src/app/probe.ts";
@@ -629,5 +638,67 @@ describe("what the wall deliberately leaves alone", () => {
     ["MuPDF", IMPORTS_MUPDF],
   ])("lets a unit test import %s", async (_what, code) => {
     expect(await wallErrors(UNIT_TEST, code)).toEqual([]);
+  });
+});
+
+/**
+ * Spec 0011, AC-15. RedactNest's own code writes no log, in any zone, because
+ * the privacy policy says so (claim C8) and a line written from the worker or
+ * the engine could carry document detail. `zone()` adds the ban, so every zone
+ * carries it and none can relax it; each zone is proved here on its own.
+ */
+describe("writing a log", () => {
+  const ZONES = [
+    ENGINE_MODULE,
+    DETECTOR,
+    WORKER,
+    CLIENT,
+    PRIMITIVE,
+    TOOL_PAGE,
+    ROUTE,
+    LIBRARY,
+    PAGE,
+  ];
+  const LOGS = 'export const log = () => console.log("x");\n';
+  const WRITES = 'export const write = () => process.stdout.write("x");\n';
+
+  it.each(ZONES)("through the console is rejected in %s", async (path) => {
+    expect(await wallErrors(path, LOGS)).toContainEqual(expect.stringMatching(CONSOLE));
+  });
+
+  it.each(ZONES)("through process.stdout is rejected in %s", async (path) => {
+    expect(await wallErrors(path, WRITES)).toContainEqual(expect.stringMatching(STREAM));
+  });
+
+  it.each([
+    ["console.error", 'export const log = () => console.error("x");\n', CONSOLE],
+    ["console.warn", 'export const log = () => console.warn("x");\n', CONSOLE],
+    ["process.stderr", 'export const w = () => process.stderr.write("x");\n', STREAM],
+    [
+      "a computed member",
+      'export const w = () => process["stdout"].write("x");\n',
+      STREAM,
+    ],
+    [
+      "a destructured stream",
+      'const { stderr } = process;\nexport const w = () => stderr.write("x");\n',
+      STREAM,
+    ],
+  ])("is rejected as %s", async (_form, code, message) => {
+    expect(await wallErrors(LIBRARY, code)).toContainEqual(
+      expect.stringMatching(message),
+    );
+  });
+
+  /** The ban is on writing, not on reading the rest of `process`. */
+  it("leaves the rest of process alone", async () => {
+    expect(
+      await wallErrors(LIBRARY, "export const env = process.env.NODE_ENV;\n"),
+    ).toEqual([]);
+  });
+
+  /** A test ships to nobody, so it may still log while it is written. */
+  it("lets a unit test log", async () => {
+    expect(await wallErrors(UNIT_TEST, LOGS)).toEqual([]);
   });
 });

@@ -19,7 +19,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 6 | Pattern detection | Release 1 | done |
 | 7 | Scanned page detection & warnings | Release 1 | done |
 | 8 | Redact flow | Release 1 | done |
-| 9 | Privacy policy & terms | Release 2 | planned |
+| 9 | Privacy policy & terms | Release 2 | done |
 | 10 | Billing & paid plan | Release 2 | planned |
 | 11 | Telemetry & error monitoring | Release 3 | planned |
 | 12 | Remaining detectors | Release 3 | planned |
@@ -31,6 +31,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 18 | AGPL compliance & source publication | Release 1 | in-progress |
 | 19 | Sparse OCR scans | Release 1 | done |
 | 20 | Dense text layers over pictures | Release 1 | done |
+| 21 | Launch readiness | Release 2 | planned |
 
 ## Foundations
 
@@ -195,10 +196,28 @@ spec [0010](../specs/0010-dense-text-layers-over-pictures/index.md) · code in `
 
 Short slice. The only paid benefit that exists yet is the removed page cap, and that is fine: it proves the payment path while you still have energy, and every later capability makes the same plan worth more.
 
-### 9. Privacy policy & terms · Prototype
+### 9. Privacy policy & terms · done · Alpha
 The commitments behind the product, published before money changes hands. The privacy policy is where the never stored claim stops being marketing copy and becomes something you are held to.
 **Done when:** both pages are published and linked from the footer, and the privacy policy describes the in memory only processing and the counts only logging accurately.
-- [ ] Build it: `/develop privacy policy & terms`
+spec [0011](../specs/0011-privacy-policy-terms/index.md) · code in `src/app/privacy`, `src/app/terms`, `src/app` (`legal-page.tsx`, `legal-nav.tsx`, `footer-link.ts`, `tool/terms-notice.tsx`), `src/lib` (`legal.ts`, `policy-changes.ts`, `policy-sections.ts`), `src/config` (`privacy.ts`, `csp.ts`, `error.ts`), `src/ui/prose.tsx`, `next.config.ts`, `eslint.config.mjs`
+- [x] Design it (spec): `/architect privacy policy & terms`
+- [x] Build it: `/develop privacy policy & terms`
+  - [x] The facts and the gates: operator facts, the placeholder contact and the Article 27 record in `src/lib/legal.ts`, the change lists and headings, and the Vercel production gate in `src/config` · AC-1, AC-2, AC-16, AC-17
+  - [x] The pages, published and linked: the outside services list, `Prose`, both pages with their tested seams, the footer's Legal nav, the line under the drop zone, and the browser checks · AC-1, AC-3 to AC-10, AC-12, AC-18, AC-19
+  - [x] The claims, held: the policy builder in `src/config/csp.ts` fed by the services list and never `/tool`, the console and stream ban in every zone, and the cookie check · AC-11, AC-13, AC-14, AC-15
+  - [x] The amends and your review: specs 0001, 0003, 0007 and 0009 amended, and every word of both pages read by you before merge · AC-4 to AC-7, AC-9, AC-10, AC-13
+- [x] Verify it: `/check verify privacy policy & terms`
+
+### 21. Launch readiness · Prototype · from spec 0011
+Everything that must be true before RedactNest launches publicly, in one place, because launch no longer means going public: the repository may stay private under an Artifex commercial licence. Spec 0011's two production gates hold the first two steps; the rest are lawyer questions and host settings no test can check.
+**Done when:** the real contact address and the Article 27 decision are recorded, so a Vercel production deploy builds; a lawyer has answered the Article 27, PECA section 32 and choice of law questions and reviewed both pages; Vercel runs on Pro with Observability Plus, log drains, Web Analytics, Speed Insights and the firewall's challenge modes off; Vercel has confirmed in writing how it treats deployment request logs; and each page's change list is folded into one launch day entry. Feature 10 takes no money before the lawyer review.
+spec [0011](../specs/0011-privacy-policy-terms/index.md) (its Launch readiness steps)
+- [x] Steps decided (spec): `/architect privacy policy & terms`
+- [ ] Do the steps (your steps): spec 0011's Launch readiness list, steps 1 to 7
+  - [ ] The domain and the real contact address in `LEGAL.contactEmail` · spec 0011 AC-16
+  - [ ] The lawyer questions: Article 27 recorded in `LEGAL.representatives`, PECA section 32, Pakistani law and courts, and a full review of both pages · spec 0011 AC-17
+  - [ ] Vercel: Pro, the logging and challenge settings off, and the log role confirmed in writing
+  - [ ] The change lists folded into one launch day entry
 
 ### 10. Billing & paid plan · needs a decision · GA
 The paywall moment: an anonymous visitor hits the page cap, signs in, subscribes, and the cap is gone. The interesting part is that entitlement has to work with no database of your own.

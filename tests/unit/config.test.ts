@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { checkLegalFacts, LEGAL } from "@/lib/legal";
+
 /**
  * The config module validates once, at module load. So each case here has to
  * start from a clean module registry with the environment already set, rather
@@ -21,6 +23,7 @@ const CONFIG_KEYS = [
   "NEXT_PUBLIC_VERCEL_GIT_REPO_SLUG",
   "NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA",
   "VERCEL",
+  "VERCEL_ENV",
 ] as const;
 
 /** A full commit, so a production build accepts a link to its tree. */
@@ -184,6 +187,7 @@ describe("the source link", () => {
   /** What every Vercel build has once its system variables are exposed. */
   const VERCEL_BUILD = {
     VERCEL: "1",
+    VERCEL_ENV: "preview",
     NEXT_PUBLIC_VERCEL_GIT_PROVIDER: "github",
     NEXT_PUBLIC_VERCEL_GIT_REPO_OWNER: "HeyrbiarKhan",
     NEXT_PUBLIC_VERCEL_GIT_REPO_SLUG: "redactnest",
@@ -369,5 +373,81 @@ describe("the source link", () => {
       NEXT_PUBLIC_SOURCE_URL: "http://localhost/x/tree/main",
     });
     expect(config.sourceUrl).toBe("http://localhost/x/tree/main");
+  });
+});
+
+/**
+ * The launch gate. Spec 0011, AC-16 and AC-17, INV-5.
+ *
+ * `tests/unit/legal.test.ts` covers every case of `checkLegalFacts` itself.
+ * This proves the build calls it with the right environment, and fails closed
+ * on Vercel when it cannot tell whether it is building production.
+ */
+describe("the launch gate", () => {
+  const SITE = { NEXT_PUBLIC_SITE_URL: "https://redactnest.com" };
+  const VERCEL_BUILD = {
+    VERCEL: "1",
+    NEXT_PUBLIC_VERCEL_GIT_PROVIDER: "github",
+    NEXT_PUBLIC_VERCEL_GIT_REPO_OWNER: "HeyrbiarKhan",
+    NEXT_PUBLIC_VERCEL_GIT_REPO_SLUG: "redactnest",
+    NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA: SHA,
+  };
+
+  beforeEach(() => {
+    vi.stubEnv("NODE_ENV", "production");
+  });
+
+  /**
+   * covers: AC-16, AC-17. Throws exactly when the repository's facts are not
+   * ready, so this stays true once the real address and decision are in.
+   */
+  it("fails a production deploy exactly while the launch facts are not ready", async () => {
+    const problems = checkLegalFacts(LEGAL, "production");
+    const loading = loadConfig({ ...SITE, ...VERCEL_BUILD, VERCEL_ENV: "production" });
+
+    if (problems.length === 0) {
+      await expect(loading).resolves.toBeDefined();
+    } else {
+      await expect(loading).rejects.toThrow(/LEGAL\./);
+      for (const problem of problems) {
+        await expect(
+          loadConfig({ ...SITE, ...VERCEL_BUILD, VERCEL_ENV: "production" }),
+        ).rejects.toThrow(problem);
+      }
+    }
+  });
+
+  /** covers: AC-16, AC-17. Every problem in one error, each on its own line. */
+  it("lists every problem in one error", async () => {
+    // Only meaningful while both placeholders are still in the repository.
+    if (checkLegalFacts(LEGAL, "production").length < 2) return;
+
+    await expect(
+      loadConfig({ ...SITE, ...VERCEL_BUILD, VERCEL_ENV: "production" }),
+    ).rejects.toThrow(/LEGAL\.contactEmail[\s\S]*\n- LEGAL\.representatives/);
+  });
+
+  /** covers: AC-16, AC-17. Previews and development deploys show the placeholder. */
+  it.each(["preview", "development"])("builds a %s deploy", async (vercelEnv) => {
+    const config = await loadConfig({ ...SITE, ...VERCEL_BUILD, VERCEL_ENV: vercelEnv });
+    expect(config.sourceUrl).toContain(SHA);
+  });
+
+  /** covers: AC-16. CI's Playwright build runs off Vercel, with no VERCEL_ENV. */
+  it("builds off Vercel, where VERCEL_ENV is never set", async () => {
+    const config = await loadConfig({ ...SITE, NEXT_PUBLIC_SOURCE_URL: TREE_URL });
+    expect(config.sourceUrl).toBe(TREE_URL);
+  });
+
+  /** covers: AC-16. Fail closed: it cannot tell whether this is production. */
+  it.each([
+    ["missing", undefined],
+    ["blank", "  "],
+    ["a custom name", "staging"],
+    ["in capitals", "PRODUCTION"],
+  ])("fails a Vercel build whose VERCEL_ENV is %s", async (_label, vercelEnv) => {
+    await expect(
+      loadConfig({ ...SITE, ...VERCEL_BUILD, VERCEL_ENV: vercelEnv }),
+    ).rejects.toThrow(/VERCEL_ENV must be production, preview or development/);
   });
 });

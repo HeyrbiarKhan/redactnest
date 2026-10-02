@@ -3,13 +3,7 @@ import { Fragment, type ReactNode } from "react";
 import { LEGAL } from "@/lib/legal";
 import { LICENCE_PATH, NOTICES_PATH } from "@/lib/routes";
 
-/**
- * Plain links, in the same tab. On `/tool` a plain link is a real page load,
- * so spec 0007's leave warning still guards ticked work (spec 0009, AC-2). At
- * least 24 pixels tall, so each one is a large enough target.
- */
-const LINK_CLASS =
-  "inline-flex min-h-6 items-center rounded-sm underline underline-offset-4 hover:text-ink";
+import { FOOTER_LINK_CLASS } from "./footer-link";
 
 /**
  * The licence notice at the foot of every page. Spec 0009, AC-1 to AC-3.
@@ -30,16 +24,16 @@ export function LicenceNotice({ sourceUrl }: { readonly sourceUrl: string }) {
     LEGAL.warrantyLine,
     // AC-3: a development build has no commit to link to.
     sourceUrl ? (
-      <a key="source" href={sourceUrl} className={LINK_CLASS}>
+      <a key="source" href={sourceUrl} className={FOOTER_LINK_CLASS}>
         {LEGAL.sourceLabel}
       </a>
     ) : (
       LEGAL.sourcePending
     ),
-    <a key="licence" href={LICENCE_PATH} className={LINK_CLASS}>
+    <a key="licence" href={LICENCE_PATH} className={FOOTER_LINK_CLASS}>
       {LEGAL.licenceLabel}
     </a>,
-    <a key="notices" href={NOTICES_PATH} className={LINK_CLASS}>
+    <a key="notices" href={NOTICES_PATH} className={FOOTER_LINK_CLASS}>
       {LEGAL.noticesLabel}
     </a>,
   ];

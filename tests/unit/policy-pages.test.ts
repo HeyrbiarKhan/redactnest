@@ -1,0 +1,58 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { describe, expect, it } from "vitest";
+
+/**
+ * The legal pages ship no script of their own. Spec 0011, AC-19 and INV-7.
+ *
+ * Both pages and everything they are built from are server components: no
+ * form, no state, nothing that runs in the visitor's browser and so nothing
+ * that could collect. A `"use client"` anywhere in them would quietly make one
+ * of them a client component, so the directive is looked for in the files
+ * themselves.
+ */
+
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+
+/** Every file under a folder, at any depth. */
+function filesUnder(folder: string): string[] {
+  return readdirSync(join(ROOT, folder), { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => relative(ROOT, join(entry.parentPath, entry.name)));
+}
+
+/** The two pages' folders, and the pieces they render from outside them. */
+const PAGE_FILES = [
+  ...filesUnder("src/app/privacy"),
+  ...filesUnder("src/app/terms"),
+  "src/app/legal-page.tsx",
+  "src/ui/prose.tsx",
+];
+
+/** A directive is the first statement, after any comments. */
+const USE_CLIENT = /^(?:\s|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*["']use client["']/;
+
+describe("the legal pages", () => {
+  it("are built from files that exist", () => {
+    expect(PAGE_FILES.map((file) => file.replaceAll("\\", "/"))).toEqual(
+      expect.arrayContaining(["src/app/privacy/page.tsx", "src/app/terms/page.tsx"]),
+    );
+  });
+
+  /** covers: AC-19, INV-7 */
+  it.each(PAGE_FILES)("%s is not a client component", (file) => {
+    expect(readFileSync(join(ROOT, file), "utf8")).not.toMatch(USE_CLIENT);
+  });
+
+  /** The check itself, so a directive written any of these ways is caught. */
+  it.each([
+    ['"use client";\n'],
+    ["'use client'\n"],
+    ['// a note\n"use client";\n'],
+    ['/** a note */\n\n"use client";\n'],
+  ])("would catch %j", (source) => {
+    expect(source).toMatch(USE_CLIENT);
+  });
+});

@@ -1,86 +1,28 @@
 import type { NextConfig } from "next";
 
+// Relative paths, never the `@/` alias, which this file cannot resolve. Both
+// modules, and the error module they share, import only each other and read
+// no environment variable (spec 0011, INV-8).
+import { buildPolicies } from "./src/config/csp";
+import { OUTSIDE_SERVICES } from "./src/config/privacy";
+
 /**
  * The content security policy is the enforcement point for this product's
  * central claim, not a hardening extra. Spec 0001 fixes two regimes, split by
- * route.
+ * route, and `src/config/csp.ts` builds both, with the notes that matter if
+ * you change either.
  *
- * Notes that matter if you change anything here:
- *
- *  - `'unsafe-inline'` in `script-src` on the tool route is deliberate. The App
- *    Router injects inline hydration scripts, and the nonce alternative requires
- *    dynamic rendering, which is exactly what the prerendered static tool route
- *    rules out. The privacy guarantee rests on `connect-src` and the other fetch
- *    directives, which stay strict, not on `script-src`.
- *  - Never mix `'unsafe-inline'` with a nonce or a hash. A browser that sees a
- *    nonce ignores `'unsafe-inline'` entirely, which breaks hydration.
- *  - `'wasm-unsafe-eval'` is required, including where streaming instantiation
- *    would seem to avoid it.
- *  - `worker-src`, not `script-src`, governs worker creation under a strict
- *    policy. Omit it and the worker fails with a confusing error.
- *
- * What `connect-src 'self'` actually buys: it stops anything on the tool route
- * reaching a third party origin, which is the exfiltration path that matters. It
- * does not stop a same origin request. So the claim is "no third party ever
- * receives your document", enforced by the browser, plus "we operate no endpoint
- * that accepts one", enforced by us.
+ * The standard regime's outside origins come from `OUTSIDE_SERVICES` and from
+ * nowhere else, the same list the privacy policy renders, so the policy cannot
+ * admit a service the privacy policy does not name. The tool regime never
+ * reads that list (spec 0011, AC-13 and AC-14).
  */
 
 const isDev = process.env.NODE_ENV !== "production";
 
-/**
- * Origins features 10 (auth) and 11 (analytics) will need.
- *
- * They belong on the standard regime only. Adding one to the tool route would
- * quietly weaken the guarantee, which is why this list is applied in exactly one
- * place below.
- */
-const THIRD_PARTY_SCRIPT_ORIGINS: string[] = [];
-const THIRD_PARTY_CONNECT_ORIGINS: string[] = [];
-
-/**
- * `next dev` needs `eval` for React Fast Refresh and a websocket for hot
- * reloading. Production gets neither. The header assertion test runs against a
- * production build for this reason.
- */
-const DEV_SCRIPT_SRC = isDev ? ["'unsafe-eval'"] : [];
-const DEV_CONNECT_SRC = isDev ? ["ws:", "wss:"] : [];
-
-function buildPolicy(options: {
-  scriptExtra?: string[];
-  connectExtra?: string[];
-}): string {
-  const scriptSrc = [
-    "'self'",
-    "'unsafe-inline'",
-    "'wasm-unsafe-eval'",
-    ...DEV_SCRIPT_SRC,
-    ...(options.scriptExtra ?? []),
-  ];
-  const connectSrc = ["'self'", ...DEV_CONNECT_SRC, ...(options.connectExtra ?? [])];
-
-  return [
-    "default-src 'none'",
-    `script-src ${scriptSrc.join(" ")}`,
-    "worker-src 'self'",
-    `connect-src ${connectSrc.join(" ")}`,
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
-    "font-src 'self'",
-    "object-src 'none'",
-    "base-uri 'none'",
-    "frame-ancestors 'none'",
-    "form-action 'self'",
-  ].join("; ");
-}
-
-/** The page that holds a document. Nothing third party may load here. */
-const TOOL_POLICY = buildPolicy({});
-
-/** Every other route. Same shape, plus the origins later features need. */
-const STANDARD_POLICY = buildPolicy({
-  scriptExtra: THIRD_PARTY_SCRIPT_ORIGINS,
-  connectExtra: THIRD_PARTY_CONNECT_ORIGINS,
+const { tool: TOOL_POLICY, standard: STANDARD_POLICY } = buildPolicies({
+  services: OUTSIDE_SERVICES,
+  dev: isDev,
 });
 
 const nextConfig: NextConfig = {
