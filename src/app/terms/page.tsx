@@ -55,7 +55,7 @@ export default function TermsPage() {
         <h2>{TERMS_SECTIONS.checkingTheResult}</h2>
         <p>
           RedactNest suggests what to remove. You choose, and it removes only what you
-          tick. It tells you what it cannot read or remove, such as text in pictures and
+          tick. It warns you about parts it cannot read, such as text in pictures and
           scanned pages.
         </p>
         <p>

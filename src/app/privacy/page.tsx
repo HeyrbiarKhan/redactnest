@@ -79,8 +79,9 @@ export default function PrivacyPage() {
         </p>
         {/* C5 */}
         <p>
-          The tool page asks our server for one thing only: which plan applies to you.
-          That request carries nothing about your document.
+          Apart from loading the page and its own files, the tool page asks our server one
+          question only: which plan applies to you. That request carries nothing about
+          your document.
         </p>
         <p>
           The cleaned file is saved wherever your browser saves downloads. We cannot see,
@@ -210,7 +211,7 @@ export default function PrivacyPage() {
       <section>
         <h2>{PRIVACY_SECTIONS.children}</h2>
         <p>
-          RedactNest is not aimed at children, and it collects nothing from anyone,
+          RedactNest is not aimed at children, and it asks no one for personal details,
           children included.
         </p>
       </section>

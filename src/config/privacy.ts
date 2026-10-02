@@ -82,7 +82,7 @@ export const COMPLAINT_AUTHORITIES: Readonly<{
   }),
   eu: Object.freeze({
     name: "European Data Protection Board’s list of national authorities",
-    url: "https://www.edpb.europa.eu/about-edpb/about-edpb/members_en",
+    url: "https://www.edpb.europa.eu/about-edpb/our-members_en",
   }),
 });
 
