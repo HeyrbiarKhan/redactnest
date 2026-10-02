@@ -2,6 +2,7 @@
 
 **Date**: 2026-10-02
 **Status**: In Progress
+**Updated**: 2026-10-02, wording only: C5, the Children outline and terms outline item 3 now match the narrower page wording. The tool page asks our server one question apart from loading the page and its own files (and C5 now names the test that holds that), the site asks no one for personal details, and RedactNest warns about parts it cannot read. No design changed.
 
 ## Summary
 
@@ -149,7 +150,7 @@ The one entry `OUTSIDE_SERVICES` holds today:
 | C2 | We never store your document, and nothing about it is saved in your browser's storage | Spec 0002 INV-3, the lint storage ban, `privacy.spec.ts` "every store is empty for the origin after a run" |
 | C3 | What RedactNest finds, the words around it, and your file's name stay on your device | Spec 0002 AC-3 and INV-4, `privacy.spec.ts` "a detected redaction sends, stores and logs no match text or context" |
 | C4 | When you close the page or start over, the document is gone from the page's memory | Spec 0002 INV-6, AC-5a, AC-5b |
-| C5 | The tool page asks our server for one thing, which plan applies, and that request carries nothing about your document | Spec 0001's entitlement route (no body, no query read), spec 0002 AC-3 |
+| C5 | Apart from loading the page and its own files, the tool page asks our server one question only, which plan applies, and that request carries nothing about your document | Spec 0001's entitlement route (no body, no query read), spec 0002 AC-3, `privacy.spec.ts` "the only thing the tool route asks its own server for is the entitlement" |
 | C6 | No cookies | AC-11 for our code. At the host, Launch readiness step 5 keeps the Vercel firewall's challenge modes off, because a challenge sets its own cookie |
 | C7 | No analytics, advertising, tracking or error reporting, and no script from anyone else | AC-13 (the standard policy holds no outside origin while the list names none), `tests/e2e/headers.spec.ts` |
 | C8 | Our own code keeps no logs | AC-15 |
@@ -167,14 +168,14 @@ The one entry `OUTSIDE_SERVICES` holds today:
 6. **Transfers outside the UK and the EU**: each service's location and safeguard, each explained in one plain sentence (an agreement under which certified US companies commit to protection at the EU's level; contract terms approved by the European Commission that bind the receiver to protect the data). We operate from Pakistan.
 7. **Your rights**: access, correction, erasure, restriction, objection and portability. The only data is the host's request logs, kept one day, and we cannot link them to you, so most requests will find nothing, and we will say so. How to ask (the contact), a reply within one month, no fee.
 8. **Complaints**: the ICO for the UK and your own country's data protection authority in the EU, each linked from `COMPLAINT_AUTHORITIES`.
-9. **Children**: RedactNest is not aimed at children and collects nothing from anyone.
+9. **Children**: RedactNest is not aimed at children, and it asks no one for personal details, children included.
 10. **Links to other sites**: their own policies apply.
 11. **Changes**: we change this page, update the date and add a line below. Then the dated list (AC-1, AC-2).
 
 **Terms of use outline** (h2 sections in order):
 1. **About these terms**: an agreement between you and RedactNest, operated by Heyrbiar Khan, an individual based in Pakistan. Choosing a PDF in the tool, or using the site, means you agree. The contact.
 2. **What RedactNest does**: a tool that runs in your browser to find and remove text from PDFs, free within the limits shown in the tool. We may change, limit or stop it at any time.
-3. **Checking the result is your job**: RedactNest suggests, you choose, and it removes only what you tick. It tells you what it cannot read or remove, such as text in pictures and scanned pages. Review the cleaned file before you share it. You decide whether it is fit for your purpose.
+3. **Checking the result is your job**: RedactNest suggests, you choose, and it removes only what you tick. It warns you about parts it cannot read, such as text in pictures and scanned pages. Review the cleaned file before you share it. You decide whether it is fit for your purpose.
 4. **Using it fairly**: use it lawfully, and only on documents you are entitled to handle. Do not attack, overload or disrupt the site, or try to get around its limits.
 5. **The software licence**: RedactNest's software is licensed separately, under the licence linked at the foot of every page. These terms cover your use of this website, and nothing in them limits your rights under that licence.
 6. **No warranty**: provided as is and as available. No promise that it finds every sensitive item, is free of errors, or is always available.
