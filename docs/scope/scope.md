@@ -199,7 +199,7 @@ Short slice. The only paid benefit that exists yet is the removed page cap, and 
 ### 9. Privacy policy & terms · in-progress · Alpha
 The commitments behind the product, published before money changes hands. The privacy policy is where the never stored claim stops being marketing copy and becomes something you are held to.
 **Done when:** both pages are published and linked from the footer, and the privacy policy describes the in memory only processing and the counts only logging accurately.
-spec [0011](../specs/0011-privacy-policy-terms/index.md)
+spec [0011](../specs/0011-privacy-policy-terms/index.md) · code in `src/app/privacy`, `src/app/terms`, `src/app` (`legal-page.tsx`, `legal-nav.tsx`, `footer-link.ts`, `tool/terms-notice.tsx`), `src/lib` (`legal.ts`, `policy-changes.ts`, `policy-sections.ts`), `src/config` (`privacy.ts`, `csp.ts`, `error.ts`), `src/ui/prose.tsx`, `next.config.ts`, `eslint.config.mjs`
 - [x] Design it (spec): `/architect privacy policy & terms`
 - [ ] Build it: `/develop privacy policy & terms`
   - [x] The facts and the gates: operator facts, the placeholder contact and the Article 27 record in `src/lib/legal.ts`, the change lists and headings, and the Vercel production gate in `src/config` · AC-1, AC-2, AC-16, AC-17
