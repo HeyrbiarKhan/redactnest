@@ -201,11 +201,11 @@ The commitments behind the product, published before money changes hands. The pr
 **Done when:** both pages are published and linked from the footer, and the privacy policy describes the in memory only processing and the counts only logging accurately.
 spec [0011](../specs/0011-privacy-policy-terms/index.md) · code in `src/app/privacy`, `src/app/terms`, `src/app` (`legal-page.tsx`, `legal-nav.tsx`, `footer-link.ts`, `tool/terms-notice.tsx`), `src/lib` (`legal.ts`, `policy-changes.ts`, `policy-sections.ts`), `src/config` (`privacy.ts`, `csp.ts`, `error.ts`), `src/ui/prose.tsx`, `next.config.ts`, `eslint.config.mjs`
 - [x] Design it (spec): `/architect privacy policy & terms`
-- [ ] Build it: `/develop privacy policy & terms`
+- [x] Build it: `/develop privacy policy & terms`
   - [x] The facts and the gates: operator facts, the placeholder contact and the Article 27 record in `src/lib/legal.ts`, the change lists and headings, and the Vercel production gate in `src/config` · AC-1, AC-2, AC-16, AC-17
   - [x] The pages, published and linked: the outside services list, `Prose`, both pages with their tested seams, the footer's Legal nav, the line under the drop zone, and the browser checks · AC-1, AC-3 to AC-10, AC-12, AC-18, AC-19
   - [x] The claims, held: the policy builder in `src/config/csp.ts` fed by the services list and never `/tool`, the console and stream ban in every zone, and the cookie check · AC-11, AC-13, AC-14, AC-15
-  - [ ] The amends and your review: specs 0001, 0003, 0007 and 0009 amended, and every word of both pages read by you before merge · AC-4 to AC-7, AC-9, AC-10, AC-13
+  - [x] The amends and your review: specs 0001, 0003, 0007 and 0009 amended, and every word of both pages read by you before merge · AC-4 to AC-7, AC-9, AC-10, AC-13
 - [x] Verify it: `/check verify privacy policy & terms`
 
 ### 21. Launch readiness · Prototype · from spec 0011
