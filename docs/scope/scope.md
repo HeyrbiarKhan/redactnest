@@ -19,7 +19,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 6 | Pattern detection | Release 1 | done |
 | 7 | Scanned page detection & warnings | Release 1 | done |
 | 8 | Redact flow | Release 1 | done |
-| 9 | Privacy policy & terms | Release 2 | in-progress |
+| 9 | Privacy policy & terms | Release 2 | done |
 | 10 | Billing & paid plan | Release 2 | planned |
 | 11 | Telemetry & error monitoring | Release 3 | planned |
 | 12 | Remaining detectors | Release 3 | planned |
@@ -196,7 +196,7 @@ spec [0010](../specs/0010-dense-text-layers-over-pictures/index.md) · code in `
 
 Short slice. The only paid benefit that exists yet is the removed page cap, and that is fine: it proves the payment path while you still have energy, and every later capability makes the same plan worth more.
 
-### 9. Privacy policy & terms · in-progress · Alpha
+### 9. Privacy policy & terms · done · Alpha
 The commitments behind the product, published before money changes hands. The privacy policy is where the never stored claim stops being marketing copy and becomes something you are held to.
 **Done when:** both pages are published and linked from the footer, and the privacy policy describes the in memory only processing and the counts only logging accurately.
 spec [0011](../specs/0011-privacy-policy-terms/index.md) · code in `src/app/privacy`, `src/app/terms`, `src/app` (`legal-page.tsx`, `legal-nav.tsx`, `footer-link.ts`, `tool/terms-notice.tsx`), `src/lib` (`legal.ts`, `policy-changes.ts`, `policy-sections.ts`), `src/config` (`privacy.ts`, `csp.ts`, `error.ts`), `src/ui/prose.tsx`, `next.config.ts`, `eslint.config.mjs`

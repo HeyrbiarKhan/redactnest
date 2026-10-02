@@ -1,7 +1,7 @@
 # 0011. Privacy policy and terms of use
 
 **Date**: 2026-10-02
-**Status**: In Progress
+**Status**: Accepted
 **Updated**: 2026-10-02, wording only: C5, the Children outline and terms outline item 3 now match the narrower page wording. The tool page asks our server one question apart from loading the page and its own files (and C5 now names the test that holds that), the site asks no one for personal details, and RedactNest warns about parts it cannot read. No design changed. Later the same day, wording only, as built: AC-16 and INV-5 refuse any contact address on a `.invalid` host in production, in any letter case, not only the exact placeholder; AC-17 says a representative's email meets AC-16's shape rule alone; and the Vercel privacy notice link in `rationale.md` is its final address. No design changed.
 
 ## Summary
