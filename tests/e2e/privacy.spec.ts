@@ -254,14 +254,15 @@ test("no request carries the document, its text or its name", async ({ page }) =
 /**
  * Spec 0003, AC-4 and AC-20. The design system added a font and an icon set,
  * and neither may bring a third party with it. `next/font` self hosts Inter at
- * build time and the icons compile into our bundle, so every request either
- * page makes, the font files included, goes to our own origin.
+ * build time and the icons compile into our bundle, so every request any page
+ * makes, the font files included, goes to our own origin. Spec 0011, AC-12,
+ * holds the privacy policy and the terms of use to the same rule (claim C9).
  *
  * The font requests are counted too, so this cannot pass on a page that simply
  * never asked for a font: a regression to a CDN stylesheet would show up as a
  * font request to someone else, not as no font request at all.
  */
-for (const path of ["/", "/tool"]) {
+for (const path of ["/", "/tool", "/privacy", "/terms"]) {
   test(`every request on ${path}, fonts included, stays on our own origin`, async ({
     page,
   }) => {

@@ -8,6 +8,7 @@ import { config } from "@/config";
 import { SiteFooter } from "@/ui/site-footer";
 import { SkipLink } from "@/ui/skip-link";
 
+import { LegalNav } from "./legal-nav";
 import { LicenceNotice } from "./licence-notice";
 
 import "./globals.css";
@@ -36,6 +37,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <SkipLink />
         {children}
         <SiteFooter>
+          {/* The privacy policy and the terms, on every page (spec 0011, AC-4). */}
+          <LegalNav />
           {/*
             The AGPL notice and the source offer, on every page, /tool included
             (spec 0009, AC-1). The link names the exact commit this deploy was
