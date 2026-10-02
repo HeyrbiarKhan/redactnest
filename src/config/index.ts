@@ -13,10 +13,17 @@
  * computed lookup like `process.env[name]` would come back undefined in the
  * browser even when the variable is set.
  *
- * `VERCEL` is the one name here without the prefix, so it is never inlined: the
- * build and the server see it, and the browser's copy of this module reads it
- * as absent. It is read literally all the same, beside the rest.
+ * `VERCEL` and `VERCEL_ENV` are the two names here without the prefix, so they
+ * are never inlined: the build and the server see them, and the browser's copy
+ * of this module reads them as absent. They are read literally all the same,
+ * beside the rest.
  */
+
+import { checkLegalFacts, LEGAL } from "@/lib/legal";
+
+import { ConfigError } from "./error";
+
+export { ConfigError };
 
 const RAW = {
   NEXT_PUBLIC_FREE_PAGE_CAP: process.env.NEXT_PUBLIC_FREE_PAGE_CAP,
@@ -32,17 +39,13 @@ const RAW = {
   NEXT_PUBLIC_VERCEL_GIT_REPO_SLUG: process.env.NEXT_PUBLIC_VERCEL_GIT_REPO_SLUG,
   NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA,
   VERCEL: process.env.VERCEL,
+  // Which kind of Vercel deploy this is (spec 0011, AC-16 and AC-17). The
+  // browser never sees it, so the production rules below run only at build and
+  // on the server, while the address shape check also runs in the browser.
+  VERCEL_ENV: process.env.VERCEL_ENV,
 } as const;
 
 type RawName = keyof typeof RAW;
-
-/** Thrown at module load so the build fails instead of the browser. */
-export class ConfigError extends Error {
-  constructor(message: string) {
-    super(`[config] ${message}`);
-    this.name = "ConfigError";
-  }
-}
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
@@ -254,6 +257,36 @@ if (freePageCap > maxPages) {
   );
 }
 
+/** What Vercel sets `VERCEL_ENV` to. A custom environment reports `preview`. */
+const VERCEL_ENVIRONMENTS: readonly string[] = ["production", "preview", "development"];
+
+/**
+ * The launch gate. Spec 0011, AC-16 and AC-17, INV-5.
+ *
+ * A production deploy refuses the placeholder contact and a pending Article 27
+ * decision, and every build refuses a malformed address or representative.
+ * Fail closed: on Vercel a `VERCEL_ENV` that is missing or unknown cannot say
+ * whether this is production, so it is a problem in itself, as a missing
+ * commit is for the source link. Every problem goes into one error, so a
+ * deploy with two of them is fixed in one pass rather than two.
+ */
+function checkLaunchFacts(): void {
+  const vercelEnv = present(RAW.VERCEL_ENV);
+  const problems = [
+    present(RAW.VERCEL) === "1" &&
+    (vercelEnv === undefined || !VERCEL_ENVIRONMENTS.includes(vercelEnv))
+      ? `VERCEL_ENV must be production, preview or development on Vercel (VERCEL is 1), got ${JSON.stringify(vercelEnv ?? "")}. Turn on "Automatically expose System Environment Variables".`
+      : null,
+    ...checkLegalFacts(LEGAL, vercelEnv),
+  ].filter((problem) => problem !== null);
+
+  if (problems.length > 0) {
+    throw new ConfigError(
+      `The launch gate stopped this build:\n${problems.map((problem) => `- ${problem}`).join("\n")}`,
+    );
+  }
+}
+
 export const config = Object.freeze({
   /** Pages an anonymous visitor may redact. */
   freePageCap,
@@ -280,5 +313,9 @@ export const config = Object.freeze({
    */
   sourceUrl: readSourceUrl(),
 });
+
+// Last, so a cap or a source link that is wrong is still reported the way it
+// always was, and the launch gate speaks only once everything else is sound.
+checkLaunchFacts();
 
 export type Config = typeof config;

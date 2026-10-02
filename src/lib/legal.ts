@@ -1,5 +1,6 @@
 /**
- * The licence notice's words, in one place. Spec 0009, AC-1 and AC-3.
+ * The legal words and facts, in one place. Spec 0009, AC-1 and AC-3, and spec
+ * 0011, AC-4 to AC-6, AC-16 and AC-17.
  *
  * AGPL section 5(d) asks a program with an interactive interface to show four
  * things: a copyright notice, that there is no warranty, that people may share
@@ -7,12 +8,65 @@
  * offer of the source to everyone who uses it over a network. The footer shows
  * each of these from here, never from a literal in a component. The wording,
  * without the word "free", was settled in spec 0009's design.
+ *
+ * Spec 0011 adds who runs the service, how to reach them, the Article 27
+ * record, and the words of the footer's Legal nav and the line under the drop
+ * zone. Two of these facts move one way, by hand, before launch: the contact
+ * from the placeholder to the real address, and the representatives from
+ * `pending` to `decided`. `checkLegalFacts` is what stops a production deploy
+ * going out before both have moved (INV-5).
  */
 
 const holder = "Heyrbiar Khan";
 
 /** The year of first publication. */
 const year = 2026;
+
+const tradingName = "RedactNest";
+const country = "Pakistan";
+
+/**
+ * The contact until the domain is bought (Launch readiness step 1). The
+ * `.invalid` top level domain is reserved and never delivers mail, so the
+ * placeholder cannot reach a stranger while previews and development show it.
+ */
+export const CONTACT_PLACEHOLDER = "privacy@redactnest.invalid";
+
+/**
+ * What a contact address must look like, tested on the trimmed value (AC-16).
+ * Deliberately loose: it catches a typo or a blank, not every address the mail
+ * standards allow. The placeholder passes it.
+ */
+export const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** One representative under GDPR Article 27, every field required (AC-17). */
+export interface Representative {
+  readonly name: string;
+  readonly postalAddress: string;
+  readonly email: string;
+}
+
+/**
+ * The Article 27 record (Launch readiness step 2). `decided` with both slots
+ * `null` means a lawyer advised that neither is required.
+ */
+export type RepresentativesDecision =
+  | { readonly status: "pending" }
+  | {
+      readonly status: "decided";
+      readonly eu: Representative | null;
+      readonly uk: Representative | null;
+    };
+
+/** The two launch facts, typed wide so a test can feed real ones. */
+export interface LaunchFacts {
+  readonly contactEmail: string;
+  readonly representatives: RepresentativesDecision;
+}
+
+const contactEmail: string = CONTACT_PLACEHOLDER;
+
+const representatives: RepresentativesDecision = Object.freeze({ status: "pending" });
 
 export const LEGAL = Object.freeze({
   holder,
@@ -26,4 +80,85 @@ export const LEGAL = Object.freeze({
   noticesLabel: "Third party notices",
   /** AC-3: a development build has no commit to link to. */
   sourcePending: "Source code for this version (link set per deploy)",
+
+  tradingName,
+  country,
+  /** Who runs the service, as both pages name it (spec 0011, AC-6, AC-10). */
+  operatorLine: `${tradingName}, operated by ${holder}, an individual based in ${country}`,
+  contactEmail,
+  representatives,
+
+  /** The footer's nav (spec 0011, AC-4). */
+  legalNavLabel: "Legal",
+  privacyLabel: "Privacy policy",
+  termsLabel: "Terms of use",
+  /**
+   * The line under the drop zone, around its two links (spec 0011, AC-5): "By
+   * choosing a PDF you agree to the Terms of use. The Privacy policy explains
+   * what happens to your data."
+   */
+  toolNotice: Object.freeze({
+    beforeTerms: "By choosing a PDF you agree to the ",
+    betweenLinks: ". The ",
+    afterPrivacy: " explains what happens to your data.",
+  }),
 });
+
+const PRODUCTION_ADVICE = "in src/lib/legal.ts before deploying to production.";
+
+/** A recorded representative missing a field, or with an address that is not one. */
+function representativeProblems(
+  slot: "eu" | "uk",
+  representative: Representative | null,
+): readonly string[] {
+  if (representative === null) return [];
+
+  const where = `LEGAL.representatives.${slot}`;
+  return [
+    representative.name.trim() === "" ? `${where}.name is empty.` : null,
+    representative.postalAddress.trim() === ""
+      ? `${where}.postalAddress is empty.`
+      : null,
+    EMAIL_SHAPE.test(representative.email.trim())
+      ? null
+      : `${where}.email must be an email address, got ${JSON.stringify(representative.email)}.`,
+  ].filter((problem) => problem !== null);
+}
+
+/**
+ * Every problem with the two launch facts, for the build to report at once
+ * (spec 0011, AC-16 and AC-17, INV-5).
+ *
+ * Pure, so a test can feed it a real address and a recorded decision while
+ * this file still holds the placeholders. `src/config/index.ts` calls it at
+ * module load with `VERCEL_ENV` and throws one `ConfigError` listing whatever
+ * comes back. A malformed address or representative fails every build; the
+ * placeholder and a pending decision fail only a production deploy, so
+ * previews, CI and development still build and show the placeholder.
+ */
+export function checkLegalFacts(
+  facts: LaunchFacts,
+  vercelEnv: string | undefined,
+): readonly string[] {
+  const production = vercelEnv === "production";
+  const email = facts.contactEmail.trim();
+  const decision = facts.representatives;
+
+  return [
+    EMAIL_SHAPE.test(email)
+      ? null
+      : `LEGAL.contactEmail must be an email address, got ${JSON.stringify(facts.contactEmail)}.`,
+    production && email === CONTACT_PLACEHOLDER
+      ? `LEGAL.contactEmail is still the placeholder ${CONTACT_PLACEHOLDER}. Set the real contact address ${PRODUCTION_ADVICE}`
+      : null,
+    production && decision.status === "pending"
+      ? `LEGAL.representatives is still pending. Record the Article 27 decision ${PRODUCTION_ADVICE}`
+      : null,
+    ...(decision.status === "decided"
+      ? [
+          ...representativeProblems("eu", decision.eu),
+          ...representativeProblems("uk", decision.uk),
+        ]
+      : []),
+  ].filter((problem) => problem !== null);
+}

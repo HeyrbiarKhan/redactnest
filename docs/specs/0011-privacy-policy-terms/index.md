@@ -1,7 +1,7 @@
 # 0011. Privacy policy and terms of use
 
 **Date**: 2026-10-02
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 
