@@ -341,6 +341,11 @@ const LOG_MESSAGE =
  * The two streams `no-console` cannot see, in each spelling: a member
  * (`process.stdout.write`), a computed member (`process["stderr"]`), and a
  * destructured name (`const { stdout } = process`).
+ *
+ * These match the name `process` as written, and `no-console` the global
+ * `console`, so an alias (`const p = process; p.stdout.write()`) or
+ * `globalThis.console.log()` slips past both. That is the intent: a guard
+ * against an honest slip, not against code written to evade it.
  */
 const noProcessStreams = [
   {
