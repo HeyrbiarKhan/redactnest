@@ -206,7 +206,7 @@ spec [0011](../specs/0011-privacy-policy-terms/index.md) · code in `src/app/pri
   - [x] The pages, published and linked: the outside services list, `Prose`, both pages with their tested seams, the footer's Legal nav, the line under the drop zone, and the browser checks · AC-1, AC-3 to AC-10, AC-12, AC-18, AC-19
   - [x] The claims, held: the policy builder in `src/config/csp.ts` fed by the services list and never `/tool`, the console and stream ban in every zone, and the cookie check · AC-11, AC-13, AC-14, AC-15
   - [ ] The amends and your review: specs 0001, 0003, 0007 and 0009 amended, and every word of both pages read by you before merge · AC-4 to AC-7, AC-9, AC-10, AC-13
-- [ ] Verify it: `/check verify privacy policy & terms`
+- [x] Verify it: `/check verify privacy policy & terms`
 
 ### 21. Launch readiness · Prototype · from spec 0011
 Everything that must be true before RedactNest launches publicly, in one place, because launch no longer means going public: the repository may stay private under an Artifex commercial licence. Spec 0011's two production gates hold the first two steps; the rest are lawyer questions and host settings no test can check.
