@@ -33,7 +33,7 @@ Run against a production build (`pnpm build && pnpm start` with the Playwright b
 - [x] `VERCEL=1 VERCEL_ENV=production` plus the Vercel Git variables, then `pnpm build` → fails with one `ConfigError` naming `LEGAL.contactEmail` (set the real address) and `LEGAL.representatives` → AC-16, AC-17
 - [x] The same with `VERCEL_ENV=preview` → builds and shows the placeholder address; with `VERCEL_ENV` unset or `staging` → fails naming `VERCEL_ENV` → AC-16
 - [x] `pnpm build` off Vercel (the Playwright build values, no `VERCEL`) → builds with the placeholder → AC-16
-- [x] `pnpm vitest run tests/unit/legal.test.ts tests/unit/config.test.ts` → every gate case: placeholder, pending, malformed address, blank representative field, each environment → AC-16, AC-17
+- [x] `pnpm vitest run tests/unit/legal.test.ts tests/unit/config.test.ts` → every gate case: the placeholder in any letter case, any other `.invalid` host, lookalike hosts that pass, pending, malformed address, blank representative field, each environment → AC-16, AC-17
 - [x] `pnpm vitest run tests/unit/policy-changes.test.ts` → both lists hold an entry, real dates (`2026-02-30` refused), strictly newest first, British format → AC-2
 - [x] `pnpm vitest run tests/unit/policy-pages.test.ts` → no `"use client"` in either page or what they render → AC-19
 
@@ -66,7 +66,7 @@ Run against a production build (`pnpm build && pnpm start` with the Playwright b
 - AC-13 … the list is the only source of outside origins: Commands 4, 5; Value sourcing 8
 - AC-14 … the tool policy never takes from the list: Commands 4, 5; Value sourcing 8
 - AC-15 … console and streams banned: Commands 6, 7
-- AC-16 … placeholder contact gate: Commands 8, 9, 10, 11; Value sourcing 11
+- AC-16 … `.invalid` contact gate: Commands 8, 9, 10, 11; Value sourcing 11
 - AC-17 … Article 27 gate: Commands 8, 11
 - AC-18 … WCAG 2.2 AA on both pages: UI 15, 16; Commands 1
 - AC-19 … no numbers, no repository, no script: UI 17; Commands 1, 13

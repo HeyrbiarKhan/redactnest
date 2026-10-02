@@ -88,7 +88,7 @@ A cheap web research pass on 2026-10-02 (full notes in `docs/.agent-cache/resear
 - GDPR Article 13: https://gdpr-info.eu/art-13-gdpr/
 - GDPR Article 27: https://gdpr-info.eu/art-27-gdpr/
 - EDPB Guidelines 3/2018 on territorial scope (located, not read in full): https://edpb.europa.eu/sites/default/files/consultation/edpb_guidelines_3_2018_territorial_scope_en.pdf
-- Vercel privacy policy: https://vercel.com/legal/privacy
+- Vercel privacy notice (its final address; `/legal/privacy` redirects here): https://vercel.com/legal/privacy-notice
 - Vercel terms of service: https://vercel.com/legal/terms
 - Vercel data processing addendum: https://vercel.com/legal/dpa
 - Vercel runtime logs (retention by plan): https://vercel.com/docs/logs/runtime
