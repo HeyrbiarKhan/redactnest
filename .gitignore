@@ -59,3 +59,6 @@ next-env.d.ts
 
 # playwright mcp
 .playwright-mcp/
+
+# claude code worktrees
+.claude/worktrees/
