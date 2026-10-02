@@ -112,6 +112,36 @@ export const LEGAL = Object.freeze({
 
 const PRODUCTION_ADVICE = "in src/lib/legal.ts before deploying to production.";
 
+/** The reserved top level domain that never delivers mail (RFC 2606). */
+const NEVER_DELIVERS = ".invalid";
+
+/** The host of an address, lowercased and without a trailing dot, which DNS ignores. */
+function hostOf(email: string): string {
+  return email
+    .slice(email.lastIndexOf("@") + 1)
+    .toLowerCase()
+    .replace(/\.+$/, "");
+}
+
+/**
+ * What is wrong with the contact address (AC-16, INV-5). Every build refuses
+ * an address that is not one. Production also refuses any address on a
+ * `.invalid` host, the placeholder in any case among them: an exact match let
+ * `Privacy@redactnest.invalid`, or another `.invalid` name typed by hand, ship
+ * a privacy contact that bounces.
+ */
+function contactProblem(contactEmail: string, production: boolean): string | null {
+  const email = contactEmail.trim();
+  if (!EMAIL_SHAPE.test(email)) {
+    return `LEGAL.contactEmail must be an email address, got ${JSON.stringify(contactEmail)}.`;
+  }
+  if (!production || !hostOf(email).endsWith(NEVER_DELIVERS)) return null;
+
+  return email.toLowerCase() === CONTACT_PLACEHOLDER
+    ? `LEGAL.contactEmail is still the placeholder ${CONTACT_PLACEHOLDER}. Set the real contact address ${PRODUCTION_ADVICE}`
+    : `LEGAL.contactEmail ${JSON.stringify(email)} is on a ${NEVER_DELIVERS} host, which never delivers mail. Set the real contact address ${PRODUCTION_ADVICE}`;
+}
+
 /** A recorded representative missing a field, or with an address that is not one. */
 function representativeProblems(
   slot: "eu" | "uk",
@@ -138,25 +168,20 @@ function representativeProblems(
  * Pure, so a test can feed it a real address and a recorded decision while
  * this file still holds the placeholders. `src/config/index.ts` calls it at
  * module load with `VERCEL_ENV` and throws one `ConfigError` listing whatever
- * comes back. A malformed address or representative fails every build; the
- * placeholder and a pending decision fail only a production deploy, so
- * previews, CI and development still build and show the placeholder.
+ * comes back. A malformed address or representative fails every build; an
+ * address on a `.invalid` host (the placeholder among them) and a pending
+ * decision fail only a production deploy, so previews, CI and development
+ * still build and show the placeholder.
  */
 export function checkLegalFacts(
   facts: LaunchFacts,
   vercelEnv: string | undefined,
 ): readonly string[] {
   const production = vercelEnv === "production";
-  const email = facts.contactEmail.trim();
   const decision = facts.representatives;
 
   return [
-    EMAIL_SHAPE.test(email)
-      ? null
-      : `LEGAL.contactEmail must be an email address, got ${JSON.stringify(facts.contactEmail)}.`,
-    production && email === CONTACT_PLACEHOLDER
-      ? `LEGAL.contactEmail is still the placeholder ${CONTACT_PLACEHOLDER}. Set the real contact address ${PRODUCTION_ADVICE}`
-      : null,
+    contactProblem(facts.contactEmail, production),
     production && decision.status === "pending"
       ? `LEGAL.representatives is still pending. Record the Article 27 decision ${PRODUCTION_ADVICE}`
       : null,

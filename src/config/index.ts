@@ -263,12 +263,17 @@ const VERCEL_ENVIRONMENTS: readonly string[] = ["production", "preview", "develo
 /**
  * The launch gate. Spec 0011, AC-16 and AC-17, INV-5.
  *
- * A production deploy refuses the placeholder contact and a pending Article 27
- * decision, and every build refuses a malformed address or representative.
- * Fail closed: on Vercel a `VERCEL_ENV` that is missing or unknown cannot say
- * whether this is production, so it is a problem in itself, as a missing
- * commit is for the source link. Every problem goes into one error, so a
- * deploy with two of them is fixed in one pass rather than two.
+ * A production deploy refuses a contact on a `.invalid` host (the placeholder
+ * among them) and a pending Article 27 decision, and every build refuses a
+ * malformed address or representative. Fail closed: on Vercel a `VERCEL_ENV`
+ * that is missing or unknown cannot say whether this is production, so it is
+ * a problem in itself, as a missing commit is for the source link. Every
+ * problem goes into one error, so a deploy with two of them is fixed in one
+ * pass rather than two.
+ *
+ * Off Vercel nothing says production, so a self hosted deploy of the AGPL
+ * source keeps the placeholder, as AC-16 specifies. It fails safe: a `.invalid`
+ * address never delivers, so it cannot reach a stranger.
  */
 function checkLaunchFacts(): void {
   const vercelEnv = present(RAW.VERCEL_ENV);

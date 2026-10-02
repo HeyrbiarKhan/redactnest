@@ -113,6 +113,38 @@ describe("a production deploy", () => {
     ).toEqual([expect.stringMatching(/^LEGAL\.contactEmail/)]);
   });
 
+  /** covers: AC-16, INV-5. A hand edit to the case must not slip it through. */
+  it.each([
+    ["Privacy@redactnest.invalid"],
+    ["PRIVACY@REDACTNEST.INVALID"],
+    ["privacy@RedactNest.Invalid"],
+  ])("reports the placeholder written as %s", (contactEmail) => {
+    expect(checkLegalFacts({ ...READY, contactEmail }, "production")).toEqual([
+      expect.stringMatching(/^LEGAL\.contactEmail is still the placeholder/),
+    ]);
+  });
+
+  /** covers: AC-16, INV-5. Any `.invalid` address bounces, not only the placeholder. */
+  it.each([
+    ["hello@redactnest.invalid"],
+    ["privacy@example.invalid"],
+    ["privacy@mail.redactnest.INVALID"],
+    ["privacy@redactnest.invalid."],
+  ])("reports %s, which is on a .invalid host", (contactEmail) => {
+    expect(checkLegalFacts({ ...READY, contactEmail }, "production")).toEqual([
+      expect.stringMatching(/^LEGAL\.contactEmail ".*" is on a \.invalid host.*real/),
+    ]);
+  });
+
+  /** covers: AC-16. Only the host's last label counts, not a lookalike. */
+  it.each([
+    ["privacy@invalid.redactnest.com"],
+    ["privacy@redactnest.xinvalid"],
+    ["me.invalid@redactnest.com"],
+  ])("accepts %s, whose host does not end in .invalid", (contactEmail) => {
+    expect(checkLegalFacts({ ...READY, contactEmail }, "production")).toEqual([]);
+  });
+
   /** covers: AC-17 */
   it("reports a pending decision, naming LEGAL.representatives", () => {
     const problems = checkLegalFacts(
@@ -152,6 +184,19 @@ describe("every other build", () => {
     "passes the placeholders when VERCEL_ENV is %s",
     (vercelEnv) => {
       expect(checkLegalFacts(PLACEHOLDERS, vercelEnv)).toEqual([]);
+    },
+  );
+
+  /** covers: AC-16. The `.invalid` rule is production's alone. */
+  it.each([["preview"], ["development"], [undefined]])(
+    "passes any .invalid address, in any case, when VERCEL_ENV is %s",
+    (vercelEnv) => {
+      for (const contactEmail of [
+        "Privacy@redactnest.invalid",
+        "hello@example.invalid",
+      ]) {
+        expect(checkLegalFacts({ ...PLACEHOLDERS, contactEmail }, vercelEnv)).toEqual([]);
+      }
     },
   );
 });
