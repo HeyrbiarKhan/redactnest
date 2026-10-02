@@ -162,23 +162,29 @@ for (const { path, title, sections } of PAGES) {
       }
     });
 
-    /** covers: AC-18. Underlined, and ringed when a keyboard lands on one. */
-    test("underlines every link in the text, and rings it on focus", async ({ page }) => {
+    /** covers: AC-18. Underlined, and ringed when a keyboard lands on each one. */
+    test("underlines every link in the text, and rings each as Tab reaches it", async ({
+      page,
+    }) => {
       await page.goto(path);
 
-      const links = page.locator("main a");
-      expect(await links.count()).toBeGreaterThan(0);
-      for (const link of await links.all()) {
+      const links = await page.locator("main a").all();
+      expect(links.length).toBeGreaterThan(0);
+      for (const link of links) {
         expect(
           await link.evaluate((element) => getComputedStyle(element).textDecorationLine),
         ).toContain("underline");
       }
 
-      // From the top of main, so the next Tab is the first link in the text.
+      // From the top of main, each Tab lands on the next link in the text,
+      // so every link is proved reachable in reading order and ringed there,
+      // the services list and the contact included.
       await page.locator("main").focus();
-      await page.keyboard.press("Tab");
-      await expect(links.first()).toBeFocused();
-      await expectFocusRing(links.first());
+      for (const link of links) {
+        await page.keyboard.press("Tab");
+        await expect(link).toBeFocused();
+        await expectFocusRing(link);
+      }
     });
 
     /** covers: AC-18 */
