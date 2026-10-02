@@ -66,7 +66,13 @@ export interface LaunchFacts {
 
 const contactEmail: string = CONTACT_PLACEHOLDER;
 
-const representatives: RepresentativesDecision = Object.freeze({ status: "pending" });
+/**
+ * Typed by `Object.freeze`'s type argument, never by an annotation on the
+ * const. A const annotated with a union narrows to the member its value
+ * matches, and `LEGAL` takes that narrow type, so a decided record here broke
+ * the build wherever code asks which status it holds (AC-17).
+ */
+const representatives = Object.freeze<RepresentativesDecision>({ status: "pending" });
 
 export const LEGAL = Object.freeze({
   holder,

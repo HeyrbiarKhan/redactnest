@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   checkLegalFacts,
@@ -7,6 +7,7 @@ import {
   LEGAL,
   type LaunchFacts,
   type Representative,
+  type RepresentativesDecision,
 } from "@/lib/legal";
 
 /**
@@ -62,6 +63,33 @@ describe("the facts the repository holds today", () => {
     expect(Object.isFrozen(LEGAL)).toBe(true);
     expect(Object.isFrozen(LEGAL.representatives)).toBe(true);
     expect(Object.isFrozen(LEGAL.toolNotice)).toBe(true);
+  });
+});
+
+/**
+ * Recording the decision is an edit to one line of `src/lib/legal.ts`, so
+ * `LEGAL.representatives` has to keep the whole union whatever that line holds.
+ * Typed only as the placeholder, a decided record broke `next build` wherever
+ * code asks which status it has. Like `loggable.test.ts`, the type assertions
+ * run at `pnpm typecheck`, not at `pnpm test`: what fails is the compile.
+ */
+describe("the type LEGAL gives the decision", () => {
+  /** covers: AC-17 */
+  it("is the whole union, not the pending placeholder alone", () => {
+    expectTypeOf(LEGAL.representatives).toEqualTypeOf<RepresentativesDecision>();
+  });
+
+  /** covers: AC-17. EU only, UK only, both, and neither. */
+  it("takes every decided record, and the production gate passes each", () => {
+    const decided: readonly (typeof LEGAL)["representatives"][] = [
+      { status: "decided", eu: REPRESENTATIVE, uk: null },
+      { status: "decided", eu: null, uk: REPRESENTATIVE },
+      { status: "decided", eu: REPRESENTATIVE, uk: REPRESENTATIVE },
+      { status: "decided", eu: null, uk: null },
+    ];
+    for (const representatives of decided) {
+      expect(checkLegalFacts({ ...READY, representatives }, "production")).toEqual([]);
+    }
   });
 });
 
