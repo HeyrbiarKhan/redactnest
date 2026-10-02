@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { expect, test, type Page, type Request } from "@playwright/test";
+import { expect, test, type Page, type Request, type Response } from "@playwright/test";
 
 /**
  * The guarantee, proved rather than promised. Spec 0002, AC-2 and AC-3.
@@ -489,6 +489,59 @@ test("a flagged document sends, stores and logs no page text or finding detail",
     .filter((path) => path !== "/tool")
     .filter((path) => !ASSET_PATHS.some((asset) => asset.test(path)));
   expect([...new Set(dataRequests)]).toEqual(["/api/entitlement"]);
+});
+
+/**
+ * Spec 0011, AC-11: no cookies, which is claim C6 in the privacy policy. A full
+ * run on the tool, open to download, and then every other page, with every
+ * response's headers read in full. `headersArray()` keeps a repeated header,
+ * where `headers()` would fold several `Set-Cookie` lines into one. A cookie
+ * set from script never shows in a header, so the browser context's own jar
+ * is read at the end as well.
+ */
+test.describe("cookies", () => {
+  test("none is set by a full run on the tool or by any other page", async ({
+    page,
+    context,
+  }) => {
+    test.setTimeout(120_000);
+
+    const responses: Response[] = [];
+    page.on("response", (response) => responses.push(response));
+
+    await page.goto("/tool");
+    await redactAndDownload(page);
+    for (const path of ["/", "/privacy", "/terms"]) {
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+    }
+
+    const paths = new Set(responses.map((response) => new URL(response.url()).pathname));
+    expect([...paths]).toEqual(
+      expect.arrayContaining(["/tool", "/api/entitlement", "/", "/privacy", "/terms"]),
+    );
+
+    const setCookies: string[] = [];
+    for (const response of responses) {
+      for (const header of await response.headersArray()) {
+        if (header.name.toLowerCase() === "set-cookie") {
+          setCookies.push(`${response.url()}: ${header.value}`);
+        }
+      }
+    }
+    expect(setCookies, "a response set a cookie").toEqual([]);
+    expect(await context.cookies()).toEqual([]);
+  });
+
+  /** The control: the jar really does show a cookie when one is set. */
+  test("a cookie set by script would be seen", async ({ page, context }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      document.cookie = "canary=1; path=/";
+    });
+
+    expect((await context.cookies()).map((cookie) => cookie.name)).toEqual(["canary"]);
+  });
 });
 
 /**
