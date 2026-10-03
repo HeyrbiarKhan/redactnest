@@ -7,8 +7,8 @@
  * of its list in the same change (INV-3). Each date is a literal written on the
  * day, never computed at build, so a rebuild cannot move it.
  *
- * Launch readiness step 7 folds every entry made before launch into one
- * `First published.` entry dated launch day.
+ * Launch readiness step 7 folded every entry made before launch into one
+ * `First published.` entry dated launch day, 2026-10-03.
  */
 
 export interface PolicyChange {
@@ -21,11 +21,11 @@ export interface PolicyChange {
 export type PolicyChanges = readonly [PolicyChange, ...PolicyChange[]];
 
 export const PRIVACY_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
-  Object.freeze({ date: "2026-10-02", summary: "First published." }),
+  Object.freeze({ date: "2026-10-03", summary: "First published." }),
 ]);
 
 export const TERMS_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
-  Object.freeze({ date: "2026-10-02", summary: "First published." }),
+  Object.freeze({ date: "2026-10-03", summary: "First published." }),
 ]);
 
 /** The newest entry's date, which is what "Last updated" shows (AC-2). */

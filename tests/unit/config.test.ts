@@ -417,14 +417,30 @@ describe("the launch gate", () => {
     }
   });
 
-  /** covers: AC-16, AC-17. Every problem in one error, each on its own line. */
-  it("lists every problem in one error", async () => {
-    // Only meaningful while both placeholders are still in the repository.
-    if (checkLegalFacts(LEGAL, "production").length < 2) return;
-
-    await expect(
-      loadConfig({ ...SITE, ...VERCEL_BUILD, VERCEL_ENV: "production" }),
-    ).rejects.toThrow(/LEGAL\.contactEmail[\s\S]*\n- LEGAL\.representatives/);
+  /**
+   * covers: AC-16, AC-17, INV-5. The repository's facts are ready, so this
+   * hands the build both placeholders to prove it still refuses them, every
+   * problem in one error, each on its own line.
+   */
+  it("refuses the placeholders, listing every problem in one error", async () => {
+    vi.doMock("@/lib/legal", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@/lib/legal")>();
+      return {
+        ...actual,
+        LEGAL: {
+          ...actual.LEGAL,
+          contactEmail: actual.CONTACT_PLACEHOLDER,
+          representatives: { status: "pending" },
+        },
+      };
+    });
+    try {
+      await expect(
+        loadConfig({ ...SITE, ...VERCEL_BUILD, VERCEL_ENV: "production" }),
+      ).rejects.toThrow(/LEGAL\.contactEmail[\s\S]*\n- LEGAL\.representatives/);
+    } finally {
+      vi.doUnmock("@/lib/legal");
+    }
   });
 
   /** covers: AC-16, AC-17. Previews and development deploys show the placeholder. */
