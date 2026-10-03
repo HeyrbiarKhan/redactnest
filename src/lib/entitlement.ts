@@ -124,9 +124,12 @@ export function askWhenVisible(): void {
   if (inFlight === null) startAsk("visible");
 }
 
-/** AC-5's Try again: ask fresh now, or join the ask already out. */
-export function askAgain(): void {
-  if (inFlight === null) startAsk("fresh");
+/**
+ * AC-5's Try again: ask fresh now, or join the ask already out. Settles with
+ * the page's answer, so the plan line knows when its button has done its work.
+ */
+export function askAgain(): Promise<EntitlementSnapshot> {
+  return getEntitlement({ fresh: true });
 }
 
 /**

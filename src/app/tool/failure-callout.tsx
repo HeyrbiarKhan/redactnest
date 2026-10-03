@@ -12,6 +12,13 @@ interface FailureCalloutProps {
   /** Where focus goes when the callout appears (spec 0007, *Focus*). */
   readonly titleRef?: Ref<HTMLHeadingElement>;
   readonly action?: ReactNode;
+  /**
+   * A row under the next step, for a way forward that takes more than one
+   * control: the free cap's new tab link and its "Check my plan and open it
+   * again" (spec 0012, AC-6). Its words come from `flow-text.ts` beside the
+   * copy they follow.
+   */
+  readonly actions?: ReactNode;
   readonly "data-testid": string;
 }
 
@@ -32,6 +39,7 @@ export function FailureCallout({
   lead,
   titleRef,
   action,
+  actions,
   "data-testid": testId,
 }: FailureCalloutProps) {
   return (
@@ -47,6 +55,9 @@ export function FailureCallout({
     >
       <p>{body}</p>
       {next !== undefined && <p className="font-medium text-ink">{next}</p>}
+      {actions !== undefined && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2">{actions}</div>
+      )}
     </Callout>
   );
 }

@@ -16,8 +16,16 @@ import { config } from "@/config";
 import { resultCounts } from "@/lib/detectors";
 import { currentPath, loadedAt, loadGuard, reloadDocument } from "@/lib/document-load";
 import { offerDownload } from "@/lib/download";
-import { askAtLoad, askWhenVisible, getEntitlement } from "@/lib/entitlement";
 import {
+  askAgain,
+  askAtLoad,
+  askWhenVisible,
+  getEntitlement,
+  readEntitlement,
+  subscribeEntitlement,
+} from "@/lib/entitlement";
+import {
+  dropZoneHelper,
   failureText,
   isTickCaused,
   LOST_TEXT,
@@ -68,6 +76,7 @@ import { Spinner } from "@/ui/spinner";
 
 import { ActionPanel } from "./action-panel";
 import { FailureCallout } from "./failure-callout";
+import { NewTabLink, PlanLine } from "./plan-line";
 import { ResultCard } from "./result-card";
 import { ReviewChecklist } from "./review-checklist";
 import { TermsNotice } from "./terms-notice";
@@ -207,6 +216,21 @@ export function ToolClient() {
   );
 
   const [session, dispatch] = useReducer(sessionReducer, IDLE as ToolSession);
+
+  /**
+   * The page's answer to which plan applies, for the helper and the plan line
+   * (spec 0012, AC-5). Never a job's: each job froze its own snapshot at open.
+   * None on the server, so the prerendered page says it is checking.
+   */
+  const planAnswer = useSyncExternalStore<EntitlementSnapshot | null>(
+    subscribeEntitlement,
+    readEntitlement,
+    SERVER_SNAPSHOT,
+  );
+
+  /** While the plan line's Try again is asking, so the press visibly does something. */
+  const [planChecking, setPlanChecking] = useState(false);
+  const planLineRef = useRef<HTMLParagraphElement>(null);
 
   /**
    * The one window the session cannot describe: after a file is chosen and
@@ -389,6 +413,28 @@ export function ToolClient() {
     [],
   );
 
+  /**
+   * Freeze the plan into a new job and open the file under it. `fresh` asks
+   * the server again whatever the page's answer's age (spec 0012, AC-6);
+   * otherwise the page's answer serves unless it is more than 5 minutes old
+   * (AC-4).
+   */
+  const openFile = useCallback(
+    async (file: File, fresh: boolean) => {
+      setCheckingEntitlement(false);
+      const entitlement = await getEntitlement({
+        fresh,
+        onWaiting: () => setCheckingEntitlement(true),
+      });
+      setCheckingEntitlement(false);
+
+      const jobId = crypto.randomUUID();
+      dispatch({ type: "file-chosen", jobId, file, entitlement });
+      await runOpen({ jobId, file, entitlement });
+    },
+    [runOpen],
+  );
+
   const handleFile = useCallback(
     async (file: File) => {
       // AC-1: one tab, one session. Replacing one with work in it asks first,
@@ -403,19 +449,35 @@ export function ToolClient() {
       // for. Replacing a session does not need a new worker: `openSession`
       // retires the previous job on this side, and the worker ends it on the
       // other, which is what AC-1 actually asks for.
-
-      setCheckingEntitlement(false);
-      const entitlement = await getEntitlement({
-        onWaiting: () => setCheckingEntitlement(true),
-      });
-      setCheckingEntitlement(false);
-
-      const jobId = crypto.randomUUID();
-      dispatch({ type: "file-chosen", jobId, file, entitlement });
-      await runOpen({ jobId, file, entitlement });
+      await openFile(file, false);
     },
-    [runOpen],
+    [openFile],
   );
+
+  /**
+   * Spec 0012, AC-6: "Check my plan and open it again". Asks fresh, then opens
+   * the file the failed job held as a new job under the new answer, with no
+   * file picker and no reload. A file changed or gone on disk fails that open
+   * with `file-unreadable`, and a cap the new answer still sets shows the
+   * callout again in that answer's words.
+   */
+  const handleRecheck = useCallback(() => {
+    const failed = sessionRef.current;
+    if (failed.state !== "failed") return;
+    void openFile(failed.file, true);
+  }, [openFile]);
+
+  /**
+   * Spec 0012, AC-5: the plan line's Try again. Its button goes with the line
+   * it belongs to, so when the answer changes, focus moves to the line that
+   * replaced it rather than falling to the page (spec 0007, AC-20).
+   */
+  const handleTryAgain = useCallback(async () => {
+    setPlanChecking(true);
+    const answer = await askAgain();
+    setPlanChecking(false);
+    if (answer.account !== "unknown") planLineRef.current?.focus();
+  }, []);
 
   /** AC-11: retry from the handle we kept, with no second trip to the picker. */
   const handleRetry = useCallback(() => {
@@ -700,10 +762,25 @@ export function ToolClient() {
       */}
       {session.state === "failed" && (
         <div className="mb-6">
-          <FailureCallout
-            data-testid="error"
+          <OpenFailure
+            session={session}
             titleRef={failureRef}
-            {...failureText(session.failure ?? "unsupported", session.entitlement)}
+            onRecheck={handleRecheck}
+          />
+        </div>
+      )}
+
+      {/*
+        Spec 0012, AC-5. Directly above the drop zone in either form, so it
+        stays put as a file opens, and only on a build that sells Pro.
+      */}
+      {config.billingEnabled && (
+        <div className="mb-3">
+          <PlanLine
+            answer={planAnswer}
+            checking={planChecking}
+            onTryAgain={() => void handleTryAgain()}
+            lineRef={planLineRef}
           />
         </div>
       )}
@@ -728,7 +805,7 @@ export function ToolClient() {
         <>
           <DropZone
             title="Drop a PDF here, or choose one"
-            helper={`Up to ${config.freePageCap} pages for now.`}
+            helper={dropZoneHelper(planAnswer)}
             buttonLabel="Choose a PDF"
             accept="application/pdf"
             onFile={(file) => void handleFile(file)}
@@ -869,6 +946,49 @@ export function ToolClient() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * An open that failed (spec 0007, AC-15), in its kind's words for the job's
+ * frozen snapshot. A free cap with billing on also carries its way forward
+ * (spec 0012, AC-6): the account's new tab link, and "Check my plan and open
+ * it again", which opens the file this job held under a fresh answer.
+ */
+function OpenFailure({
+  session,
+  titleRef,
+  onRecheck,
+}: {
+  readonly session: LiveSession;
+  readonly titleRef: RefObject<HTMLHeadingElement | null>;
+  readonly onRecheck: () => void;
+}) {
+  const { plan, ...text } = failureText(
+    session.failure ?? "unsupported",
+    session.entitlement,
+  );
+
+  return (
+    <FailureCallout
+      data-testid="error"
+      titleRef={titleRef}
+      {...text}
+      actions={
+        plan && (
+          <>
+            {plan.link !== null && (
+              // Ink rather than the accent, a pairing the contrast contract
+              // already holds on the danger tint (spec 0003, INV-1 to INV-3).
+              <NewTabLink link={plan.link} className="font-medium text-ink" />
+            )}
+            <Button variant="secondary" data-testid="recheck" onClick={onRecheck}>
+              {plan.recheck}
+            </Button>
+          </>
+        )
+      }
+    />
   );
 }
 

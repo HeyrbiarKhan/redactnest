@@ -51,6 +51,12 @@ const mocks = vi.hoisted(() => ({
   getEntitlement: vi.fn(),
   askAtLoad: vi.fn(),
   askWhenVisible: vi.fn(),
+  askAgain: vi.fn(),
+  /** The page's answer the plan line reads, and who is listening for it. */
+  answer: null as EntitlementSnapshot | null,
+  answerListeners: new Set<() => void>(),
+  /** `config.billingEnabled`, off unless a test turns it on (spec 0012, AC-23). */
+  billingEnabled: false,
   getSupport: vi.fn(),
   loadedAt: vi.fn(),
   currentPath: vi.fn(),
@@ -78,7 +84,27 @@ vi.mock("@/lib/entitlement", () => ({
   getEntitlement: mocks.getEntitlement,
   askAtLoad: mocks.askAtLoad,
   askWhenVisible: mocks.askWhenVisible,
+  askAgain: mocks.askAgain,
+  readEntitlement: () => mocks.answer,
+  subscribeEntitlement: (listener: () => void) => {
+    mocks.answerListeners.add(listener);
+    return () => mocks.answerListeners.delete(listener);
+  },
 }));
+
+// Every other value is the real config; whether billing is on is the test's.
+vi.mock("@/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/config")>();
+  return {
+    ...actual,
+    config: {
+      ...actual.config,
+      get billingEnabled() {
+        return mocks.billingEnabled;
+      },
+    },
+  };
+});
 
 // The gap wording stays real; only the detection is stubbed.
 vi.mock("@/lib/support", async (importOriginal) => ({
@@ -171,6 +197,14 @@ async function chooseFile(file: File): Promise<void> {
   await user.upload(screen.getByTestId("file-input"), file);
 }
 
+/** The page's answer changed, told to whoever listens, as the real store does. */
+function answerWith(answer: EntitlementSnapshot | null): void {
+  act(() => {
+    mocks.answer = answer;
+    for (const listener of mocks.answerListeners) listener();
+  });
+}
+
 /** The worker died. Fired the way `client.ts` fires it, through the listeners. */
 async function fireEngineLost(): Promise<void> {
   await act(async () => {
@@ -206,6 +240,9 @@ function wouldWarnOnLeave(): boolean {
 
 beforeEach(() => {
   mocks.lostListeners.clear();
+  mocks.answerListeners.clear();
+  mocks.answer = null;
+  mocks.billingEnabled = false;
   vi.clearAllMocks();
   mocks.getSupport.mockReturnValue(SUPPORTED);
   mocks.loadedAt.mockReturnValue("/tool");
@@ -722,6 +759,321 @@ describe("asking which plan applies (spec 0012, AC-4)", () => {
     document.dispatchEvent(new Event("visibilitychange"));
     expect(mocks.askWhenVisible).toHaveBeenCalledOnce();
     visibility.mockRestore();
+  });
+});
+
+/**
+ * Spec 0012, AC-5 and AC-6: the plan line and the helper read the page's
+ * answer, and a free cap's callout reads the job's frozen snapshot, by
+ * account. Billing is on here unless a test says otherwise.
+ */
+describe("the plan, said out loud (spec 0012, AC-5 and AC-6)", () => {
+  const answer = (
+    account: EntitlementSnapshot["account"],
+    tier: EntitlementSnapshot["tier"] = "free",
+  ): EntitlementSnapshot =>
+    Object.freeze({ ...(tier === "paid" ? PAID : FREE), tier, account });
+
+  type Link = readonly [label: string, href: string];
+
+  /** A link's accessible name says it opens a new tab, and it does. */
+  function expectNewTabLink(scope: HTMLElement, label: string, href: string) {
+    const link = within(scope).getByRole("link", {
+      name: `${label} (opens in a new tab)`,
+    });
+    expect(link).toHaveAttribute("href", href);
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link.getAttribute("rel")).toContain("noopener");
+  }
+
+  beforeEach(() => {
+    mocks.billingEnabled = true;
+  });
+
+  describe("the helper and the plan line (AC-5)", () => {
+    it("says it is checking until the first answer, then names the cap and the plan", () => {
+      render(<ToolClient />);
+
+      expect(screen.getByTestId("drop-area")).toHaveTextContent("Checking your plan");
+      expect(screen.getByRole("status")).toBeEmptyDOMElement();
+
+      answerWith(answer("none"));
+      expect(screen.getByTestId("drop-area")).toHaveTextContent("Up to 3 pages on Free");
+
+      answerWith(answer("signed-in", "paid"));
+      expect(screen.getByTestId("drop-area")).toHaveTextContent("Up to 50 pages on Pro");
+    });
+
+    it.each([
+      [
+        "anonymous",
+        answer("none"),
+        "Sign in (opens in a new tab), or see what Pro adds (opens in a new tab).",
+        [
+          ["Sign in", "/sign-in"],
+          ["see what Pro adds", "/pricing"],
+        ] as Link[],
+      ],
+      [
+        "signed in on Free",
+        answer("signed-in"),
+        "Get Pro (opens in a new tab) for up to 50 pages a document.",
+        [["Get Pro", "/pricing"]] as Link[],
+      ],
+      [
+        "signed in with Pro",
+        answer("signed-in", "paid"),
+        "Signed in with Pro.",
+        [] as Link[],
+      ],
+      [
+        "signed in, but the sign in has expired",
+        answer("sign-in-needed"),
+        "Your sign in has expired, so the free limit applies. Sign in again (opens in a new tab) to use Pro.",
+        [["Sign in again", "/sign-in"]] as Link[],
+      ],
+    ])("shows the next step when %s", async (_label, page, words, links) => {
+      const { container } = render(<ToolClient />);
+      answerWith(page);
+
+      const line = screen.getByRole("status");
+      expect(line).toHaveTextContent(words);
+      for (const [label, href] of links) expectNewTabLink(line, label, href);
+      expect(within(line).queryAllByRole("link")).toHaveLength(links.length);
+      expect(screen.queryByTestId("plan-try-again")).not.toBeInTheDocument();
+      await expectNoAxeViolations(container);
+    });
+
+    it("says the plan could not be checked, and offers to try again", async () => {
+      const { container } = render(<ToolClient />);
+      answerWith(answer("unknown"));
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "We couldn't check your plan, so the free limit applies for now.",
+      );
+      expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+      await expectNoAxeViolations(container);
+    });
+
+    it("asks fresh on Try again, says so, and keeps focus there if the answer is the same", async () => {
+      let settle: (value: EntitlementSnapshot) => void = () => {};
+      mocks.askAgain.mockReturnValue(
+        new Promise<EntitlementSnapshot>((resolve) => {
+          settle = resolve;
+        }),
+      );
+      const user = userEvent.setup();
+      render(<ToolClient />);
+      answerWith(answer("unknown"));
+
+      await user.click(screen.getByRole("button", { name: "Try again" }));
+      expect(mocks.askAgain).toHaveBeenCalledOnce();
+      expect(screen.getByRole("status")).toHaveTextContent("Checking your plan…");
+
+      await act(async () => settle(answer("unknown")));
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "We couldn't check your plan, so the free limit applies for now.",
+      );
+      expect(screen.getByRole("button", { name: "Try again" })).toHaveFocus();
+    });
+
+    it("moves focus to the plan line when Try again brings an answer, never to the page", async () => {
+      mocks.askAgain.mockImplementation(async () => {
+        mocks.answer = answer("signed-in", "paid");
+        for (const listener of mocks.answerListeners) listener();
+        return mocks.answer;
+      });
+      const user = userEvent.setup();
+      render(<ToolClient />);
+      answerWith(answer("unknown"));
+
+      await user.click(screen.getByRole("button", { name: "Try again" }));
+
+      expect(screen.queryByTestId("plan-try-again")).not.toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent("Signed in with Pro.");
+      expect(screen.getByRole("status")).toHaveFocus();
+    });
+
+    it("sits directly above the drop zone, and stays there once a file opens", async () => {
+      render(<ToolClient />);
+      answerWith(answer("none"));
+
+      const above = (element: HTMLElement) =>
+        Boolean(
+          screen.getByRole("status").compareDocumentPosition(element) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+        );
+      expect(above(screen.getByTestId("drop-area"))).toBe(true);
+
+      await chooseFile(pdfFile());
+      await screen.findByTestId("page-count");
+      expect(above(screen.getByTestId("file-bar"))).toBe(true);
+    });
+
+    it("shows no plan line with billing off, and names the free cap with no plan", () => {
+      mocks.billingEnabled = false;
+      render(<ToolClient />);
+      answerWith(answer("none"));
+
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(screen.getByTestId("drop-area")).toHaveTextContent("Up to 3 pages");
+      expect(screen.getByTestId("drop-area")).not.toHaveTextContent("Free");
+    });
+  });
+
+  describe("a free cap (AC-6)", () => {
+    /** Choose a file under `snapshot` and have the engine refuse it for its pages. */
+    async function capped(snapshot: EntitlementSnapshot, file = pdfFile()) {
+      mocks.getEntitlement.mockResolvedValue(snapshot);
+      mocks.openSession.mockRejectedValue(new EngineError("too-many-pages"));
+      const view = render(<ToolClient />);
+      await chooseFile(file);
+      return { ...view, error: await screen.findByRole("alert") };
+    }
+
+    it.each([
+      [
+        "anonymous",
+        "none",
+        "Sign in and get Pro, then open it again here.",
+        ["Get Pro", "/pricing"],
+      ],
+      [
+        "signed in on Free",
+        "signed-in",
+        "Get Pro, then open it again here.",
+        ["Get Pro", "/pricing"],
+      ],
+      [
+        "signed in, but the sign in has expired",
+        "sign-in-needed",
+        "Sign in again to use Pro, then open it again here.",
+        ["Sign in again", "/sign-in"],
+      ],
+      [
+        "unchecked",
+        "unknown",
+        "We couldn't check your plan. Check it, then open it again.",
+        null,
+      ],
+    ] as const)(
+      "points a visitor %s to Pro, never to splitting the file",
+      async (_label, account, next, link) => {
+        const { container, error } = await capped(answer(account));
+
+        expect(
+          within(error).getByRole("heading", {
+            level: 2,
+            name: "This PDF has more than 3 pages",
+          }),
+        ).toBeInTheDocument();
+        expect(error).toHaveTextContent(
+          "The free plan handles up to 3 pages. Pro handles up to 50.",
+        );
+        expect(error).toHaveTextContent(next);
+        expect(error).not.toHaveTextContent("Split");
+        if (link === null)
+          expect(within(error).queryByRole("link")).not.toBeInTheDocument();
+        else expectNewTabLink(error, link[0], link[1]);
+        expect(
+          within(error).getByRole("button", { name: "Check my plan and open it again" }),
+        ).toBeInTheDocument();
+        await expectNoAxeViolations(container);
+      },
+    );
+
+    it("asks fresh and opens the same file again under the new answer, with no file picker", async () => {
+      const file = pdfFile("long.pdf");
+      const reads = vi.spyOn(file, "arrayBuffer");
+      const user = userEvent.setup();
+      const { error } = await capped(answer("none"), file);
+      const picker = vi.spyOn(HTMLInputElement.prototype, "click");
+
+      mocks.getEntitlement.mockResolvedValue(PAID);
+      mocks.openSession.mockResolvedValue(openedSession("again"));
+      await user.click(
+        within(error).getByRole("button", { name: "Check my plan and open it again" }),
+      );
+
+      await screen.findByTestId("page-count");
+      expect(mocks.getEntitlement).toHaveBeenLastCalledWith(
+        expect.objectContaining({ fresh: true }),
+      );
+      expect(lastLimits()).toEqual({
+        maxBytes: PAID.maxFileBytes,
+        maxPages: PAID.pageCap,
+      });
+      expect(reads).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("file-bar")).toHaveTextContent("long.pdf");
+      expect(picker).not.toHaveBeenCalled();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("shows the callout again in the new answer's words when the cap still applies", async () => {
+      const user = userEvent.setup();
+      const { error } = await capped(answer("none"));
+
+      mocks.getEntitlement.mockResolvedValue(answer("signed-in"));
+      await user.click(
+        within(error).getByRole("button", { name: "Check my plan and open it again" }),
+      );
+
+      await vi.waitFor(() =>
+        expect(screen.getByRole("alert")).toHaveTextContent(
+          "Get Pro, then open it again here.",
+        ),
+      );
+      expect(screen.getByRole("alert")).not.toHaveTextContent("Sign in and get Pro");
+      expect(mocks.openSession).toHaveBeenCalledTimes(2);
+      // A new failure, so focus moves to its heading (spec 0007, AC-20).
+      expect(
+        screen.getByRole("heading", { level: 2, name: "This PDF has more than 3 pages" }),
+      ).toHaveFocus();
+    });
+
+    it("fails with the file unreadable when the file changed on disk since it was chosen", async () => {
+      const file = pdfFile("moved.pdf");
+      const original = file.arrayBuffer.bind(file);
+      let reads = 0;
+      Object.defineProperty(file, "arrayBuffer", {
+        value: () => {
+          reads += 1;
+          return reads === 1
+            ? original()
+            : Promise.reject(new DOMException("NotReadableError"));
+        },
+      });
+      const user = userEvent.setup();
+      const { error } = await capped(answer("none"), file);
+
+      mocks.getEntitlement.mockResolvedValue(PAID);
+      await user.click(
+        within(error).getByRole("button", { name: "Check my plan and open it again" }),
+      );
+
+      await vi.waitFor(() =>
+        expect(screen.getByRole("alert")).toHaveTextContent("The file couldn't be read"),
+      );
+      expect(mocks.openSession).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the split advice and offers no plan for a paid job", async () => {
+      const { error } = await capped(PAID);
+
+      expect(error).toHaveTextContent("RedactNest handles up to 50 pages.");
+      expect(error).toHaveTextContent("Split it into parts of 50 pages or fewer");
+      expect(within(error).queryByRole("link")).not.toBeInTheDocument();
+      expect(within(error).queryByRole("button")).not.toBeInTheDocument();
+    });
+
+    it("keeps today's words and offers no plan with billing off, where no Pro exists", async () => {
+      mocks.billingEnabled = false;
+      const { error } = await capped(answer("none"));
+
+      expect(error).toHaveTextContent("The free limit is 3 pages.");
+      expect(error).toHaveTextContent("Split it into parts of 3 pages or fewer");
+      expect(within(error).queryByRole("button")).not.toBeInTheDocument();
+    });
   });
 });
 
@@ -1889,7 +2241,7 @@ describe("the redact flow (spec 0007)", () => {
       render(<ToolClient />);
 
       expect(screen.getByTestId("drop-area")).toHaveTextContent(
-        `Up to ${config.freePageCap} pages for now.`,
+        `Up to ${config.freePageCap} pages`,
       );
       expect(screen.queryByTestId("file-bar")).not.toBeInTheDocument();
     });
@@ -1898,7 +2250,7 @@ describe("the redact flow (spec 0007)", () => {
       const run = controllable();
       await openFlow(run.session);
       const user = userEvent.setup();
-      const helper = `Up to ${config.freePageCap} pages for now.`;
+      const helper = `Up to ${config.freePageCap} pages`;
 
       await user.click(screen.getByTestId("start-over"));
       expect(screen.getByTestId("drop-area")).toHaveTextContent(helper);
