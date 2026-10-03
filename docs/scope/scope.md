@@ -229,7 +229,7 @@ The paywall moment: an anonymous visitor hits the page cap, signs in, subscribes
 spec [0012](../specs/0012-billing-paid-plan/index.md) · code in `src/billing`, `src/app/(account)`, `src/app/pricing`, `src/config/billing.ts`
 - [x] Design it (spec): `/architect billing & paid plan`
 - [ ] Build it: `/develop billing & paid plan`
-  - [ ] The money path: the billing config and its gate, the plan check reading Clerk's cookie and asking Polar, Clerk and Polar in the policy builder, the account pages with sign in, Subscribe and the welcome page, the proxy and the lint walls, Pricing and the header links · AC-1, AC-2, AC-4, AC-8, AC-9, AC-10, AC-13, AC-14, AC-15, AC-16, AC-20, AC-21, AC-23
+  - [x] The money path: the billing config and its gate, the plan check reading Clerk's cookie and asking Polar, Clerk and Polar in the policy builder, the account pages with sign in, Subscribe and the welcome page, the proxy and the lint walls, Pricing and the header links · AC-1, AC-2, AC-4, AC-8, AC-9, AC-10, AC-13, AC-14, AC-15, AC-16, AC-20, AC-21, AC-23
   - [x] The walk's fixes (slice 1b): the Polar customer tied before checkout, the landing kept across sign in and sign up with Clerk's other redirect parameters refused, sign out with a full page load, previews with billing off · AC-8, AC-12, AC-14, AC-23, AC-25
   - [ ] Never silently free: the tool's ask and refresh rules, the plan line, the cap words by account, and "Check my plan and open it again" · AC-3, AC-4, AC-5, AC-6, AC-7
   - [ ] Managing it: the full account page, the billing portal, delete and sign out, and the sandbox walk · AC-7, AC-10, AC-11, AC-12, AC-17, AC-18
