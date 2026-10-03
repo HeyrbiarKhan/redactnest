@@ -16,7 +16,7 @@ import { config } from "@/config";
 import { resultCounts } from "@/lib/detectors";
 import { currentPath, loadedAt, loadGuard, reloadDocument } from "@/lib/document-load";
 import { offerDownload } from "@/lib/download";
-import { getEntitlement, prefetchEntitlement } from "@/lib/entitlement";
+import { askAtLoad, askWhenVisible, getEntitlement } from "@/lib/entitlement";
 import {
   failureText,
   isTickCaused,
@@ -229,14 +229,23 @@ export function ToolClient() {
 
   /**
    * Ask which plan applies once the page has loaded, rather than on the warm
-   * trigger, so the answer is in before anyone chooses a file (spec 0012,
-   * AC-4). Only after the load guard and the support check pass: a page that
-   * is about to reload, sits at the wrong address, or cannot run the tool has
-   * no use for the answer, and asking would be a request it did not need.
+   * trigger, so the answer is in before anyone chooses a file, and again each
+   * time the tab comes back, so an upgrade made in another tab shows here
+   * (spec 0012, AC-4; `askWhenVisible` never asks a Pro page). Only after the
+   * load guard and the support check pass: a page that is about to reload,
+   * sits at the wrong address, or cannot run the tool has no use for the
+   * answer, and asking would be a request it did not need.
    */
   const supported = support?.supported === true;
   useEffect(() => {
-    if (guard === "ok" && supported) prefetchEntitlement();
+    if (guard !== "ok" || !supported) return;
+    askAtLoad();
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") askWhenVisible();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [guard, supported]);
 
   /** Warm what a chosen file will need: the engine. */

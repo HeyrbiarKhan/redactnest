@@ -49,7 +49,8 @@ const mocks = vi.hoisted(() => ({
   releaseEngine: vi.fn(),
   openSession: vi.fn(),
   getEntitlement: vi.fn(),
-  prefetchEntitlement: vi.fn(),
+  askAtLoad: vi.fn(),
+  askWhenVisible: vi.fn(),
   getSupport: vi.fn(),
   loadedAt: vi.fn(),
   currentPath: vi.fn(),
@@ -75,7 +76,8 @@ vi.mock("@/lib/download", () => ({
 
 vi.mock("@/lib/entitlement", () => ({
   getEntitlement: mocks.getEntitlement,
-  prefetchEntitlement: mocks.prefetchEntitlement,
+  askAtLoad: mocks.askAtLoad,
+  askWhenVisible: mocks.askWhenVisible,
 }));
 
 // The gap wording stays real; only the detection is stubbed.
@@ -674,7 +676,7 @@ describe("browsers that cannot run it", () => {
 
     render(<ToolClient />);
 
-    expect(mocks.prefetchEntitlement).not.toHaveBeenCalled();
+    expect(mocks.askAtLoad).not.toHaveBeenCalled();
   });
 });
 
@@ -687,19 +689,39 @@ describe("asking which plan applies (spec 0012, AC-4)", () => {
   it("asks once as the page loads", () => {
     render(<ToolClient />);
 
-    expect(mocks.prefetchEntitlement).toHaveBeenCalledOnce();
+    expect(mocks.askAtLoad).toHaveBeenCalledOnce();
   });
 
   it("does not ask again when the drop zone is warmed", async () => {
     const user = userEvent.setup();
     render(<ToolClient />);
-    mocks.prefetchEntitlement.mockClear();
+    mocks.askAtLoad.mockClear();
 
     await user.hover(screen.getByTestId("drop-area"));
     await user.tab();
 
     expect(mocks.warmEngine).toHaveBeenCalled();
-    expect(mocks.prefetchEntitlement).not.toHaveBeenCalled();
+    expect(mocks.askAtLoad).not.toHaveBeenCalled();
+    expect(mocks.askWhenVisible).not.toHaveBeenCalled();
+  });
+
+  /** Whether to ask is the module's rule (never a Pro page); the page only reports the return. */
+  it("reports the tab coming back, and only that", () => {
+    const visibility = vi.spyOn(document, "visibilityState", "get");
+    const { unmount } = render(<ToolClient />);
+
+    visibility.mockReturnValue("hidden");
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(mocks.askWhenVisible).not.toHaveBeenCalled();
+
+    visibility.mockReturnValue("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(mocks.askWhenVisible).toHaveBeenCalledOnce();
+
+    unmount();
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(mocks.askWhenVisible).toHaveBeenCalledOnce();
+    visibility.mockRestore();
   });
 });
 
@@ -735,7 +757,7 @@ describe("a document not loaded at /tool (spec 0003, AC-21)", () => {
     await user.hover(screen.getByTestId("progress"));
 
     expect(mocks.warmEngine).not.toHaveBeenCalled();
-    expect(mocks.prefetchEntitlement).not.toHaveBeenCalled();
+    expect(mocks.askAtLoad).not.toHaveBeenCalled();
   });
 
   it("runs before the support check, so nothing here is trusted first", () => {
@@ -791,7 +813,7 @@ describe("the tool rendered at the wrong address (spec 0003, INV-11)", () => {
     await user.hover(screen.getByTestId("wrong-url"));
 
     expect(mocks.warmEngine).not.toHaveBeenCalled();
-    expect(mocks.prefetchEntitlement).not.toHaveBeenCalled();
+    expect(mocks.askAtLoad).not.toHaveBeenCalled();
   });
 
   it("says so, and offers a real page load into the tool", async () => {

@@ -1,26 +1,34 @@
 /**
- * The tier and caps a job runs under, fetched once and frozen into the session.
+ * Which plan applies on this page, asked of our own server and kept as the
+ * page's answer. Spec 0012, AC-3 and AC-4, on spec 0002's frozen snapshot.
  *
- * Spec 0002 closes a question spec 0001 left open: when does the tool route ask?
- * The answer is the same trigger that already warms the engine (pointer enter,
- * focus, drag over), so by the time a file has been chosen it has almost always
- * resolved and the common path pays nothing. If it has not, opening waits behind
- * the `checking-entitlement` phase, and that wait is bounded.
+ * The page asks once as it loads, so the plan line can say what applies before
+ * anyone chooses a file. It asks again when the tab comes back and the answer
+ * is not Pro (an upgrade made in another tab shows here, and a paying visitor
+ * is never polled), at an open when the answer is more than 5 minutes old (a
+ * cancel or a lapse shows within one open), and whenever a button asks fresh.
+ * One ask at a time: a trigger during one joins it.
+ *
+ * Every ask has the 4 s budget. Past it the page's answer becomes free with
+ * `unknown`, and an answer that lands later still replaces the page's answer,
+ * so the helper and the plan line catch up. It never reaches a job's
+ * snapshot, which froze at open (spec 0002, INV-5).
  *
  * Failing closed is the whole point. Every path out of here that is not a clean
- * answer from our own origin produces the free tier: a network error, a shape we
- * do not recognise, a tier we have never heard of, a fetch that takes too long.
- * Nothing about a slow or broken network may hand somebody the paid caps.
+ * answer from our own origin is the free tier, said out loud as `unknown`
+ * (INV-2). One exception, and it is bounded: a Pro answer confirmed on this
+ * page in the last 30 minutes survives a failed refresh for age, so a Polar
+ * blip at an open does not cap someone confirmed Pro minutes ago.
  */
 
 import { config } from "@/config";
 import { ENTITLEMENT_ACCOUNTS, type EntitlementSnapshot } from "@/worker/protocol";
 
-/** Same origin, and the only request the tool route makes (AC-3). */
+/** Same origin, and the only request the tool route makes (spec 0002, AC-3). */
 const ENTITLEMENT_URL = "/api/entitlement";
 
 /**
- * How long opening will wait for an entitlement that has not arrived.
+ * How long anything waits for an ask to land.
  *
  * Long enough that a slow connection is not punished with the free cap, short
  * enough that nobody watches a spinner wondering if the page is broken. Not a
@@ -28,6 +36,20 @@ const ENTITLEMENT_URL = "/api/entitlement";
  * from the config module; it is named here for the one place that uses it.
  */
 const WAIT_BUDGET_MS = 4_000;
+
+/**
+ * How old the page's answer may be before an open asks again, so a cancel or a
+ * lapse shows within one open after Polar revokes the benefit. A rule about
+ * freshness, not a cap on the visitor (spec 0012, *Value sourcing*).
+ */
+const REFRESH_AFTER_MS = 300_000;
+
+/**
+ * How long a confirmed Pro answer survives a failed refresh for age. Bounded,
+ * and only for that refresh, so a failure never becomes Pro for anyone not
+ * confirmed Pro on this page (spec 0012, AC-4).
+ */
+const KEEP_PAID_MS = 1_800_000;
 
 /**
  * What every failure on this side falls back to: a request that fails, an
@@ -43,68 +65,181 @@ export const FREE_ENTITLEMENT: EntitlementSnapshot = Object.freeze({
 });
 
 /**
- * Module level and deliberate: one answer per page, shared by every caller.
- *
- * Spec 0001 also asks for a refetch on window focus and before a job that would
- * exceed the free cap. Feature 10 adds that when there is a session that can
- * actually change; today there is nothing to refetch into.
+ * Why an ask was made. Only `age` may keep a recent Pro answer: the tab coming
+ * back never asks a Pro page, and a button that asks fresh wants the truth.
  */
-let inFlight: Promise<EntitlementSnapshot> | null = null;
+type AskReason = "load" | "visible" | "age" | "fresh";
+
+interface Ask {
+  readonly reason: AskReason;
+  /** The page's answer once this ask lands or its budget runs out, whichever comes first. */
+  readonly settled: Promise<EntitlementSnapshot>;
+  readonly hasSettled: () => boolean;
+}
+
+/*
+ * Module level and deliberate: one answer per page, shared by every caller and
+ * every subscriber. Every way into `/tool` is a document load (spec 0003,
+ * INV-10), so each visit starts with none.
+ */
+let answer: EntitlementSnapshot | null = null;
+/** When the page's answer was last set, for the age rule. */
+let answeredAt = 0;
+/** When the page last heard Pro from the server, for the keep rule. */
+let paidAt = Number.NEGATIVE_INFINITY;
+/** The one ask out, from its request until that request settles, past the budget included. */
+let inFlight: Ask | null = null;
+const listeners = new Set<() => void>();
 
 /**
- * Start asking, and do not wait for the answer.
- *
- * Called on the engine warm trigger. Safe to call repeatedly: only the first
- * call makes a request, so hovering the drop area ten times still costs one.
+ * The page's answer, for the drop zone's helper and the plan line, or `null`
+ * until the first ask lands or runs out of budget ("Checking your plan").
  */
-export function prefetchEntitlement(): void {
-  void request();
+export function readEntitlement(): EntitlementSnapshot | null {
+  return answer;
+}
+
+/** For `useSyncExternalStore`: told whenever the page's answer changes. */
+export function subscribeEntitlement(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 /**
- * The snapshot to freeze into a job, waiting only as long as the budget allows.
+ * AC-4: ask once as the page loads. Safe to call again: a second call joins
+ * the ask already out, and one made after the answer does nothing.
+ */
+export function askAtLoad(): void {
+  if (answer === null && inFlight === null) startAsk("load");
+}
+
+/**
+ * AC-4: the tab is visible again. Asks unless the page already holds Pro, so
+ * an upgrade in another tab reaches this one without polling anybody.
+ */
+export function askWhenVisible(): void {
+  if (answer?.tier === "paid") return;
+  if (inFlight === null) startAsk("visible");
+}
+
+/** AC-5's Try again: ask fresh now, or join the ask already out. */
+export function askAgain(): void {
+  if (inFlight === null) startAsk("fresh");
+}
+
+/**
+ * The snapshot to freeze into a job at an open, waiting only within the ask's
+ * budget. Asks again when the page's answer is more than 5 minutes old, and
+ * always when `fresh` (AC-6's "Check my plan and open it again"). An ask
+ * already out is joined either way, so a file chosen just after the tab came
+ * back opens under the answer that return asked for.
  *
  * `onWaiting` fires only when there is a real wait, so the interface can report
  * the `checking-entitlement` phase without flashing it at everybody whose
- * prefetch already landed.
+ * answer is already in.
  */
 export function getEntitlement(
-  options: { onWaiting?: () => void } = {},
+  options: { onWaiting?: () => void; fresh?: boolean } = {},
 ): Promise<EntitlementSnapshot> {
-  const pending = request();
-  let settled = false;
-  void pending.then(() => {
-    settled = true;
-  });
+  const ask =
+    inFlight ??
+    (options.fresh === true ? startAsk("fresh") : isStale() ? startAsk("age") : null);
+  if (ask === null) return Promise.resolve(answer ?? FREE_ENTITLEMENT);
 
-  // A microtask, so a promise that is already resolved settles the flag before
+  // A microtask, so an ask that settles at once is seen to have settled before
   // we decide whether anybody is actually waiting.
   return Promise.resolve().then(() => {
-    if (settled) return pending;
-
+    // Its budget has run out while its request is still out, or it landed: the
+    // page's answer already says what applies.
+    if (ask.hasSettled()) return answer ?? FREE_ENTITLEMENT;
     options.onWaiting?.();
-
-    return Promise.race([
-      pending,
-      new Promise<EntitlementSnapshot>((resolve) => {
-        setTimeout(() => resolve(FREE_ENTITLEMENT), WAIT_BUDGET_MS);
-      }),
-    ]);
+    return ask.settled;
   });
 }
 
+function isStale(): boolean {
+  return answer === null || Date.now() - answeredAt > REFRESH_AFTER_MS;
+}
+
+/**
+ * Send the one request and race it against the budget. The request is never
+ * cut off at the budget: whatever it brings later still becomes the page's
+ * answer, and the ask stays out until then, so the triggers that come in the
+ * meantime join it rather than stacking requests behind a slow server.
+ */
+function startAsk(reason: AskReason): Ask {
+  let settledYet = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const budget = new Promise<EntitlementSnapshot>((resolve) => {
+    timer = setTimeout(() => {
+      take(FREE_ENTITLEMENT, reason);
+      settledYet = true;
+      resolve(answer ?? FREE_ENTITLEMENT);
+    }, WAIT_BUDGET_MS);
+  });
+
+  const landed = request().then((next) => {
+    clearTimeout(timer);
+    if (inFlight === ask) inFlight = null;
+    take(next, reason);
+    settledYet = true;
+    return answer ?? FREE_ENTITLEMENT;
+  });
+
+  const ask: Ask = Object.freeze({
+    reason,
+    settled: Promise.race([landed, budget]),
+    hasSettled: () => settledYet,
+  });
+  inFlight = ask;
+  return ask;
+}
+
+/**
+ * Make an ask's outcome the page's answer, by AC-4's rules. Subscribers hear
+ * of it only when something they show could change.
+ */
+function take(next: EntitlementSnapshot, reason: AskReason): void {
+  const now = Date.now();
+  const keepsPaid =
+    reason === "age" &&
+    next.account === "unknown" &&
+    answer?.tier === "paid" &&
+    now - paidAt <= KEEP_PAID_MS;
+  // Kept, not confirmed: the time stays, so the next open asks again, and
+  // the 30 minutes still run from the last Pro the server actually said.
+  if (keepsPaid) return;
+
+  answeredAt = now;
+  if (next.tier === "paid") paidAt = now;
+  if (answer !== null && sameAnswer(answer, next)) return;
+  answer = next;
+  for (const listener of listeners) listener();
+}
+
+function sameAnswer(a: EntitlementSnapshot, b: EntitlementSnapshot): boolean {
+  return (
+    a.tier === b.tier &&
+    a.pageCap === b.pageCap &&
+    a.maxFileBytes === b.maxFileBytes &&
+    a.account === b.account
+  );
+}
+
+/** The request itself. Never rejects: every failure is `FREE_ENTITLEMENT`. */
 function request(): Promise<EntitlementSnapshot> {
-  inFlight ??= fetch(ENTITLEMENT_URL, {
-    // Same origin only. The session cookie feature 10 will set has to travel,
-    // and nothing here may ever be sent anywhere else.
+  return fetch(ENTITLEMENT_URL, {
+    // Same origin only. Clerk's sign in cookie has to travel, and nothing here
+    // may ever be sent anywhere else.
     credentials: "same-origin",
     headers: { Accept: "application/json" },
   })
     .then((response) => (response.ok ? response.json() : null))
     .then((body: unknown) => readSnapshot(body))
     .catch(() => FREE_ENTITLEMENT);
-
-  return inFlight;
 }
 
 /**
@@ -135,14 +270,4 @@ export function readSnapshot(body: unknown): EntitlementSnapshot {
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
-}
-
-/**
- * Forget the cached answer.
- *
- * For tests, and for feature 10 when signing in or subscribing makes the current
- * answer wrong.
- */
-export function forgetEntitlement(): void {
-  inFlight = null;
 }
