@@ -83,3 +83,33 @@ _Steps for tasks 7a to 7d. The same local setup as slice 1. Slice 1's command st
 
 ## Acceptance-criteria coverage
 - AC-8 … the switching, clean redirect and landing steps · AC-11 … the after deletion case of the sign out test (the delete flow follows in task 12) · AC-12 … the two sign out steps · AC-14 … the stuck customer, known email, disabled email and other product steps · AC-23 … the gate test and the preview build · AC-25 … the tying steps, the conflict step and the INV-3 test
+
+# Slice 2 (never silently free) · updated 2026-10-04
+_Steps for tasks 8 to 10. The same local setup as slice 1. To show an answer the account cannot reach by hand, block or edit `/api/entitlement` in DevTools._
+
+## UI / manual
+- [ ] Open `/tool` signed out → the helper reads "Checking your plan", then "Up to 3 pages on Free"; the plan line directly above the zone reads "Sign in, or see what Pro adds.", and both links open a new tab → AC-5
+- [ ] Signed in on Free, then as `walk-one+clerk_test@redactnest.com` (Pro) → "Get Pro for up to 50 pages a document.", then "Signed in with Pro." with the helper "Up to 50 pages on Pro" → AC-5
+- [ ] Delete the `__session` cookies but keep `__client_uat`, then reload → "Your sign in has expired, so the free limit applies. Sign in again to use Pro." with a Sign in again link → AC-5, AC-2 rule 2
+- [ ] Block `/api/entitlement` in DevTools and reload → after 4 s, "We couldn't check your plan, so the free limit applies for now." with Try again; unblock and press Try again → "Checking your plan…", then the real answer, with focus on the plan line → AC-3, AC-4, AC-5
+- [ ] Signed out, choose a 12 page PDF (`tests/fixtures/read-pages.pdf`) → "This PDF has more than 3 pages", "The free plan handles up to 3 pages. Pro handles up to 50.", "Sign in and get Pro, then open it again here.", a Get Pro link to a new tab, "Check my plan and open it again", and no split advice → AC-6
+- [ ] AC-7 end to end: at the cap, Get Pro → Pricing in a new tab → Subscribe → sign in → pay with 4242 → back to the tool tab → the plan line shows "Signed in with Pro." while the callout still shows the free words → "Check my plan and open it again" → the same file opens past the free cap, with no file picker → AC-7
+- [ ] At the cap, rename or edit the file on disk, then "Check my plan and open it again" → "The file couldn't be read" → AC-6
+- [ ] Pro page: revoke the benefit by hand in Polar, wait over 5 minutes, choose a file → it opens under the free cap, and the callout speaks to a signed in Free account → AC-4
+- [ ] Pro page: over 5 minutes and under 30 after the last Pro answer, block `/api/entitlement` and choose a 12 page file → it still opens under Pro; past 30 minutes it gets the `unknown` callout → AC-4 (keep paid)
+- [ ] Free page: switch to another tab and back → one `/api/entitlement` request and the line updates; on a Pro page, switching back makes no request → AC-4
+
+## Commands
+- [ ] `pnpm exec vitest run tests/unit/entitlement.test.ts` → one ask at a time, the 4 s budget on every ask, late answers, the age and visibility rules, keep paid within 30 minutes only for a refresh for age → AC-3, AC-4
+- [ ] `pnpm exec vitest run tests/unit/flow-text.test.ts tests/component/tool-client.test.tsx` → `PLAN_TEXT` for every account, the helper, the cap words and links by account, billing off keeping today's words, the open again with no picker, a changed file's `file-unreadable` → AC-5, AC-6
+- [ ] `pnpm exec playwright test tests/e2e/plan.spec.ts --project=chromium` → every plan line, every cap callout, axe on each, and AC-7 with a new tab and no file chooser → AC-5, AC-6, AC-7
+
+## Value sourcing
+- [ ] The free cap and the paid figure: change `NEXT_PUBLIC_FREE_PAGE_CAP` and `NEXT_PUBLIC_MAX_PAGES` → the helper, the plan line's "up to N pages a document" and the callout's "Pro handles up to N." all follow → AC-5, AC-6
+- [ ] Billing on or off: build with none of the seven values → no plan line, the helper "Up to 3 pages", and the cap words with the split advice → AC-5, AC-6, AC-23
+- [ ] Which words: open a job anonymously at the cap, then sign in in another tab and come back → the plan line changes, the callout keeps the anonymous words until its button is pressed → AC-6
+- [ ] When to ask again: an open within 5 minutes of the last answer makes no request; one after makes one (`REFRESH_AFTER_MS`) → AC-4
+- [ ] The file opened again: the session's held `File`, so no file chooser opens and the file bar shows the same name → AC-6
+
+## Acceptance-criteria coverage
+- AC-3 … the blocked request step and the entitlement unit test · AC-4 … the revoke, keep paid and tab switching steps, the unit test · AC-5 … the plan line steps for each account, the component and browser tests · AC-6 … the cap callout, changed file and which words steps · AC-7 … the end to end step and the browser test
