@@ -226,7 +226,7 @@ spec [0011](../specs/0011-privacy-policy-terms/index.md) (its Launch readiness s
 The paywall moment: an anonymous visitor hits the page cap, signs in, subscribes, and the cap is gone. The interesting part is that entitlement has to work with no database of your own.
 **Done when:** a visitor at the cap can sign in, subscribe at $19 a month, and immediately redact a document past the cap; there is no trial, because the free plan is the trial (spec 0012); cancelling restores the cap; the subscription can be managed; and no usage counter or user table of your own is introduced.
 **Also owed here:** the rest of spec 0005's paid cap measure. Spec 0007 measured only the checklist. Open time with detection and the slowest single read (which sets how quickly a cancel is noticed, spec 0005 AC-11) are still unmeasured on a dense 50 page document such as `tests/fixtures/detect-dense.pdf`. Measure them before the paid cap lifts the page limit (spec 0012, AC-24).
-spec [0012](../specs/0012-billing-paid-plan/index.md)
+spec [0012](../specs/0012-billing-paid-plan/index.md) · code in `src/billing`, `src/app/(account)`, `src/app/pricing`, `src/config/billing.ts`
 - [x] Design it (spec): `/architect billing & paid plan`
 - [ ] Build it: `/develop billing & paid plan`
   - [ ] The money path: the billing config and its gate, the plan check reading Clerk's cookie and asking Polar, Clerk and Polar in the policy builder, the account pages with sign in, Subscribe and the welcome page, the proxy and the lint walls, Pricing and the header links · AC-1, AC-2, AC-4, AC-8, AC-9, AC-10, AC-13, AC-14, AC-15, AC-16, AC-20, AC-21, AC-23

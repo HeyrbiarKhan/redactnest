@@ -49,6 +49,7 @@ function buildPolicy(options: {
   readonly dev: boolean;
   readonly scriptExtra: readonly string[];
   readonly connectExtra: readonly string[];
+  readonly imageExtra: readonly string[];
 }): string {
   const scriptSrc = [
     "'self'",
@@ -63,8 +64,10 @@ function buildPolicy(options: {
     ...options.connectExtra,
   ];
 
+  const imgSrc = ["'self'", "data:", "blob:", ...options.imageExtra];
+
   // Every other directive holds its fixed sources only. Whether a service may
-  // name frames, images or styles is a later feature's decision (AC-13), and
+  // name frames or styles is a later feature's decision (AC-13), and
   // `default-src 'none'` blocks whatever this does not name.
   return [
     "default-src 'none'",
@@ -72,7 +75,7 @@ function buildPolicy(options: {
     "worker-src 'self'",
     `connect-src ${connectSrc.join(" ")}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    `img-src ${imgSrc.join(" ")}`,
     "font-src 'self'",
     "object-src 'none'",
     "base-uri 'none'",
@@ -91,13 +94,15 @@ export function buildPolicies({
   return {
     // The page that holds a document. Nothing third party may load here, so
     // this never reads `services`, whatever later features add to it (INV-2).
-    tool: buildPolicy({ dev, scriptExtra: [], connectExtra: [] }),
+    tool: buildPolicy({ dev, scriptExtra: [], connectExtra: [], imageExtra: [] }),
     // Every other route. Same shape, plus exactly the origins the services
     // list names, and nothing it does not (INV-1).
     standard: buildPolicy({
       dev,
       scriptExtra: union(services.flatMap((service) => service.scriptOrigins)),
       connectExtra: union(services.flatMap((service) => service.connectOrigins)),
+      // Spec 0012, AC-21: images too, and on the standard policy only.
+      imageExtra: union(services.flatMap((service) => service.imageOrigins)),
     }),
   };
 }

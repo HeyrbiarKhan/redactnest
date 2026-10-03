@@ -3,6 +3,8 @@ import { Button } from "@/ui/button";
 import { PageContainer } from "@/ui/page-container";
 import { SiteHeader } from "@/ui/site-header";
 
+import { SiteNav } from "./site-nav";
+
 /**
  * Kept deliberately light. Feature 15 builds the real landing page; this exists
  * so the scaffold has a route that is not the tool route, which is what the
@@ -22,6 +24,7 @@ export default function HomePage() {
   return (
     <>
       <SiteHeader
+        nav={<SiteNav />}
         action={
           <Button href={TOOL_PATH} reload>
             Redact a PDF

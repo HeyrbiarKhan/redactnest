@@ -62,11 +62,17 @@ const NOTHING_REMOVED: RedactionOutcome = {
   sanitized: ["xmp-metadata"],
 };
 
-const FREE: EntitlementSnapshot = { tier: "free", pageCap: 3, maxFileBytes: 26_214_400 };
+const FREE: EntitlementSnapshot = {
+  tier: "free",
+  pageCap: 3,
+  maxFileBytes: 26_214_400,
+  account: "none",
+};
 const PAID: EntitlementSnapshot = {
   tier: "paid",
   pageCap: 500,
   maxFileBytes: 26_214_400,
+  account: "signed-in",
 };
 
 const ON = asMatchId("m-on");

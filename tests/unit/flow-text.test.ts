@@ -62,11 +62,13 @@ const FREE: EntitlementSnapshot = Object.freeze({
   tier: "free",
   pageCap: 3,
   maxFileBytes: 26_214_400,
+  account: "none",
 });
 const PAID: EntitlementSnapshot = Object.freeze({
   tier: "paid",
   pageCap: 50,
   maxFileBytes: 104_857_600,
+  account: "signed-in",
 });
 
 /** Every failure's words, for both tiers. */

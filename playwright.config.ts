@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-import { SOURCE_URL } from "./tests/e2e/build-env";
+import { BILLING_ENV, SOURCE_URL } from "./tests/e2e/build-env";
 
 /**
  * Browser tests run against a production build, never `next dev`.
@@ -30,6 +30,8 @@ const BUILD_ENV = {
   NEXT_PUBLIC_MAX_FILE_BYTES: "26214400",
   NEXT_PUBLIC_SITE_URL: "https://redactnest.test",
   NEXT_PUBLIC_SOURCE_URL: SOURCE_URL,
+  // Billing on, from a fake set, never the keys in `.env.local` (spec 0012).
+  ...BILLING_ENV,
 };
 
 export default defineConfig({

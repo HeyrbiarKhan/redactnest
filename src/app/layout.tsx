@@ -5,6 +5,10 @@ import { Inter } from "next/font/google";
 // validates at module load, so a missing or malformed environment variable fails
 // `next build` rather than shipping a cap that is quietly `undefined`.
 import { config } from "@/config";
+// The billing gate, for its checks alone (spec 0012, AC-23): a partial or
+// inconsistent set of billing values fails the build and every server start
+// here, and a Vercel production deploy refuses anything but live keys.
+import "@/config/billing";
 import { SiteFooter } from "@/ui/site-footer";
 import { SkipLink } from "@/ui/skip-link";
 

@@ -34,12 +34,41 @@ export interface OutsideService {
   /** Its own privacy policy, https. */
   readonly policyUrl: string;
   /**
-   * The origins the standard policy must allow for it. A service names script
-   * and connect origins only: whether one may also name frames, images or
-   * styles is a later feature's decision, not something to slip in here.
+   * The origins the standard policy must allow for it. A service names script,
+   * connect and image origins only: whether one may also name frames or styles
+   * is a later feature's decision, not something to slip in here. Images joined
+   * with spec 0012 (AC-21), for the avatars Clerk's sign in shows.
    */
   readonly scriptOrigins: readonly string[];
   readonly connectOrigins: readonly string[];
+  readonly imageOrigins: readonly string[];
+}
+
+/**
+ * Clerk's Frontend API in production: a subdomain of ours, set up by DNS
+ * (spec 0012, Go live step 1). A Vercel production build refuses any other
+ * publishable key host (AC-23), so this is also what `src/config/billing.ts`
+ * checks the key against.
+ */
+export const CLERK_PRODUCTION_ORIGIN = "https://clerk.redactnest.com";
+
+/**
+ * Every origin Clerk's script and its calls may come from: production, and a
+ * development instance's host (spec 0012, AC-21). A publishable key whose host
+ * none of these covers fails the build (AC-23), so sign in can never be pointed
+ * at an origin the policy does not name.
+ */
+export const CLERK_ORIGINS: readonly string[] = Object.freeze([
+  CLERK_PRODUCTION_ORIGIN,
+  "https://*.clerk.accounts.dev",
+]);
+
+/** Whether an origin from the list above, wildcard included, covers a host. */
+export function originCoversHost(origin: string, host: string): boolean {
+  const pattern = origin.replace(/^https:\/\//, "");
+  if (!pattern.startsWith("*.")) return host === pattern;
+  const parent = pattern.slice(1);
+  return host.endsWith(parent) && host.length > parent.length;
 }
 
 export interface ComplaintAuthority {
@@ -67,6 +96,56 @@ export const OUTSIDE_SERVICES: readonly OutsideService[] = Object.freeze([
     policyUrl: "https://vercel.com/legal/privacy-notice",
     scriptOrigins: Object.freeze([]),
     connectOrigins: Object.freeze([]),
+    imageOrigins: Object.freeze([]),
+  }),
+  // Spec 0012. Each fact below was read from Clerk's privacy policy (updated
+  // 15 June 2026), its Data Privacy Framework notice and its DPA (updated 26
+  // November 2024) on 3 October 2026. Clerk acts as our processor: "the
+  // customer is the controller and we act as a processor". Its script loads
+  // on the sign in and account pages only (AC-9), never on /tool (INV-1).
+  Object.freeze({
+    name: "Clerk",
+    role: "Runs sign in and accounts",
+    receives:
+      "Your email address, and for each sign in your IP address, browser and device type, and the time",
+    purpose:
+      "To sign you in with an emailed code and keep you signed in on the account pages",
+    location:
+      "The United States and other countries where Clerk and its providers operate, hosted mainly by Google Cloud and Cloudflare",
+    safeguard:
+      "The Data Privacy Framework between the EU and the US, with its UK Extension, and standard contractual clauses where that does not apply",
+    retention: "Until you delete your account, which you can do in Account",
+    // The final address, checked to resolve with no redirect on 3 October 2026.
+    policyUrl: "https://clerk.com/legal/privacy",
+    scriptOrigins: CLERK_ORIGINS,
+    connectOrigins: CLERK_ORIGINS,
+    imageOrigins: Object.freeze(["https://img.clerk.com"]),
+  }),
+  // Spec 0012. Each fact below was read from Polar's privacy policy (effective
+  // 8 September 2026), its buyer terms (updated 25 March 2026) and its DPA
+  // (updated 9 June 2026) on 3 October 2026. Polar sells Pro as merchant of
+  // record and reseller; checkout and the billing portal are Polar's own pages,
+  // reached by a redirect, so it names no origin for any policy here.
+  Object.freeze({
+    name: "Polar",
+    role: "Sells Pro to you as our merchant of record, under the name EdiventStudio, and takes your payment",
+    receives:
+      "Your email address, billing address, payment details and IP address, and your RedactNest account id",
+    purpose:
+      "To sell and renew Pro, charge your card, work out tax, send receipts and handle refunds",
+    location:
+      "The United States, Canada and other countries outside the UK and the EU where Polar and its payment processor Stripe operate",
+    safeguard:
+      "Standard contractual clauses, with the UK’s International Data Transfer Addendum",
+    retention:
+      "While you have an account or subscription with Polar, and longer where tax and accounting law requires",
+    ownUse:
+      "Polar also uses this data for fraud protection and security, and keeps the records tax and accounting law requires, under its own privacy policy. Its payment processor, Stripe, takes your card details.",
+    // The final address, checked to resolve with no redirect on 3 October 2026.
+    policyUrl: "https://polar.sh/legal/privacy-policy",
+    scriptOrigins: Object.freeze([]),
+    connectOrigins: Object.freeze([]),
+    imageOrigins: Object.freeze([]),
   }),
 ]);
 
@@ -124,7 +203,7 @@ export function checkPrivacyConfig(
       : [
           `${service.name}'s policyUrl must be an https address, got ${JSON.stringify(service.policyUrl)}.`,
         ]),
-    ...[...service.scriptOrigins, ...service.connectOrigins]
+    ...[...service.scriptOrigins, ...service.connectOrigins, ...service.imageOrigins]
       .filter((origin) => !isPolicyOrigin(origin))
       .map(
         (origin) =>

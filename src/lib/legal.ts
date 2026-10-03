@@ -25,6 +25,7 @@ const year = 2026;
 
 const tradingName = "RedactNest";
 const country = "Pakistan";
+const sellerName = "EdiventStudio";
 
 /**
  * The contact the repository held until the domain was bought (Launch
@@ -120,6 +121,25 @@ export const LEGAL = Object.freeze({
     beforeTerms: "By choosing a PDF you agree to the ",
     betweenLinks: ". The ",
     afterPrivacy: " explains what happens to your data.",
+  }),
+
+  /**
+   * The studio RedactNest is sold through, the name on a buyer's receipt and
+   * card statement (spec 0012). A trading name of the operator above, so the
+   * operator line does not change.
+   */
+  sellerName,
+  /** Under Subscribe on Pricing (spec 0012, AC-13). */
+  merchantLine: `Payments are handled by Polar, our merchant of record. Your receipt and card statement show ${sellerName}, the studio RedactNest is sold through.`,
+  /**
+   * Set by task 1's sandbox check (spec 0012, AC-13): Polar takes tax out of
+   * the price in some countries and adds it on top in others, such as the US.
+   */
+  taxLine: "Tax may be added at checkout, depending on where you live.",
+  /** "By subscribing you agree to the Terms of service.", around its link. */
+  subscribeNotice: Object.freeze({
+    beforeTerms: "By subscribing you agree to the ",
+    afterTerms: ".",
   }),
 });
 

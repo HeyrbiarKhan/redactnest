@@ -8,18 +8,24 @@
  * Two rules this endpoint exists to keep:
  *
  *  - It accepts no document data and returns none. There is no request body, no
- *    query it reads, and nothing about the document in the answer.
- *  - Failure is closed, never open. An absent, invalid or expired session gets
- *    the free tier. Nothing about a slow or broken network may hand somebody the
- *    paid caps.
+ *    query it reads, and nothing about the document in the answer. The only
+ *    thing it reads is Clerk's sign in cookie.
+ *  - Failure is closed, never open, and never silent. An absent, forged or
+ *    stale sign in, or a check that fails, gets the free tier with the reason
+ *    in `account` (spec 0012, INV-2). Nothing about a slow or broken network
+ *    may hand somebody the paid caps.
  *
- * Feature 10 adds the session cookie read that can answer `paid`. Until it does,
- * there is no session to read and the honest answer is the free tier for
- * everybody, which is also what failing closed would produce.
+ * Spec 0012, AC-1 and AC-2: the decision itself is `resolveEntitlement` in
+ * `src/billing`, which reads the cookie locally and asks Polar only for a user
+ * a genuine token names. Clerk's proxy never runs here (INV-1), and this route
+ * never sets a cookie of its own (INV-5).
  */
 
+import { cookies } from "next/headers";
+
+import { entitlementSeams } from "@/billing/clients";
+import { resolveEntitlement } from "@/billing/entitlement";
 import { config } from "@/config";
-import type { EntitlementSnapshot } from "@/worker/protocol";
 
 /**
  * Route handlers are not cached by default in this version of Next.js, which is
@@ -30,11 +36,11 @@ import type { EntitlementSnapshot } from "@/worker/protocol";
 const NO_SHARED_CACHE = "private, no-store";
 
 export async function GET(): Promise<Response> {
-  const entitlement: EntitlementSnapshot = {
-    tier: "free",
-    pageCap: config.freePageCap,
-    maxFileBytes: config.maxFileBytes,
-  };
+  const jar = await cookies();
+  const entitlement = await resolveEntitlement((name) => jar.get(name)?.value, {
+    caps: config,
+    billing: entitlementSeams(),
+  });
 
   return Response.json(entitlement, {
     headers: { "Cache-Control": NO_SHARED_CACHE },

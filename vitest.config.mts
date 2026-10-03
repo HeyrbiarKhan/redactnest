@@ -23,6 +23,11 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // Throws on import outside React's server build, which is its whole
+      // job in the app and the wrong thing in a unit test of server code.
+      "server-only": fileURLToPath(
+        new URL("./tests/setup/server-only.ts", import.meta.url),
+      ),
     },
   },
   test: {

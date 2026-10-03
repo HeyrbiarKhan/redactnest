@@ -118,3 +118,43 @@ A web pass on 2026-10-03 (full notes in `docs/.agent-cache/research/billing-cler
 ## Spike and measure results
 
 _Filled in by `/develop`: task 1's spike findings and task 16's paid cap measure._
+
+### Task 1 spike (3 October 2026)
+
+Run under `pnpm dev` against the Clerk development instance and the Polar sandbox, with `@clerk/nextjs` 7.9.10 (which resolves `@clerk/backend` 3.22.0 and `@clerk/shared` 4.38.0, and loads clerk-js 6.36.0 and `@clerk/ui` 1.38.0) and `@polar-sh/sdk` 1.0.2 through its `2026-10` module.
+
+**Install.** Both packages are pinned exactly, as `next`, `react` and `mupdf` are, because the plan check relies on Clerk's check order. `@clerk/shared`, `@clerk/backend` and `server-only` are direct dependencies at the versions `@clerk/nextjs` resolves, since pnpm is strict and `src/billing` imports all three. `pnpm dev` passes `sync-legal` with them.
+
+**Sign in under the standard policy.** Clerk's script and calls come from the development host under `*.clerk.accounts.dev` (the clerk-js and `@clerk/ui` bundles, `/v1/environment`, `/v1/client`). Sign up and sign in by emailed code both work. One violation shows: clerk-js tries to start a timer worker from a `blob:` address, which `worker-src 'self'` blocks. It breaks nothing: on `/account` the session token was refreshed 88 seconds later without it. So it stays blocked and the policy gains no source.
+
+**Theme.** Clerk takes CSS variables in `appearance.variables`: the primary button computes to the accent (`rgb(31, 122, 122)`) with white text, all text is Inter, and body text is `ink`. Clerk's footer link ("Sign up") was told apart by colour alone, so `appearance.elements` underlines it (spec 0003, INV-8).
+
+**Landing after sign in.** Sign up with `redirect_url=/account/subscribe` went on to Polar's sandbox checkout, with the signed in email filled in. Sign in with `redirect_url=/tool` landed on `/account`. Both pages pass `forceRedirectUrl` every time (Subscribe or Account), because Clerk follows a `redirect_url` in the address over its fallback, and only the forced value outranks it.
+
+**Cookies.** Clerk set these on the site: `__session` and `__client_uat`, each both plain and suffixed with `_Yx6ZP9zS`, which is exactly what `getCookieSuffix` gives for the publishable key (the plain and suffixed session cookies hold the same token); `__clerk_db_jwt`, plain and suffixed, which development instances use in place of the `__client` cookie; `clerk_active_context`, a session cookie; and `__refresh_<suffix>`, HttpOnly, after a handshake. The spec's data model names only `__session` and `__client_uat`, so the cookie words of claim C6 (task 14) should be written to cover the rest.
+
+**The token.** It lives 60 seconds, its `nbf` sits 10 seconds before `iat`, and it carries `azp`, `exp`, `fva`, `iat`, `iss`, `nbf`, `sid`, `sts`, `sub` and `v`. Its `iss` equals `https://` plus the Frontend API host parsed from the publishable key, and its `azp` equals the site's origin. Once 60 seconds had passed, `verifyToken` reported the real token as `token-expired`, and `/api/entitlement` on `/tool` (no Clerk script) still answered `signed-in` from it, with no `Set-Cookie`.
+
+**`verifyToken` and a missing `azp`.** In `@clerk/backend` 3.22, `verifyToken` refuses a token with no `azp` whenever `authorizedParties` is set (`assertAuthorizedPartiesClaim` checks `!azp`), and it does so before the expiry. *Decided while writing* says it lets such a token through, which is out of date for this version. The route's own presence check stays as a second guard, so the outcome is unchanged.
+
+**The site address.** The route checks `azp` against `config.siteUrl`, so billing works only where `NEXT_PUBLIC_SITE_URL` equals the address the site is opened at. With `.env.local` naming another host, every real token answered `sign-in-needed` and checkout's `success_url` pointed at that host. Locally that means `NEXT_PUBLIC_SITE_URL=http://localhost:3000`. On Vercel, a preview whose address differs from `NEXT_PUBLIC_SITE_URL` would show every signed in visitor "sign in again", which go live should settle.
+
+**Sign out.** Clerk's sign out ends the session and lands on `/` with a client side navigation, so its script stays in memory until the next page load. The next answer is `none`, and every way into `/tool` is a real page load, so the tool's policy is untouched.
+
+**Clerk's server telemetry.** Clerk's proxy prints that it collects telemetry on development instances. `telemetry={false}` on the provider covers the browser only; the server reads just the `CLERK_TELEMETRY_DISABLED` and `NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED` variables. Its collector switches itself off for production instances, so a live deploy sends none.
+
+**Polar's product.** "RedactNest Pro", $19 a month in US dollars, with the "RedactNest Pro" feature flag benefit attached and a required "Terms" tick box. The tick box label is a link, "I agree to RedactNest's [Terms of service](https://redactnest.com/terms)" (with three leading spaces), and renders as "I agree to RedactNest's Terms of service" linking to the terms, under EdiventStudio. The product description says "up to 50 pages", a cap written outside `config`, so it changes by hand if task 16 lowers the cap. The organisation settings (one subscription per customer, the grace period) could not be read back: the access token has no organisation read scope, which is the least privilege it should have, so those rest on the setup steps.
+
+**No customer.** `customers.getStateExternal` for an unknown external id throws `ResourceNotFound` with `statusCode` 404.
+
+**Tax.** Polar's tax depends on the buyer's country. With a billing address in the United Kingdom it is taken out of the $19 ($3.17, the total stays $19), in Germany likewise ($3.03), in Pakistan it is nothing, and in Texas it is added on top ($1.22, a total of $20.22). Polar adds tax in some places, so `LEGAL.taxLine` is "Tax may be added at checkout, depending on where you live."
+
+**Emails Polar refuses.** Polar rejects a `customer_email` whose domain accepts no mail (`example.com`) with a 422, so the spike used addresses at redactnest.com.
+
+**An email that already belongs to a customer with no external id.** Creating the checkout succeeds, and it is not linked to that customer at creation. What Polar does once it is paid is still open (below).
+
+**Polar's role in law.** Polar's privacy policy says "Under the GDPR, we are designated as a Processor with respect to information collected or processed to provide the Services", its DPA names the merchant the controller and Polar the processor, and its buyer terms make Polar "merchant of record and authorized reseller". None of them calls Polar a controller for the sale, as *Policy and terms changes* assumes, so task 14's wording needs settling first. The Polar entry in `OUTSIDE_SERVICES` states only what those documents say.
+
+**Paying in the sandbox.** Stripe's card form runs an invisible hCaptcha that holds an automated browser, so sandbox payments are made by hand.
+
+**Still open.** Two checks need a completed sandbox payment, made by hand: the customer state's shape for a subscriber and where a payment being retried appears in it, and what Polar does on payment when the email already belongs to a customer with no external id.

@@ -8,6 +8,8 @@ import { PageContainer } from "@/ui/page-container";
 import { Prose } from "@/ui/prose";
 import { SiteHeader } from "@/ui/site-header";
 
+import { SiteNav } from "./site-nav";
+
 /**
  * The frame both legal pages share. Spec 0011, AC-1, AC-2 and AC-18.
  *
@@ -31,6 +33,7 @@ export function LegalPage({
   return (
     <>
       <SiteHeader
+        nav={<SiteNav />}
         action={
           <Button href={TOOL_PATH} reload>
             Redact a PDF

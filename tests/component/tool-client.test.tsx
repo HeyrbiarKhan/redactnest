@@ -101,12 +101,14 @@ const FREE: EntitlementSnapshot = Object.freeze({
   tier: "free",
   pageCap: 3,
   maxFileBytes: 20 * 1024 * 1024,
+  account: "none",
 });
 
 const PAID: EntitlementSnapshot = Object.freeze({
   tier: "paid",
   pageCap: 50,
   maxFileBytes: 100 * 1024 * 1024,
+  account: "signed-in",
 });
 
 /** Page 1 typed, page 2 blank: quiet, so the plain name and the all clear line. */
@@ -663,6 +665,41 @@ describe("browsers that cannot run it", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent("Web Workers are unavailable.");
     expect(screen.queryByTestId("drop-area")).not.toBeInTheDocument();
+  });
+
+  it("asks for no plan, because no file can be opened here", () => {
+    mocks.getSupport.mockReturnValue(
+      Object.freeze({ supported: false, missing: ["web-workers"] }) as SupportReport,
+    );
+
+    render(<ToolClient />);
+
+    expect(mocks.prefetchEntitlement).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Spec 0012, AC-4: the plan is asked for once as the page loads, after the load
+ * guard and the support check pass, so the answer is in before a file is
+ * chosen. Warming the drop zone no longer asks.
+ */
+describe("asking which plan applies (spec 0012, AC-4)", () => {
+  it("asks once as the page loads", () => {
+    render(<ToolClient />);
+
+    expect(mocks.prefetchEntitlement).toHaveBeenCalledOnce();
+  });
+
+  it("does not ask again when the drop zone is warmed", async () => {
+    const user = userEvent.setup();
+    render(<ToolClient />);
+    mocks.prefetchEntitlement.mockClear();
+
+    await user.hover(screen.getByTestId("drop-area"));
+    await user.tab();
+
+    expect(mocks.warmEngine).toHaveBeenCalled();
+    expect(mocks.prefetchEntitlement).not.toHaveBeenCalled();
   });
 });
 

@@ -49,7 +49,9 @@ test("the checklist renders a dense document and takes a tick within AC-8's line
   page,
 }) => {
   await page.route("**/api/entitlement", (route) =>
-    route.fulfill({ json: { tier: "paid", pageCap: 50, maxFileBytes: 26_214_400 } }),
+    route.fulfill({
+      json: { tier: "paid", pageCap: 50, maxFileBytes: 26_214_400, account: "signed-in" },
+    }),
   );
 
   await page.addInitScript(() => {

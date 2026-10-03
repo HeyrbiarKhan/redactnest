@@ -23,6 +23,7 @@ const HOST: OutsideService = {
   policyUrl: "https://host.example/privacy",
   scriptOrigins: [],
   connectOrigins: [],
+  imageOrigins: [],
 };
 
 const MAILER: OutsideService = {
@@ -36,6 +37,7 @@ const MAILER: OutsideService = {
   policyUrl: "https://mailer.example/privacy",
   scriptOrigins: [],
   connectOrigins: ["https://api.mailer.example"],
+  imageOrigins: [],
 };
 
 /** The labels AC-8 asks for, in its order. */

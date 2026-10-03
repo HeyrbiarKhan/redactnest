@@ -1,5 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ENTITLEMENT_ACCOUNTS, type EntitlementSnapshot } from "@/worker/protocol";
+
+/**
+ * The route reads Clerk's cookie through `next/headers`, which needs a request
+ * scope a unit test does not have. The jar here is what the route sees.
+ */
+const cookieJar = new Map<string, string>();
+vi.mock("next/headers", () => ({
+  cookies: () =>
+    Promise.resolve({
+      get: (name: string) => {
+        const value = cookieJar.get(name);
+        return value === undefined ? undefined : { name, value };
+      },
+    }),
+}));
+
 /**
  * `GET /api/entitlement`, the only request the tool route makes.
  *
@@ -9,8 +26,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * paid ceiling, or that let a shared cache hand one visitor's tier to another,
  * would have shipped with the suite green.
  *
- * The route validates nothing at request time and reads no input, which is the
- * point: it accepts no document data and returns none.
+ * The route reads no input but Clerk's sign in cookie, which is the point: it
+ * accepts no document data and returns none. Spec 0012 added the cookie read
+ * and `account`; the decision table itself is `billing-entitlement.test.ts`.
+ * With no billing values set, as here, billing is off and everybody gets the
+ * free tier with `account: "none"` (AC-2 rule 1).
  */
 
 const CONFIG_KEYS = [
@@ -25,6 +45,13 @@ const CONFIG_KEYS = [
   "NEXT_PUBLIC_VERCEL_GIT_REPO_SLUG",
   "NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA",
   "VERCEL",
+  "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+  "CLERK_SECRET_KEY",
+  "CLERK_JWT_KEY",
+  "POLAR_ACCESS_TOKEN",
+  "POLAR_ENVIRONMENT",
+  "POLAR_PRO_PRODUCT_ID",
+  "POLAR_PRO_BENEFIT_ID",
 ] as const;
 
 const originalEnv = { ...process.env };
@@ -47,16 +74,19 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs();
   process.env = { ...originalEnv };
+  cookieJar.clear();
 });
 
 describe("what the endpoint answers", () => {
   /** covers: AC-9 */
-  it("gives everybody the free tier, because there is no session to read yet", async () => {
+  it("gives everybody the free tier with billing off, whatever cookie is sent", async () => {
+    cookieJar.set("__session", "eyJhbGciOiJSUzI1NiJ9.e30.c2ln");
+    cookieJar.set("__client_uat", "1791033000");
     const { GET } = await loadRoute();
 
     const body: unknown = await (await GET()).json();
 
-    expect(body).toMatchObject({ tier: "free" });
+    expect(body).toMatchObject({ tier: "free", account: "none" });
   });
 
   it("answers JSON", async () => {
@@ -101,7 +131,12 @@ describe("where the caps come from", () => {
 
     const body: unknown = await (await GET()).json();
 
-    expect(body).toEqual({ tier: "free", pageCap: 7, maxFileBytes: 4242 });
+    expect(body).toEqual({
+      tier: "free",
+      pageCap: 7,
+      maxFileBytes: 4242,
+      account: "none",
+    });
   });
 
   /** The default the spec fixes, when nothing is configured. */
@@ -110,7 +145,12 @@ describe("where the caps come from", () => {
 
     const body: unknown = await (await GET()).json();
 
-    expect(body).toEqual({ tier: "free", pageCap: 3, maxFileBytes: 26_214_400 });
+    expect(body).toEqual({
+      tier: "free",
+      pageCap: 3,
+      maxFileBytes: 26_214_400,
+      account: "none",
+    });
   });
 });
 
@@ -164,12 +204,17 @@ describe("what it refuses to know", () => {
    * request id, a file name or anything else to help with debugging, this
    * fails, and that is the point.
    */
-  it("carries three fields and nothing else", async () => {
+  it("carries four fields and nothing else", async () => {
     const { GET } = await loadRoute();
 
     const body = (await (await GET()).json()) as Record<string, unknown>;
 
-    expect(Object.keys(body).sort()).toEqual(["maxFileBytes", "pageCap", "tier"]);
+    expect(Object.keys(body).sort()).toEqual([
+      "account",
+      "maxFileBytes",
+      "pageCap",
+      "tier",
+    ]);
   });
 
   it("sets no cookie, so nothing about this visitor is written down", async () => {
@@ -206,8 +251,62 @@ describe("agreeing with the browser that reads it", () => {
       tier: "free",
       pageCap: 5,
       maxFileBytes: 1234,
+      account: "none",
     });
 
     vi.unstubAllGlobals();
+  });
+});
+
+/**
+ * Spec 0012, AC-1: whatever the decision, the route passes it through whole,
+ * keeps its headers, and never sets a cookie (INV-5, AC-19).
+ */
+describe("every account kind", () => {
+  afterEach(() => {
+    vi.doUnmock("@/billing/entitlement");
+  });
+
+  const answers: readonly EntitlementSnapshot[] = [
+    ...ENTITLEMENT_ACCOUNTS.map((account) => ({
+      tier: "free" as const,
+      pageCap: 3,
+      maxFileBytes: 26_214_400,
+      account,
+    })),
+    { tier: "paid", pageCap: 50, maxFileBytes: 26_214_400, account: "signed-in" },
+  ];
+
+  for (const answer of answers) {
+    it(`answers ${answer.tier} ${answer.account} whole, private, with no cookie`, async () => {
+      vi.resetModules();
+      vi.doMock("@/billing/entitlement", () => ({
+        resolveEntitlement: () => Promise.resolve(answer),
+      }));
+      const { GET } = await import("@/app/api/entitlement/route");
+
+      const response = await GET();
+
+      expect(await response.json()).toEqual(answer);
+      expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+      expect(response.headers.get("Set-Cookie")).toBeNull();
+    });
+  }
+
+  it("hands the decision Clerk's cookies and nothing else", async () => {
+    cookieJar.set("__session_abc", "token-value");
+    const seen: Array<string | undefined> = [];
+    vi.resetModules();
+    vi.doMock("@/billing/entitlement", () => ({
+      resolveEntitlement: (cookie: (name: string) => string | undefined) => {
+        seen.push(cookie("__session_abc"), cookie("__client_uat"));
+        return Promise.resolve(answers[0]);
+      },
+    }));
+    const { GET } = await import("@/app/api/entitlement/route");
+
+    await GET();
+
+    expect(seen).toEqual(["token-value", undefined]);
   });
 });

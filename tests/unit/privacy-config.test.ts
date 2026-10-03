@@ -4,6 +4,7 @@ import {
   checkPrivacyConfig,
   COMPLAINT_AUTHORITIES,
   isPolicyOrigin,
+  originCoversHost,
   OUTSIDE_SERVICES,
   type OutsideService,
 } from "@/config/privacy";
@@ -28,6 +29,7 @@ const SAMPLE: OutsideService = {
   policyUrl: "https://sample.example/privacy",
   scriptOrigins: [],
   connectOrigins: [],
+  imageOrigins: [],
 };
 
 describe("the real list", () => {
@@ -36,13 +38,29 @@ describe("the real list", () => {
     expect(checkPrivacyConfig(OUTSIDE_SERVICES, COMPLAINT_AUTHORITIES)).toEqual([]);
   });
 
-  /** covers: AC-8. Today, the host only, naming no origin of its own. */
-  it("names Vercel, and no origin for the policy", () => {
-    expect(OUTSIDE_SERVICES.map((service) => service.name)).toEqual(["Vercel"]);
-    for (const service of OUTSIDE_SERVICES) {
-      expect(service.scriptOrigins).toEqual([]);
-      expect(service.connectOrigins).toEqual([]);
-    }
+  /**
+   * covers: spec 0011 AC-8, spec 0012 AC-21. The host, then Clerk with its
+   * origins, then Polar with none, because checkout and the portal are
+   * Polar's own pages reached by a redirect.
+   */
+  it("names Vercel, Clerk and Polar, with only Clerk's origins for the policy", () => {
+    expect(OUTSIDE_SERVICES.map((service) => service.name)).toEqual([
+      "Vercel",
+      "Clerk",
+      "Polar",
+    ]);
+    const origins = Object.fromEntries(
+      OUTSIDE_SERVICES.map((service) => [
+        service.name,
+        [service.scriptOrigins, service.connectOrigins, service.imageOrigins],
+      ]),
+    );
+    const clerk = ["https://clerk.redactnest.com", "https://*.clerk.accounts.dev"];
+    expect(origins).toEqual({
+      Vercel: [[], [], []],
+      Clerk: [clerk, clerk, ["https://img.clerk.com"]],
+      Polar: [[], [], []],
+    });
   });
 
   it("is frozen, entries included", () => {
@@ -96,6 +114,7 @@ describe("a list that must fail", () => {
     for (const service of [
       { ...SAMPLE, scriptOrigins: [origin] },
       { ...SAMPLE, connectOrigins: [origin] },
+      { ...SAMPLE, imageOrigins: [origin] },
     ]) {
       expect(checkPrivacyConfig([service], COMPLAINT_AUTHORITIES)).toEqual([
         expect.stringContaining(JSON.stringify(origin)),
@@ -132,10 +151,29 @@ describe("a list that must fail", () => {
             ...SAMPLE,
             scriptOrigins: ["https://*.a.example"],
             connectOrigins: ["https://a.example:8443"],
+            imageOrigins: [],
           },
         ],
         COMPLAINT_AUTHORITIES,
       ),
     ).toEqual([]);
+  });
+});
+
+/**
+ * Spec 0012, AC-23: the billing gate checks the publishable key's host against
+ * Clerk's origins with this, so a wildcard covers a subdomain and nothing else.
+ */
+describe("whether a Clerk origin covers a host", () => {
+  it.each([
+    ["https://clerk.redactnest.com", "clerk.redactnest.com", true],
+    ["https://clerk.redactnest.com", "evil.clerk.redactnest.com", false],
+    ["https://clerk.redactnest.com", "clerk.redactnest.com.evil.com", false],
+    ["https://*.clerk.accounts.dev", "fluent-cat-12.clerk.accounts.dev", true],
+    ["https://*.clerk.accounts.dev", "clerk.accounts.dev", false],
+    ["https://*.clerk.accounts.dev", "evilclerk.accounts.dev", false],
+    ["https://*.clerk.accounts.dev", "a.clerk.accounts.dev.evil.com", false],
+  ])("%s covers %s: %s", (origin, host, covers) => {
+    expect(originCoversHost(origin, host)).toBe(covers);
   });
 });

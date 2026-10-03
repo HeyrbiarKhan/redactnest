@@ -270,16 +270,38 @@ export interface ResultCounts {
 }
 
 /**
+ * Why the plan check answered as it did, a closed set. Spec 0012, AC-1.
+ *
+ * `none`: not signed in, or billing is off on this build. `signed-in`: a
+ * confirmed sign in, the only kind that may be `paid` (INV-2). `sign-in-needed`:
+ * a sign in existed but cannot be confirmed now. `unknown`: the check itself
+ * failed, so the free limit applies for now. Every free answer says which, so a
+ * paying visitor is never capped in silence. The words for each live in
+ * `PLAN_TEXT` in `src/lib/flow-text.ts`.
+ */
+export const ENTITLEMENT_ACCOUNTS = [
+  "none",
+  "signed-in",
+  "sign-in-needed",
+  "unknown",
+] as const;
+
+export type EntitlementAccount = (typeof ENTITLEMENT_ACCOUNTS)[number];
+
+/**
  * What a visitor is allowed to do, frozen at the moment a job opens.
  *
  * INV-5: a job runs to completion on the snapshot it started with. The tier is
  * never revised mid job, so a subscription lapsing while someone works cannot
- * fail their document halfway through.
+ * fail their document halfway through. `account` travels with it (spec 0012),
+ * because a failure's words come only from its kind and this snapshot (spec
+ * 0007, INV-3), and the cap's words depend on why the answer was free.
  */
 export interface EntitlementSnapshot {
   readonly tier: "free" | "paid";
   readonly pageCap: number;
   readonly maxFileBytes: number;
+  readonly account: EntitlementAccount;
 }
 
 /**

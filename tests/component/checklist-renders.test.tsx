@@ -88,7 +88,12 @@ const OPEN: readonly SessionAction[] = [
     type: "file-chosen",
     jobId: "job",
     file: new File(["%PDF-1.4"], "directory.pdf"),
-    entitlement: { tier: "paid", pageCap: 50, maxFileBytes: 26_214_400 },
+    entitlement: {
+      tier: "paid",
+      pageCap: 50,
+      maxFileBytes: 26_214_400,
+      account: "signed-in",
+    },
   },
   { type: "opened", summary: { pageCount: 25, pages: [] }, matches: MATCHES },
 ];

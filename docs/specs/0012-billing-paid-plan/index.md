@@ -1,7 +1,7 @@
 # 0012. Billing and the paid plan
 
 **Date**: 2026-10-03
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 

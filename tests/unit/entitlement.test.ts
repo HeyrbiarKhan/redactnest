@@ -70,18 +70,25 @@ describe("asking for the entitlement", () => {
   });
 
   it("returns what the endpoint said when it makes sense", async () => {
-    vi.stubGlobal("fetch", reply({ tier: "paid", pageCap: 500, maxFileBytes: 999 }));
+    vi.stubGlobal(
+      "fetch",
+      reply({ tier: "paid", pageCap: 500, maxFileBytes: 999, account: "signed-in" }),
+    );
     const { getEntitlement } = await loadEntitlement();
 
     await expect(getEntitlement()).resolves.toEqual({
       tier: "paid",
       pageCap: 500,
       maxFileBytes: 999,
+      account: "signed-in",
     });
   });
 
   it("freezes what it hands back, so a job's terms cannot be edited", async () => {
-    vi.stubGlobal("fetch", reply({ tier: "paid", pageCap: 500, maxFileBytes: 999 }));
+    vi.stubGlobal(
+      "fetch",
+      reply({ tier: "paid", pageCap: 500, maxFileBytes: 999, account: "signed-in" }),
+    );
     const { getEntitlement } = await loadEntitlement();
 
     expect(Object.isFrozen(await getEntitlement())).toBe(true);
@@ -102,7 +109,8 @@ describe("asking for the entitlement", () => {
 });
 
 describe("failing closed", () => {
-  const FREE = { tier: "free", pageCap: 3, maxFileBytes: 26_214_400 };
+  // Every failure on this side is `unknown`, never `none` (spec 0012, AC-3).
+  const FREE = { tier: "free", pageCap: 3, maxFileBytes: 26_214_400, account: "unknown" };
 
   it.each([
     ["the network fails", () => vi.fn(() => Promise.reject(new Error("offline")))],
@@ -121,6 +129,24 @@ describe("failing closed", () => {
     ["a cap is zero", () => reply({ tier: "paid", pageCap: 0, maxFileBytes: 999 })],
     ["a cap is negative", () => reply({ tier: "paid", pageCap: -1, maxFileBytes: 999 })],
     ["a cap is a float", () => reply({ tier: "paid", pageCap: 2.5, maxFileBytes: 999 })],
+    // Spec 0012, AC-3: the account is a closed set, and only a confirmed sign
+    // in may be paid, so a drifted deploy caps rather than uncaps.
+    [
+      "the account is missing",
+      () => reply({ tier: "free", pageCap: 3, maxFileBytes: 999 }),
+    ],
+    [
+      "the account is one nobody has heard of",
+      () => reply({ tier: "free", pageCap: 3, maxFileBytes: 999, account: "guest" }),
+    ],
+    [
+      "paid comes with an account that is not signed in",
+      () => reply({ tier: "paid", pageCap: 500, maxFileBytes: 999, account: "none" }),
+    ],
+    [
+      "paid comes with the plan check unknown",
+      () => reply({ tier: "paid", pageCap: 500, maxFileBytes: 999, account: "unknown" }),
+    ],
   ])("falls back to the free tier when %s", async (_label, fetcher) => {
     vi.stubGlobal("fetch", fetcher());
     const { getEntitlement } = await loadEntitlement();
@@ -143,6 +169,7 @@ describe("failing closed", () => {
       tier: "free",
       pageCap: 7,
       maxFileBytes: 4242,
+      account: "unknown",
     });
   });
 });

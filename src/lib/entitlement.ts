@@ -14,7 +14,7 @@
  */
 
 import { config } from "@/config";
-import type { EntitlementSnapshot } from "@/worker/protocol";
+import { ENTITLEMENT_ACCOUNTS, type EntitlementSnapshot } from "@/worker/protocol";
 
 /** Same origin, and the only request the tool route makes (AC-3). */
 const ENTITLEMENT_URL = "/api/entitlement";
@@ -30,13 +30,16 @@ const ENTITLEMENT_URL = "/api/entitlement";
 const WAIT_BUDGET_MS = 4_000;
 
 /**
- * What everybody gets until feature 10 can answer otherwise, and what every
- * failure falls back to.
+ * What every failure on this side falls back to: a request that fails, an
+ * answer we cannot read, or one that comes too late. Always `unknown`, never
+ * `none`, so the page says the plan could not be checked rather than quietly
+ * treating a paying visitor as anonymous (spec 0012, AC-3, INV-2).
  */
 export const FREE_ENTITLEMENT: EntitlementSnapshot = Object.freeze({
   tier: "free",
   pageCap: config.freePageCap,
   maxFileBytes: config.maxFileBytes,
+  account: "unknown",
 });
 
 /**
@@ -111,17 +114,23 @@ function request(): Promise<EntitlementSnapshot> {
  * though it is our own endpoint: a deploy where the two sides disagree should
  * cap somebody, never uncap them.
  */
-function readSnapshot(body: unknown): EntitlementSnapshot {
+export function readSnapshot(body: unknown): EntitlementSnapshot {
   if (typeof body !== "object" || body === null) return FREE_ENTITLEMENT;
 
-  const { tier, pageCap, maxFileBytes } = body as Record<string, unknown>;
+  const { tier, pageCap, maxFileBytes, account } = body as Record<string, unknown>;
 
   if (tier !== "free" && tier !== "paid") return FREE_ENTITLEMENT;
   if (!isPositiveInteger(pageCap) || !isPositiveInteger(maxFileBytes)) {
     return FREE_ENTITLEMENT;
   }
+  // Spec 0012, AC-3: an account outside the closed set, or a tier and account
+  // that disagree (paid with anything but a confirmed sign in), is a deploy
+  // where the two sides drifted, and it caps rather than uncaps.
+  const known = ENTITLEMENT_ACCOUNTS.find((kind) => kind === account);
+  if (known === undefined) return FREE_ENTITLEMENT;
+  if (tier === "paid" && known !== "signed-in") return FREE_ENTITLEMENT;
 
-  return Object.freeze({ tier, pageCap, maxFileBytes });
+  return Object.freeze({ tier, pageCap, maxFileBytes, account: known });
 }
 
 function isPositiveInteger(value: unknown): value is number {
