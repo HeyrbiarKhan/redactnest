@@ -20,7 +20,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 7 | Scanned page detection & warnings | Release 1 | done |
 | 8 | Redact flow | Release 1 | done |
 | 9 | Privacy policy & terms | Release 2 | done |
-| 10 | Billing & paid plan | Release 2 | planned |
+| 10 | Billing & paid plan | Release 2 | in-progress |
 | 11 | Telemetry & error monitoring | Release 3 | planned |
 | 12 | Remaining detectors | Release 3 | planned |
 | 13 | Custom terms | Release 4 | planned |
@@ -210,22 +210,33 @@ spec [0011](../specs/0011-privacy-policy-terms/index.md) · code in `src/app/pri
 
 ### 21. Launch readiness · in-progress · Prototype · from spec 0011
 Everything that must be true before RedactNest launches publicly, in one place. Launch also means going public: spec 0001 records the decision to stay on the AGPL 3.0 and publish the source (2026-10-02, after an Artifex commercial licence quote came in over budget), so feature 18's last slice, going public, is done here on go live day. Spec 0011's two production gates hold the first two steps; the rest are lawyer questions, host settings and the going public steps, which no test can check.
-**Done when:** the real contact address and the Article 27 decision are recorded, so a Vercel production deploy builds; a lawyer has answered the Article 27, PECA section 32 and choice of law questions and reviewed both pages; Vercel runs on Pro with Observability Plus, log drains, Web Analytics, Speed Insights and the firewall's challenge modes off; Vercel has confirmed in writing how it treats deployment request logs; and each page's change list is folded into one launch day entry. Feature 10 takes no money before the lawyer review.
-spec [0011](../specs/0011-privacy-policy-terms/index.md) (its Launch readiness steps) · code in `src/lib` (`legal.ts`, `policy-changes.ts`)
+**Done when:** the real contact address and the Article 27 decision are recorded, so a Vercel production deploy builds; Vercel runs on Pro with Observability Plus, log drains, Web Analytics, Speed Insights and the firewall's challenge modes off, a spending cap set, and a rate limit rule that denies rather than challenges; Vercel has confirmed in writing how it treats deployment request logs; billing's go live steps are done (Clerk and Polar in production, a real purchase made and refunded, Polar's account review submitted); and each page's change list is one `First published.` entry dated go live day. The remaining lawyer questions (PECA section 32, Pakistani law and courts, a full review of both pages) wait until RedactNest has 100+ users, on a tech lawyer's advice (2026-10-03), so feature 10 may take money before them.
+spec [0011](../specs/0011-privacy-policy-terms/index.md) (its Launch readiness steps) · spec [0012](../specs/0012-billing-paid-plan/index.md) (its Go live steps) · code in `src/lib` (`legal.ts`, `policy-changes.ts`)
 - [x] Steps decided (spec): `/architect privacy policy & terms`
-- [ ] Do the steps (your steps): spec 0011's Launch readiness list, steps 1 to 7, plus feature 18's going public steps
+- [ ] Do the steps (your steps): spec 0011's Launch readiness list, steps 1 to 7, spec 0012's Go live steps, plus feature 18's going public steps
   - [x] The domain and the real contact address in `LEGAL.contactEmail`: `privacy@redactnest.com`, forwarding tested (2026-10-03) · spec 0011 step 1, AC-16
   - [x] Article 27 recorded in `LEGAL.representatives`: decided, with no EU or UK representative, not required on a lawyer's advice (2026-10-03) · spec 0011 step 2, AC-17
   - [ ] The other lawyer questions: PECA section 32, Pakistani law and courts, and a full review of both pages. Deferred until RedactNest has 100+ users, on the same lawyer's advice (2026-10-03): the pages and the app stay as they are until then · spec 0011 steps 3 and 4
   - [ ] Vercel (your steps on go live day): Pro, the logging and challenge settings off, and the log role confirmed in writing · spec 0011 steps 5 and 6
-  - [x] The change lists folded into one launch day entry, dated 2026-10-03 · spec 0011 step 7
+  - [x] The change lists folded into one launch day entry, dated 2026-10-03. Billing's policy changes join that same entry, and its date moves to go live day (spec 0012 Go live step 4) · spec 0011 step 7
+  - [ ] Billing (your steps on go live day, after feature 10): Clerk and Polar production, the billing values on Vercel, the spending cap and the deny only rate limit rule, the `First published.` date, a real purchase made and refunded, then Polar's account review submitted · spec 0012 Go live steps 1 to 7, INV-12
   - [ ] Going public (your steps on go live day): feature 18's last slice, gitleaks over every ref, the noreply address, the Vercel settings, public with secret scanning, push protection and rulesets, then the first tagged deploy checked · spec 0009 AC-7, AC-19, AC-20, AC-21
 
-### 10. Billing & paid plan · needs a decision · GA
+### 10. Billing & paid plan · in-progress · GA
 The paywall moment: an anonymous visitor hits the page cap, signs in, subscribes, and the cap is gone. The interesting part is that entitlement has to work with no database of your own.
-**Done when:** a visitor at the cap can sign in, subscribe at around $19 a month, and immediately redact a document past the cap; a trial is offered if Polar supports one; cancelling restores the cap; the subscription can be managed; and no usage counter or user table of your own is introduced.
-**Also owed here:** the rest of spec 0005's paid cap measure. Spec 0007 measured only the checklist. Open time with detection and the slowest single read (which sets how quickly a cancel is noticed, spec 0005 AC-11) are still unmeasured on a dense 50 page document such as `tests/fixtures/detect-dense.pdf`. Measure them before the paid cap lifts the page limit.
-- [ ] Design it (spec): `/architect billing & paid plan`
+**Done when:** a visitor at the cap can sign in, subscribe at $19 a month, and immediately redact a document past the cap; there is no trial, because the free plan is the trial (spec 0012); cancelling restores the cap; the subscription can be managed; and no usage counter or user table of your own is introduced.
+**Also owed here:** the rest of spec 0005's paid cap measure. Spec 0007 measured only the checklist. Open time with detection and the slowest single read (which sets how quickly a cancel is noticed, spec 0005 AC-11) are still unmeasured on a dense 50 page document such as `tests/fixtures/detect-dense.pdf`. Measure them before the paid cap lifts the page limit (spec 0012, AC-24).
+spec [0012](../specs/0012-billing-paid-plan/index.md)
+- [x] Design it (spec): `/architect billing & paid plan`
+- [ ] Build it: `/develop billing & paid plan`
+  - [ ] The money path: the billing config and its gate, the plan check reading Clerk's cookie and asking Polar, Clerk and Polar in the policy builder, the account pages with sign in, Subscribe and the welcome page, the proxy and the lint walls, Pricing and the header links · AC-1, AC-2, AC-4, AC-8, AC-9, AC-10, AC-13, AC-14, AC-15, AC-16, AC-20, AC-21, AC-23
+  - [ ] Never silently free: the tool's ask and refresh rules, the plan line, the cap words by account, and "Check my plan and open it again" · AC-3, AC-4, AC-5, AC-6, AC-7
+  - [ ] Managing it: the full account page, the billing portal, delete and sign out, and the sandbox walk · AC-7, AC-10, AC-11, AC-12, AC-17, AC-18
+  - [ ] The words, the proofs and the measure: both legal pages (renamed Terms of service), the cookie and request checks, the paid cap measure, the amends to older specs, and your read of every word · AC-5, AC-6, AC-13, AC-19, AC-20, AC-22, AC-24
+- [ ] Verify it: `/check verify billing & paid plan`
+- [ ] Test it: `/test billing & paid plan`
+- [ ] Review it (fresh model): `/check review billing & paid plan`
+- [ ] Document it: `/document billing & paid plan`
 
 ## Release 3: See it working, and widen the net
 
@@ -287,6 +298,8 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **The crooked scan line on a straight scan**: spec 0006's line (AC-25) shows whenever a match is blocked `slanted-text` on a machine read page, and says the scan is slightly crooked. On a straight scan with a picture pasted before OCR, OCR's lines beside the picture can come out slanted, so the line shows and its advice to straighten the scan may not help (4 matches on the local `scan-dense-photo-before.pdf`). It fails safe: the matches stay blocked and shown. Decide what the line says, or when it shows, measured first · needs a decision · from spec 0010
 - **Host MuPDF's source ourselves**: attach each shipped version's source archive as a release asset on our own repository, if Artifex ever stop serving one we still ship. AGPL section 6(d) keeps its availability our duty (spec 0009, Option 4) · from spec 0009
 - **Open outside contributions**: choose a CLA or DCO, and look again at who can get a commit deployed before approving any fork deployment, since the tag workflow's copy that runs may be the contributor's (spec 0009, INV-3) · needs a decision · from spec 0009
+- **Customer identity across EdiventStudio products**: Polar keeps one customer per email per organisation, with one external id, and RedactNest's account deletion removes the whole Polar customer. Decide before EdiventStudio sells a second product with accounts · needs a decision · from spec 0012
+- **Clerk testing tokens in CI**: run the sign in path in CI against a Clerk development instance, if the hand walk in spec 0012's task 13 proves fragile · from spec 0012
 - **Cookie consent banner**: deliberately not built. The only cookies are the strictly necessary auth ones and analytics is cookieless, so no consent is required. Kept here so it does not get added later out of habit.
 
 ## Legend
