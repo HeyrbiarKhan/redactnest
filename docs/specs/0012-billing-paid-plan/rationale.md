@@ -17,7 +17,7 @@ Compliance scope: UK GDPR and EU GDPR now reach an account email and sign in rec
 
 ### Option 1: Polar asked live, Clerk kept off `/tool`, an expired sign in trusted on its signature (chosen)
 
-`/api/entitlement` reads Clerk's cookies itself. A token whose signature verifies is trusted, and an expired one too for 30 days after it was issued, with no call to Clerk. Then Polar's customer state says whether the user holds the Pro benefit. The proxy runs on the account pages only.
+`/api/entitlement` reads Clerk's cookies itself. A token whose signature verifies is trusted, and an expired one too for 7 days after it was issued, with no call to Clerk. Then Polar's customer state says whether the user holds the Pro benefit. The proxy runs on the account pages only.
 
 **Pros**: no store, no webhook, no cookie of our own; always current on billing; `/tool`'s check never touches Clerk, and its load path never does either; a forged token is refused locally; works however long the tab has been open.
 **Cons**: one outbound call per check; a session revoked elsewhere keeps Pro in this browser until its cookie goes; depends on `verifyJwt` checking the signature before expiry (true in `@clerk/backend` 3.x, pinned by a test); a browser restart needs one Sign in again click.
@@ -70,7 +70,7 @@ A web pass on 2026-10-03 (full notes in `docs/.agent-cache/research/billing-cler
 - `verifyJwt` checks the header, then the signature, then `sub`, `aud`, `azp`, `exp`, `nbf`, `iat`, in that order (installed source). So an expired verdict means the signature and the authorized party were good.
 - Clerk 7 supports Next.js 16 and `proxy.ts`. Its browser scripts (`clerk-js`, `@clerk/ui`) load from the Frontend API host the publishable key names. Its documented CSP: the Frontend API host in `script-src` and `connect-src`, `img.clerk.com` in `img-src`, and Cloudflare and `*.protect.clerk.com` only for bot protection (off here). Telemetry turns off by the `telemetry` prop or `NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED`; keyless mode by `NEXT_PUBLIC_CLERK_KEYLESS_DISABLED`.
 - `@clerk/shared/keys` exports `getCookieSuffix`, `getSuffixedCookieName` and `parsePublishableKey` (installed types).
-- Not found: session statuses and backend rate limits in the docs (the SDK types `status` as a string, one reason the tool's check does not ask for it), the session lifetime defaults, Clerk's data location and transfer safeguard (`/develop` reads them from Clerk's DPA when writing the services entry).
+- Not found: session statuses and backend rate limits in the docs (the SDK types `status` as a string, one reason the tool's check does not ask for it), Clerk's data location and transfer safeguard (`/develop` reads them from Clerk's DPA when writing the services entry). The session lifetime is fixed at 7 days on Clerk's free plan (https://clerk.com/docs/guides/secure/session-options).
 
 **Polar** (`@polar-sh/sdk` 1.0.2):
 - The SDK is versioned by API date: `createPolar` from `@polar-sh/sdk/2026-10`, `environment: "sandbox"`, timeouts in seconds, snake_case fields. `customers.getStateExternal(externalId)` returns `active_subscriptions` (trialing included) and `granted_benefits`; benefit types include `feature_flag`. High confidence (SDK types and Polar docs).
