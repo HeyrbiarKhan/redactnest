@@ -248,16 +248,41 @@ describe("Vercel (INV-7)", () => {
     expect(billing?.live).toBe(true);
   });
 
-  it("refuses live keys on a preview", () => {
-    const { problems } = readBillingConfig({ ...LIVE_SET, ...VERCEL_PREVIEW });
-    expect(problems.join("\n")).toMatch(
-      /Only a Vercel production deploy may hold live Clerk keys/,
-    );
+  const BILLING_OFF_RULE = /Every Vercel build but production runs with billing off/;
+
+  it.each([
+    ["a complete test set", TEST_SET],
+    ["live keys", LIVE_SET],
+    ["a single value", { POLAR_ENVIRONMENT: "sandbox" }],
+  ])("refuses %s on a preview, on the billing off rule alone", (_name, set) => {
+    const { billing, problems } = readBillingConfig({ ...set, ...VERCEL_PREVIEW });
+    expect(billing).toBeNull();
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(BILLING_OFF_RULE);
+    expectNoSecrets(problems);
   });
 
-  it("accepts test keys on a preview, and billing off there", () => {
-    expect(readBillingConfig({ ...TEST_SET, ...VERCEL_PREVIEW }).problems).toEqual([]);
-    expect(readBillingConfig(VERCEL_PREVIEW).problems).toEqual([]);
+  it("names every value set on a preview, and never its value", () => {
+    const { problems } = readBillingConfig({
+      CLERK_SECRET_KEY: SECRET_TEST,
+      POLAR_ACCESS_TOKEN: POLAR_TOKEN,
+      ...VERCEL_PREVIEW,
+    });
+    expect(problems[0]).toMatch(/CLERK_SECRET_KEY, POLAR_ACCESS_TOKEN\.$/);
+    expectNoSecrets(problems);
+  });
+
+  it("refuses a complete set under vercel dev too", () => {
+    const { problems } = readBillingConfig({
+      ...TEST_SET,
+      VERCEL: "1",
+      VERCEL_ENV: "development",
+    });
+    expect(problems.join("\n")).toMatch(BILLING_OFF_RULE);
+  });
+
+  it("builds a preview with none of the seven, billing off", () => {
+    expect(readBillingConfig(VERCEL_PREVIEW)).toEqual({ billing: null, problems: [] });
   });
 });
 
@@ -289,7 +314,12 @@ describe("at module load", () => {
   });
 
   it("throws one ConfigError listing every problem, and no secret", async () => {
-    setEnv({ ...LIVE_SET, POLAR_ENVIRONMENT: "sandbox", ...VERCEL_PREVIEW });
+    setEnv({
+      ...LIVE_SET,
+      CLERK_SECRET_KEY: SECRET_TEST,
+      POLAR_ENVIRONMENT: "sandbox",
+      ...VERCEL_PRODUCTION,
+    });
     const error = await import("@/config/billing").then(
       () => null,
       (thrown: unknown) => thrown,
@@ -299,7 +329,18 @@ describe("at module load", () => {
     expect((error as Error).name).toBe("ConfigError");
     expect(message).toMatch(/The billing configuration stopped this build/);
     expect(message).toMatch(/Live Clerk keys need POLAR_ENVIRONMENT=production/);
-    expect(message).toMatch(/Only a Vercel production deploy may hold live Clerk keys/);
+    expect(message).toMatch(/The Clerk keys disagree/);
     expectNoSecrets([message]);
+  });
+
+  it("stops a preview that holds any billing value", async () => {
+    setEnv({ ...TEST_SET, ...VERCEL_PREVIEW });
+    const error = await import("@/config/billing").then(
+      () => null,
+      (thrown: unknown) => thrown,
+    );
+    expect((error as Error).message).toMatch(
+      /Every Vercel build but production runs with billing off/,
+    );
   });
 });

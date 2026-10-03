@@ -11,8 +11,10 @@
  * a test sign in: test keys go with the Polar sandbox and live keys with
  * production, the publishable key must name a Clerk host the content security
  * policy already allows, and the token key must be a public key. A Vercel
- * production deploy runs only on live keys at our own Clerk domain, and no
- * other Vercel deploy may hold live keys at all (INV-7).
+ * production deploy runs only on live keys at our own Clerk domain, and every
+ * other Vercel build (a preview, or `vercel dev`) runs with billing off, so
+ * any one of the seven there stops it (INV-7). The token check accepts one
+ * site address (`azp`, INV-11), and a preview's address is never that one.
  *
  * Imported by the root layout, so every build and every server start runs
  * these checks, as `src/config/index.ts` does for the caps. Every problem goes
@@ -134,6 +136,15 @@ export function readBillingConfig(env: BillingEnv): {
         : [],
     };
   }
+  if (onVercel && !vercelProduction) {
+    const set = BILLING_NAMES.filter((name) => values[name] !== undefined);
+    return {
+      billing: null,
+      problems: [
+        `Every Vercel build but production runs with billing off, so it may hold none of the seven billing values. Remove them from this environment: ${set.join(", ")}.`,
+      ],
+    };
+  }
   if (missing.length > 0) {
     return {
       billing: null,
@@ -188,9 +199,6 @@ export function readBillingConfig(env: BillingEnv): {
       : null,
     vercelProduction && parsed && `https://${host}` !== CLERK_PRODUCTION_ORIGIN
       ? `A Vercel production deploy needs the publishable key of the ${CLERK_PRODUCTION_ORIGIN.replace("https://", "")} instance, not ${JSON.stringify(host)}.`
-      : null,
-    onVercel && !vercelProduction && publishableKind === "live"
-      ? "Only a Vercel production deploy may hold live Clerk keys. Use test keys and the Polar sandbox for this one."
       : null,
   ].filter((problem) => problem !== null);
 

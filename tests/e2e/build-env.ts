@@ -38,4 +38,8 @@ export const BILLING_ENV = Object.freeze({
   POLAR_ENVIRONMENT: "sandbox",
   POLAR_PRO_PRODUCT_ID: "00000000-0000-4000-8000-0000000e2e01",
   POLAR_PRO_BENEFIT_ID: "00000000-0000-4000-8000-0000000e2e02",
+  // Not one of the seven: Clerk's server collector runs on development
+  // instances, and only this variable stops it (spec 0012, *Decided after the
+  // sandbox walk*).
+  CLERK_TELEMETRY_DISABLED: "1",
 });

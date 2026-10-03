@@ -51,3 +51,35 @@ _Slice 1 (the money path) as built. Locally, billing needs `NEXT_PUBLIC_SITE_URL
 ## Acceptance-criteria coverage
 - AC-1 … the first `/tool` step, the expired token step, the route tests · AC-2 … the decision table, value sourcing rows 1 to 6 · AC-3 … the client test · AC-4 … the load time ask and the Pro open (refresh rules follow in slice 2) · AC-8 … the sign up, sign in, theme and signed in redirect steps · AC-9 … the request and header steps, the matcher and wall tests · AC-10 … the two `/account` steps (renewal, Manage billing and the unknown state follow in slice 3) · AC-12 … the sign out step · AC-13 … the Pricing step and build · AC-14 … the checkout, already Pro and identity steps, INV-3 test · AC-15 … the checkout step · AC-16 … the two welcome steps · AC-19 … the public pages step · AC-20 … the request step, the policy and wall tests · AC-21 … the policy test and the console step · AC-23 … the gate test and the billing off build
 - Not in slice 1: AC-5, AC-6, AC-7, AC-11, AC-17, AC-18, AC-22, AC-24
+
+# Slice 1b (the walk's fixes) · updated 2026-10-03
+_Steps for tasks 7a to 7d. The same local setup as slice 1. Slice 1's command step "live keys on a preview" is replaced by the stricter rule below: every Vercel build but production now refuses any billing value._
+
+## UI / manual
+- [ ] Your stuck `walk-one+clerk_test@redactnest.com` customer: sign in and open `/account/subscribe` once → Polar's customer now shows your Clerk user id as its External ID, and you land on `/account` with "You're already on Pro." and no checkout → AC-25, AC-14
+- [ ] An untied sandbox customer holding a `+clerk_test` email, then sign up with that email, Subscribe and pay → the customer gains your Clerk user id as its external id, Welcome reaches "You're on Pro.", and the tool shows Pro → AC-25, AC-14
+- [ ] Signed out, open Subscribe → Sign in → its "Sign up" link → sign up with a fresh `+clerk_test` address and 424242 → Polar's checkout, never `/account`; then the same from Sign up switching to Sign in, with an existing account → AC-8
+- [ ] On the checkout Subscribe opened → the email field shows your address and is disabled, so the order can only land on the tied customer → AC-14, AC-25
+- [ ] Signed out, open `/sign-in/factor-one?sign_in_force_redirect_url=/pricing&redirect_url=/account/subscribe&keep=1` → the address becomes `/sign-in/factor-one?keep=1&redirect_url=%2Faccount%2Fsubscribe` before Clerk shows; sign in from `/sign-in?sign_in_force_redirect_url=/pricing` → lands on `/account` → AC-8, INV-13
+- [ ] Sign out from `/account` → `/` arrives as a document load (its navigation entry is `/`, type `navigate`), no request to a Clerk origin, `window.Clerk` undefined, and the next `/api/entitlement` answer is `free`, `none` with no `Set-Cookie` → AC-12, INV-13
+- [ ] Go offline in DevTools, then Sign out → "We couldn't sign you out. Try again." and the page stays → AC-12
+- [ ] A sandbox customer holding your email but tied to another external id → Subscribe shows "This email is already linked to another account with us, so we didn't start a checkout. Write to privacy@redactnest.com and we'll sort it out." and starts no checkout → AC-25
+
+## Commands
+- [ ] `pnpm exec vitest run tests/unit/billing-subscribe.test.ts` → INV-3's cases (only A's id and email reach Polar, tie, conflict, soft deleted, case, two matches, 422 on create, other product, unverified email, no session), the tying cases and every Subscribe outcome pass → AC-14, AC-25, INV-3
+- [ ] `pnpm exec vitest run tests/unit/billing-landing.test.ts` → both forms of Subscribe, every Account case, the six parameters and the clean redirect, both pages forcing both landings → AC-8, INV-13
+- [ ] `pnpm exec vitest run --project component tests/component/app/sign-out.test.tsx` → `signOut` called with a function then `/` loaded; a throw stays and says so; after deletion a throw still loads `/` → AC-11, AC-12
+- [ ] `pnpm exec vitest run tests/unit/engine-wall.test.ts` → `SignOutButton` and `UserButton` rejected in every zone and every spelling, the rest of `@clerk/nextjs` still allowed in the account group → INV-13
+- [ ] `pnpm exec vitest run tests/unit/billing-config.test.ts` → a preview or `vercel dev` with any billing value stops on the billing off rule, naming the values set; a preview with none builds → AC-23
+
+## Value sourcing
+- [ ] The email Subscribe uses: a primary email Clerk reports unverified → no email search, no create, the checkout error line → AC-25 step 2
+- [ ] The email's case: Clerk holds `a@…` and Polar `A@…` → tied, not a conflict → AC-25
+- [ ] The customer a checkout is bound to: after Subscribe, the checkout's customer is the one whose external id is your Clerk user id, never one named in the address → INV-3
+- [ ] Another product: a tied customer with an active subscription to another EdiventStudio product → the other product line, no checkout → AC-14
+- [ ] Where Clerk lands: the switch link's absolute `redirect_url` on `NEXT_PUBLIC_SITE_URL`'s origin → Subscribe; the same on another origin → Account → AC-8
+- [ ] Previews: build with `VERCEL=1 VERCEL_ENV=preview` and any one billing value → the build stops naming the billing off rule → AC-23
+- [ ] Telemetry: `pnpm dev` with `CLERK_TELEMETRY_DISABLED=1` from `.env.example` → Clerk's proxy prints no telemetry notice → *Decided after the sandbox walk*
+
+## Acceptance-criteria coverage
+- AC-8 … the switching, clean redirect and landing steps · AC-11 … the after deletion case of the sign out test (the delete flow follows in task 12) · AC-12 … the two sign out steps · AC-14 … the stuck customer, known email, disabled email and other product steps · AC-23 … the gate test and the preview build · AC-25 … the tying steps, the conflict step and the INV-3 test
