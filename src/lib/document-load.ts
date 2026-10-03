@@ -84,3 +84,13 @@ export function loadGuard(loadedAtPath: string | null, address: string): LoadGua
 export function reloadDocument(): void {
   location.reload();
 }
+
+/**
+ * Load `path` as a new document, never a client side navigation, so the page
+ * being left takes its scripts with it (spec 0012, INV-13: sign out ends with
+ * this, and Clerk's script never outlives the account pages). Its own function
+ * for the same reason as `reloadDocument`.
+ */
+export function loadDocument(path: string): void {
+  location.assign(path);
+}

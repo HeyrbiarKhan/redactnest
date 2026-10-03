@@ -24,6 +24,14 @@ export const PRIVACY_PATH = "/privacy";
 export const TERMS_PATH = "/terms";
 
 /**
+ * The home page, where sign out lands. Spec 0012, AC-12 and INV-13: sign out
+ * reaches it as a full page load (`window.location.assign`), so Clerk's
+ * script stops with the account pages, and the provider's `afterSignOutUrl`
+ * names it too.
+ */
+export const HOME_PATH = "/";
+
+/**
  * Pricing and the account pages (spec 0012). Every link to one of these is a
  * plain `a` (`Button`'s `reload`), never `next/link`, so nothing prefetches an
  * account page or the one that starts a checkout, and `/tool` sends no request

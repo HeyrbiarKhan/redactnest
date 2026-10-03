@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { billing } from "@/config/billing";
-import { ACCOUNT_PATH, SIGN_IN_PATH, SIGN_UP_PATH } from "@/lib/routes";
+import { ACCOUNT_PATH, HOME_PATH, SIGN_IN_PATH, SIGN_UP_PATH } from "@/lib/routes";
 
 import { AccountColumn, AccountShell } from "./account-shell";
 import { CLERK_APPEARANCE } from "./clerk-appearance";
@@ -53,7 +53,7 @@ export default function AccountLayout({ children }: { readonly children: ReactNo
       signUpUrl={SIGN_UP_PATH}
       signInFallbackRedirectUrl={ACCOUNT_PATH}
       signUpFallbackRedirectUrl={ACCOUNT_PATH}
-      afterSignOutUrl="/"
+      afterSignOutUrl={HOME_PATH}
       telemetry={false}
       appearance={CLERK_APPEARANCE}
     >

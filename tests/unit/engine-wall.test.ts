@@ -857,3 +857,81 @@ describe("Clerk, Polar and the billing modules", () => {
     }
   });
 });
+
+/**
+ * Spec 0012, INV-13: every way out of the account group is a full page load.
+ * Clerk's `SignOutButton` and `UserButton` sign out with Clerk's client side
+ * navigation, so both are banned by name in every zone, the account group
+ * (the only one allowed `@clerk/nextjs` at all) included.
+ */
+describe("Clerk's sign out components", () => {
+  const CLERK_SIGN_OUT = /Clerk's SignOutButton and UserButton sign out/;
+  const ACCOUNT_PAGE = "src/app/(account)/account/probe/page.tsx";
+
+  const NAMED =
+    'import { SignOutButton } from "@clerk/nextjs";\nexport const s = SignOutButton;\n';
+
+  it.each([
+    ["a named import", NAMED],
+    [
+      "UserButton",
+      'import { UserButton } from "@clerk/nextjs";\nexport const u = UserButton;\n',
+    ],
+    [
+      "an aliased import",
+      'import { SignOutButton as Leave } from "@clerk/nextjs";\nexport const l = Leave;\n',
+    ],
+    [
+      "a namespace import's member",
+      'import * as clerk from "@clerk/nextjs";\nexport const s = clerk.SignOutButton;\n',
+    ],
+    [
+      "a computed member",
+      'import * as clerk from "@clerk/nextjs";\nexport const u = clerk["UserButton"];\n',
+    ],
+    [
+      "a destructured dynamic import",
+      'export const { UserButton: u } = await import("@clerk/nextjs");\n',
+    ],
+    [
+      "JSX through a namespace",
+      'import * as clerk from "@clerk/nextjs";\nexport const s = <clerk.SignOutButton />;\n',
+    ],
+    ["a re-export", 'export { SignOutButton } from "@clerk/nextjs";\n'],
+  ])("rejects %s in the account group", async (_form, code) => {
+    expect(await wallErrors(ACCOUNT_PAGE, code)).toContainEqual(
+      expect.stringMatching(CLERK_SIGN_OUT),
+    );
+  });
+
+  it.each([
+    ROUTE,
+    LIBRARY,
+    PRIMITIVE,
+    PAGE,
+    TOOL_PAGE,
+    ENGINE_MODULE,
+    WORKER,
+    CLIENT,
+    DETECTOR,
+    "src/billing/probe.ts",
+    "src/config/billing.ts",
+    ACCOUNT_PAGE,
+    "src/proxy.ts",
+    "src/app/api/entitlement/route.ts",
+    "src/app/layout.tsx",
+  ])("rejects it in %s, because no zone gets to relax this one", async (path) => {
+    expect(await wallErrors(path, NAMED)).toContainEqual(
+      expect.stringMatching(CLERK_SIGN_OUT),
+    );
+  });
+
+  it("lets the account group use the rest of Clerk's Next.js package", async () => {
+    expect(
+      await wallErrors(
+        ACCOUNT_PAGE,
+        'import { SignIn, useClerk } from "@clerk/nextjs";\nexport const p = [SignIn, useClerk];\n',
+      ),
+    ).toEqual([]);
+  });
+});

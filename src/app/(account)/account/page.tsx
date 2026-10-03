@@ -1,4 +1,3 @@
-import { SignOutButton } from "@clerk/nextjs";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
@@ -14,6 +13,7 @@ import { Card } from "@/ui/card";
 import { SummaryList } from "@/ui/summary-list";
 
 import { AccountColumn } from "../account-shell";
+import { SignOutControl } from "../sign-out";
 
 export const metadata: Metadata = {
   title: "Account",
@@ -80,9 +80,7 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
               Get Pro
             </Button>
           )}
-          <SignOutButton redirectUrl="/">
-            <Button variant="secondary">Sign out</Button>
-          </SignOutButton>
+          <SignOutControl />
         </div>
       </Card>
     </AccountColumn>

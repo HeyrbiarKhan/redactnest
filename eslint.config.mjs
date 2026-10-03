@@ -442,6 +442,29 @@ const noClerkButAnywhere = (...allowed) => [
   },
 ];
 
+const CLERK_SIGN_OUT_MESSAGE =
+  "Clerk's SignOutButton and UserButton sign out with Clerk's client side " +
+  "navigation, which leaves Clerk's script running on the page they land on " +
+  "(spec 0012, INV-13, claims C7 and C9). Sign out with SignOutControl or " +
+  "leaveAccount from src/app/(account)/sign-out.tsx, which end in a full page load.";
+
+/**
+ * Both names in every spelling: a named import, a namespace or dynamic
+ * import's member, a destructured name, JSX, a re-export, and a computed
+ * member (`probe["UserButton"]`). By name rather than by package, so the ban
+ * holds whichever Clerk entry point exports them.
+ */
+const noClerkSignOut = [
+  {
+    selector: ":matches(Identifier, JSXIdentifier)[name=/^(SignOutButton|UserButton)$/]",
+    message: CLERK_SIGN_OUT_MESSAGE,
+  },
+  {
+    selector: "Literal[value=/^(SignOutButton|UserButton)$/]",
+    message: CLERK_SIGN_OUT_MESSAGE,
+  },
+];
+
 /** What every zone keeps whatever else it relaxes: the engine wall's own bans. */
 const WALL_IMPORTS = [
   noMupdfImport,
@@ -466,9 +489,10 @@ const BILLING_SYNTAX = [...noClerkPolarAnywhere, ...noBillingAnywhere];
 /**
  * A zone's rules, from the restrictions it does not get to relax.
  *
- * The storage ban, the colour patterns and the log ban are applied to every
- * zone here rather than passed in, so a zone can only ever relax what it
- * explicitly names, and no zone can name these.
+ * The storage ban, the colour patterns, the log ban and the ban on Clerk's
+ * sign out components are applied to every zone here rather than passed in,
+ * so a zone can only ever relax what it explicitly names, and no zone can
+ * name these.
  */
 const zone = (imports, syntax) => ({
   "no-restricted-imports": ["error", { patterns: imports }],
@@ -478,6 +502,7 @@ const zone = (imports, syntax) => ({
     ...noStorageAnywhere,
     ...noUncheckedColour,
     ...noProcessStreams,
+    ...noClerkSignOut,
   ],
   "no-console": "error",
 });
