@@ -52,6 +52,11 @@ export const polar =
  * What the account pages need from Polar, or `null` with billing off. These
  * calls keep the SDK's own timeout: a person waiting on Subscribe or Account
  * is waiting on that page, not on the tool's budget.
+ *
+ * The three customer writes and the email search are Subscribe's alone, for
+ * tying the customer before checkout (AC-25). Each passes only what it is
+ * given, so INV-3's test can hold that Polar sees the session's user and
+ * nobody else.
  */
 export function accountSeams() {
   if (billing === null || polar === null) return null;
@@ -63,6 +68,11 @@ export function accountSeams() {
     siteUrl: site,
     getStateExternal: (externalId: string) =>
       client.customers.getStateExternal(externalId),
+    findCustomersByEmail: (email: string) => client.customers.list({ email }),
+    setExternalId: (customerId: string, externalId: string) =>
+      client.customers.update(customerId, { external_id: externalId }),
+    createCustomer: (body: { readonly email: string; readonly external_id: string }) =>
+      client.customers.create({ email: body.email, external_id: body.external_id }),
     createCheckout: (body: CheckoutRequest) =>
       client.checkouts.create({ ...body, products: [...body.products] }),
   });
