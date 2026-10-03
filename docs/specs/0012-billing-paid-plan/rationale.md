@@ -11,7 +11,7 @@ Three forces make that harder than it looks:
 - **No store** means the answer to "is this person on Pro" must come from Clerk or Polar each time, or be carried in something the browser holds.
 - **The Polar organisation is EdiventStudio**, which will sell other products, so "has an active subscription" is not the same as "has RedactNest Pro", and the API rate limit is shared.
 
-Compliance scope: UK GDPR and EU GDPR now reach an account email and sign in records (Clerk as our processor), and the sale is a consumer subscription sold by Polar as merchant of record (Polar is the seller of record, handles tax, and is a controller for the sale; card data never reaches us, so PCI DSS is Polar's and its processor's). The full lawyer review is deferred to 100+ users on a tech lawyer's advice (2026-10-03), so the subscriptions terms ship drafted, not cleared.
+Compliance scope: UK GDPR and EU GDPR now reach an account email and sign in records (Clerk as our processor), and the sale is a consumer subscription sold by Polar as merchant of record (Polar is the seller of record and handles tax; its privacy policy and DPA make it our processor, keeping tax and fraud records under its own policy; card data never reaches us, so PCI DSS is Polar's and its processor's). The first draft called Polar a controller for the sale; that was corrected after the sandbox walk (below). The full lawyer review is deferred to 100+ users on a tech lawyer's advice (2026-10-03), so the subscriptions terms ship drafted, not cleared.
 
 ## Options considered
 
@@ -57,8 +57,47 @@ The bar for the entitlement is set by spec 0001: the cap lives in public client 
 
 An independent read only pass (a different model) found the core sound and raised gaps, all applied on your pick:
 - **Changed from the first draft**: the expired token rule no longer asks Clerk `sessions.getSession` (one call, one outage path and one undocumented status string fewer); a Pro answer confirmed in the last 30 minutes survives a failed age refresh; the firewall rate limit became a required go live step, with a per user memo as the fallback.
-- **Your additions after the cross check**: INV-3 (checkout and portal identity from the session only, with its test), INV-11 ("genuine" means signature, issuer and authorized party all verified, only the expiry relaxed, and a failing token always gets "sign in again"; `verifyToken` itself checks no issuer and accepts a missing `azp`, so the route checks both), and INV-12 (the firewall rule denies with 429, never a challenge, per spec 0011 INV-9).
+- **Your additions after the cross check**: INV-3 (checkout and portal identity from the session only, with its test), INV-11 ("genuine" means signature, issuer and authorized party all verified, only the expiry relaxed, and a failing token always gets "sign in again"; `verifyToken` itself checks no issuer and accepts a missing `azp`, so the route checks both; corrected after task 1: `@clerk/backend` 3.22 refuses a missing `azp` itself, and the route keeps its check as a second guard), and INV-12 (the firewall rule denies with 429, never a challenge, per spec 0011 INV-9).
 - **Settled**: the billing off mode and `config.billingEnabled`, with CI building on a fake complete set; Polar's error statuses; the cookie helper; the ask's concurrency, budget and late answers; "open it again" as `file-chosen` on the held `File`; the sign in redirect rule; plan display without an active subscription; the delete flow's confirm, refusals, failure lines and browser sign out; Subscribe refusing on `unknown`; the welcome page's polling; one call for the portal; the exact proxy matcher, noindex and plain links; the gate's consistency, host and PEM rules; AC-21's spike exception; claim C6's wording; the measure's step and machine.
+
+### After the sandbox walk (2026-10-03)
+
+Slice 1 was built, and your walk through the Polar sandbox found two faults; `/develop` sent back six more points. You asked for all eight to be settled together and nothing else.
+
+**1. A payment that the plan check could not find.** A sandbox customer already held your email with no external id (task 1's spike made it). You signed up and paid: the subscription went active and the benefit was granted, but Polar put the order on that older customer and left its external id empty, although the checkout carried `external_customer_id`. The plan check looks customers up by external id, so it never found you, and Welcome sat on "still being confirmed". In production, anyone whose email already belonged to an EdiventStudio customer would pay and stay on the free plan. Polar's own docs describe `external_customer_id` as matching an existing customer by that id and otherwise creating one with it set; what the walk shows is that when no customer has the id but one has the email, the email wins and the id is dropped. The installed SDK's types add the two facts the fix rests on: a customer's email is unique within the organisation, and its external id can be set once and never changed.
+
+Options weighed:
+- **Tie or create before checkout, bind the checkout by `customer_id` (chosen).** The customer always carries the account's id before any money moves, so there is one path and nothing to repair after payment. Tying an untied customer found by email is safe because Clerk has proved the person owns that email with an emailed code, which is also how Polar's own portal signs people in. Once tied, the customer's state is read again, so a person who already paid (your stuck sandbox customer, or anyone caught before this fix) goes to "You're already on Pro." and is never charged twice. Cons: a Polar customer record for anyone who leaves checkout; up to four Polar calls on Subscribe; an email tied to another id needs you by hand.
+- **Tie only, let checkout create new customers.** No record for people who leave checkout. But a buyer who edits the email in Polar's form to one an untied customer holds would hit the same fault again.
+- **Repair after payment on Welcome.** Leaves checkout alone, but fixes the fault only after money has moved, needs the checkout id from the address, and must refuse to tie a customer whose email differs from the verified one, so some payments would still be stranded.
+
+Because tying can bring in a customer who existed before RedactNest, AC-11 now also refuses deletion while another product's subscription is active: deleting the Polar customer would end it.
+
+**2. Polar's role in law.** Polar's privacy policy says it is a processor for what it handles to provide its services, its DPA names the merchant the controller and Polar the processor, and its buyer terms make it "merchant of record and authorized reseller". The first draft called Polar a controller for the sale, the way Paddle describes itself. Chosen: our processor, as Polar's documents say, with its fraud, security and tax record work described as its own use under its own policy, the pattern spec 0011 uses for Vercel's `ownUse`. Runners up: keep "controller" (no document of Polar's backs it, and spec 0011 takes vendor facts from the vendor); name no role (GDPR expects the policy to say who processes data and in what role). Whether that own use makes Polar a controller in law goes to the deferred lawyer review.
+
+**3. Clerk's cookies.** Task 1 found five names on the site, not two (`__session`, `__client_uat`, `__refresh_<suffix>`, `clerk_active_context`, and `__clerk_db_jwt` on development instances), each possibly suffixed. C6 now speaks of Clerk's sign in cookies by owner and purpose, with a link to Clerk's cookie page, so a renamed cookie in a later Clerk does not make the claim false.
+
+**4. Previews.** The token check accepts one site address (`azp`), and every preview has another, so a signed in visitor there always saw "sign in again". Chosen: billing off on every Vercel build that is not production, enforced by the gate. Runners up: the deployment's own address on previews (two addresses per preview, Clerk's allowed origins, more gate rules, for checks a local sandbox run already gives); leave it and document it (a preview that looks broken). There is no Vercel project until go live, so nothing is lost today.
+
+**5. A missing `azp`.** Task 1 found that `verifyToken` in `@clerk/backend` 3.22 refuses a token with no `azp` whenever `authorizedParties` is set. The wording was corrected; the route's own check stays as a second guard, and the outcome is unchanged.
+
+**6. Sign out.** Clerk's `SignOutButton` lands on `/` with a client side navigation, so Clerk's script kept running on the home page, against C7 and C9. The app router's `ClerkProvider` sets its own `routerPush` and `routerReplace` after the props it is given (read in the installed `@clerk/nextjs` 7.9.10), so Clerk's navigation cannot be made a full load from outside. Chosen: our own control calls `signOut` with a callback, which stops Clerk navigating (the `SignOut` type in `@clerk/shared` 4.38 takes one), then `window.location.assign("/")`. INV-13 states the rule for every way out of the account group.
+
+**7. The Subscribe destination lost on the switch.** Reading `RedirectUrls` in the installed `@clerk/shared` points to the cause (read from the code, not yet watched in a browser; task 7b confirms it): Clerk turns every redirect URL into an absolute one on the page's origin before carrying it across, so the sign up page most likely received `redirect_url=http://localhost:3000/account/subscribe`, which the exact match on `/account/subscribe` rejected, and the forced Account landing won. The landing now accepts the path or an absolute URL on the site's own origin. The same code shows Clerk ranking a `*_force_redirect_url` or `*_fallback_redirect_url` in the address above the page's forced value, so a crafted link could land a new sign in on any page of the site by a client side navigation. The tool's load guard already reloads `/tool` reached that way (spec 0003, AC-21), but elsewhere Clerk would keep running, so the pages now refuse those parameters with a clean redirect. This goes past the eight points, and is included because recording "both pages force the landing" (point 8) would otherwise be untrue.
+
+**8. Small choices recorded.** Both pages always force the landing; the account redirects are 307s from `redirect()`; the header's words live in `src/app/site-nav.tsx`; the tick box label is a markdown link; the product description's page figure is checked against `config.maxPages` by hand at go live; `CLERK_TELEMETRY_DISABLED=1` for development and the e2e build; Get Pro on Account goes to Pricing first.
+
+**Cross check of this update.** A read only pass on a different model (Sonnet) confirmed in the SDK types that `customer_id` binds a checkout apart from `external_customer_id` and `customer_email`, so the fix closes the fault, and raised twelve points, all applied on your pick:
+- Tying: soft deleted customers ignored, untied defined as a null, missing or empty id, several live matches treated as a conflict, the email lowercased, and one more list after a 422.
+- A customer who already subscribes to another EdiventStudio product gets a line of their own instead of a checkout that always fails, since the one subscription rule covers the whole organisation.
+- `planFromState` avoids a fifth Polar call.
+- The landing function's shape is stated, and the clean redirect keeps Clerk's own parameters.
+- Sign out after deletion ignores a failure.
+- Re-signup after deletion is checked in the sandbox.
+- C13 says the email is sent when you start to subscribe.
+- Small notes on AC-23 and the Preview environment.
+
+Its suggestion to search customers by a free text query when the email filter misses was not taken, because it would read other people's records.
 
 ## Research findings
 
@@ -157,4 +196,4 @@ Run under `pnpm dev` against the Clerk development instance and the Polar sandbo
 
 **Paying in the sandbox.** Stripe's card form runs an invisible hCaptcha that holds an automated browser, so sandbox payments are made by hand.
 
-**Still open.** Two checks need a completed sandbox payment, made by hand: the customer state's shape for a subscriber and where a payment being retried appears in it, and what Polar does on payment when the email already belongs to a customer with no external id.
+**Still open.** Two checks need a completed sandbox payment, made by hand: the customer state's shape for a subscriber and where a payment being retried appears in it, and what Polar does on payment when the email already belongs to a customer with no external id. (Your walk answered the second: the order lands on that customer and the external id is dropped. See *After the sandbox walk*.)
