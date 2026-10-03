@@ -61,7 +61,9 @@ export function PlanLine({ answer, checking, onTryAgain, lineRef }: PlanLineProp
     <div className="flex min-h-6 flex-wrap items-center gap-x-3">
       <p
         ref={lineRef}
-        tabIndex={-1}
+        // A place Try again can hand focus to, once there are words to land
+        // on: an empty line is no target at all (spec 0003, AC-7).
+        tabIndex={line === null ? undefined : -1}
         role="status"
         data-testid="plan-line"
         className="text-small text-ink-muted"

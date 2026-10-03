@@ -447,10 +447,12 @@ test.describe("a short OCR scan (spec 0008)", () => {
 });
 
 test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
-  test("starts at the skip link, then the wordmark, the header's links, then the file picker", async ({
+  test("starts at the skip link, then the wordmark, the header's links, the plan line, then the file picker", async ({
     page,
   }) => {
     await page.goto("/tool");
+    const plan = page.getByTestId("plan-line");
+    await expect(plan.getByRole("link")).toHaveCount(2);
 
     await page.keyboard.press("Tab");
     const skip = page.getByRole("link", { name: "Skip to main content" });
@@ -470,20 +472,35 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await page.keyboard.press("Tab");
     await expect(header.getByRole("link", { name: "Account" })).toBeFocused();
 
+    // Spec 0012, AC-5: the plan line sits directly above the drop zone, so an
+    // anonymous visitor's two links come next, in the order they are read.
+    for (const name of ["Sign in", "see what Pro adds"]) {
+      await page.keyboard.press("Tab");
+      const link = plan.getByRole("link", { name: `${name} (opens in a new tab)` });
+      await expect(link).toBeFocused();
+      await expectFocusRing(link);
+    }
+
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("choose-file")).toBeFocused();
     await expectFocusRing(page.getByTestId("choose-file"));
   });
 
-  test("the skip link moves focus to main, so the next Tab is the file picker", async ({
+  test("the skip link moves focus to main, so the next Tabs are the plan line, then the file picker", async ({
     page,
   }) => {
     await page.goto("/tool");
+    await expect(page.getByTestId("plan-line").getByRole("link")).toHaveCount(2);
 
     await page.keyboard.press("Tab");
     await page.keyboard.press("Enter");
     await expect(page.locator("main")).toBeFocused();
 
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("link", { name: "Sign in (opens in a new tab)" }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("choose-file")).toBeFocused();
   });
