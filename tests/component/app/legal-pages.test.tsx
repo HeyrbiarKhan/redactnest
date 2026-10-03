@@ -202,10 +202,14 @@ describe("the privacy policy's facts", () => {
     expect(text).toContain("no profiling");
   });
 
-  /** covers: AC-6. Nothing about representatives while the decision is pending. */
-  it("says nothing about representatives while the decision is pending", () => {
-    // Only meaningful while the repository still holds the pending decision.
-    if (LEGAL.representatives.status !== "pending") return;
+  /** covers: AC-6. Nothing about representatives while none is recorded. */
+  it("says nothing about representatives while none is recorded", () => {
+    // Only meaningful while the repository's decision names nobody, as the
+    // recorded "not required, on advice" does.
+    const decision = LEGAL.representatives;
+    if (decision.status === "decided" && (decision.eu !== null || decision.uk !== null)) {
+      return;
+    }
 
     render(<PrivacyPage />);
     expect(mainText()).not.toMatch(/representative/i);

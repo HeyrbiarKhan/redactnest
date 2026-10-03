@@ -72,8 +72,8 @@ export function ChangeList({ changes }: { readonly changes: PolicyChanges }) {
 }
 
 /**
- * The contact address as a `mailto:` link (AC-6, AC-10). The placeholder until
- * Launch readiness step 1, which a production deploy refuses (AC-16).
+ * The contact address as a `mailto:` link (AC-6, AC-10). A production deploy
+ * refuses one on a `.invalid` host, the placeholder among them (AC-16).
  */
 export function ContactLink() {
   const email = LEGAL.contactEmail.trim();

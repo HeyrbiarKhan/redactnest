@@ -14,9 +14,9 @@ import {
  * The two launch facts and the gate over them. Spec 0011, AC-16 and AC-17,
  * INV-5.
  *
- * `checkLegalFacts` is pure, so these cases feed it a real address and a
- * recorded decision while `src/lib/legal.ts` still holds the placeholders. The
- * config test proves the build actually calls it.
+ * `checkLegalFacts` is pure, so these cases feed it the placeholders and each
+ * kind of decision whatever `src/lib/legal.ts` holds. The config test proves
+ * the build actually calls it.
  */
 
 const REAL_EMAIL = "privacy@redactnest.example";
@@ -27,7 +27,7 @@ const REPRESENTATIVE: Representative = {
   email: "rep@example.eu",
 };
 
-/** What the repository holds until Launch readiness steps 1 and 2. */
+/** What the repository held until Launch readiness steps 1 and 2. */
 const PLACEHOLDERS: LaunchFacts = {
   contactEmail: CONTACT_PLACEHOLDER,
   representatives: { status: "pending" },
@@ -40,11 +40,18 @@ const READY: LaunchFacts = {
 };
 
 describe("the facts the repository holds today", () => {
-  /** covers: AC-16, AC-17 */
-  it("are the placeholder address and a pending decision", () => {
-    expect(LEGAL.contactEmail).toBe(CONTACT_PLACEHOLDER);
-    expect(CONTACT_PLACEHOLDER).toBe("privacy@redactnest.invalid");
-    expect(LEGAL.representatives).toEqual({ status: "pending" });
+  /**
+   * covers: AC-16, AC-17. Launch readiness steps 1 and 2, recorded 2026-10-03:
+   * the real address, and no representative, not required on advice.
+   */
+  it("are the real address and the recorded Article 27 decision", () => {
+    expect(LEGAL.contactEmail).toBe("privacy@redactnest.com");
+    expect(LEGAL.representatives).toEqual({ status: "decided", eu: null, uk: null });
+  });
+
+  /** covers: AC-16, AC-17, INV-5. A production deploy builds with them. */
+  it("pass the production gate", () => {
+    expect(checkLegalFacts(LEGAL, "production")).toEqual([]);
   });
 
   /** covers: AC-6. The operator line both pages name. */
@@ -56,6 +63,7 @@ describe("the facts the repository holds today", () => {
 
   /** covers: AC-16. The placeholder passes the shape, so previews build. */
   it("include a placeholder that passes the address shape", () => {
+    expect(CONTACT_PLACEHOLDER).toBe("privacy@redactnest.invalid");
     expect(EMAIL_SHAPE.test(CONTACT_PLACEHOLDER)).toBe(true);
   });
 

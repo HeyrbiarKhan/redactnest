@@ -11,10 +11,11 @@
  *
  * Spec 0011 adds who runs the service, how to reach them, the Article 27
  * record, and the words of the footer's Legal nav and the line under the drop
- * zone. Two of these facts move one way, by hand, before launch: the contact
- * from the placeholder to the real address, and the representatives from
- * `pending` to `decided`. `checkLegalFacts` is what stops a production deploy
- * going out before both have moved (INV-5).
+ * zone. Two of these facts moved one way, by hand, before launch (Launch
+ * readiness steps 1 and 2, 2026-10-03): the contact from the placeholder to
+ * the real address, and the representatives from `pending` to `decided`.
+ * `checkLegalFacts` still stops a production deploy if either moves back
+ * (INV-5).
  */
 
 const holder = "Heyrbiar Khan";
@@ -26,9 +27,10 @@ const tradingName = "RedactNest";
 const country = "Pakistan";
 
 /**
- * The contact until the domain is bought (Launch readiness step 1). The
- * `.invalid` top level domain is reserved and never delivers mail, so the
- * placeholder cannot reach a stranger while previews and development show it.
+ * The contact the repository held until the domain was bought (Launch
+ * readiness step 1). The `.invalid` top level domain is reserved and never
+ * delivers mail, so the placeholder could not reach a stranger. Kept so the
+ * production gate can name it if it ever comes back (AC-16).
  */
 export const CONTACT_PLACEHOLDER = "privacy@redactnest.invalid";
 
@@ -64,15 +66,26 @@ export interface LaunchFacts {
   readonly representatives: RepresentativesDecision;
 }
 
-const contactEmail: string = CONTACT_PLACEHOLDER;
+/**
+ * The real address, on the domain bought for launch, with its forwarding
+ * tested (Launch readiness step 1, 2026-10-03).
+ */
+const contactEmail: string = "privacy@redactnest.com";
 
 /**
+ * Decided, with neither an EU nor a UK representative: not required, on a
+ * lawyer's advice (Launch readiness step 2, 2026-10-03).
+ *
  * Typed by `Object.freeze`'s type argument, never by an annotation on the
  * const. A const annotated with a union narrows to the member its value
  * matches, and `LEGAL` takes that narrow type, so a decided record here broke
  * the build wherever code asks which status it holds (AC-17).
  */
-const representatives = Object.freeze<RepresentativesDecision>({ status: "pending" });
+const representatives = Object.freeze<RepresentativesDecision>({
+  status: "decided",
+  eu: null,
+  uk: null,
+});
 
 export const LEGAL = Object.freeze({
   holder,

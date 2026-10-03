@@ -272,8 +272,8 @@ const VERCEL_ENVIRONMENTS: readonly string[] = ["production", "preview", "develo
  * pass rather than two.
  *
  * Off Vercel nothing says production, so a self hosted deploy of the AGPL
- * source keeps the placeholder, as AC-16 specifies. It fails safe: a `.invalid`
- * address never delivers, so it cannot reach a stranger.
+ * source builds even with the placeholder, as AC-16 specifies. It fails safe: a
+ * `.invalid` address never delivers, so it cannot reach a stranger.
  */
 function checkLaunchFacts(): void {
   const vercelEnv = present(RAW.VERCEL_ENV);
