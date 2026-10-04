@@ -161,6 +161,43 @@ test.describe("every way into the tool is a real page load", () => {
 });
 
 /**
+ * Spec 0012, AC-9 and INV-10. Every page's header links to Pricing and Account
+ * as plain links, so nothing prefetches Pricing, an account page or the page
+ * that starts a checkout. `next/link` prefetches on sight and again on hover,
+ * so both get their chance before the count is read, as for the tool above.
+ */
+test.describe("the header's Pricing and Account links", () => {
+  for (const path of ["/", "/tool", "/pricing", "/privacy", "/terms"]) {
+    test(`are plain links on ${path} that prefetch nothing`, async ({ page }) => {
+      const prefetched: string[] = [];
+      page.on("request", (request) => {
+        const { pathname } = new URL(request.url());
+        if (pathname === path) return;
+        if (/^\/(pricing|account|sign-in|sign-up)(\/|$)/.test(pathname)) {
+          prefetched.push(pathname);
+        }
+      });
+
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+
+      const header = page.getByRole("banner");
+      for (const [name, href] of [
+        ["Pricing", "/pricing"],
+        ["Account", "/account"],
+      ] as const) {
+        const link = header.getByRole("link", { name, exact: true });
+        await expect(link).toHaveAttribute("href", href);
+        await link.hover();
+      }
+      await page.waitForLoadState("networkidle");
+
+      expect(prefetched).toEqual([]);
+    });
+  }
+});
+
+/**
  * Spec 0009, AC-1 and AC-2. AGPL section 5(d)'s notice and section 13's source
  * offer, on the page doing the work as on every other.
  */
