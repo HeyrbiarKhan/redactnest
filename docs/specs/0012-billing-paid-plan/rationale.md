@@ -135,6 +135,39 @@ On the referrer policy, three values were weighed. Browsers today default to `st
 
 **Cross check of this update.** A read only pass on a different model (Sonnet) found the three decisions sound and raised gaps, all applied on your pick. The clean address is built from `request.nextUrl`, never `config.siteUrl`, with names matched once decoded but case sensitively. The strip covers every method and every page in the matcher. The e2e test sends the request as a page load (Clerk runs its handshake for nothing else, so without those headers the test would prove nothing) and adds a control that reaches Clerk's host. The header test names its rule source, reads the script address from the page, and covers `/engine/VERSION`. Its concern that the proxy would pull in billing code was checked and dropped: `plan.ts` holds only `server-only`. Its point on another product's `past_due` subscription stays the accepted tradeoff recorded under point 1.
 
+### After task 13's walk: claim C6 (2026-10-04)
+
+Task 13's cookie check failed as written (*Task 12a by hand and task 13's walk* below). C6 said Clerk's cookie page lists every cookie Clerk sets, and the check compared the browser against that page. The page lists three: `__session` and `__client_uat` as first party, and Cloudflare's `_cfuvid` as third party. The walk saw ten names (plain and suffixed forms counted apart): those three, plus `__refresh_<suffix>`, `clerk_active_context`, `__clerk_db_jwt` (development only), the suffixed forms of `__session`, `__client_uat` and `__clerk_db_jwt`, and Cloudflare's `__cf_bm` on Clerk's host. "We set none of our own" held: nothing outside Clerk and Cloudflare set a cookie on either host, and `/api/entitlement` set none. What failed was the promise about Clerk's page. You asked for C6 to be true without it, by owner and purpose, and for a go live check on the real domains.
+
+One more weakness turned up while rewording. C6 opened "No cookies until you sign in", and nobody checked a visitor who opens the sign in page and leaves. Clerk's script runs as that page loads, and its calls to Clerk's host pass through Cloudflare, so cookies most likely appear before any sign in. The claim's real boundary is the page, which AC-9 already holds: only the account group loads Clerk or runs the proxy.
+
+Options weighed:
+- **By owner, purpose and place, naming no cookie (chosen).** Owner: Clerk, and Cloudflare on Clerk's host. Purpose: sign in and its security, strictly necessary. Place: only the sign in and account pages set them, on our site and on `clerk.redactnest.com`. A renamed or added Clerk cookie keeps the claim true as long as Clerk sets it for sign in. Cons: a visitor gets no names; only checks by hand hold the signed in half, since no test can reach a real Clerk instance.
+- **List every name in the policy.** The most transparent today. But Clerk changes its cookies between releases (the walk already found six more Clerk names than Clerk documents), so the list would go stale with any upgrade, and each upgrade would change a legal page.
+- **Keep the link to Clerk's cookie page, as further reading.** Gives the reader Clerk's own words. But a link beside the cookie words reads as the list, and a reader who compares it with their browser finds seven names missing.
+
+Three smaller choices, all on your pick:
+- **Cloudflare is named.** The Clerk entry in `OUTSIDE_SERVICES` already says Clerk is "hosted mainly by Google Cloud and Cloudflare", and Clerk's cookie page names `_cfuvid` as Cloudflare's, so naming it adds no new vendor fact. A visitor who sees `__cf_bm` can match it to a name. Runner up: "the network Clerk uses", never stale if Clerk moves, but vaguer.
+- **Polar's pages are said to be Polar's own.** The walk saw Polar, Stripe and Google cookies on their own domains in checkout and the portal. One sentence keeps "nothing else sets a cookie" from reading as covering them.
+- **No link to Clerk's cookie page.** Clerk's privacy policy stays linked under Services we use.
+
+**Cloudflare's own words** (its cookie page, read by a read only subagent on 4 October 2026, resolved with no redirect): "All the cookies listed below are strictly necessary to provide the services requested by our customers, unless otherwise stated." `__cf_bm` is for bot protection ("necessary for these bot solutions to function properly") and expires after 30 minutes of inactivity. `_cfuvid` "is only set when a site uses this option in a Rate Limiting Rule, and is only used to allow the Cloudflare WAF to distinguish individual users who share the same IP address"; no lifetime is stated. The page does not say which domain the cookies are scoped to, which is one reason Go live step 6 checks the domains on production.
+
+**Why a go live check.** Everything seen so far came from a development instance: its host is under `*.clerk.accounts.dev`, and it sets `__clerk_db_jwt` on the site where production sets `__client` on Clerk's host. The production list, on `redactnest.com` and `clerk.redactnest.com`, has never been seen. Step 6 takes three lists from the browser's own cookie list (so HttpOnly cookies show): the sign in page left without signing in, signed in after the portal, and after sign out. It judges each cookie by who set it, its purpose and its domain, and records the result here. A Cloudflare cookie scoped to `redactnest.com` itself fails, because C6 places Cloudflare's cookies on Clerk's address. It runs straight after the deploy, before the real purchase, because Clerk's production instance works only on the real domain, so this is the earliest it can run.
+
+The walk's recorded list already meets the new wording, so task 13's check passes on its own evidence and needs no second walk. The Follow-up asks `/sync` to record that a Clerk upgrade reruns the check.
+
+**Cross check of this update.** A read only pass on a different model (Sonnet) found the direction sound and raised gaps, all applied on your pick:
+- Step 6 says who owns a cookie (whoever set it, by the response that carried it, or Clerk's script), fails any other owner, counts a cookie on `.redactnest.com` as our site, and takes a third list after sign out, which passes when no new cookie appears. C6 drops "to keep you signed in", because the walk saw some of Clerk's cookies stay after sign out.
+- The check moved before the real purchase, so the portal is still open when the signed in list is taken.
+- The one line in "What we do not do" is fixed word for word, and the Polar sentence sits with the rest of C6 in "Your account".
+- The Polar sentence no longer says what Polar's privacy policy covers, which was never checked for Stripe's and Google's cookies. It now says only that those cookies are not ours, held by the redirects (AC-14, AC-17) and AC-21.
+- AC-19 and task 15 add the not found page and `/licence.txt`, so "no page sets a cookie" is held past the five named routes.
+- "Strictly necessary" stays (your direction) and joins the deferred lawyer review's questions.
+- The scope's "Go live steps 1 to 7" goes to `/scope` as a Follow-up, because it sits on another feature's row.
+
+Its shorter rewording was not taken: it drops "strictly necessary", which you asked for, and "nothing else sets a cookie", which is what makes a Vercel challenge cookie a breach of C6.
+
 ## Research findings
 
 A web pass on 2026-10-03 (full notes in `docs/.agent-cache/research/billing-clerk.md` and `billing-polar.md`), plus a scratch install of the packages, read directly.
@@ -194,6 +227,7 @@ A web pass on 2026-10-03 (full notes in `docs/.agent-cache/research/billing-cler
 - Polar checkout features, the `{CHECKOUT_ID}` placeholder (read 2026-10-04): https://polar.sh/docs/features/checkout
 - Polar customer sessions, "short-lived" (read 2026-10-04): https://polar.sh/docs/features/customer-portal/navigate-customers
 - Polar embedded checkout, the token by `postMessage` (read 2026-10-04): https://polar.sh/docs/features/checkout/embed
+- Cloudflare cookies, `__cf_bm` and `_cfuvid` "strictly necessary" (read 2026-10-04): https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/
 
 ## Spike and measure results
 
