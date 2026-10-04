@@ -15,6 +15,27 @@ const SIGN_OUT_FAILED = "We couldn't sign you out. Try again.";
 type SignOut = (callback?: () => void) => Promise<unknown>;
 
 /**
+ * How long leaving waits for Clerk's `signOut` before treating it as failed.
+ *
+ * Clerk's `signOut` can hang rather than throw: before it ends the session,
+ * `@clerk/nextjs` awaits a server action of its own, and when that request
+ * fails (offline, say) the promise it hands Clerk never settles, so neither
+ * does `signOut`. Sign out is a few requests, so this leaves a slow connection
+ * plenty of time. A rule about this control, not a cap on the visitor, so it
+ * is named here for the one place that uses it.
+ */
+export const SIGN_OUT_LIMIT_MS = 10_000;
+
+/** `work`'s outcome, or a rejection once `ms` pass without one. */
+function withinLimit<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("time limit")), ms);
+  });
+  return Promise.race([work, limit]).finally(() => clearTimeout(timer));
+}
+
+/**
  * How a failure to end the session is treated. After deletion the user is
  * already gone, so Clerk's `signOut` will likely fail, and the page load that
  * clears Clerk's cookies is what matters (AC-11).
@@ -30,14 +51,18 @@ export type LeaveMode = "sign-out" | "after-deletion";
  * running on `/` (claims C7 and C9). The app router's `ClerkProvider` sets its
  * own router after the props it is given, so that cannot be changed from
  * outside. The page load runs after `signOut` settles whether or not Clerk ran
- * the callback, since Clerk skips it when no session is left.
+ * the callback, since Clerk skips it when no session is left. A `signOut` that
+ * has not settled within `SIGN_OUT_LIMIT_MS` counts as one that threw.
  *
  * True once the page load has started; false when signing out failed and the
  * visitor should stay to try again, which never happens after deletion.
  */
 export async function leaveAccount(signOut: SignOut, mode: LeaveMode): Promise<boolean> {
   try {
-    await signOut(() => {});
+    await withinLimit(
+      signOut(() => {}),
+      SIGN_OUT_LIMIT_MS,
+    );
   } catch {
     if (mode === "sign-out") return false;
   }
