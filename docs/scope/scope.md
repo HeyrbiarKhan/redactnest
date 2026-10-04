@@ -237,7 +237,7 @@ spec [0012](../specs/0012-billing-paid-plan/index.md) · code in `src/billing`, 
 - [x] Verify it: `/check verify billing & paid plan`
 - [x] Test it: `/test billing & paid plan`
 - [x] Review it (fresh model): `/check review billing & paid plan`
-- [ ] Document it: `/document billing & paid plan`
+- [x] Document it: `/document billing & paid plan`
 
 ## Release 3: See it working, and widen the net
 
