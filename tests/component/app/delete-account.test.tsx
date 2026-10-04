@@ -26,7 +26,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/app/(account)/account/actions", () => ({
   deleteAccountAction: mocks.deleteAccountAction,
 }));
-vi.mock("@clerk/nextjs", () => ({ useClerk: () => ({ signOut: mocks.signOut }) }));
+// Clerk once its script has loaded; Sign out's tests cover the wait before.
+vi.mock("@clerk/nextjs", () => ({
+  useClerk: () => ({ loaded: true, on: () => {}, off: () => {}, signOut: mocks.signOut }),
+}));
 vi.mock("@/lib/document-load", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/document-load")>()),
   loadDocument: mocks.loadDocument,

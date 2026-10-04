@@ -69,7 +69,7 @@ type FocusTarget = "delete" | "confirm" | "cancel";
  * confirm can say that deleting ends it now instead.
  */
 export function DeleteAccount({ endsOn }: { readonly endsOn: string | null }) {
-  const { signOut } = useClerk();
+  const clerk = useClerk();
   const [step, setStep] = useState<Step>("idle");
   const [problem, setProblem] = useState<Problem | null>(null);
   const deleteRef = useRef<HTMLButtonElement>(null);
@@ -113,7 +113,7 @@ export function DeleteAccount({ endsOn }: { readonly endsOn: string | null }) {
     }
     if (result === "deleted") {
       setStep("leaving");
-      await leaveAccount(signOut, "after-deletion");
+      await leaveAccount(clerk, "after-deletion");
       return;
     }
     if (result === "sign-in") {

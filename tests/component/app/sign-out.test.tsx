@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   leaveAccount,
+  type LeavingClerk,
   SIGN_OUT_LIMIT_MS,
   SignOutControl,
 } from "@/app/(account)/sign-out";
@@ -20,19 +21,29 @@ import {
 import { expectNoAxeViolations } from "../../setup/component";
 
 const mocks = vi.hoisted(() => ({
+  useClerk: vi.fn<() => LeavingClerk>(),
   signOut: vi.fn<(callback?: () => void) => Promise<unknown>>(),
   loadDocument: vi.fn<(path: string) => void>(),
 }));
 
-vi.mock("@clerk/nextjs", () => ({ useClerk: () => ({ signOut: mocks.signOut }) }));
+vi.mock("@clerk/nextjs", () => ({ useClerk: mocks.useClerk }));
 vi.mock("@/lib/document-load", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/document-load")>()),
   loadDocument: mocks.loadDocument,
 }));
 
+/** Clerk once its script has loaded, with `mocks.signOut` as its `signOut`. */
+const loadedClerk = (): LeavingClerk => ({
+  loaded: true,
+  on: () => {},
+  off: () => {},
+  signOut: mocks.signOut,
+});
+
 beforeEach(() => {
   mocks.signOut.mockReset();
   mocks.loadDocument.mockReset();
+  mocks.useClerk.mockReset().mockReturnValue(loadedClerk());
 });
 
 afterEach(() => {
@@ -41,6 +52,48 @@ afterEach(() => {
 
 /** Clerk's `signOut` offline: it hangs rather than throws, never settling. */
 const hangs = () => new Promise<never>(() => {});
+
+/** Lets every pending promise run, as real time passing would. */
+const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+/**
+ * Clerk before its script has loaded, as `@clerk/react` 6 behaves: `signOut`
+ * only queues the call and resolves at once, and `load()` runs that queue,
+ * then tells every `status` listener. `ended` records the session really
+ * ending, which a page load before `load()` would have thrown away.
+ */
+function clerkNotLoadedYet() {
+  let loaded = false;
+  let queued: (() => void) | undefined;
+  const listeners = new Set<() => void>();
+  const ended = vi.fn<() => void>();
+  const clerk = {
+    get loaded() {
+      return loaded;
+    },
+    on: (_event: "status", handler: () => void, options: { notify: boolean }) => {
+      listeners.add(handler);
+      if (options.notify) handler();
+    },
+    off: (_event: "status", handler: () => void) => {
+      listeners.delete(handler);
+    },
+    signOut: vi.fn(async (callback?: () => void) => {
+      const run = () => {
+        ended();
+        callback?.();
+      };
+      if (loaded) run();
+      else queued = run;
+    }),
+  } satisfies LeavingClerk;
+  const load = () => {
+    loaded = true;
+    queued?.();
+    listeners.forEach((handler) => handler());
+  };
+  return { clerk, ended, load };
+}
 
 describe("SignOutControl", () => {
   /** covers: AC-12, INV-13 */
@@ -128,12 +181,72 @@ describe("SignOutControl", () => {
   });
 });
 
+describe("SignOutControl before Clerk's script has loaded", () => {
+  /**
+   * covers: AC-12, INV-13. Found in verify's rerun: a page load straight
+   * after Clerk's queued `signOut` threw the call away, so the visitor landed
+   * on / still signed in.
+   */
+  it("waits for Clerk, ends the session, and only then loads /", async () => {
+    const stub = clerkNotLoadedYet();
+    mocks.useClerk.mockReturnValue(stub.clerk);
+    render(<SignOutControl />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    await act(settle);
+
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeDisabled();
+    expect(stub.clerk.signOut).not.toHaveBeenCalled();
+    expect(mocks.loadDocument).not.toHaveBeenCalled();
+
+    act(stub.load);
+
+    await waitFor(() => expect(mocks.loadDocument).toHaveBeenCalledWith("/"));
+    expect(stub.ended).toHaveBeenCalledOnce();
+    expect(stub.ended).toHaveBeenCalledBefore(mocks.loadDocument);
+    expect(typeof stub.clerk.signOut.mock.calls[0][0]).toBe("function");
+  });
+
+  /**
+   * covers: AC-12. The limit counts the wait for Clerk too, and once the
+   * visitor has been told it failed, Clerk arriving later signs nobody out.
+   */
+  it("stays and says so when Clerk has not loaded within the limit", async () => {
+    vi.useFakeTimers();
+    const stub = clerkNotLoadedYet();
+    mocks.useClerk.mockReturnValue(stub.clerk);
+    render(<SignOutControl />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    await act(() => vi.advanceTimersByTimeAsync(SIGN_OUT_LIMIT_MS - 1));
+
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeDisabled();
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    await act(() => vi.advanceTimersByTimeAsync(1));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "We couldn't sign you out. Try again.",
+    );
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
+
+    await act(async () => {
+      stub.load();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(stub.clerk.signOut).not.toHaveBeenCalled();
+    expect(stub.ended).not.toHaveBeenCalled();
+    expect(mocks.loadDocument).not.toHaveBeenCalled();
+  });
+});
+
 describe("leaveAccount after deletion", () => {
   /** covers: AC-11. The user is gone, so signOut likely fails; the load matters. */
   it("loads / even when signOut throws", async () => {
     mocks.signOut.mockRejectedValue(new Error("user not found"));
 
-    expect(await leaveAccount(mocks.signOut, "after-deletion")).toBe(true);
+    expect(await leaveAccount(loadedClerk(), "after-deletion")).toBe(true);
     expect(mocks.loadDocument).toHaveBeenCalledWith("/");
   });
 
@@ -142,7 +255,7 @@ describe("leaveAccount after deletion", () => {
     vi.useFakeTimers();
     mocks.signOut.mockReturnValue(hangs());
 
-    const left = leaveAccount(mocks.signOut, "after-deletion");
+    const left = leaveAccount(loadedClerk(), "after-deletion");
     await vi.advanceTimersByTimeAsync(SIGN_OUT_LIMIT_MS - 1);
     expect(mocks.loadDocument).not.toHaveBeenCalled();
 
@@ -154,8 +267,39 @@ describe("leaveAccount after deletion", () => {
   it("loads / when signOut succeeds", async () => {
     mocks.signOut.mockResolvedValue(undefined);
 
-    expect(await leaveAccount(mocks.signOut, "after-deletion")).toBe(true);
+    expect(await leaveAccount(loadedClerk(), "after-deletion")).toBe(true);
     expect(mocks.loadDocument).toHaveBeenCalledWith("/");
     expect(typeof mocks.signOut.mock.calls[0][0]).toBe("function");
+  });
+
+  /** covers: AC-11, INV-13. The same wait as Sign out's, before the load. */
+  it("waits for Clerk's script before signing out", async () => {
+    const stub = clerkNotLoadedYet();
+
+    const left = leaveAccount(stub.clerk, "after-deletion");
+    await settle();
+    expect(stub.clerk.signOut).not.toHaveBeenCalled();
+    expect(mocks.loadDocument).not.toHaveBeenCalled();
+
+    stub.load();
+
+    expect(await left).toBe(true);
+    expect(stub.ended).toHaveBeenCalledOnce();
+    expect(stub.ended).toHaveBeenCalledBefore(mocks.loadDocument);
+  });
+
+  /** covers: AC-11. Clerk that never loads must not hold the deleted visitor either. */
+  it("loads / once the limit passes when Clerk never loads", async () => {
+    vi.useFakeTimers();
+    const stub = clerkNotLoadedYet();
+
+    const left = leaveAccount(stub.clerk, "after-deletion");
+    await vi.advanceTimersByTimeAsync(SIGN_OUT_LIMIT_MS - 1);
+    expect(mocks.loadDocument).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await left).toBe(true);
+    expect(mocks.loadDocument).toHaveBeenCalledWith("/");
+    expect(stub.clerk.signOut).not.toHaveBeenCalled();
   });
 });

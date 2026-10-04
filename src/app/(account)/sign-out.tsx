@@ -11,11 +11,24 @@ import { Button } from "@/ui/button";
 const SIGN_OUT_LABEL = "Sign out";
 const SIGN_OUT_FAILED = "We couldn't sign you out. Try again.";
 
-/** Clerk's `signOut`, as far as leaving needs it. */
-type SignOut = (callback?: () => void) => Promise<unknown>;
+/**
+ * Clerk, as far as leaving needs it: `useClerk()` itself, never a copy of
+ * `loaded`, which changes once Clerk's script has loaded.
+ */
+export interface LeavingClerk {
+  readonly loaded: boolean;
+  readonly on: (
+    event: "status",
+    handler: () => void,
+    options: { notify: boolean },
+  ) => void;
+  readonly off: (event: "status", handler: () => void) => void;
+  readonly signOut: (callback?: () => void) => Promise<unknown>;
+}
 
 /**
- * How long leaving waits for Clerk's `signOut` before treating it as failed.
+ * How long leaving waits for Clerk to load and its `signOut` to settle before
+ * treating it as failed.
  *
  * Clerk's `signOut` can hang rather than throw: before it ends the session,
  * `@clerk/nextjs` awaits a server action of its own, and when that request
@@ -26,13 +39,40 @@ type SignOut = (callback?: () => void) => Promise<unknown>;
  */
 export const SIGN_OUT_LIMIT_MS = 10_000;
 
-/** `work`'s outcome, or a rejection once `ms` pass without one. */
-function withinLimit<T>(work: Promise<T>, ms: number): Promise<T> {
+/**
+ * `work`'s outcome, or a rejection once `ms` pass without one. `work` can ask
+ * whether the limit has passed, so it can stop rather than act after it.
+ */
+function withinLimit<T>(
+  work: (late: () => boolean) => Promise<T>,
+  ms: number,
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let late = false;
   const limit = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error("time limit")), ms);
+    timer = setTimeout(() => {
+      late = true;
+      reject(new Error("time limit"));
+    }, ms);
   });
-  return Promise.race([work, limit]).finally(() => clearTimeout(timer));
+  return Promise.race([work(() => late), limit]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Settles once Clerk's script has loaded. Until then Clerk's `signOut` only
+ * queues the call for that moment and resolves at once, so a page load right
+ * after it drops the call and leaves the session signed in.
+ */
+function clerkLoaded(clerk: LeavingClerk): Promise<void> {
+  if (clerk.loaded) return Promise.resolve();
+  return new Promise((resolve) => {
+    const onStatus = () => {
+      if (!clerk.loaded) return;
+      clerk.off("status", onStatus);
+      resolve();
+    };
+    clerk.on("status", onStatus, { notify: true });
+  });
 }
 
 /**
@@ -51,18 +91,27 @@ export type LeaveMode = "sign-out" | "after-deletion";
  * running on `/` (claims C7 and C9). The app router's `ClerkProvider` sets its
  * own router after the props it is given, so that cannot be changed from
  * outside. The page load runs after `signOut` settles whether or not Clerk ran
- * the callback, since Clerk skips it when no session is left. A `signOut` that
- * has not settled within `SIGN_OUT_LIMIT_MS` counts as one that threw.
+ * the callback, since Clerk skips it when no session is left.
+ *
+ * `signOut` waits for Clerk's script, which may still be loading when the
+ * visitor clicks. Clerk that has not loaded, or a `signOut` that has not
+ * settled, within `SIGN_OUT_LIMIT_MS` counts as a `signOut` that threw.
  *
  * True once the page load has started; false when signing out failed and the
  * visitor should stay to try again, which never happens after deletion.
  */
-export async function leaveAccount(signOut: SignOut, mode: LeaveMode): Promise<boolean> {
+export async function leaveAccount(
+  clerk: LeavingClerk,
+  mode: LeaveMode,
+): Promise<boolean> {
   try {
-    await withinLimit(
-      signOut(() => {}),
-      SIGN_OUT_LIMIT_MS,
-    );
+    await withinLimit(async (late) => {
+      await clerkLoaded(clerk);
+      // Past the limit the visitor has been told it failed, so Clerk turning
+      // up later must not end the session behind their back.
+      if (late()) return;
+      await clerk.signOut(() => {});
+    }, SIGN_OUT_LIMIT_MS);
   } catch {
     if (mode === "sign-out") return false;
   }
@@ -75,12 +124,12 @@ export async function leaveAccount(signOut: SignOut, mode: LeaveMode): Promise<b
  * lint bans in every zone for the reason `leaveAccount` gives (INV-13).
  */
 export function SignOutControl() {
-  const { signOut } = useClerk();
+  const clerk = useClerk();
   const [state, setState] = useState<"idle" | "leaving" | "failed">("idle");
 
   async function handleClick() {
     setState("leaving");
-    const left = await leaveAccount(signOut, "sign-out");
+    const left = await leaveAccount(clerk, "sign-out");
     // A page that is loading keeps the control disabled until it goes.
     if (!left) setState("failed");
   }
