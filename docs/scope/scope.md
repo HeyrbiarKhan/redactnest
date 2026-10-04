@@ -20,7 +20,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 7 | Scanned page detection & warnings | Release 1 | done |
 | 8 | Redact flow | Release 1 | done |
 | 9 | Privacy policy & terms | Release 2 | done |
-| 10 | Billing & paid plan | Release 2 | in-progress |
+| 10 | Billing & paid plan | Release 2 | done |
 | 11 | Telemetry & error monitoring | Release 3 | planned |
 | 12 | Remaining detectors | Release 3 | planned |
 | 13 | Custom terms | Release 4 | planned |
@@ -222,7 +222,7 @@ spec [0011](../specs/0011-privacy-policy-terms/index.md) (its Launch readiness s
   - [ ] Billing (your steps on go live day, after feature 10): Clerk and Polar production, the billing values on Vercel, the spending cap and the deny only rate limit rule, the `First published.` date, a real purchase made and refunded, then Polar's account review submitted · spec 0012 Go live steps 1 to 7, INV-12
   - [ ] Going public (your steps on go live day): feature 18's last slice, gitleaks over every ref, the noreply address, the Vercel settings, public with secret scanning, push protection and rulesets, then the first tagged deploy checked · spec 0009 AC-7, AC-19, AC-20, AC-21
 
-### 10. Billing & paid plan · in-progress · GA
+### 10. Billing & paid plan · done · GA
 The paywall moment: an anonymous visitor hits the page cap, signs in, subscribes, and the cap is gone. The interesting part is that entitlement has to work with no database of your own.
 **Done when:** a visitor at the cap can sign in, subscribe at $19 a month, and immediately redact a document past the cap; there is no trial, because the free plan is the trial (spec 0012); cancelling restores the cap; the subscription can be managed; and no usage counter or user table of your own is introduced.
 **Also owed here:** the rest of spec 0005's paid cap measure. Spec 0007 measured only the checklist. Open time with detection and the slowest single read (which sets how quickly a cancel is noticed, spec 0005 AC-11) are still unmeasured on a dense 50 page document such as `tests/fixtures/detect-dense.pdf`. Measure them before the paid cap lifts the page limit (spec 0012, AC-24).
