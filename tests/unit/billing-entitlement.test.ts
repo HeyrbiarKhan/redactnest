@@ -262,6 +262,14 @@ describe("rules 3 to 6: a genuine token reaches Polar with its sub, and nothing 
     });
     expect(polar.calls).toEqual([OTHER_USER]);
   });
+
+  it("reads the suffixed session cookie when it is the only one set", async () => {
+    const { answer, polar } = await check({
+      [`__session_${suffix}`]: token(claims(FRESH)),
+    });
+    expect(answer).toMatchObject({ tier: "paid", account: "signed-in" });
+    expect(polar.calls).toEqual([USER]);
+  });
 });
 
 /**
@@ -538,5 +546,69 @@ describe("the timeout on the one outbound call", () => {
     } finally {
       process.env = originalEnv;
     }
+  });
+});
+
+/**
+ * Where INV-11's two expected values come from: the real `clients.ts` over the
+ * real config, with only Polar's SDK faked. The issuer is Clerk's Frontend API
+ * host, read from the publishable key, and the authorized party is the origin
+ * of `NEXT_PUBLIC_SITE_URL`, so a token minted while browsing at any other
+ * address is refused.
+ */
+describe("the seams the route is built with (INV-11)", () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    vi.doUnmock("@polar-sh/sdk/2026-10");
+    vi.resetModules();
+  });
+
+  async function realSeams(siteUrl: string): Promise<BillingSeams> {
+    vi.resetModules();
+    vi.doMock("@polar-sh/sdk/2026-10", () => ({
+      createPolar: () => ({
+        customers: { getStateExternal: () => Promise.resolve(state([PRO_BENEFIT])) },
+      }),
+    }));
+    Object.assign(process.env, {
+      NEXT_PUBLIC_SITE_URL: siteUrl,
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: PUBLISHABLE_KEY,
+      CLERK_SECRET_KEY: "sk_test_x",
+      CLERK_JWT_KEY: INSTANCE.publicKey,
+      POLAR_ACCESS_TOKEN: "polar_oat_x",
+      POLAR_ENVIRONMENT: "sandbox",
+      POLAR_PRO_PRODUCT_ID: PRO_PRODUCT,
+      POLAR_PRO_BENEFIT_ID: PRO_BENEFIT,
+    });
+    const built = (await import("@/billing/clients")).entitlementSeams();
+    if (built === null) throw new Error("billing should be on with all seven values set");
+    return built;
+  }
+
+  it("expects the issuer Clerk's Frontend API, as the publishable key names it", async () => {
+    const seams = await realSeams("https://redactnest.example");
+    expect(seams.issuer).toBe(`https://${HOST}`);
+  });
+
+  it("takes the authorized party from NEXT_PUBLIC_SITE_URL, as an origin", async () => {
+    const seams = await realSeams("https://redactnest.example/");
+    expect(seams.authorizedParty).toBe("https://redactnest.example");
+  });
+
+  it("refuses a genuine token minted at another address than the site's", async () => {
+    const seams = await realSeams("https://redactnest.example");
+    const ask = (azp: string) =>
+      resolveEntitlement(jar({ __session: token(claims(FRESH, { azp })) }), {
+        caps: CAPS,
+        billing: seams,
+      });
+
+    expect(await ask("https://redactnest.example")).toMatchObject({
+      tier: "paid",
+      account: "signed-in",
+    });
+    expect(await ask(SITE)).toMatchObject({ tier: "free", account: "sign-in-needed" });
   });
 });

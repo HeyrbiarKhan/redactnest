@@ -69,6 +69,28 @@ vi.mock("@clerk/nextjs", () => ({ useClerk: () => ({ signOut: vi.fn() }) }));
 vi.mock("@/config/billing", () => ({ billing: { publishableKey: "pk_test_x" } }));
 vi.mock("@/billing/clients", () => ({ accountSeams: () => fake.seams }));
 
+/** The plans' names a case swaps in, or the real ones. */
+const plans = vi.hoisted(() => ({
+  names: null as { readonly free: string; readonly pro: string } | null,
+}));
+
+vi.mock("@/lib/plans", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/plans")>();
+  return {
+    FREE_PLAN: {
+      get name() {
+        return plans.names?.free ?? actual.FREE_PLAN.name;
+      },
+    },
+    PRO_PLAN: {
+      ...actual.PRO_PLAN,
+      get name() {
+        return plans.names?.pro ?? actual.PRO_PLAN.name;
+      },
+    },
+  };
+});
+
 const { store: polar } = fake;
 
 const USER_A = "user_aaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -91,6 +113,7 @@ const state = (
 beforeEach(() => {
   session.userId = USER_A;
   Object.assign(polar, { state: state([]), status: null, calls: [] });
+  plans.names = null;
 });
 
 async function openAccount(
@@ -185,6 +208,17 @@ describe("the plan and its renewal (AC-10)", () => {
     const text = await accountText();
     expect(text).toMatch(row("Plan", "Free"));
     expect(text).not.toMatch(/Renews on|Ends on/);
+  });
+
+  /** covers: AC-13's value row. Pricing reads the same names (pricing-page.test.tsx). */
+  it("names the plan from PRO_PLAN and FREE_PLAN, so Account and Pricing agree", async () => {
+    plans.names = { free: "Basic", pro: "Pro Plus" };
+
+    polar.state = state([PRO_GRANT], [proSubscription(false)]);
+    expect(await accountText()).toMatch(row("Plan", "Pro Plus"));
+
+    polar.state = state([]);
+    expect(await accountText()).toMatch(row("Plan", "Basic"));
   });
 });
 

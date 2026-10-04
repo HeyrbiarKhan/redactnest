@@ -252,6 +252,25 @@ describe("the server action (INV-3)", () => {
     expect(world.calls).toEqual([["getStateExternal", USER_A], ...DELETES]);
   });
 
+  // Anyone can POST to a server action with arguments of their choosing, so
+  // the action's signature is not the guard; reading only `auth()` is.
+  it("ignores whatever a request sends with it, a user named in a form included", async () => {
+    const { deleteAccountAction } = await import("@/app/(account)/account/actions");
+    const sendAnything = deleteAccountAction as (...args: unknown[]) => Promise<string>;
+    const form = new FormData();
+    form.set("userId", "user_bbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+    expect(await sendAnything(form, { userId: "user_bbbbbbbbbbbbbbbbbbbbbbbbbbb" })).toBe(
+      "deleted",
+    );
+    expect(world.calls).toEqual([["getStateExternal", USER_A], ...DELETES]);
+  });
+
+  it("takes no arguments", async () => {
+    const { deleteAccountAction } = await import("@/app/(account)/account/actions");
+    expect(deleteAccountAction).toHaveLength(0);
+  });
+
   it("with no session, answers sign in and asks Polar and Clerk nothing", async () => {
     session.userId = null;
     expect(await action()).toBe("sign-in");

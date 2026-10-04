@@ -313,6 +313,31 @@ describe("at module load", () => {
     expect((await import("@/config")).config.billingEnabled).toBe(true);
   });
 
+  // `config` is what the browser reads, so it decides from the one public value
+  // alone; a set that disagrees with it is the server gate's to stop, above.
+  it("turns billingEnabled on from the publishable key alone", async () => {
+    setEnv({
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: TEST_SET.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+    });
+    expect((await import("@/config")).config.billingEnabled).toBe(true);
+  });
+
+  it("keeps billingEnabled off with the other six set and no publishable key", async () => {
+    setEnv(
+      Object.fromEntries(
+        Object.entries(TEST_SET).filter(
+          ([name]) => name !== "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+        ),
+      ),
+    );
+    expect((await import("@/config")).config.billingEnabled).toBe(false);
+  });
+
+  it("reads a blank publishable key as no key", async () => {
+    setEnv({ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "   " });
+    expect((await import("@/config")).config.billingEnabled).toBe(false);
+  });
+
   it("throws one ConfigError listing every problem, and no secret", async () => {
     setEnv({
       ...LIVE_SET,

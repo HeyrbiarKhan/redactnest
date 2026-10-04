@@ -8,7 +8,7 @@
  * deletion mode, a full page load of `/` whatever Clerk's `signOut` does.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   deleteAccountAction: vi.fn<() => Promise<DeleteResult>>(),
   signOut: vi.fn<(callback?: () => void) => Promise<unknown>>(),
   loadDocument: vi.fn<(path: string) => void>(),
+  /** The seller and contact a case swaps in, or the real ones. */
+  legal: null as { readonly sellerName: string; readonly contactEmail: string } | null,
 }));
 
 vi.mock("@/app/(account)/account/actions", () => ({
@@ -34,6 +36,22 @@ vi.mock("@/lib/document-load", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/document-load")>()),
   loadDocument: mocks.loadDocument,
 }));
+// The real words unless a case swaps the seller or the contact (INV-9).
+vi.mock("@/lib/legal", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/legal")>();
+  return {
+    ...actual,
+    LEGAL: {
+      ...actual.LEGAL,
+      get sellerName() {
+        return mocks.legal?.sellerName ?? actual.LEGAL.sellerName;
+      },
+      get contactEmail() {
+        return mocks.legal?.contactEmail ?? actual.LEGAL.contactEmail;
+      },
+    },
+  };
+});
 
 const DELETE = { name: "Delete account" };
 const CONFIRM = { name: "Delete my account for good" };
@@ -43,6 +61,7 @@ beforeEach(() => {
   mocks.deleteAccountAction.mockReset();
   mocks.signOut.mockReset();
   mocks.loadDocument.mockReset();
+  mocks.legal = null;
 });
 
 /** Render, then open the confirm. */
@@ -169,15 +188,52 @@ describe("refusals and failures (AC-11)", () => {
     },
   );
 
-  it("links the contact address where the words name it", async () => {
-    mocks.deleteAccountAction.mockResolvedValue("billing-failed");
-    await openConfirm();
+  it.each<DeleteResult>(["billing-failed", "other-product"])(
+    "links the contact address where the words name it, for %s",
+    async (result) => {
+      mocks.deleteAccountAction.mockResolvedValue(result);
+      await openConfirm();
+
+      await userEvent.click(screen.getByRole("button", CONFIRM));
+
+      expect(
+        within(await screen.findByRole("alert")).getByRole("link", {
+          name: "privacy@redactnest.com",
+        }),
+      ).toHaveAttribute("href", "mailto:privacy@redactnest.com");
+    },
+  );
+
+  /** covers: INV-9. The seller and the contact are LEGAL's, never a literal here. */
+  it.each<[DeleteResult, string]>([
+    [
+      "other-product",
+      "Your email also has a subscription to another Another Studio product, so we can’t remove your billing details here. Write to help@redactnest.example.",
+    ],
+    [
+      "billing-failed",
+      "We couldn’t delete your account. Nothing was removed. Try again, or write to help@redactnest.example.",
+    ],
+  ])("takes the seller and the contact from LEGAL, for %s", async (result, words) => {
+    mocks.legal = {
+      sellerName: "Another Studio",
+      contactEmail: "help@redactnest.example",
+    };
+    mocks.deleteAccountAction.mockResolvedValue(result);
+    // The lines are built once, as the module loads, so a fresh copy reads the
+    // swapped words; the contact link reads them again as it renders.
+    vi.resetModules();
+    const { DeleteAccount: Fresh } = await import("@/app/(account)/delete-account");
+    render(<Fresh endsOn={null} />);
+    await userEvent.click(screen.getByRole("button", DELETE));
 
     await userEvent.click(screen.getByRole("button", CONFIRM));
 
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(words);
     expect(
-      await screen.findByRole("link", { name: "privacy@redactnest.com" }),
-    ).toHaveAttribute("href", "mailto:privacy@redactnest.com");
+      within(alert).getByRole("link", { name: "help@redactnest.example" }),
+    ).toHaveAttribute("href", "mailto:help@redactnest.example");
   });
 
   it("claims nothing either way when the call never answers", async () => {
