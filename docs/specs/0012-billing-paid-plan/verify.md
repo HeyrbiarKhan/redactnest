@@ -141,3 +141,34 @@ _Steps marked "seen" were run once at build time against the sandbox (`walk-one+
 
 ## Acceptance-criteria coverage
 - AC-10 … the signed out, Pro renewing, cancelled, free with and without a customer steps, and `billing-account.test.ts` · AC-17 … the Manage billing, signed out and no customer steps, and the portal cases in `billing-subscribe.test.ts` · INV-3 … Manage billing's session cases
+
+# Slice 3, task 12 (Delete account) · updated 2026-10-04
+
+_Steps marked "seen" were run once at build time against the sandbox with throwaway accounts (`delete-one+clerk_test@redactnest.com`, deleted twice with your approval each time; `walk-one` untouched). `/check verify` runs them all again. Use only a new throwaway account for any step that deletes._
+
+## UI / manual
+- [ ] Signed in, Account → Delete account → the confirm opens in place with "Delete my account for good" and Cancel, and focus lands on Cancel → AC-11 (seen)
+- [ ] Cancel → back to Delete account, focus on it, nothing deleted → AC-11
+- [ ] Pro that renews → Delete my account for good → "Cancel your subscription in Manage billing first.", focus back on the confirm, and Polar and Clerk still hold the account → AC-11 (seen)
+- [ ] Cancel in Polar's portal, back to Account → "Ends on {date}", and the confirm reads "Your Pro access ends now, not on {date}." with the same date → AC-11 (seen: 4 November 2026)
+- [ ] Delete with Pro set to end → lands on `/` as a document load (navigation type `navigate`), no resource from a Clerk origin, both `__client_uat` cookies `0`, no session cookie, and `/api/entitlement` answers free, `none` → AC-11, AC-12, INV-13 (seen)
+- [ ] In the Polar sandbox dashboard after that delete → the customer is gone or anonymised, and its RedactNest Pro subscription ended at once rather than at its period end; in Clerk's dashboard, the user is gone → AC-11 (the API side seen: 404 by id and by external id, no email match; the subscription's status needs the dashboard)
+- [ ] The same email signs up again and opens Subscribe → Polar's checkout, with no conflict line, and a new Polar customer tied to the new user id → AC-11, AC-25 (seen)
+- [ ] A free account with a Polar customer and no subscription → the confirm shows no warning, and deleting lands on `/` with the tool answering `none` → AC-11 (seen)
+- [ ] With the plan check failing (for example a wrong `POLAR_ACCESS_TOKEN` locally) → Account says "We couldn't check your plan just now." and shows no Delete account → AC-10, AC-11
+- [ ] An account whose customer holds another EdiventStudio product's active subscription (needs a second sandbox product) → "Your email also has a subscription to another EdiventStudio product, so we can't remove your billing details here. Write to privacy@redactnest.com." with a mail link, and nothing deleted → AC-11
+- [ ] **Open with `/architect`:** a payment to Pro being retried (`past_due`) → AC-11 asks for the renewal refusal, but Polar's customer state never lists a `past_due` subscription, so the build cannot see it yet → AC-11
+
+## Commands
+- [ ] `pnpm exec vitest run tests/unit/billing-delete.test.ts` → no session calls nothing; Polar by external id with `anonymize: true` before Clerk; a 404 from either counts as done; a second try after Clerk failed finishes; refused while Pro renews, while a payment settles, with a second Pro subscription that renews, and while another product's subscription is active; nothing removed when the state lookup fails or cannot be read, or Polar's delete fails; "sign in kept" when Clerk fails after Polar; the server action acts on the session's user only, and with billing off asks nothing; one `todo` for the retry refusal → AC-11, INV-3
+- [ ] `pnpm exec vitest run tests/component/app/delete-account.test.tsx` → the two steps, focus on Cancel and back, the "ends now" warning tied to the confirm, every refusal and failure line with the contact link, a call that never answers, a second try, the sign in case, and leaving through Sign out's after deletion mode even when `signOut` fails; axe clean → AC-11, AC-12, INV-13
+- [ ] `pnpm exec vitest run tests/unit/billing-account.test.ts` → Delete account shows for a free account, a free customer and Pro, gets the ending day only for Pro set to end, and is absent when the plan cannot be checked → AC-10, AC-11
+
+## Value sourcing
+- [ ] "Set to renew": any subscription to `POLAR_PRO_PRODUCT_ID` in the customer state with `cancel_at_period_end` false; a subscription to another product that renews does not count as Pro renewing, but refuses on its own line → AC-11
+- [ ] "Ends now, not on {date}": the Pro subscription's `current_period_end` as a British date in UTC, only while Pro is held and `cancel_at_period_end` is true; the same day as Account's "Ends on" row → AC-11
+- [ ] The account deleted: the session's user from `auth()`, never anything in the request; the action takes no arguments → AC-11, INV-3
+- [ ] The failure lines' contact: `LEGAL.contactEmail`, as a mail link; the other product line's seller name: `LEGAL.sellerName` → AC-11
+
+## Acceptance-criteria coverage
+- AC-11 … the confirm, renewing refusal, "ends now", delete with Pro set to end, dashboard, re-signup, free account, plan check failing and other product steps, `billing-delete.test.ts`, `delete-account.test.tsx` and `billing-account.test.ts`; the retry refusal is open with `/architect` · AC-12 … the after deletion mode in the delete step and the component test · INV-3 … the server action's session cases · INV-13 … the document load to `/` after deletion
