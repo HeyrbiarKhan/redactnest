@@ -6,13 +6,14 @@ import { linkCustomer } from "@/billing/customer";
 import { subscribe, type SubscribeDeps } from "@/billing/subscribe";
 
 /**
- * Subscribe. Spec 0012, AC-14, AC-25 and INV-3.
+ * Subscribe and Manage billing. Spec 0012, AC-14, AC-17, AC-25 and INV-3.
  *
  * INV-3 first, on the page itself: with a fake session for user A and a
  * request carrying user B's details in its query, Polar receives A's id and
  * A's email and nothing else, in every call, and with no session it receives
  * nothing at all. Then every case of tying the customer before checkout, and
- * every outcome of the decision behind the page.
+ * every outcome of the decision behind the page. Manage billing last, with the
+ * same session cases (INV-3) and every outcome of opening the portal.
  *
  * One fake Polar serves both: an organisation's customers in memory, keeping
  * Polar's two rules the fix rests on (one live customer per email, and an
@@ -42,6 +43,8 @@ interface FakeCustomer {
 const fake = vi.hoisted(() => {
   const SITE = "https://redactnest.test";
   const CHECKOUT_URL = "https://sandbox.polar.sh/checkout/polar_c_test";
+  const PORTAL_URL =
+    "https://sandbox.polar.sh/redactnest/portal?customer_session_token=x";
   const rejectWith = (statusCode: number) =>
     Promise.reject(Object.assign(new Error(`status ${statusCode}`), { statusCode }));
 
@@ -61,6 +64,9 @@ const fake = vi.hoisted(() => {
     createAnswer: undefined as unknown,
     checkoutStatus: null as number | null,
     checkoutAnswer: { url: CHECKOUT_URL } as unknown,
+    portalStatus: null as number | null,
+    /** An answer the portal gives instead of its address. */
+    portalAnswer: undefined as unknown,
     created: 0,
   };
 
@@ -133,9 +139,19 @@ const fake = vi.hoisted(() => {
       if (store.checkoutStatus !== null) return rejectWith(store.checkoutStatus);
       return Promise.resolve(store.checkoutAnswer);
     },
+    createCustomerSession: (body: { readonly external_customer_id: string }) => {
+      store.calls.push(["createCustomerSession", { ...body }]);
+      if (store.portalStatus !== null) return rejectWith(store.portalStatus);
+      if (store.portalAnswer !== undefined) return Promise.resolve(store.portalAnswer);
+      // Polar finds the customer by external id, as the plan check does.
+      const known = live().some((c) => c.external_id === body.external_customer_id);
+      return known
+        ? Promise.resolve({ customer_portal_url: PORTAL_URL })
+        : rejectWith(404);
+    },
   };
 
-  return { store, seams, SITE, CHECKOUT_URL };
+  return { store, seams, SITE, CHECKOUT_URL, PORTAL_URL };
 });
 
 const session = vi.hoisted(() => ({
@@ -166,7 +182,7 @@ vi.mock("@clerk/nextjs/server", () => ({
 vi.mock("@/config/billing", () => ({ billing: { publishableKey: "pk_test_x" } }));
 vi.mock("@/billing/clients", () => ({ accountSeams: () => fake.seams }));
 
-const { store: polar, seams, SITE, CHECKOUT_URL } = fake;
+const { store: polar, seams, SITE, CHECKOUT_URL, PORTAL_URL } = fake;
 
 const USER_A = "user_aaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const EMAIL_A = "a@redactnest.com";
@@ -185,6 +201,7 @@ const CONFLICT_LINE =
 const OTHER_PRODUCT_LINE =
   "Your email already has a subscription to another EdiventStudio product, and Polar allows one per person, so we didn’t start a checkout.";
 const CHECKOUT_LINE = "We couldn’t start the checkout. Try again, or write to";
+const BILLING_LINE = "We couldn’t open billing. Try again, or write to";
 
 const PRO_SUBSCRIPTION = {
   product_id: PRO_PRODUCT,
@@ -236,6 +253,8 @@ beforeEach(() => {
     createAnswer: undefined,
     checkoutStatus: null,
     checkoutAnswer: { url: CHECKOUT_URL },
+    portalStatus: null,
+    portalAnswer: undefined,
     created: 0,
   });
 });
@@ -269,6 +288,31 @@ async function openSubscribe(): Promise<Redirected | ReactElement> {
 /** The words of a page that started no checkout. */
 async function failureText(): Promise<string> {
   const result = await openSubscribe();
+  expect(result).not.toBeInstanceOf(Redirected);
+  return renderToStaticMarkup(result as ReactElement);
+}
+
+/** Manage billing, called as Next.js would, with user B's details in its query. */
+async function openBilling(): Promise<Redirected | ReactElement> {
+  const { default: BillingPage } = await import("@/app/(account)/account/billing/page");
+  const page = BillingPage as unknown as (props: unknown) => Promise<ReactElement>;
+  try {
+    return await page({
+      params: Promise.resolve({}),
+      searchParams: Promise.resolve({
+        external_customer_id: USER_B,
+        customer_id: "cus_b",
+      }),
+    });
+  } catch (error) {
+    if (error instanceof Redirected) return error;
+    throw error;
+  }
+}
+
+/** The words of a Manage billing page that opened no portal. */
+async function billingFailureText(): Promise<string> {
+  const result = await openBilling();
   expect(result).not.toBeInstanceOf(Redirected);
   return renderToStaticMarkup(result as ReactElement);
 }
@@ -636,5 +680,87 @@ describe("subscribe, the decision", () => {
 
     polar.customers[0].granted_benefits = [];
     expect(await subscribe(USER_A, deps())).toEqual({ kind: "settling" });
+  });
+});
+
+describe("INV-3 on /account/billing (AC-17)", () => {
+  const sessionFor = (userId: string) => [
+    "createCustomerSession",
+    { external_customer_id: userId, return_url: `${SITE}/account` },
+  ];
+
+  it("opens the portal for A's own customer, with the way back to Account", async () => {
+    signInAsA();
+    customer({ external_id: USER_A });
+    customer({ id: "cus_b", email: EMAIL_B, external_id: USER_B });
+
+    expect(await openBilling()).toEqual(new Redirected(PORTAL_URL));
+    expect(polar.calls).toEqual([sessionFor(USER_A)]);
+    expect(JSON.stringify(polar.calls)).not.toMatch(/bbbb|b@redactnest|cus_b/);
+  });
+
+  it("sends a visitor with no session to sign in, and calls Polar for nothing", async () => {
+    customer({ id: "cus_b", email: EMAIL_B, external_id: USER_B });
+
+    expect(await openBilling()).toEqual(new Redirected("/sign-in"));
+    expect(polar.calls).toEqual([]);
+  });
+
+  it("sends A to Pricing when Polar holds no customer for A, even with B's in the query", async () => {
+    signInAsA();
+    customer({ id: "cus_b", email: EMAIL_B, external_id: USER_B });
+
+    expect(await openBilling()).toEqual(new Redirected("/pricing"));
+    expect(polar.calls).toEqual([sessionFor(USER_A)]);
+  });
+
+  it("never ties, creates or checks out, whatever Polar holds", async () => {
+    signInAsA();
+    customer();
+
+    expect(await openBilling()).toEqual(new Redirected("/pricing"));
+    expect(writes()).toEqual([]);
+    expect(polar.calls.map(([op]) => op)).toEqual(["createCustomerSession"]);
+  });
+});
+
+describe("the portal's other outcomes (AC-17)", () => {
+  beforeEach(() => {
+    signInAsA();
+    customer({ external_id: USER_A });
+  });
+
+  it("sends A to Pricing on a 422", async () => {
+    polar.portalStatus = 422;
+    expect(await openBilling()).toEqual(new Redirected("/pricing"));
+  });
+
+  it.each([401, 403, 429, 500])(
+    "says billing did not open on a %i, with Try again and the contact",
+    async (status) => {
+      polar.portalStatus = status;
+      const text = await billingFailureText();
+      expect(text).toContain(BILLING_LINE);
+      expect(text).toContain('href="mailto:privacy@redactnest.com"');
+      expect(text).toContain('href="/account/billing"');
+      expect(text).not.toContain("checkout");
+    },
+  );
+
+  it("says billing did not open when the call throws with no status", async () => {
+    vi.spyOn(seams, "createCustomerSession").mockRejectedValueOnce(
+      new Error("socket hang up"),
+    );
+    expect(await billingFailureText()).toContain(BILLING_LINE);
+  });
+
+  it.each([
+    ["no url", {}],
+    ["an http url", { customer_portal_url: "http://sandbox.polar.sh/portal" }],
+    ["not a url", { customer_portal_url: "portal" }],
+    ["nothing at all", null],
+  ])("says billing did not open when Polar's answer has %s", async (_name, answer) => {
+    polar.portalAnswer = answer;
+    expect(await billingFailureText()).toContain(BILLING_LINE);
   });
 });

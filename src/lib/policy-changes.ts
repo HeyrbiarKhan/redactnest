@@ -11,6 +11,8 @@
  * `First published.` entry dated launch day, 2026-10-03.
  */
 
+import { formatBritishDate } from "@/lib/british-date";
+
 export interface PolicyChange {
   /** `YYYY-MM-DD`, a real calendar date. */
   readonly date: string;
@@ -58,14 +60,6 @@ export function isCalendarDate(date: string): boolean {
 export const isNewestFirst = (changes: PolicyChanges): boolean =>
   changes.every((change, index) => index === 0 || changes[index - 1].date > change.date);
 
-/** British, in UTC, so the server's own zone cannot move the day. */
-const BRITISH_DATE = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-  timeZone: "UTC",
-});
-
-/** `2026-10-02` as `2 October 2026` (AC-2). */
+/** `2026-10-02` as `2 October 2026` (AC-2), the format the account page shares. */
 export const formatPolicyDate = (date: string): string =>
-  BRITISH_DATE.format(new Date(`${date}T00:00:00Z`));
+  formatBritishDate(new Date(`${date}T00:00:00Z`));

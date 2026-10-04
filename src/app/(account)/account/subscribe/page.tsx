@@ -17,6 +17,7 @@ import { Button } from "@/ui/button";
 import { Callout } from "@/ui/callout";
 
 import { AccountColumn } from "../../account-shell";
+import { ContactLink } from "../../contact-link";
 
 export const metadata: Metadata = {
   title: "Subscribe",
@@ -68,7 +69,7 @@ export default async function SubscribePage() {
       return (
         <SubscribeFailed>
           This email is already linked to another account with us, so we didn&rsquo;t
-          start a checkout. Write to <Contact /> and we&rsquo;ll sort it out.
+          start a checkout. Write to <ContactLink /> and we&rsquo;ll sort it out.
         </SubscribeFailed>
       );
     case "other-product":
@@ -76,22 +77,16 @@ export default async function SubscribePage() {
         <SubscribeFailed>
           Your email already has a subscription to another {LEGAL.sellerName} product, and
           Polar allows one per person, so we didn&rsquo;t start a checkout. Write to{" "}
-          <Contact />.
+          <ContactLink />.
         </SubscribeFailed>
       );
     case "checkout-failed":
       return (
         <SubscribeFailed>
-          We couldn&rsquo;t start the checkout. Try again, or write to <Contact />.
+          We couldn&rsquo;t start the checkout. Try again, or write to <ContactLink />.
         </SubscribeFailed>
       );
   }
-}
-
-/** The contact address, as a link that opens the visitor's mail. */
-function Contact() {
-  const address = LEGAL.contactEmail.trim();
-  return <a href={`mailto:${address}`}>{address}</a>;
 }
 
 /** The page when no checkout started, with a way to try again. */

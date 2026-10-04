@@ -17,6 +17,7 @@ import { config } from "@/config";
 import { billing } from "@/config/billing";
 
 import type { BillingSeams } from "./entitlement";
+import type { PortalRequest } from "./portal";
 import type { CheckoutRequest } from "./subscribe";
 
 /**
@@ -54,9 +55,9 @@ export const polar =
  * is waiting on that page, not on the tool's budget.
  *
  * The three customer writes and the email search are Subscribe's alone, for
- * tying the customer before checkout (AC-25). Each passes only what it is
- * given, so INV-3's test can hold that Polar sees the session's user and
- * nobody else.
+ * tying the customer before checkout (AC-25); the customer session is Manage
+ * billing's (AC-17). Each passes only what it is given, so INV-3's test can
+ * hold that Polar sees the session's user and nobody else.
  */
 export function accountSeams() {
   if (billing === null || polar === null) return null;
@@ -75,6 +76,8 @@ export function accountSeams() {
       client.customers.create({ email: body.email, external_id: body.external_id }),
     createCheckout: (body: CheckoutRequest) =>
       client.checkouts.create({ ...body, products: [...body.products] }),
+    createCustomerSession: (body: PortalRequest) =>
+      client.customerSessions.create({ ...body }),
   });
 }
 
