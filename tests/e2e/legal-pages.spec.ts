@@ -6,7 +6,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PRIVACY_SECTIONS, TERMS_SECTIONS } from "../../src/lib/policy-sections";
 
 /**
- * The privacy policy and the terms of use, in a real browser. Spec 0011, AC-1
+ * The privacy policy and the terms of service, in a real browser. Spec 0011, AC-1
  * to AC-5, AC-18 and AC-19.
  *
  * The component tests render both pages without styles or layout. These prove
@@ -24,7 +24,7 @@ const PAGES = [
   },
   {
     path: "/terms",
-    title: "Terms of use",
+    title: "Terms of service",
     sections: Object.values(TERMS_SECTIONS),
   },
 ] as const;
@@ -39,7 +39,7 @@ const TEXT_PAGE = resolve("tests/fixtures/text-page.pdf");
 const PHONE = "020 7946 0958";
 
 const NOTICE =
-  "By choosing a PDF you agree to the Terms of use. The Privacy policy explains what happens to your data.";
+  "By choosing a PDF you agree to the Terms of service. The Privacy policy explains what happens to your data.";
 
 async function expectNoAxeViolations(page: Page): Promise<void> {
   const { violations } = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
@@ -232,7 +232,7 @@ test.describe("the footer's Legal nav", () => {
       const nav = footer.getByRole("navigation", { name: "Legal" });
 
       const links = nav.getByRole("link");
-      await expect(links).toHaveText(["Privacy policy", "Terms of use"]);
+      await expect(links).toHaveText(["Privacy policy", "Terms of service"]);
       await expect(links.nth(0)).toHaveAttribute("href", "/privacy");
       await expect(links.nth(1)).toHaveAttribute("href", "/terms");
       for (const link of await links.all()) {
@@ -323,8 +323,11 @@ test.describe("the terms notice on /tool", () => {
     const notice = page.getByTestId("terms-notice");
 
     await expect(notice).toHaveText(NOTICE);
-    await expect(notice.getByRole("link")).toHaveText(["Terms of use", "Privacy policy"]);
-    await expect(notice.getByRole("link", { name: "Terms of use" })).toHaveAttribute(
+    await expect(notice.getByRole("link")).toHaveText([
+      "Terms of service",
+      "Privacy policy",
+    ]);
+    await expect(notice.getByRole("link", { name: "Terms of service" })).toHaveAttribute(
       "href",
       "/terms",
     );

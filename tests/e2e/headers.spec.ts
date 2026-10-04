@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 
-import { expect, test } from "@playwright/test";
+import { type APIResponse, expect, test } from "@playwright/test";
+
+import { BILLING_ENV } from "./build-env";
 
 /**
  * The content security policy is the enforcement point for this product's
@@ -42,18 +44,24 @@ test("the tool route carries the full policy, enforced", async ({ request }) => 
   }
 });
 
-test("exactly one policy header is sent", async ({ request }) => {
-  const response = await request.get("/tool");
-
-  // Two matching header rules would send two policies, and a browser enforces
-  // all of them at once. That makes the effective policy very hard to reason
-  // about, so the route matching is arranged to produce exactly one.
+/** Every value a response sends for one header name, counted, not merged. */
+async function valuesOf(response: APIResponse, name: string): Promise<string[]> {
   const all = await response.headersArray();
-  const policies = all.filter(
-    (header) => header.name.toLowerCase() === "content-security-policy",
-  );
-  expect(policies).toHaveLength(1);
-});
+  return all
+    .filter((header) => header.name.toLowerCase() === name)
+    .map((header) => header.value);
+}
+
+// Two matching header rules would send two policies, and a browser enforces
+// all of them at once. That makes the effective policy very hard to reason
+// about, so the route matching is arranged to produce exactly one. `/` is
+// checked too since spec 0012's referrer rule matches every path beside it.
+for (const path of ["/tool", "/"]) {
+  test(`exactly one policy header is sent on ${path}`, async ({ request }) => {
+    const response = await request.get(path);
+    expect(await valuesOf(response, "content-security-policy")).toHaveLength(1);
+  });
+}
 
 test("the tool route permits no third party origin", async ({ request }) => {
   const response = await request.get("/tool");
@@ -170,5 +178,93 @@ test.describe("MuPDF's source offer", () => {
     );
     expect(notices).toContain("Independent JPEG Group");
     expect(notices).toContain("Emscripten");
+  });
+});
+
+/**
+ * Spec 0012, AC-27. Every page and file carries exactly one referrer policy,
+ * so another origin (Clerk, Polar, GitHub) learns at most our origin, never a
+ * path or a query. The value is written out here rather than imported, so a
+ * change to `REFERRER_POLICY` has to change this test too.
+ */
+test.describe("the referrer policy", () => {
+  const POLICY = ["strict-origin-when-cross-origin"];
+
+  // `/engine/VERSION` already has a header rule of its own, the content type.
+  for (const path of [
+    "/",
+    "/tool",
+    "/pricing",
+    "/privacy",
+    "/terms",
+    "/engine/VERSION",
+  ]) {
+    test(`${path} carries exactly one`, async ({ request }) => {
+      const response = await request.get(path);
+      expect(response.status()).toBe(200);
+      expect(await valuesOf(response, "referrer-policy")).toEqual(POLICY);
+    });
+  }
+
+  test("a script the home page loads carries exactly one", async ({ request }) => {
+    // Its name changes with every build, so it is read from the page.
+    const html = await (await request.get("/")).text();
+    const src = html.match(/<script[^>]+src="(\/_next\/static\/[^"]+\.js)"/)?.[1];
+    expect(src, "the home page loads a script of its own").toBeTruthy();
+
+    const response = await request.get(src!);
+    expect(response.status()).toBe(200);
+    expect(await valuesOf(response, "referrer-policy")).toEqual(POLICY);
+  });
+});
+
+/**
+ * Spec 0012, AC-26. After a payment Polar adds its portal token to the
+ * welcome address. The proxy answers with a 307 to the same address without
+ * it, before Clerk runs, so Clerk's handshake never carries the token.
+ *
+ * Sent as a page load, because Clerk runs its handshake for nothing else, so
+ * without these headers the control below would prove nothing.
+ */
+test.describe("the portal token", () => {
+  const PAGE_LOAD = { "Sec-Fetch-Dest": "document", Accept: "text/html" };
+
+  /** The Frontend API host the fake publishable key names, as Clerk reads it. */
+  const CLERK_HOST = Buffer.from(
+    BILLING_ENV.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.replace(/^pk_test_/, ""),
+    "base64",
+  )
+    .toString("utf8")
+    .replace(/\$$/, "");
+
+  test("is dropped with a 307 to the same address on our own origin", async ({
+    request,
+    baseURL,
+  }) => {
+    const response = await request.get(
+      "/account/welcome?customer_session_token=x&keep=1",
+      { headers: PAGE_LOAD, maxRedirects: 0 },
+    );
+    expect(response.status()).toBe(307);
+
+    const location = response.headers()["location"] ?? "";
+    expect(location).not.toContain("customer_session_token");
+    const target = new URL(location, baseURL);
+    // The request's own origin, never `NEXT_PUBLIC_SITE_URL`, which the
+    // browser tests set to another host.
+    expect(target.origin).toBe(new URL(baseURL!).origin);
+    expect(target.pathname).toBe("/account/welcome");
+    expect(target.search).toBe("?keep=1");
+  });
+
+  test("without it, the same request goes to Clerk's handshake, so the strip runs first", async ({
+    request,
+  }) => {
+    const response = await request.get("/account/welcome?keep=1", {
+      headers: PAGE_LOAD,
+      maxRedirects: 0,
+    });
+    expect(response.status()).toBe(307);
+    expect(new URL(response.headers()["location"] ?? "").host).toBe(CLERK_HOST);
   });
 });

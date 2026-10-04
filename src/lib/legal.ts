@@ -25,6 +25,7 @@ const year = 2026;
 
 const tradingName = "RedactNest";
 const country = "Pakistan";
+const sellerName = "EdiventStudio";
 
 /**
  * The contact the repository held until the domain was bought (Launch
@@ -107,19 +108,51 @@ export const LEGAL = Object.freeze({
   contactEmail,
   representatives,
 
-  /** The footer's nav (spec 0011, AC-4). */
+  /**
+   * The footer's nav (spec 0011, AC-4). The terms were renamed "Terms of
+   * service" at the same path once they covered Pro (spec 0012, AC-22).
+   */
   legalNavLabel: "Legal",
   privacyLabel: "Privacy policy",
-  termsLabel: "Terms of use",
+  termsLabel: "Terms of service",
   /**
    * The line under the drop zone, around its two links (spec 0011, AC-5): "By
-   * choosing a PDF you agree to the Terms of use. The Privacy policy explains
-   * what happens to your data."
+   * choosing a PDF you agree to the Terms of service. The Privacy policy
+   * explains what happens to your data."
    */
   toolNotice: Object.freeze({
     beforeTerms: "By choosing a PDF you agree to the ",
     betweenLinks: ". The ",
     afterPrivacy: " explains what happens to your data.",
+  }),
+
+  /**
+   * The studio RedactNest is sold through, the name on a buyer's receipt (spec
+   * 0012). A trading name of the operator above, so the operator line does not
+   * change.
+   */
+  sellerName,
+  /**
+   * Who we are and About these terms (spec 0012, *Policy and terms changes*):
+   * the name on a receipt belongs to the same person as the operator line.
+   */
+  soldThroughLine: `${tradingName} is sold through ${sellerName}, another trading name of ${holder}.`,
+  /**
+   * Under Subscribe on Pricing (spec 0012, AC-13), and the first line of the
+   * privacy policy's Payments. It names the receipt only: the sandbox never
+   * charges a real card and Polar's docs do not say what a card statement
+   * shows, so that waits for Go live step 7's real purchase (task 18).
+   */
+  merchantLine: `Payments are handled by Polar, our merchant of record. Your receipt shows ${sellerName}, the studio RedactNest is sold through.`,
+  /**
+   * Set by task 1's sandbox check (spec 0012, AC-13): Polar takes tax out of
+   * the price in some countries and adds it on top in others, such as the US.
+   */
+  taxLine: "Tax may be added at checkout, depending on where you live.",
+  /** "By subscribing you agree to the Terms of service.", around its link. */
+  subscribeNotice: Object.freeze({
+    beforeTerms: "By subscribing you agree to the ",
+    afterTerms: ".",
   }),
 });
 

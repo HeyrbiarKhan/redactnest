@@ -3,6 +3,12 @@ import { resolve } from "node:path";
 
 import { expect, test, type Page, type Request, type Response } from "@playwright/test";
 
+import {
+  CLERK_ORIGINS,
+  OUTSIDE_SERVICES,
+  originCoversHost,
+} from "../../src/config/privacy";
+
 /**
  * The guarantee, proved rather than promised. Spec 0002, AC-2 and AC-3.
  *
@@ -37,6 +43,37 @@ const FILE_NAME = "zzsecretpayroll2026.pdf";
 
 /** Same origin and not a document request: the page's own code and the engine. */
 const ASSET_PATHS = [/^\/_next\//, /^\/engine\//, /^\/favicon\./];
+
+/**
+ * Spec 0012, AC-9: the routes outside the account group, none of which may
+ * load Clerk or reach its hosts.
+ */
+const PUBLIC_ROUTES = ["/", "/tool", "/pricing", "/privacy", "/terms"] as const;
+
+/**
+ * Every origin Clerk's sign in uses, its images included, read from the same
+ * list that feeds the policy, so a Clerk origin added there is looked for here.
+ */
+const CLERK_HOST_ORIGINS: readonly string[] = [
+  ...CLERK_ORIGINS,
+  ...OUTSIDE_SERVICES.filter((service) => service.name === "Clerk").flatMap(
+    (service) => service.imageOrigins,
+  ),
+];
+
+const isClerkHost = (url: string): boolean => {
+  const { host } = new URL(url);
+  return CLERK_HOST_ORIGINS.some((origin) => originCoversHost(origin, host));
+};
+
+/** The header's links into the account group, which plain `a` elements never prefetch. */
+async function hoverHeaderLinks(page: Page): Promise<void> {
+  const header = page.getByRole("banner");
+  for (const name of ["Pricing", "Account"]) {
+    await header.getByRole("link", { name, exact: true }).hover();
+  }
+  await page.waitForLoadState("networkidle");
+}
 
 interface RecordedWrite {
   readonly api: string;
@@ -256,13 +293,15 @@ test("no request carries the document, its text or its name", async ({ page }) =
  * and neither may bring a third party with it. `next/font` self hosts Inter at
  * build time and the icons compile into our bundle, so every request any page
  * makes, the font files included, goes to our own origin. Spec 0011, AC-12,
- * holds the privacy policy and the terms of use to the same rule (claim C9).
+ * holds the privacy policy and the Terms of service to the same rule (claim
+ * C9), and spec 0012 (task 15) holds Pricing to it too: it sells Pro without
+ * a script or an origin from Polar or Clerk.
  *
  * The font requests are counted too, so this cannot pass on a page that simply
  * never asked for a font: a regression to a CDN stylesheet would show up as a
  * font request to someone else, not as no font request at all.
  */
-for (const path of ["/", "/tool", "/privacy", "/terms"]) {
+for (const path of PUBLIC_ROUTES) {
   test(`every request on ${path}, fonts included, stays on our own origin`, async ({
     page,
   }) => {
@@ -283,6 +322,41 @@ for (const path of ["/", "/tool", "/privacy", "/terms"]) {
   });
 }
 
+/**
+ * Spec 0012, AC-9 and claims C7 and C9: Clerk's script loads only on the sign
+ * in and account pages. Each public route is loaded and its header's Pricing
+ * and Account links hovered, which `next/link` would answer with a prefetch,
+ * and nothing reaches a Clerk host. The same origin check above already holds
+ * this; this one names what it guards, so a failure says which wall fell.
+ */
+for (const path of PUBLIC_ROUTES) {
+  test(`${path} reaches no Clerk host, with the header's links hovered`, async ({
+    page,
+  }) => {
+    const requests = recordRequests(page);
+
+    await page.goto(path);
+    await page.waitForLoadState("networkidle");
+    await hoverHeaderLinks(page);
+
+    expect(requests.length, "the page made no request at all").toBeGreaterThan(0);
+    expect(
+      requests.map((request) => request.url()).filter(isClerkHost),
+      "a public route reached Clerk",
+    ).toEqual([]);
+  });
+}
+
+/** The control: the check above would see a request to a Clerk host. */
+test("a request to a Clerk host would be seen", () => {
+  expect(isClerkHost("https://clerk.redactnest.com/npm/@clerk/clerk-js")).toBe(true);
+  expect(isClerkHost("https://redactnest-e2e-00.clerk.accounts.dev/v1/client")).toBe(
+    true,
+  );
+  expect(isClerkHost("https://img.clerk.com/avatar")).toBe(true);
+  expect(isClerkHost("https://redactnest.test/pricing")).toBe(false);
+});
+
 test("the only thing the tool route asks its own server for is the entitlement", async ({
   page,
 }) => {
@@ -290,6 +364,18 @@ test("the only thing the tool route asks its own server for is the entitlement",
 
   await page.goto("/tool");
   await openDocument(page);
+
+  // Spec 0012, AC-9: the header now links to Pricing and Account. They are
+  // plain links, so hovering them prefetches neither, and the route's requests
+  // stay as they were.
+  const header = page.getByRole("banner");
+  await expect(
+    header.getByRole("link", { name: "Pricing", exact: true }),
+  ).toHaveAttribute("href", "/pricing");
+  await expect(
+    header.getByRole("link", { name: "Account", exact: true }),
+  ).toHaveAttribute("href", "/account");
+  await hoverHeaderLinks(page);
 
   // AC-3. Everything else the route fetches is its own code and the engine, both
   // static assets. What is left is the one endpoint spec 0001 allows, and that
@@ -492,14 +578,19 @@ test("a flagged document sends, stores and logs no page text or finding detail",
 });
 
 /**
- * Spec 0011, AC-11: no cookies, which is claim C6 in the privacy policy. A full
- * run on the tool, open to download, and then every other page, with every
+ * Spec 0011, AC-11, as spec 0012's AC-19 states it for anonymous visitors: no
+ * page outside the sign in and account pages sets a cookie, which is the first
+ * half of claim C6. A full run on the tool, open to download, and then every
+ * other public page, a page that does not exist and a static file, with every
  * response's headers read in full. `headersArray()` keeps a repeated header,
  * where `headers()` would fold several `Set-Cookie` lines into one. A cookie
  * set from script never shows in a header, so the browser context's own jar
  * is read at the end as well.
  */
 test.describe("cookies", () => {
+  /** A path no route answers, so the not found page renders. */
+  const MISSING = "/no-such-page";
+
   test("none is set by a full run on the tool or by any other page", async ({
     page,
     context,
@@ -511,14 +602,24 @@ test.describe("cookies", () => {
 
     await page.goto("/tool");
     await redactAndDownload(page);
-    for (const path of ["/", "/privacy", "/terms"]) {
-      await page.goto(path);
+    for (const path of ["/", "/pricing", "/privacy", "/terms", MISSING, "/licence.txt"]) {
+      const response = await page.goto(path);
+      expect(response?.status(), path).toBe(path === MISSING ? 404 : 200);
       await page.waitForLoadState("networkidle");
     }
 
     const paths = new Set(responses.map((response) => new URL(response.url()).pathname));
     expect([...paths]).toEqual(
-      expect.arrayContaining(["/tool", "/api/entitlement", "/", "/privacy", "/terms"]),
+      expect.arrayContaining([
+        "/tool",
+        "/api/entitlement",
+        "/",
+        "/pricing",
+        "/privacy",
+        "/terms",
+        MISSING,
+        "/licence.txt",
+      ]),
     );
 
     const setCookies: string[] = [];

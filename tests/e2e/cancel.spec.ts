@@ -75,7 +75,12 @@ test("a run can be cancelled while it is under way, and the tool carries on", as
 
   await page.route("**/api/entitlement", (route) =>
     route.fulfill({
-      json: { tier: "paid", pageCap: PAGES, maxFileBytes: 26_214_400 },
+      json: {
+        tier: "paid",
+        pageCap: PAGES,
+        maxFileBytes: 26_214_400,
+        account: "signed-in",
+      },
     }),
   );
 
@@ -127,7 +132,12 @@ test("a cancelled run keeps the ticks that were changed before it", async ({ pag
 
   await page.route("**/api/entitlement", (route) =>
     route.fulfill({
-      json: { tier: "paid", pageCap: PAGES, maxFileBytes: 26_214_400 },
+      json: {
+        tier: "paid",
+        pageCap: PAGES,
+        maxFileBytes: 26_214_400,
+        account: "signed-in",
+      },
     }),
   );
 
@@ -171,7 +181,12 @@ test("Make it again can be cancelled, landing on plain review", async ({ page })
 
   await page.route("**/api/entitlement", (route) =>
     route.fulfill({
-      json: { tier: "paid", pageCap: PAGES, maxFileBytes: 26_214_400 },
+      json: {
+        tier: "paid",
+        pageCap: PAGES,
+        maxFileBytes: 26_214_400,
+        account: "signed-in",
+      },
     }),
   );
 
@@ -255,7 +270,12 @@ test("detection gives way to a second document chosen while it reads", async ({
 
   await page.route("**/api/entitlement", (route) =>
     route.fulfill({
-      json: { tier: "paid", pageCap: PAGES, maxFileBytes: 26_214_400 },
+      json: {
+        tier: "paid",
+        pageCap: PAGES,
+        maxFileBytes: 26_214_400,
+        account: "signed-in",
+      },
     }),
   );
   await page.addInitScript(() => {

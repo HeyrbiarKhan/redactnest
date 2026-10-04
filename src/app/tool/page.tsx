@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { PageContainer } from "@/ui/page-container";
 import { SiteHeader } from "@/ui/site-header";
 
+import { SiteNav } from "../site-nav";
 import { ToolClient } from "./tool-client";
 
 /**
@@ -28,7 +29,7 @@ export const metadata: Metadata = {
 export default function ToolPage() {
   return (
     <>
-      <SiteHeader />
+      <SiteHeader nav={<SiteNav />} />
       {/*
         The skip link's target (spec 0003, AC-14). Focusable so the link can
         move focus here, and the one element allowed to drop its outline,

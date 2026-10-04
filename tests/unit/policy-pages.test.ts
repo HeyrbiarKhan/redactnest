@@ -56,3 +56,30 @@ describe("the legal pages", () => {
     expect(source).toMatch(USE_CLIENT);
   });
 });
+
+/**
+ * Pricing ships no script of its own either. Spec 0012, AC-13: a static page
+ * with no client component, so nothing on it runs before the visitor chooses
+ * Subscribe.
+ */
+const PRICING_FILES = [
+  ...filesUnder("src/app/pricing"),
+  "src/app/site-nav.tsx",
+  "src/ui/site-header.tsx",
+  "src/ui/page-container.tsx",
+  "src/ui/card.tsx",
+  "src/ui/button.tsx",
+];
+
+describe("Pricing", () => {
+  it("is built from files that exist", () => {
+    expect(PRICING_FILES.map((file) => file.replaceAll("\\", "/"))).toContain(
+      "src/app/pricing/page.tsx",
+    );
+  });
+
+  /** covers: AC-13 */
+  it.each(PRICING_FILES)("%s is not a client component", (file) => {
+    expect(readFileSync(join(ROOT, file), "utf8")).not.toMatch(USE_CLIENT);
+  });
+});

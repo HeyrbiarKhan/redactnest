@@ -365,12 +365,134 @@ const noProcessStreams = [
   },
 ];
 
+const CLERK_POLAR_MESSAGE =
+  "Clerk and Polar stay behind their walls (spec 0012, AC-20 and INV-1). Only " +
+  "src/billing may import @clerk/backend, @clerk/shared and @polar-sh/sdk; only " +
+  "the (account) route group and src/proxy.ts may import @clerk/nextjs; and " +
+  "src/config/billing.ts may import @clerk/shared to check the keys. Nothing " +
+  "else, so no Clerk or Polar code can ever reach /tool.";
+
+const BILLING_MODULE_MESSAGE =
+  "Only the plan check (src/app/api/entitlement), the (account) route group, " +
+  "src/proxy.ts and the root layout may import @/billing or @/config/billing " +
+  "(spec 0012, AC-20). They hold the billing secrets and the calls to Clerk " +
+  "and Polar, and they are server only.";
+
+/** Any Clerk or Polar package, by any entry point. */
+const noClerkImport = { regex: "^@clerk/", message: CLERK_POLAR_MESSAGE };
+const noPolarImport = { regex: "^@polar-sh/", message: CLERK_POLAR_MESSAGE };
+
+/**
+ * The billing modules, by alias and by relative path: `@/billing`, anything
+ * under it, `@/config/billing`, and `../billing` or `../config/billing` from
+ * anywhere. A regex, for the same reason `noWorkerButProtocol` is one.
+ */
+const noBillingImport = {
+  regex: String.raw`^(@/|(\.\.?/)+)(config/)?billing(/.*)?$`,
+  message: BILLING_MODULE_MESSAGE,
+};
+
+/** `await import(...)` and `typeof import(...)` of all three, `.` for the slash. */
+const noClerkPolarAnywhere = [
+  {
+    selector: "ImportExpression > Literal[value=/^@(clerk|polar-sh)./]",
+    message: CLERK_POLAR_MESSAGE,
+  },
+  {
+    selector: "TSImportType[source.value=/^@(clerk|polar-sh)./]",
+    message: CLERK_POLAR_MESSAGE,
+  },
+];
+
+/** Polar alone, for the zones that may name some of Clerk but none of Polar. */
+const noPolarAnywhere = [
+  {
+    selector: "ImportExpression > Literal[value=/^@polar-sh./]",
+    message: CLERK_POLAR_MESSAGE,
+  },
+  { selector: "TSImportType[source.value=/^@polar-sh./]", message: CLERK_POLAR_MESSAGE },
+];
+
+const noBillingAnywhere = [
+  {
+    selector: "ImportExpression > Literal[value=/^@.(config.)?billing/]",
+    message: BILLING_MODULE_MESSAGE,
+  },
+  {
+    selector: "TSImportType[source.value=/^@.(config.)?billing/]",
+    message: BILLING_MODULE_MESSAGE,
+  },
+];
+
+/** Clerk's packages but the ones a zone names, by any entry point. */
+const noClerkBut = (...allowed) => ({
+  regex: `^@clerk/(?!(${allowed.join("|")})(/|$))`,
+  message: CLERK_POLAR_MESSAGE,
+});
+
+/** The same, for `await import(...)`, where esquery wants a regex without `/`. */
+const noClerkButAnywhere = (...allowed) => [
+  {
+    selector: `ImportExpression > Literal[value=/^@clerk.(?!(${allowed.join("|")})($|.))/]`,
+    message: CLERK_POLAR_MESSAGE,
+  },
+  {
+    selector: `TSImportType[source.value=/^@clerk.(?!(${allowed.join("|")})($|.))/]`,
+    message: CLERK_POLAR_MESSAGE,
+  },
+];
+
+const CLERK_SIGN_OUT_MESSAGE =
+  "Clerk's SignOutButton and UserButton sign out with Clerk's client side " +
+  "navigation, which leaves Clerk's script running on the page they land on " +
+  "(spec 0012, INV-13, claims C7 and C9). Sign out with SignOutControl or " +
+  "leaveAccount from src/app/(account)/sign-out.tsx, which end in a full page load.";
+
+/**
+ * Both names in every spelling: a named import, a namespace or dynamic
+ * import's member, a destructured name, JSX, a re-export, and a computed
+ * member (`probe["UserButton"]`). By name rather than by package, so the ban
+ * holds whichever Clerk entry point exports them.
+ */
+const noClerkSignOut = [
+  {
+    selector: ":matches(Identifier, JSXIdentifier)[name=/^(SignOutButton|UserButton)$/]",
+    message: CLERK_SIGN_OUT_MESSAGE,
+  },
+  {
+    selector: "Literal[value=/^(SignOutButton|UserButton)$/]",
+    message: CLERK_SIGN_OUT_MESSAGE,
+  },
+];
+
+/** What every zone keeps whatever else it relaxes: the engine wall's own bans. */
+const WALL_IMPORTS = [
+  noMupdfImport,
+  noEngineImport,
+  noDetectImport,
+  noPhoneLibraryImport,
+  noToolClientImport,
+];
+const WALL_SYNTAX = [
+  ...noMupdfAnywhere,
+  ...noEngineAnywhere,
+  ...noDetectAnywhere,
+  ...noPhoneLibraryAnywhere,
+  ...noNewWorker,
+  ...noToolClientAnywhere,
+];
+
+/** The billing walls in full, for every zone that is not one of their homes. */
+const BILLING_IMPORTS = [noClerkImport, noPolarImport, noBillingImport];
+const BILLING_SYNTAX = [...noClerkPolarAnywhere, ...noBillingAnywhere];
+
 /**
  * A zone's rules, from the restrictions it does not get to relax.
  *
- * The storage ban, the colour patterns and the log ban are applied to every
- * zone here rather than passed in, so a zone can only ever relax what it
- * explicitly names, and no zone can name these.
+ * The storage ban, the colour patterns, the log ban and the ban on Clerk's
+ * sign out components are applied to every zone here rather than passed in,
+ * so a zone can only ever relax what it explicitly names, and no zone can
+ * name these.
  */
 const zone = (imports, syntax) => ({
   "no-restricted-imports": ["error", { patterns: imports }],
@@ -380,6 +502,7 @@ const zone = (imports, syntax) => ({
     ...noStorageAnywhere,
     ...noUncheckedColour,
     ...noProcessStreams,
+    ...noClerkSignOut,
   ],
   "no-console": "error",
 });
@@ -412,22 +535,11 @@ const eslintConfig = defineConfig([
     // nobody.
     name: "redactnest/engine-wall",
     files: [WALL],
+    // Spec 0012 adds the billing walls here, so they hold in every zone of
+    // `src` by default; only the zones below that are their homes relax them.
     rules: zone(
-      [
-        noMupdfImport,
-        noEngineImport,
-        noDetectImport,
-        noPhoneLibraryImport,
-        noToolClientImport,
-      ],
-      [
-        ...noMupdfAnywhere,
-        ...noEngineAnywhere,
-        ...noDetectAnywhere,
-        ...noPhoneLibraryAnywhere,
-        ...noNewWorker,
-        ...noToolClientAnywhere,
-      ],
+      [...WALL_IMPORTS, ...BILLING_IMPORTS],
+      [...WALL_SYNTAX, ...BILLING_SYNTAX],
     ),
   },
   {
@@ -437,13 +549,14 @@ const eslintConfig = defineConfig([
     name: "redactnest/engine-wall-engine",
     files: ["src/engine/**/*.{ts,mts}"],
     rules: zone(
-      [noEngineImport, noPhoneLibraryImport, noToolClientImport],
+      [noEngineImport, noPhoneLibraryImport, noToolClientImport, ...BILLING_IMPORTS],
       [
         ...noEngineAnywhere,
         ...noPhoneLibraryAnywhere,
         ...noNewWorker,
         ...noToolClientAnywhere,
         ...noSearch,
+        ...BILLING_SYNTAX,
       ],
     ),
   },
@@ -463,6 +576,7 @@ const eslintConfig = defineConfig([
           noDetectDependencies,
           noWorkerButProtocol,
           noToolClientImport,
+          ...BILLING_IMPORTS,
         ],
         [
           ...noMupdfAnywhere,
@@ -472,6 +586,7 @@ const eslintConfig = defineConfig([
           ...noNewWorker,
           ...noToolClientAnywhere,
           ...noSearch,
+          ...BILLING_SYNTAX,
         ],
       ),
       "@typescript-eslint/no-restricted-imports": [
@@ -498,13 +613,20 @@ const eslintConfig = defineConfig([
     name: "redactnest/engine-wall-worker",
     files: ["src/worker/engine.worker.ts"],
     rules: zone(
-      [noMupdfImport, noDetectImport, noPhoneLibraryImport, noToolClientImport],
+      [
+        noMupdfImport,
+        noDetectImport,
+        noPhoneLibraryImport,
+        noToolClientImport,
+        ...BILLING_IMPORTS,
+      ],
       [
         ...noMupdfAnywhere,
         ...noDetectAnywhere,
         ...noPhoneLibraryAnywhere,
         ...noNewWorker,
         ...noToolClientAnywhere,
+        ...BILLING_SYNTAX,
       ],
     ),
   },
@@ -513,19 +635,14 @@ const eslintConfig = defineConfig([
     name: "redactnest/engine-wall-client",
     files: ["src/worker/client.ts"],
     rules: zone(
-      [
-        noMupdfImport,
-        noEngineImport,
-        noDetectImport,
-        noPhoneLibraryImport,
-        noToolClientImport,
-      ],
+      [...WALL_IMPORTS, ...BILLING_IMPORTS],
       [
         ...noMupdfAnywhere,
         ...noEngineAnywhere,
         ...noDetectAnywhere,
         ...noPhoneLibraryAnywhere,
         ...noToolClientAnywhere,
+        ...BILLING_SYNTAX,
       ],
     ),
   },
@@ -542,6 +659,7 @@ const eslintConfig = defineConfig([
         noPhoneLibraryImport,
         noUiDependencies,
         noToolClientImport,
+        ...BILLING_IMPORTS,
       ],
       [
         ...noMupdfAnywhere,
@@ -551,7 +669,52 @@ const eslintConfig = defineConfig([
         ...noNewWorker,
         ...noInnerHtml,
         ...noToolClientAnywhere,
+        ...BILLING_SYNTAX,
       ],
+    ),
+  },
+  {
+    // The billing capability (spec 0012). Server only, and the one home of
+    // Clerk's backend and Polar's SDK, so their calls cannot spread across
+    // files the lint cannot fence. Clerk's Next.js package stays out: that
+    // belongs to the pages and the proxy.
+    name: "redactnest/billing",
+    files: ["src/billing/**/*.{ts,mts}"],
+    rules: zone(
+      [...WALL_IMPORTS, noClerkBut("backend", "shared")],
+      [...WALL_SYNTAX, ...noClerkButAnywhere("backend", "shared")],
+    ),
+  },
+  {
+    // The billing gate (spec 0012, AC-23) parses the publishable key with
+    // `@clerk/shared` and imports nothing else of Clerk's, and no Polar.
+    name: "redactnest/config-billing",
+    files: ["src/config/billing.ts"],
+    rules: zone(
+      [...WALL_IMPORTS, noClerkBut("shared"), noPolarImport],
+      [...WALL_SYNTAX, ...noClerkButAnywhere("shared"), ...noPolarAnywhere],
+    ),
+  },
+  {
+    // The account pages and Clerk's proxy (spec 0012, AC-9): the only home of
+    // `@clerk/nextjs`, and allowed the billing modules. No Polar SDK here;
+    // they reach Polar through src/billing.
+    name: "redactnest/account",
+    files: ["src/app/(account)/**/*.{ts,tsx}", "src/proxy.ts"],
+    rules: zone(
+      [...WALL_IMPORTS, noClerkBut("nextjs"), noPolarImport],
+      [...WALL_SYNTAX, ...noClerkButAnywhere("nextjs"), ...noPolarAnywhere],
+    ),
+  },
+  {
+    // The plan check, and the root layout that imports the billing gate for
+    // its checks (spec 0012, AC-1 and AC-23). Allowed the billing modules,
+    // never Clerk or Polar directly.
+    name: "redactnest/billing-entry",
+    files: ["src/app/api/entitlement/**/*.ts", "src/app/layout.tsx"],
+    rules: zone(
+      [...WALL_IMPORTS, noClerkImport, noPolarImport],
+      [...WALL_SYNTAX, ...noClerkPolarAnywhere],
     ),
   },
   {
@@ -561,13 +724,20 @@ const eslintConfig = defineConfig([
     name: "redactnest/tool-page",
     files: ["src/app/tool/page.tsx"],
     rules: zone(
-      [noMupdfImport, noEngineImport, noDetectImport, noPhoneLibraryImport],
+      [
+        noMupdfImport,
+        noEngineImport,
+        noDetectImport,
+        noPhoneLibraryImport,
+        ...BILLING_IMPORTS,
+      ],
       [
         ...noMupdfAnywhere,
         ...noEngineAnywhere,
         ...noDetectAnywhere,
         ...noPhoneLibraryAnywhere,
         ...noNewWorker,
+        ...BILLING_SYNTAX,
       ],
     ),
   },

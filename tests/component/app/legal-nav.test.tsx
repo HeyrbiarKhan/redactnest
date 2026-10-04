@@ -33,13 +33,13 @@ describe("LegalNav", () => {
   });
 
   /** covers: AC-4. The two links, in order, plain and in the same tab. */
-  it("links the privacy policy, then the terms of use", () => {
+  it("links the privacy policy, then the terms of service", () => {
     render(<LegalNav />);
 
     const links = within(screen.getByRole("navigation")).getAllByRole("link");
     expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
       ["Privacy policy", "/privacy"],
-      ["Terms of use", "/terms"],
+      ["Terms of service", "/terms"],
     ]);
     for (const link of links) expect(link).not.toHaveAttribute("target");
   });
@@ -64,7 +64,7 @@ describe("LegalNav", () => {
 
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(container.querySelector("p")).toBeNull();
-    expect(container.textContent).toBe("Privacy policyTerms of use");
+    expect(container.textContent).toBe("Privacy policyTerms of service");
   });
 
   /**

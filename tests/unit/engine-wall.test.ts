@@ -702,3 +702,236 @@ describe("writing a log", () => {
     expect(await wallErrors(UNIT_TEST, LOGS)).toEqual([]);
   });
 });
+
+/**
+ * Spec 0012, AC-20 and INV-1: Clerk and Polar behind their walls. Only
+ * src/billing names Clerk's backend and Polar, only the account group and the
+ * proxy name Clerk's Next.js package, and only the plan check, the account
+ * group, the proxy and the root layout import the billing modules. Nothing
+ * reachable from /tool names any of them.
+ */
+describe("Clerk, Polar and the billing modules", () => {
+  const CLERK_POLAR = /Clerk and Polar stay behind their walls/;
+  const BILLING_MODULE = /may import @\/billing or @\/config\/billing/;
+
+  const BILLING = "src/billing/probe.ts";
+  const CONFIG_BILLING = "src/config/billing.ts";
+  const ACCOUNT_PAGE = "src/app/(account)/account/probe/page.tsx";
+  const PROXY = "src/proxy.ts";
+  const PLAN_CHECK = "src/app/api/entitlement/route.ts";
+  const ROOT_LAYOUT = "src/app/layout.tsx";
+  const TOOL_MODULE = "src/app/tool/probe.tsx";
+
+  const importing = (specifier: string) =>
+    `import * as probe from "${specifier}";\nexport const p = probe;\n`;
+
+  const CLERK_NEXT = importing("@clerk/nextjs");
+  const CLERK_SERVER = importing("@clerk/nextjs/server");
+  const CLERK_BACKEND = importing("@clerk/backend");
+  const CLERK_SHARED = importing("@clerk/shared/keys");
+  const POLAR = importing("@polar-sh/sdk/2026-10");
+  const BILLING_PLAN = importing("@/billing/plan");
+  const BILLING_CONFIG = importing("@/config/billing");
+
+  /** AC-20's fenced zones, plus the shared shell pages, which are walled too. */
+  const FENCED = [
+    TOOL_PAGE,
+    TOOL_MODULE,
+    LIBRARY,
+    PRIMITIVE,
+    WORKER,
+    CLIENT,
+    ENGINE_MODULE,
+    DETECTOR,
+    ROUTE,
+    PAGE,
+  ];
+
+  it.each(FENCED)("rejects every Clerk and Polar package in %s", async (path) => {
+    for (const code of [CLERK_NEXT, CLERK_SERVER, CLERK_BACKEND, CLERK_SHARED, POLAR]) {
+      expect(await wallErrors(path, code)).toContainEqual(
+        expect.stringMatching(CLERK_POLAR),
+      );
+    }
+  });
+
+  it.each(FENCED)("rejects the billing modules in %s", async (path) => {
+    for (const code of [BILLING_PLAN, BILLING_CONFIG]) {
+      expect(await wallErrors(path, code)).toContainEqual(
+        expect.stringMatching(BILLING_MODULE),
+      );
+    }
+  });
+
+  it.each([
+    [
+      "a dynamic import of Clerk",
+      'export const m = await import("@clerk/nextjs");\n',
+      CLERK_POLAR,
+    ],
+    [
+      "a type only import of Polar",
+      'export type M = typeof import("@polar-sh/sdk");\n',
+      CLERK_POLAR,
+    ],
+    [
+      "a dynamic import of billing",
+      'export const m = await import("@/billing/plan");\n',
+      BILLING_MODULE,
+    ],
+    [
+      "a type only import of the gate",
+      'export type M = typeof import("@/config/billing");\n',
+      BILLING_MODULE,
+    ],
+    ["a relative path to billing", importing("../billing/plan"), BILLING_MODULE],
+    ["a relative path to the gate", importing("../config/billing"), BILLING_MODULE],
+  ])("rejects %s in a shared library", async (_form, code, message) => {
+    expect(await wallErrors(LIBRARY, code)).toContainEqual(
+      expect.stringMatching(message),
+    );
+  });
+
+  it("lets src/billing use Clerk's backend, its shared keys and Polar, and nothing else of Clerk's", async () => {
+    for (const code of [
+      CLERK_BACKEND,
+      importing("@clerk/backend/errors"),
+      CLERK_SHARED,
+      POLAR,
+      BILLING_CONFIG,
+    ]) {
+      expect(await wallErrors(BILLING, code)).toEqual([]);
+    }
+    for (const code of [CLERK_NEXT, CLERK_SERVER]) {
+      expect(await wallErrors(BILLING, code)).toContainEqual(
+        expect.stringMatching(CLERK_POLAR),
+      );
+    }
+  });
+
+  it("lets the billing gate use Clerk's shared keys and nothing else", async () => {
+    expect(await wallErrors(CONFIG_BILLING, CLERK_SHARED)).toEqual([]);
+    for (const code of [CLERK_BACKEND, CLERK_NEXT, POLAR]) {
+      expect(await wallErrors(CONFIG_BILLING, code)).toContainEqual(
+        expect.stringMatching(CLERK_POLAR),
+      );
+    }
+  });
+
+  it.each([ACCOUNT_PAGE, PROXY])(
+    "lets %s use Clerk's Next.js package and the billing modules, never Polar or Clerk's backend",
+    async (path) => {
+      for (const code of [CLERK_NEXT, CLERK_SERVER, BILLING_PLAN, BILLING_CONFIG]) {
+        expect(await wallErrors(path, code)).toEqual([]);
+      }
+      for (const code of [CLERK_BACKEND, POLAR]) {
+        expect(await wallErrors(path, code)).toContainEqual(
+          expect.stringMatching(CLERK_POLAR),
+        );
+      }
+    },
+  );
+
+  it.each([PLAN_CHECK, ROOT_LAYOUT])(
+    "lets %s import the billing modules, never Clerk or Polar",
+    async (path) => {
+      for (const code of [BILLING_PLAN, BILLING_CONFIG]) {
+        expect(await wallErrors(path, code)).toEqual([]);
+      }
+      for (const code of [CLERK_NEXT, CLERK_BACKEND, POLAR]) {
+        expect(await wallErrors(path, code)).toContainEqual(
+          expect.stringMatching(CLERK_POLAR),
+        );
+      }
+    },
+  );
+
+  it("keeps the engine wall in every billing zone", async () => {
+    for (const path of [BILLING, CONFIG_BILLING, ACCOUNT_PAGE, PROXY, PLAN_CHECK]) {
+      expect(await wallErrors(path, IMPORTS_MUPDF)).toContainEqual(
+        expect.stringMatching(MUPDF),
+      );
+      expect(await wallErrors(path, IMPORTS_ENGINE)).toContainEqual(
+        expect.stringMatching(ENGINE),
+      );
+    }
+  });
+});
+
+/**
+ * Spec 0012, INV-13: every way out of the account group is a full page load.
+ * Clerk's `SignOutButton` and `UserButton` sign out with Clerk's client side
+ * navigation, so both are banned by name in every zone, the account group
+ * (the only one allowed `@clerk/nextjs` at all) included.
+ */
+describe("Clerk's sign out components", () => {
+  const CLERK_SIGN_OUT = /Clerk's SignOutButton and UserButton sign out/;
+  const ACCOUNT_PAGE = "src/app/(account)/account/probe/page.tsx";
+
+  const NAMED =
+    'import { SignOutButton } from "@clerk/nextjs";\nexport const s = SignOutButton;\n';
+
+  it.each([
+    ["a named import", NAMED],
+    [
+      "UserButton",
+      'import { UserButton } from "@clerk/nextjs";\nexport const u = UserButton;\n',
+    ],
+    [
+      "an aliased import",
+      'import { SignOutButton as Leave } from "@clerk/nextjs";\nexport const l = Leave;\n',
+    ],
+    [
+      "a namespace import's member",
+      'import * as clerk from "@clerk/nextjs";\nexport const s = clerk.SignOutButton;\n',
+    ],
+    [
+      "a computed member",
+      'import * as clerk from "@clerk/nextjs";\nexport const u = clerk["UserButton"];\n',
+    ],
+    [
+      "a destructured dynamic import",
+      'export const { UserButton: u } = await import("@clerk/nextjs");\n',
+    ],
+    [
+      "JSX through a namespace",
+      'import * as clerk from "@clerk/nextjs";\nexport const s = <clerk.SignOutButton />;\n',
+    ],
+    ["a re-export", 'export { SignOutButton } from "@clerk/nextjs";\n'],
+  ])("rejects %s in the account group", async (_form, code) => {
+    expect(await wallErrors(ACCOUNT_PAGE, code)).toContainEqual(
+      expect.stringMatching(CLERK_SIGN_OUT),
+    );
+  });
+
+  it.each([
+    ROUTE,
+    LIBRARY,
+    PRIMITIVE,
+    PAGE,
+    TOOL_PAGE,
+    ENGINE_MODULE,
+    WORKER,
+    CLIENT,
+    DETECTOR,
+    "src/billing/probe.ts",
+    "src/config/billing.ts",
+    ACCOUNT_PAGE,
+    "src/proxy.ts",
+    "src/app/api/entitlement/route.ts",
+    "src/app/layout.tsx",
+  ])("rejects it in %s, because no zone gets to relax this one", async (path) => {
+    expect(await wallErrors(path, NAMED)).toContainEqual(
+      expect.stringMatching(CLERK_SIGN_OUT),
+    );
+  });
+
+  it("lets the account group use the rest of Clerk's Next.js package", async () => {
+    expect(
+      await wallErrors(
+        ACCOUNT_PAGE,
+        'import { SignIn, useClerk } from "@clerk/nextjs";\nexport const p = [SignIn, useClerk];\n',
+      ),
+    ).toEqual([]);
+  });
+});

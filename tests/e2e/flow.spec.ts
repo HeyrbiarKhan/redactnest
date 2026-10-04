@@ -310,10 +310,12 @@ const OPEN_FAILURES: readonly (readonly [
     "save or export it as a PDF first",
   ],
   [
+    // The browser tests build with billing on (spec 0012), so an anonymous
+    // visitor over the free cap is pointed to Pro, never to splitting it.
     "a document over the free page cap",
     () => resolve("tests/fixtures/detect-dense.pdf"),
     "This PDF has more than 3 pages",
-    "Split it into parts of 3 pages or fewer",
+    "Sign in and get Pro, then open it again here.",
   ],
   [
     "a document with layers",

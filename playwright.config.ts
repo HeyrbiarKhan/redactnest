@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-import { SOURCE_URL } from "./tests/e2e/build-env";
+import { BILLING_ENV, SOURCE_URL } from "./tests/e2e/build-env";
 
 /**
  * Browser tests run against a production build, never `next dev`.
@@ -13,8 +13,11 @@ import { SOURCE_URL } from "./tests/e2e/build-env";
  * production.
  */
 
-/** The one spec that times the page, run in a project of its own. */
-const SPEED_SPEC = /checklist-speed\.spec\.ts$/;
+/**
+ * The specs that time the page, run in a project of its own: the checklist
+ * (spec 0007, AC-8) and the paid cap's open and reads (spec 0012, AC-24).
+ */
+const SPEED_SPEC = /(checklist|paid-cap)-speed\.spec\.ts$/;
 
 const PORT = 3000;
 const BASE_URL = `http://localhost:${PORT}`;
@@ -30,6 +33,8 @@ const BUILD_ENV = {
   NEXT_PUBLIC_MAX_FILE_BYTES: "26214400",
   NEXT_PUBLIC_SITE_URL: "https://redactnest.test",
   NEXT_PUBLIC_SOURCE_URL: SOURCE_URL,
+  // Billing on, from a fake set, never the keys in `.env.local` (spec 0012).
+  ...BILLING_ENV,
 };
 
 export default defineConfig({
@@ -59,8 +64,8 @@ export default defineConfig({
       testIgnore: SPEED_SPEC,
     },
     /**
-     * Spec 0007, AC-8. The checklist's speed is a stopwatch, so it runs alone:
-     * after every other test has finished, on one worker. Beside the parallel
+     * Spec 0007, AC-8, and spec 0012, AC-24. Each is a stopwatch, so they run
+     * alone: after every other test has finished, on one worker. Beside the parallel
      * pool it timed the machine, not the page (a 140 ms first render took 7.6 s
      * there while other workers opened documents), and a gate that fails on a
      * healthy tree is one people learn to ignore.

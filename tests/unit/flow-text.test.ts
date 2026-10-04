@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   BLOCKED_REASON_TEXT,
@@ -40,6 +40,7 @@ import {
 } from "@/lib/page-findings";
 import {
   ENGINE_ERROR_KINDS,
+  ENTITLEMENT_ACCOUNTS,
   PAGE_FINDINGS,
   PROGRESS_PHASES,
   SANITIZED_KINDS,
@@ -62,11 +63,13 @@ const FREE: EntitlementSnapshot = Object.freeze({
   tier: "free",
   pageCap: 3,
   maxFileBytes: 26_214_400,
+  account: "none",
 });
 const PAID: EntitlementSnapshot = Object.freeze({
   tier: "paid",
   pageCap: 50,
   maxFileBytes: 104_857_600,
+  account: "signed-in",
 });
 
 /** Every failure's words, for both tiers. */
@@ -416,5 +419,173 @@ describe("the result card (AC-11, AC-12)", () => {
 
   it("says the browser has the file once it is handed over (AC-13)", () => {
     expect(DOWNLOADED_LINE).toBe("Your browser has the file.");
+  });
+});
+
+/**
+ * Spec 0012, AC-5 and AC-6: the plan line, the helper and the free cap's words.
+ * `config` reads whether billing is on once, as it loads, so each case loads
+ * the words afresh with billing on or off.
+ */
+describe("the plan's words (spec 0012, AC-5 and AC-6)", () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    vi.resetModules();
+  });
+
+  async function words(billing: boolean, env: Record<string, string> = {}) {
+    vi.resetModules();
+    delete process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+    delete process.env.NEXT_PUBLIC_MAX_PAGES;
+    delete process.env.NEXT_PUBLIC_FREE_PAGE_CAP;
+    if (billing) {
+      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY =
+        "pk_test_cmVkYWN0bmVzdC1lMmUtMDAuY2xlcmsuYWNjb3VudHMuZGV2JA==";
+    }
+    for (const [key, value] of Object.entries(env)) process.env[key] = value;
+    return import("@/lib/flow-text");
+  }
+
+  const at = (
+    account: EntitlementSnapshot["account"],
+    tier: EntitlementSnapshot["tier"] = "free",
+  ): EntitlementSnapshot => ({ ...(tier === "paid" ? PAID : FREE), tier, account });
+
+  /** A line as it reads, links as their labels. */
+  const read = (parts: readonly (string | { label: string })[]) =>
+    parts.map((part) => (typeof part === "string" ? part : part.label)).join("");
+
+  describe("the plan line", () => {
+    it("gives every account a line that ends as a sentence", async () => {
+      const { PLAN_TEXT, planLine } = await words(true);
+
+      expect(Object.keys(PLAN_TEXT).sort()).toEqual([...ENTITLEMENT_ACCOUNTS].sort());
+      for (const account of ENTITLEMENT_ACCOUNTS) {
+        expect(read(planLine(at(account)).parts), account).toMatch(/\.$/);
+      }
+    });
+
+    it.each([
+      [at("none"), "Sign in, or see what Pro adds.", ["/sign-in", "/pricing"]],
+      [at("signed-in"), "Get Pro for up to 50 pages a document.", ["/pricing"]],
+      [at("signed-in", "paid"), "Signed in with Pro.", []],
+      [
+        at("sign-in-needed"),
+        "Your sign in has expired, so the free limit applies. Sign in again to use Pro.",
+        ["/sign-in"],
+      ],
+      [
+        at("unknown"),
+        "We couldn't check your plan, so the free limit applies for now.",
+        [],
+      ],
+    ])("says the next step for %o", async (answer, line, hrefs) => {
+      const { planLine } = await words(true);
+      const { parts } = planLine(answer);
+
+      expect(read(parts)).toBe(line);
+      expect(
+        parts.flatMap((part) => (typeof part === "string" ? [] : [part.href])),
+      ).toEqual(hrefs);
+    });
+
+    it("offers Try again only when the plan could not be checked", async () => {
+      const { planLine } = await words(true);
+
+      for (const account of ENTITLEMENT_ACCOUNTS) {
+        expect(planLine(at(account)).tryAgain, account).toBe(
+          account === "unknown" ? "Try again" : undefined,
+        );
+      }
+    });
+
+    it("takes the paid figure from config, never a literal", async () => {
+      const { planLine } = await words(true, { NEXT_PUBLIC_MAX_PAGES: "40" });
+
+      expect(read(planLine(at("signed-in")).parts)).toBe(
+        "Get Pro for up to 40 pages a document.",
+      );
+    });
+  });
+
+  describe("the drop zone's helper", () => {
+    it("says it is checking until the first answer, then names the cap and the plan", async () => {
+      const { dropZoneHelper } = await words(true);
+
+      expect(dropZoneHelper(null)).toBe("Checking your plan");
+      expect(dropZoneHelper(at("none"))).toBe("Up to 3 pages on Free");
+      expect(dropZoneHelper(at("unknown"))).toBe("Up to 3 pages on Free");
+      expect(dropZoneHelper(at("signed-in", "paid"))).toBe("Up to 50 pages on Pro");
+    });
+
+    it("names the free cap and no plan with billing off, from the start", async () => {
+      const { dropZoneHelper } = await words(false, { NEXT_PUBLIC_FREE_PAGE_CAP: "5" });
+
+      expect(dropZoneHelper(null)).toBe("Up to 5 pages");
+      expect(dropZoneHelper({ ...at("none"), pageCap: 5 })).toBe("Up to 5 pages");
+    });
+  });
+
+  describe("too many pages", () => {
+    it.each([
+      [
+        "none",
+        "Sign in and get Pro, then open it again here.",
+        { label: "Get Pro", href: "/pricing" },
+      ],
+      [
+        "signed-in",
+        "Get Pro, then open it again here.",
+        { label: "Get Pro", href: "/pricing" },
+      ],
+      [
+        "sign-in-needed",
+        "Sign in again to use Pro, then open it again here.",
+        { label: "Sign in again", href: "/sign-in" },
+      ],
+      ["unknown", "We couldn't check your plan. Check it, then open it again.", null],
+    ] as const)(
+      "points a free job with account %s to Pro, never to splitting",
+      async (account, next, link) => {
+        const { failureText } = await words(true);
+
+        expect(failureText("too-many-pages", at(account))).toEqual({
+          title: "This PDF has more than 3 pages",
+          body: "The free plan handles up to 3 pages. Pro handles up to 50.",
+          next,
+          plan: { link, recheck: "Check my plan and open it again" },
+        });
+      },
+    );
+
+    it("keeps the split advice, and offers no plan, for a paid job", async () => {
+      const { failureText } = await words(true);
+
+      expect(failureText("too-many-pages", PAID)).toEqual({
+        title: "This PDF has more than 50 pages",
+        body: "RedactNest handles up to 50 pages.",
+        next: "Split it into parts of 50 pages or fewer in your PDF app, and redact each one.",
+      });
+    });
+
+    it("keeps today's words with billing off, where no Pro exists", async () => {
+      const { failureText } = await words(false);
+
+      expect(failureText("too-many-pages", at("none"))).toEqual({
+        title: "This PDF has more than 3 pages",
+        body: "The free limit is 3 pages.",
+        next: "Split it into parts of 3 pages or fewer in your PDF app, and redact each one.",
+      });
+    });
+
+    it("takes the paid figure from config, never a literal", async () => {
+      const { failureText } = await words(true, { NEXT_PUBLIC_MAX_PAGES: "40" });
+
+      expect(failureText("too-many-pages", at("signed-in")).body).toBe(
+        "The free plan handles up to 3 pages. Pro handles up to 40.",
+      );
+    });
   });
 });

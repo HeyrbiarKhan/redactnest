@@ -1,7 +1,7 @@
 # 0002. Document session and privacy guarantee
 
 **Date**: 2026-09-20
-**Updated**: 2026-09-21, reconciling the session ending rules with the warm engine (AC-1, AC-5a, AC-5b, INV-6, INV-6a); 2026-09-25, from spec [0004](../0004-redaction-engine/index.md): INV-1 and AC-6 reworded to say where the document really exists, `EngineSession.bytes` given its reader, `sanitized` defined as what was found; 2026-09-29, from spec [0006](../0006-scanned-page-detection-warnings/index.md): `DocumentSummary.pagesWithText` replaced by `pages` (one `PageReading` per page), `RedactionOutcome.pagesWithoutText` by `pagesByFinding`, `ReviewMatch` gains `concealed`, `ENGINE_ERROR_KINDS` gains `no-readable-text` and `edge-text`, and `outputName` is set again at `opened`; 2026-09-30, from spec [0007](../0007-redact-flow/index.md): a refused run returns to `reviewing` with its ticks kept and its kind in a new `runFailure`, so `failed` is an open failure only; `ticks-set` (a group's select all) and `rerun` (Make it again) join the machine; `outputName` is settled at `redacted`, with a `cleaned` form for a run that removed nothing; `hasUnsavedWork` counts a refusal on screen; `ReviewMatch` gains `beforeCut` and `afterCut`; and a replacement retires every pending operation, the same `jobId` included
+**Updated**: 2026-09-21, reconciling the session ending rules with the warm engine (AC-1, AC-5a, AC-5b, INV-6, INV-6a); 2026-09-25, from spec [0004](../0004-redaction-engine/index.md): INV-1 and AC-6 reworded to say where the document really exists, `EngineSession.bytes` given its reader, `sanitized` defined as what was found; 2026-09-29, from spec [0006](../0006-scanned-page-detection-warnings/index.md): `DocumentSummary.pagesWithText` replaced by `pages` (one `PageReading` per page), `RedactionOutcome.pagesWithoutText` by `pagesByFinding`, `ReviewMatch` gains `concealed`, `ENGINE_ERROR_KINDS` gains `no-readable-text` and `edge-text`, and `outputName` is set again at `opened`; 2026-09-30, from spec [0007](../0007-redact-flow/index.md): a refused run returns to `reviewing` with its ticks kept and its kind in a new `runFailure`, so `failed` is an open failure only; `ticks-set` (a group's select all) and `rerun` (Make it again) join the machine; `outputName` is settled at `redacted`, with a `cleaned` form for a run that removed nothing; `hasUnsavedWork` counts a refusal on screen; `ReviewMatch` gains `beforeCut` and `afterCut`; and a replacement retires every pending operation, the same `jobId` included; 2026-10-04, from spec [0012](../0012-billing-paid-plan/index.md): the entitlement is asked for once as `/tool` loads, after the load guard and the support check, instead of on the engine warm trigger, and asked again when the tab becomes visible and the last answer was not `paid`, at an open when the last answer is more than 5 minutes old, and always by "Check my plan and open it again" (its AC-4). One ask is in flight at a time, each with the 4 s budget, and a late answer updates the page but never a job's frozen snapshot. `EntitlementSnapshot` gains `account` (`none`, `signed-in`, `sign-in-needed` or `unknown`), and every failure on the client reads as free with `account: "unknown"` (its AC-3). INV-5 is unchanged: a job runs to the end on the snapshot frozen at open. The billing and account audit trail is Polar's records and Clerk's, and we keep none
 **Status**: Accepted
 
 ## Summary
@@ -89,7 +89,7 @@ The tick comparison is what makes this honest. Someone who opened a file and rea
 |---|---|
 | `MatchId` | opaque branded `string`. Minted in the worker, meaningless to the main thread |
 | `ReviewMatch` | `id: MatchId` · `type: DetectorKind` · `page: number` (one based, for display) · `text: string` · `before: string` · `after: string` · `tickedByDefault: boolean` · `blocked` (spec 0005) · `concealed: Concealment \| null` (spec 0006) · `beforeCut: boolean` · `afterCut: boolean` (spec 0007, AC-9: whether the page text goes on past each side). **No quads** |
-| `EntitlementSnapshot` | `tier: "free" \| "paid"` · `pageCap: number` · `maxFileBytes: number` |
+| `EntitlementSnapshot` | `tier: "free" \| "paid"` · `pageCap: number` · `maxFileBytes: number` · `account: EntitlementAccount` (spec 0012) |
 | `RedactionOutcome` | `pageCount: number` · `removedByType: Readonly<Partial<Record<DetectorKind, number>>>` · `pagesByFinding: Readonly<Partial<Record<PageFinding, number>>>` (spec 0006, which replaced `pagesWithoutText: number`) · `sanitized: readonly SanitizedKind[]` |
 | `DetectorKind` | declared here as the union feature 6 populates. Feature 3 needs the type to exist and needs `tickedByDefault` to ride on every match; it does not decide the members |
 
@@ -144,7 +144,7 @@ This feature's surface is the worker message protocol, not HTTP. Spec 0001 fixed
 | `progress` | worker to main | `id` | `phase: ProgressPhase` | none | n/a |
 | `error` | worker to main | `id` | `errorKind: EngineErrorKind` and deliberately nothing else | none | n/a |
 | `release` | **main thread only** | none | none | none | none |
-| `GET /api/entitlement` | main thread to own origin | none, cookie only | `tier`, caps | session cookie, same origin | any failure returns the free tier |
+| `GET /api/entitlement` | main thread to own origin | none, cookie only | `tier`, caps, `account` (spec 0012) | Clerk's session cookie, read on the server, same origin | any failure returns the free tier, with the reason in `account` |
 
 Notes that matter when building this:
 
@@ -155,7 +155,7 @@ Notes that matter when building this:
 
 **When the entitlement is fetched, decided here rather than left open.** `open` needs `limits` synchronously and `limits.maxPages` must be the snapshot's `pageCap` (INV-5), so the fetch cannot happen after the message is sent, and a paid visitor must not be frozen on free caps for a whole job.
 
-- The fetch starts on the same trigger that already warms the engine in `src/worker/client.ts`: pointer enter, focus, or drag over the drop area. By the time a file has been chosen it has almost always resolved, so the common path pays nothing.
+- The fetch starts on the same trigger that already warms the engine in `src/worker/client.ts`: pointer enter, focus, or drag over the drop area. By the time a file has been chosen it has almost always resolved, so the common path pays nothing. (Since spec 0012 it starts as the page loads instead, so the plan line can say what applies before a file is chosen, and it is asked again on spec 0012's refresh rules, AC-4.)
 - If it has not resolved when a file is chosen, `open` waits for it and reports the `checking-entitlement` phase while it does. The wait is bounded; on timeout it fails closed to the free tier, as spec 0001 requires of every entitlement failure.
 - The tier is never revised mid job. That is INV-5, and the prefetch is what stops it being a penalty on the people who paid.
 
@@ -165,7 +165,8 @@ Notes that matter when building this:
 |---|---|---|
 | open | `jobId` | `crypto.randomUUID()` on the main thread |
 | open | `outputName` | derived from `File.name`: strip a trailing `.pdf` case insensitively, trim, fall back to the literal `document` when nothing is left, then append `-redacted.pdf`, or `-partly-redacted.pdf` once `opened` when any page carries a warning finding (spec 0006, AC-23). Repeated downloads of the same name are left to the browser's own numbering rather than inventing a scheme |
-| open | `entitlement.tier`, `entitlement.pageCap` | `GET /api/entitlement`, decided in spec 0001, prefetched on the engine warm trigger, failing closed to the free tier on error or timeout |
+| open | `entitlement.tier`, `entitlement.pageCap` | `GET /api/entitlement`, decided in spec 0001, prefetched on the engine warm trigger (asked at load since spec 0012), failing closed to the free tier on error or timeout |
+| open | `entitlement.account` | the same answer's `account`, or `unknown` for any failure on the client (spec 0012, AC-3) |
 | open | `entitlement.maxFileBytes` | `config.maxFileBytes` |
 | open | `limits.maxPages` sent to the worker | **the snapshot's `pageCap`**, not `config.maxPages`. See the gap note in `rationale.md` |
 | open | `summary.pageCount`, `summary.pages` | the engine; `pages` from its page reading (spec 0006) |
@@ -203,7 +204,7 @@ Notes that matter when building this:
 - **No accounts on this path.** The tool route is anonymous. The only authorisation that exists is the entitlement tier, which decides a page cap and nothing else. There is no owner, no role and no tenant, because there is no stored object to own.
 - **The threat this design actually addresses** is a copy of the document surviving the visit, or reaching us. The countermeasures are INV-1, INV-3 and INV-6, plus the tool route's `connect-src 'self'` from spec 0001.
 - **Compliance scope is GDPR**, inherited from spec 0001. Under this design RedactNest is not a processor of document content: the content never reaches our infrastructure, so there is no processing to describe on that path. Features 9, 16 and 17 should describe that reality rather than standard processor language.
-- **Audit logging, stated plainly.** There is deliberately no audit trail of document content or of what anyone redacted, because such a trail would recreate the exact exposure the product exists to remove. This is a conscious position, not an omission. Audit logging does apply to the billing and authentication surfaces, and feature 10 owns it.
+- **Audit logging, stated plainly.** There is deliberately no audit trail of document content or of what anyone redacted, because such a trail would recreate the exact exposure the product exists to remove. This is a conscious position, not an omission. Audit logging does apply to the billing and authentication surfaces, and feature 10 owns it. (Spec 0012 settled it: Polar's records and Clerk's are that audit trail, and we keep none of our own.)
 - **What this design does not control, stated honestly** so feature 16 does not overclaim: operating system swap and page files, browser process memory and crash dumps, the visitor's own disk where the source file already lives and where the redacted output is saved, and any extension with access to the page. In memory means we write nothing; it does not mean the operating system never pages that memory out.
 - **The two endings are not equally strong, and the difference is worth naming.** A release terminates the worker, so its heap goes back to the browser as one act. A replacement closes the document and drops the bytes, so nothing can read them any more, but the freed WebAssembly allocation returns to the engine's own free list rather than to the operating system, and the dropped `ArrayBuffer` waits for garbage collection. Reachability is identical on both paths, and that is the property the guarantee rests on. Promptness is not, so feature 16 should say **unreachable** rather than **erased** when it describes what happens between two documents.
 - **The `File` handle is worth naming.** Retaining it lets the page re-read that one file until the session ends. It stores nothing new, since the file is already on the visitor's disk and they chose it, but the capability exists and the security page should say so rather than leave it to be discovered.
@@ -287,7 +288,7 @@ Ordered by Skateboard: the first slice is a session that exists, holds a documen
 - No audit trail of document content exists, deliberately. Named here so nobody adds one later out of compliance habit; feature 10 owns audit logging for billing and authentication, where it belongs.
 - The state machine is small enough to test exhaustively, which is unusual and worth exploiting in slice 3 rather than settling for happy path coverage.
 - Several tabs means several independent sessions and several worker heaps against the same browser ceiling. Nothing is shared between them, which follows from INV-3 rather than needing its own rule.
-- Prefetching the entitlement on the engine warm trigger means an anonymous visitor who never chooses a file still makes one `GET /api/entitlement` call. It carries no document data and returns the free tier, so it costs a request and tells nobody anything.
+- Prefetching the entitlement on the engine warm trigger means an anonymous visitor who never chooses a file still makes one `GET /api/entitlement` call. It carries no document data and returns the free tier, so it costs a request and tells nobody anything. (Since spec 0012 every visit to `/tool` makes that request as the page loads, for the same reason and at the same cost.)
 - `DetectorKind` is declared here and populated by feature 6. This spec needs the type and the `tickedByDefault` flag to exist; it does not decide the members.
 
 ## Follow-up

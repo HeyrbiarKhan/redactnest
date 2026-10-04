@@ -32,6 +32,9 @@ const RAW = {
   NEXT_PUBLIC_MATCH_CONTEXT_CHARS: process.env.NEXT_PUBLIC_MATCH_CONTEXT_CHARS,
   NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   NEXT_PUBLIC_SOURCE_URL: process.env.NEXT_PUBLIC_SOURCE_URL,
+  // Whether billing is on (spec 0012, AC-23). Only its presence is read here;
+  // `src/config/billing.ts` checks it, and the other six, on the server.
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
   // Vercel's system variables, set on every Vercel build once "Automatically
   // expose System Environment Variables" is on (spec 0009, AC-4).
   NEXT_PUBLIC_VERCEL_GIT_PROVIDER: process.env.NEXT_PUBLIC_VERCEL_GIT_PROVIDER,
@@ -317,6 +320,14 @@ export const config = Object.freeze({
    * commit to name. Spec 0009, AC-4 to AC-6.
    */
   sourceUrl: readSourceUrl(),
+  /**
+   * Whether accounts and the paid plan exist on this build: true exactly when
+   * the Clerk publishable key is set, so the browser and the server always
+   * agree. With it off, the tool shows no Pro, no sign in and no plan line,
+   * and no Clerk provider renders. Whether the rest of the billing values
+   * agree with it is `src/config/billing.ts`'s check. Spec 0012, AC-23.
+   */
+  billingEnabled: present(RAW.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) !== undefined,
 });
 
 // Last, so a cap or a source link that is wrong is still reported the way it

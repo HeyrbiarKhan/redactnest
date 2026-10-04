@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 // Relative paths, never the `@/` alias, which this file cannot resolve. Both
 // modules, and the error module they share, import only each other and read
 // no environment variable (spec 0011, INV-8).
-import { buildPolicies } from "./src/config/csp";
+import { buildPolicies, REFERRER_POLICY } from "./src/config/csp";
 import { OUTSIDE_SERVICES } from "./src/config/privacy";
 
 /**
@@ -49,6 +49,13 @@ const nextConfig: NextConfig = {
         // A content type only, so the one policy header above stays the one.
         source: "/engine/VERSION",
         headers: [{ key: "Content-Type", value: "text/plain; charset=utf-8" }],
+      },
+      {
+        // Every path, `/tool` included, so no page's address reaches another
+        // origin (spec 0012, AC-27). It sets this header alone, so it never
+        // doubles the policy above, and no other rule sets it.
+        source: "/:path*",
+        headers: [{ key: "Referrer-Policy", value: REFERRER_POLICY }],
       },
     ];
   },

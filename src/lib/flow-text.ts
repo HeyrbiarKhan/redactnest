@@ -1,18 +1,24 @@
 /**
- * Every word the redact flow shows for a step, a failure or a result. Spec
- * 0007, *Phase copy*, *Failure copy* and *Result card copy*.
+ * Every word the redact flow shows for a step, a failure, a result or the
+ * plan. Spec 0007, *Phase copy*, *Failure copy* and *Result card copy*, and
+ * spec 0012, AC-5 and AC-6.
  *
- * Typed as records over `EngineErrorKind`, `ProgressPhase` and `SanitizedKind`,
- * so a kind added to the protocol without its words fails `pnpm typecheck`
- * (AC-16). A failure's words are chosen by its kind alone (a run refusal's also
- * by whether anything is ticked) and read caps only from the job's frozen
- * entitlement (spec 0002, INV-5), so no line can carry a page, an item, a count
- * from the document or the file name (INV-3).
+ * Typed as records over `EngineErrorKind`, `ProgressPhase`, `SanitizedKind` and
+ * `EntitlementAccount`, so a kind added to the protocol without its words fails
+ * `pnpm typecheck` (AC-16). A failure's words are chosen by its kind alone (a
+ * run refusal's also by whether anything is ticked) and read caps only from the
+ * job's frozen entitlement (spec 0002, INV-5) and from `config` (spec 0007,
+ * INV-3, as spec 0012 amends it for the paid figure), so no line can carry a
+ * page, an item, a count from the document or the file name (INV-3).
  */
 
+import { config } from "@/config";
 import { countedKinds, lookedFor } from "@/lib/detectors";
+import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
+import { PRICING_PATH, SIGN_IN_PATH } from "@/lib/routes";
 import type {
   EngineErrorKind,
+  EntitlementAccount,
   EntitlementSnapshot,
   ProgressPhase,
   ResultCounts,
@@ -24,11 +30,32 @@ const LIST = new Intl.ListFormat("en-GB", { type: "conjunction" });
 
 /* Failures. */
 
+/**
+ * A link the plan line or the cap callout offers. It always opens a new tab,
+ * so the tool keeps the visitor's file while they sign in or pay, and says so
+ * to assistive technology (`NEW_TAB`). Spec 0012, AC-5 and AC-6.
+ */
+export interface PlanLink {
+  readonly label: string;
+  readonly href: typeof PRICING_PATH | typeof SIGN_IN_PATH;
+}
+
+/**
+ * The free cap's way forward (spec 0012, AC-6): the account's new tab link, if
+ * one helps, and the button that checks the plan and opens the same file again.
+ */
+export interface PlanActions {
+  readonly link: PlanLink | null;
+  readonly recheck: string;
+}
+
 /** What a failure callout says: its heading, what happened, and what to do. */
 export interface FailureText {
   readonly title: string;
   readonly body: string;
   readonly next: string;
+  /** Only on a free cap with billing on (spec 0012, AC-6). */
+  readonly plan?: PlanActions;
 }
 
 /**
@@ -47,6 +74,56 @@ function megabytes(bytes: number): string {
  */
 const NEW_COPY =
   "Printing it to a new PDF from your PDF app, then opening that copy here, may help.";
+
+const GET_PRO: PlanLink = Object.freeze({
+  label: `Get ${PRO_PLAN.name}`,
+  href: PRICING_PATH,
+});
+
+const SIGN_IN_AGAIN: PlanLink = Object.freeze({
+  label: "Sign in again",
+  href: SIGN_IN_PATH,
+});
+
+const SIGN_IN: PlanLink = Object.freeze({ label: "Sign in", href: SIGN_IN_PATH });
+
+const SEE_PRO: PlanLink = Object.freeze({
+  label: `see what ${PRO_PLAN.name} adds`,
+  href: PRICING_PATH,
+});
+
+/**
+ * A free cap's next step, by the account frozen into the job (spec 0012,
+ * AC-6). Never the split advice: on the free plan the way past the cap is Pro,
+ * and every step ends by opening the same file again here.
+ */
+const CAP_NEXT: Readonly<Record<EntitlementAccount, string>> = Object.freeze({
+  none: `Sign in and get ${PRO_PLAN.name}, then open it again here.`,
+  "signed-in": `Get ${PRO_PLAN.name}, then open it again here.`,
+  "sign-in-needed": `Sign in again to use ${PRO_PLAN.name}, then open it again here.`,
+  unknown: "We couldn't check your plan. Check it, then open it again.",
+});
+
+/**
+ * The cap callout's new tab link, by account. Get Pro for an anonymous visitor
+ * too, the path AC-7 walks: Pricing's Subscribe signs them in on the way to
+ * checkout, and a Pro user who was merely signed out lands on "You're already
+ * on Pro." None when the plan could not be checked, because a link to buy
+ * would mislead someone who may already hold Pro; the button is the way.
+ */
+const CAP_LINK: Readonly<Record<EntitlementAccount, PlanLink | null>> = Object.freeze({
+  none: GET_PRO,
+  "signed-in": GET_PRO,
+  "sign-in-needed": SIGN_IN_AGAIN,
+  unknown: null,
+});
+
+const RECHECK = "Check my plan and open it again";
+
+/** The split advice, for a cap no plan lifts. */
+function splitAdvice(pageCap: number): string {
+  return `Split it into parts of ${pageCap} pages or fewer in your PDF app, and redact each one.`;
+}
 
 /**
  * Each kind's words (AC-16, AC-17). A function of the job's own caps, because
@@ -90,16 +167,33 @@ export const FAILURE_TEXT: Readonly<
     body: `RedactNest takes files up to ${megabytes(maxFileBytes)}.`,
     next: "Save a smaller copy, or split it, and open that.",
   }),
-  // Names the cap and suggests splitting (AC-17). Feature 10 adds the sign in
-  // path for the free tier.
-  "too-many-pages": ({ tier, pageCap }) => ({
-    title: `This PDF has more than ${pageCap} pages`,
-    body:
-      tier === "free"
-        ? `The free limit is ${pageCap} pages.`
-        : `RedactNest handles up to ${pageCap} pages.`,
-    next: `Split it into parts of ${pageCap} pages or fewer in your PDF app, and redact each one.`,
-  }),
+  // Names the cap (AC-17). A free cap with billing on points to Pro by the
+  // job's account, with the way to open the same file again (spec 0012,
+  // AC-6); a paid cap, and a free one on a build with no Pro to sell, keep
+  // the split advice.
+  "too-many-pages": ({ tier, pageCap, account }) => {
+    const title = `This PDF has more than ${pageCap} pages`;
+    if (tier === "paid") {
+      return {
+        title,
+        body: `RedactNest handles up to ${pageCap} pages.`,
+        next: splitAdvice(pageCap),
+      };
+    }
+    if (!config.billingEnabled) {
+      return {
+        title,
+        body: `The free limit is ${pageCap} pages.`,
+        next: splitAdvice(pageCap),
+      };
+    }
+    return {
+      title,
+      body: `The free plan handles up to ${pageCap} pages. ${PRO_PLAN.name} handles up to ${config.maxPages}.`,
+      next: CAP_NEXT[account],
+      plan: Object.freeze({ link: CAP_LINK[account], recheck: RECHECK }),
+    };
+  },
   "file-unreadable": () => ({
     title: "The file couldn't be read",
     body: "It may have been moved, renamed or deleted since you chose it.",
@@ -210,6 +304,54 @@ export const LOST_TEXT = Object.freeze({
   body: "The PDF engine stopped unexpectedly. Your file is still on your machine, so you can try again without choosing it a second time.",
 });
 
+/* The plan. */
+
+/**
+ * A plan line, in order: plain words and the links between them, and for an
+ * answer that could not be checked, the button that asks again.
+ */
+export interface PlanLine {
+  readonly parts: readonly (string | PlanLink)[];
+  readonly tryAgain?: string;
+}
+
+/**
+ * The plan line's words, by the page's answer (spec 0012, AC-5). Typed over
+ * the account kinds, so a kind added without words fails `pnpm typecheck`.
+ * Only `signed-in` reads the tier, because only a confirmed sign in may be
+ * paid (INV-2). Each line is the account's next step.
+ */
+export const PLAN_TEXT: Readonly<
+  Record<EntitlementAccount, (answer: EntitlementSnapshot) => PlanLine>
+> = Object.freeze({
+  none: () => ({
+    parts: [SIGN_IN, ", or ", SEE_PRO, "."],
+  }),
+  "signed-in": ({ tier }) =>
+    tier === "paid"
+      ? { parts: [`Signed in with ${PRO_PLAN.name}.`] }
+      : { parts: [GET_PRO, ` for up to ${config.maxPages} pages a document.`] },
+  "sign-in-needed": () => ({
+    parts: [
+      "Your sign in has expired, so the free limit applies. ",
+      SIGN_IN_AGAIN,
+      ` to use ${PRO_PLAN.name}.`,
+    ],
+  }),
+  unknown: () => ({
+    parts: ["We couldn't check your plan, so the free limit applies for now."],
+    tryAgain: "Try again",
+  }),
+});
+
+/** Said to assistive technology after every plan link's label. */
+export const NEW_TAB = "opens in a new tab";
+
+/** The plan line's words for the page's answer. */
+export function planLine(answer: EntitlementSnapshot): PlanLine {
+  return PLAN_TEXT[answer.account](answer);
+}
+
 /* Phases. */
 
 /**
@@ -232,6 +374,20 @@ const STRIPPING = "Stripping hidden content";
 
 export function phaseLine(phase: ProgressPhase, tickedCount: number): string {
   return phase === "redacting" && tickedCount === 0 ? STRIPPING : PHASE_TEXT[phase];
+}
+
+/**
+ * The full drop zone's helper (spec 0012, AC-5): what checking says until the
+ * page's first answer, then the cap that answer gives and the plan it is on.
+ * A build with billing off has no plans to name and nothing to check, so it
+ * names the free cap from the start, the only cap such a build answers with.
+ */
+export function dropZoneHelper(answer: EntitlementSnapshot | null): string {
+  if (!config.billingEnabled)
+    return `Up to ${answer?.pageCap ?? config.freePageCap} pages`;
+  if (answer === null) return PHASE_TEXT["checking-entitlement"];
+  const plan = answer.tier === "paid" ? PRO_PLAN : FREE_PLAN;
+  return `Up to ${answer.pageCap} pages on ${plan.name}`;
 }
 
 /* The action panel. */

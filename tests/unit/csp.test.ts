@@ -7,10 +7,10 @@ import { OUTSIDE_SERVICES, type OutsideService } from "@/config/privacy";
  * The two content security policies. Spec 0001's regimes, and spec 0011,
  * AC-13 and AC-14, INV-1 and INV-2.
  *
- * The real services list names no origin today, so a test of the real list
- * alone would pass whatever the builder did with one. These hand it sample
- * origins instead, and check they reach exactly the two standard directives
- * meant for them, and never anything on the tool route.
+ * The real services list names Clerk's origins since spec 0012 (AC-21), and
+ * the tests below check the exact policies that gives. They also hand the
+ * builder sample origins, and check those reach exactly the standard
+ * directives meant for them, and never anything on the tool route.
  * `tests/e2e/headers.spec.ts` proves the built headers carry the same policies.
  */
 
@@ -54,53 +54,87 @@ const SERVICE: OutsideService = {
   policyUrl: "https://sample.example/privacy",
   scriptOrigins: [],
   connectOrigins: [],
+  imageOrigins: [],
 };
 
 /** The scenario the spec names, plus a second service repeating an origin. */
 const SAMPLE: readonly OutsideService[] = [
-  { ...SERVICE, name: "A", scriptOrigins: ["https://a.example"] },
+  {
+    ...SERVICE,
+    name: "A",
+    scriptOrigins: ["https://a.example"],
+    imageOrigins: ["https://img.c.example"],
+  },
   {
     ...SERVICE,
     name: "B",
     scriptOrigins: ["https://a.example"],
     connectOrigins: ["https://*.b.example"],
+    imageOrigins: [],
   },
 ];
 
 const SAMPLE_ORIGINS = [
   "https://a.example",
   "https://*.b.example",
+  "https://img.c.example",
   "a.example",
   "b.example",
+  "c.example",
 ];
 
+/** Clerk's origins, as spec 0012 AC-21 names them. */
+const CLERK = "https://clerk.redactnest.com https://*.clerk.accounts.dev";
+
 describe("the real list", () => {
-  /** covers: AC-13, AC-14. Today's exact two policies, which are the same. */
-  it("gives today's exact policies in production", () => {
-    const { tool, standard } = buildPolicies({ services: OUTSIDE_SERVICES, dev: false });
+  /** covers: spec 0011 AC-14, spec 0012 AC-20. The tool's policy, unchanged. */
+  it("gives the tool exactly today's policy, Clerk and Polar listed or not", () => {
+    const { tool } = buildPolicies({ services: OUTSIDE_SERVICES, dev: false });
 
     expect(tool).toBe(TODAY);
-    expect(standard).toBe(TODAY);
+  });
+
+  /**
+   * covers: spec 0012 AC-21. The standard policy gains Clerk's script,
+   * connect and image origins, Polar adds none, and no other directive moves.
+   */
+  it("gives the standard policy Clerk's origins and nothing else", () => {
+    const { standard } = buildPolicies({ services: OUTSIDE_SERVICES, dev: false });
+
+    expect(directives(standard)).toEqual({
+      ...FIXED,
+      "script-src": `${FIXED["script-src"]} ${CLERK}`,
+      "connect-src": `${FIXED["connect-src"]} ${CLERK}`,
+      "img-src": `${FIXED["img-src"]} https://img.clerk.com`,
+    });
   });
 
   /** `next dev` adds eval and a websocket, to both regimes, and nothing else. */
   it("adds only the development sources under next dev", () => {
-    for (const policy of Object.values(
-      buildPolicies({ services: OUTSIDE_SERVICES, dev: true }),
-    )) {
-      expect(directives(policy)).toEqual({
-        ...FIXED,
-        "script-src": "'self' 'unsafe-inline' 'wasm-unsafe-eval' 'unsafe-eval'",
-        "connect-src": "'self' ws: wss:",
-      });
-    }
+    const { tool, standard } = buildPolicies({ services: OUTSIDE_SERVICES, dev: true });
+    const devScript = "'self' 'unsafe-inline' 'wasm-unsafe-eval' 'unsafe-eval'";
+
+    expect(directives(tool)).toEqual({
+      ...FIXED,
+      "script-src": devScript,
+      "connect-src": "'self' ws: wss:",
+    });
+    expect(directives(standard)).toEqual({
+      ...FIXED,
+      "script-src": `${devScript} ${CLERK}`,
+      "connect-src": `'self' ws: wss: ${CLERK}`,
+      "img-src": `${FIXED["img-src"]} https://img.clerk.com`,
+    });
   });
 });
 
 describe("a list holding outside origins", () => {
-  /** covers: AC-13. Exactly the union, in script-src and connect-src only. */
+  /**
+   * covers: spec 0011 AC-13, spec 0012 AC-21. Exactly the union, in
+   * script-src, connect-src and img-src only.
+   */
   it.each([false, true])(
-    "adds them to the standard policy's two directives and no other (dev: %s)",
+    "adds them to the standard policy's three directives and no other (dev: %s)",
     (dev) => {
       const { standard } = buildPolicies({ services: SAMPLE, dev });
       const plain = directives(buildPolicies({ services: [], dev }).standard);
@@ -109,6 +143,7 @@ describe("a list holding outside origins", () => {
         ...plain,
         "script-src": `${plain["script-src"]} https://a.example`,
         "connect-src": `${plain["connect-src"]} https://*.b.example`,
+        "img-src": `${plain["img-src"]} https://img.c.example`,
       });
     },
   );

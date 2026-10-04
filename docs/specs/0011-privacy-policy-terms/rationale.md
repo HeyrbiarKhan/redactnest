@@ -4,7 +4,7 @@ The decision record behind [index.md](index.md). `/develop` does not need this f
 
 ## Context
 
-> ⚠️ Premise note: these pages can be built and made accurate now, but not legally cleared. Three questions only a lawyer can answer could change what they must say: whether you need EU and UK representatives (Article 27), whether Pakistan's traffic data rule (PECA 2016, section 32) reaches this operator, and how far Pakistani law and courts hold against UK and EU customers. Section 32 is the sharpest: if it applies, "we keep no copy" stops being true and the product needs a store it was designed never to have. So the right framing is "drafted, accurate to the code, and unable to launch until the open facts are settled", which is what the two production gates and the Launch readiness steps do. Feature 10 must not take money before the lawyer review.
+> ⚠️ Premise note: these pages can be built and made accurate now, but not legally cleared. Three questions only a lawyer can answer could change what they must say: whether you need EU and UK representatives (Article 27), whether Pakistan's traffic data rule (PECA 2016, section 32) reaches this operator, and how far Pakistani law and courts hold against UK and EU customers. Section 32 is the sharpest: if it applies, "we keep no copy" stops being true and the product needs a store it was designed never to have. So the right framing is "drafted, accurate to the code, and unable to launch until the open facts are settled", which is what the two production gates and the Launch readiness steps do. ~~Feature 10 must not take money before the lawyer review.~~ _Updated 2026-10-03 (spec 0012): the two gated facts are settled, and a tech lawyer advised keeping the pages as they are and revisiting the rest once RedactNest has 100+ users, so feature 10 may take money before the full review._
 
 Scope feature 9 says the privacy policy "is where the never stored claim stops being marketing copy and becomes something you are held to". The product's whole pitch is a privacy claim, and specs 0001 and 0002 already enforce it with a content security policy, lint rules and browser tests. A policy written as free prose would sit outside all of that: true on the day it ships, then quietly false the day feature 10 adds a cookie or feature 11 adds a reporter.
 
@@ -12,7 +12,7 @@ The operator is an individual in Pakistan, trading as RedactNest, selling mostly
 
 The facts the policy must state are mostly true by construction, with one exception: the host. Vercel records every visitor's IP address in its request logs by default, keeps them for a period set by the plan, and treats some service data as its own. Those are settings outside the code. Two values only you can supply, the real contact address (no domain bought yet) and the Article 27 decision, must not be guessed and must not ship as placeholders.
 
-A visitor never signs in, so there is no moment to collect agreement to the terms except the act of choosing a file. The repository may stay private if you take an Artifex commercial licence, so the pages cannot lean on its history.
+A visitor never signs in, so there is no moment to collect agreement to the terms except the act of choosing a file. The repository goes public under the AGPL at launch (spec 0001, 2026-10-02), but the pages still keep their own dated change lists rather than lean on its history, so a reader never needs the repository to see what changed.
 
 ## Options considered
 
