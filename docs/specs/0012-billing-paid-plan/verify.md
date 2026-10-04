@@ -179,10 +179,10 @@ _The same local setup as slice 1. Use only a new throwaway account for any step 
 
 ## UI / manual
 - [ ] Make Manage billing's call fail (for example a wrong `POLAR_ACCESS_TOKEN` locally), then open `/account/billing` signed in → "Billing didn't open", "We couldn't open billing. Try again, or write to privacy@redactnest.com." with a mail link, and Try again reloads the page; no redirect → AC-17
-- [ ] Pay the sandbox checkout with a throwaway account, with DevTools' network log kept across pages → the first request to `/account/welcome` carries `customer_session_token`, the next response is a 307 to `/account/welcome` without it, any request to Clerk's `/v1/client/handshake` that follows has a `redirect_url` without it, and Welcome reaches "You're on Pro." with a clean address bar → AC-26
+- [ ] Pay the sandbox checkout with a throwaway account, with DevTools' network log kept across pages → the first request to `/account/welcome` carries `customer_session_token`, the next response is a 307 to `/account/welcome` without it, any request to Clerk's `/v1/client/handshake` that follows has a `redirect_url` without it, and Welcome reaches "You're on Pro." with a clean address bar → AC-26 (seen twice, walk-two and walk-three, through a logging relay in place of DevTools: token, then 307 clean, then a handshake whose `redirect_url` was clean)
 - [ ] Signed in, open `/account?customer_session_token=x&keep=1` → the address becomes `/account?keep=1` before the page shows → AC-26
-- [ ] On `/account/welcome` after paying, look at the request for Clerk's script and Clerk's API calls → each `Referer` is our origin alone, never a path or query → AC-26, AC-27
-- [ ] With the header in place, run task 12's "Delete with Pro set to end" step again on a new throwaway account → the delete still lands on `/`, so the server action runs under the new policy → AC-27
+- [ ] On `/account/welcome` after paying, look at the request for Clerk's script and Clerk's API calls → each `Referer` is our origin alone, never a path or query → AC-26, AC-27 (seen: every request to Clerk's host sent `http://localhost:3000/` with `?keep=1` in the address)
+- [ ] With the header in place, run task 12's "Delete with Pro set to end" step again on a new throwaway account → the delete still lands on `/`, so the server action runs under the new policy → AC-27 (seen: walk-two after its cancel, and walk-three as a free account)
 
 ## Commands
 - [ ] `pnpm exec vitest run tests/unit/proxy-matcher.test.ts` → the matcher unchanged; the token dropped (one value, several, empty, no `=`, encoded name) while `Customer_Session_Token` and every other parameter stay in order; a 307 on the request's own origin; Clerk's middleware never called for a request carrying it, called for one without it; billing off still does nothing → AC-26, AC-23
@@ -197,3 +197,22 @@ _The same local setup as slice 1. Use only a new throwaway account for any step 
 
 ## Acceptance-criteria coverage
 - AC-11 … the retry case in `billing-delete.test.ts` · AC-17 … the failure step and its value row · AC-26 … the payment, Account and `Referer` steps, the proxy unit test and the e2e case · AC-27 … the header e2e, the `Referer` step and the delete step under the new policy
+
+# Slice 3, task 13 (the sandbox walk) · updated 2026-10-04
+
+_Run once at build time with two throwaway accounts, `walk-two` and `walk-three`. Each was paid by you in your own browser and deleted with your approval; `walk-one` was untouched. Steps marked "seen" were run then (details in `rationale.md`, *Task 12a by hand and task 13's walk*). `/check verify` runs them all again on a new throwaway, paid by hand. The hand revoke is done in Polar's dashboard._
+
+## UI / manual
+- [ ] At the cap on `/tool`, Get Pro → Pricing → Subscribe → Sign up from the sign in page → pay with 4242 → Welcome "You're on Pro." → back on the tool tab, "Signed in with Pro.", and "Check my plan and open it again" opens the same file past the free cap with no file picker → AC-7, AC-8, AC-16 (seen, with `detect-dense.pdf`)
+- [ ] On the checkout → "RedactNest Pro", $19 a month, under EdiventStudio, the email greyed out, and the terms tick box with its link; trying to pay with the box unticked is refused → AC-15 (the page seen; the refusal not yet confirmed)
+- [ ] Cancel in Polar's portal → "To Be Cancelled" with the benefit still granted; Account shows Pro, "Ends on {date}"; `/api/entitlement` still answers paid, signed in → AC-10, AC-18 (seen)
+- [ ] Hand revoke in Polar's dashboard (a subscription set to end offers only Uncancel, so Uncancel, then Cancel Subscription with the cancellation date set to immediately) → the next answer is free, signed in, `pageCap` 3, with no `Set-Cookie`; Account shows Free, Get Pro to `/pricing` and Manage billing; the tool's plan line reads "Get Pro for up to 50 pages a document." → AC-10, AC-18 (seen)
+- [ ] Sign out → `/` as a document load (type `navigate`), no resource from Clerk, `window.Clerk` undefined, both `__client_uat` cookies `0`, and the answer free, `none`, with no `Set-Cookie` → AC-12, INV-13 (seen)
+- [ ] Delete a free account that has a Polar customer → the confirm shows no warning with focus on Cancel; deleting lands on `/`; Clerk and Polar hold nothing for that email → AC-11 (seen)
+- [ ] Signed in, list every cookie on the site and on Clerk's host, and compare with Clerk's cookie page; check `/api/entitlement` sets none → only Clerk's cookies on the site, none from the plan check → AC-19, claim C6 (seen; fails as written, because Clerk's page lists only `__session`, `__client_uat` and `_cfuvid`, see `rationale.md`)
+
+## Value sourcing
+- [ ] "Renews on" and "Ends on": the same day as Polar's `current_period_end` for the Pro subscription, before and after the cancel → AC-10 (seen: 4 November 2026 both times)
+
+## Acceptance-criteria coverage
+- AC-7 … the upgrade step · AC-8 … the switch from sign in to sign up on the way to checkout · AC-10 … the cancel, revoke and renewal date steps · AC-11 … the free delete · AC-12 … the sign out step · AC-15 … the checkout step (the refusal open) · AC-16 … Welcome in the upgrade step · AC-18 … the cancel and hand revoke steps · AC-19 … the cookie step (claim C6 owed to `/architect`)

@@ -278,3 +278,44 @@ Run under `pnpm dev` against the Clerk development instance and the Polar sandbo
 **Signing up again after deletion (task 12).** The same email signed up again as a new Clerk user, and Subscribe went straight to Polar's checkout with no conflict line: Polar created a new customer with that email and the new user id, so the anonymised customer neither matched the email nor kept the old id. That second throwaway account, never paid, was then deleted through Account too (approved by you), which exercised the free account path: the confirm had no warning, and Polar and Clerk hold nothing for that email now. `walk-one` was not touched and still holds Pro.
 
 **A token in the welcome address (task 12, for `/architect` or `/check review`).** After payment, Polar sends the buyer to our `success_url` with a `customer_session_token` added to the query, a token that opens the customer portal. It sits in the browser's history and in the host's request log for `/account/welcome`. No `Referrer-Policy` is set, so browsers fall back to `strict-origin-when-cross-origin` and send other origins (Clerk's script on that page) only our origin, never the query. (Settled 4 October: the proxy drops the token before Clerk runs, and every route sets the policy, AC-26 and AC-27; *After tasks 11 and 12*, point 3.)
+
+### Task 12a by hand and task 13's walk (4 October 2026)
+
+**How the walk was watched.** `next dev` logs the pages it renders but not the proxy's redirects. So a scratch relay, kept outside the repository, listened on port 3000 (the site address the sandbox expects) and forwarded every request to `next dev` on 3001 with its headers untouched. It wrote one line per request: the method, the address, the status and any redirect's `Location`, with the token's value masked. Two throwaway accounts paid with the 4242 test card, each approved by you and paid by you in your own browser: `walk-two+clerk_test@redactnest.com` and `walk-three+clerk_test@redactnest.com`. `walk-one` was not touched and still holds Pro, renewing on 3 November 2026. Times below are UTC.
+
+**The portal token on the way back from Polar (task 12a, AC-26).** Both payments show the same chain. For walk-two, at 11:22:22:
+1. `GET /account/welcome?customer_session_token=<53 characters>` answered 307 to `/account/welcome`. That was the proxy, before Clerk ran.
+2. `GET /account/welcome` answered 307 to Clerk's `/v1/client/handshake`, with `redirect_url=http://localhost:3000/account/welcome`, which is clean. Clerk gave the reason `session-token-but-no-client-uat`, so this is exactly the handshake AC-26 exists for.
+3. The handshake came back with `__clerk_handshake`, answered 307 to the clean address, then 200.
+
+walk-three repeated it step for step at 11:34:21. In each payment the token appeared in one address of ours, the first, and never in a `Location` or a handshake. You saw "You're on Pro." on Welcome with a clean address bar. The only other place the token appeared was Manage billing's redirect to Polar's own portal, where Polar puts it by design.
+
+**The referrer policy (AC-27).** On Welcome, signed in as walk-three, with `?keep=1` in the address, the document carried exactly one `Referrer-Policy: strict-origin-when-cross-origin`. Every request to Clerk's host (its scripts, `/v1/environment`, `/v1/client`) sent `Referer: http://localhost:3000/`, our origin alone. Delete account's server action still runs under the header: your delete of walk-two at 11:24:13, after its cancel in the portal, landed on `/`, and so did walk-three's below.
+
+**The upgrade path (AC-7, AC-8, AC-15, AC-16).** On walk-two, by you:
+- On the tool, `tests/fixtures/detect-dense.pdf` (50 pages) gave the cap callout "This PDF has more than 3 pages".
+- Get Pro, then Pricing, then Subscribe, then Sign up from the sign in page reached Polar's checkout, so the landing survived the switch (AC-8).
+- The checkout showed "RedactNest Pro", $19 a month, under EdiventStudio, with the email filled in and greyed out, and the "I agree to RedactNest's Terms of service" tick box with its link. The billing country was Pakistan.
+- Welcome reached "You're on Pro."
+- Back on the tool tab, the plan line read "Signed in with Pro.", and "Check my plan and open it again" opened the same 50 page file past the free cap with no file picker.
+
+Whether Polar refuses payment with the box unticked was asked on walk-three, but your note left it open. So that part of AC-15 still rests on task 1's setup, which made the box required.
+
+**Cancel and the hand revoke (AC-10, AC-18).** On walk-three, signed in on the automated browser:
+- Account showed Pro, "Renews on 4 November 2026".
+- In Polar's portal, Manage subscription, then Cancel Subscription, gave "To Be Cancelled", an expiry date of November 4, 2026, and the benefit still granted. Back on Account it showed Pro, "Ends on 4 November 2026", and `/api/entitlement` still answered paid, signed in.
+- You then ended it by hand in the dashboard. A subscription already set to end offers only Uncancel there, so the hand revoke is Uncancel, then Cancel Subscription with the cancellation date set to immediately. It showed Canceled, ended 4 October 2026.
+- Polar's state then held no benefit and no subscription. The next answer was free, signed in, `pageCap` 3, with no `Set-Cookie`. Account showed Free, Get Pro (to `/pricing`) and Manage billing. The tool's plan line read "Get Pro for up to 50 pages a document." under the helper "Up to 3 pages on Free".
+
+**Sign out and delete (AC-11, AC-12, INV-13).**
+- Sign out from Account: the only request to another origin was Clerk's own sign out call, from the account page. Then `/` arrived as a document load (type `navigate`), with `window.Clerk` undefined and nothing loaded from Clerk. Both `__client_uat` cookies were `0`, and the next answer was free, `none`, with no `Set-Cookie`. The HttpOnly `__refresh_<suffix>` cookie and the development `__clerk_db_jwt` cookies stayed after sign out.
+- Signed in again, Delete account opened its confirm in place, with focus on Cancel and no warning (a free account, with a customer and no subscription). With your approval it deleted. `/` arrived as a document load with nothing from Clerk, both `__client_uat` cookies were `0`, the tool answered `none`, and neither Clerk nor Polar holds anything for that email.
+- Your own steps on walk-two, as the relay logged them: a first delete at 11:23:42 that did not leave the page, Manage billing, then a delete at 11:24:13 that landed on `/`. After that, two more sign ups went through Subscribe, left checkout, and were deleted at 11:25:34 and 11:27:15. The log shows only requests, so what those pages said is yours to add.
+
+**The cookie check (AC-19, claim C6) does not hold as written.** Signed in as walk-three, after the checkout and the portal, the site held only Clerk's cookies:
+- `__session` and `__client_uat`, each plain and suffixed
+- `__clerk_db_jwt`, plain and suffixed (development instances only)
+- `__refresh_<suffix>`, HttpOnly
+- `clerk_active_context`
+
+`/api/entitlement` set none. Clerk's host held two of Cloudflare's cookies, `_cfuvid` and `__cf_bm`. Clerk's cookie page (https://clerk.com/docs/guides/how-clerk-works/cookies, read raw on 4 October 2026) lists only three: `__session` and `__client_uat` as first party, and Cloudflare's `_cfuvid` as third party. `__refresh_<suffix>`, `clerk_active_context`, `__clerk_db_jwt`, the suffixed names and Cloudflare's `__cf_bm` are not on it, so task 13's check ("every cookie set while signed in is one Clerk's cookie page lists") fails. C6's "we set none of our own" still holds: nothing outside Clerk set a cookie on the site. What fails is the promise that Clerk's page lists them. The Cloudflare cookies are a second point: in production they would sit on `clerk.redactnest.com`, our own subdomain (unchecked until go live). Both are for `/architect` before task 14 writes C6. The Polar, Stripe and Google cookies in the browser sit on their own domains, from the portal and the checkout.
