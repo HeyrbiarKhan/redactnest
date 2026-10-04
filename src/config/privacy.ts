@@ -77,6 +77,35 @@ export interface ComplaintAuthority {
   readonly url: string;
 }
 
+// Spec 0012. Each fact below was read from Polar's privacy policy (effective
+// 8 September 2026), its buyer terms (updated 25 March 2026) and its DPA
+// (updated 9 June 2026) on 3 October 2026. Polar sells Pro as merchant of
+// record and reseller; checkout and the billing portal are Polar's own pages,
+// reached by a redirect, so it names no origin for any policy here. Named, so
+// the privacy policy's Payments section links Polar's own policy from here
+// rather than from a literal (task 14).
+export const POLAR_SERVICE: OutsideService = Object.freeze({
+  name: "Polar",
+  role: "Sells Pro to you as our merchant of record, under the name EdiventStudio, and takes your payment",
+  receives:
+    "Your email address, billing address, payment details and IP address, and your RedactNest account id",
+  purpose:
+    "To sell and renew Pro, charge your card, work out tax, send receipts and handle refunds",
+  location:
+    "The United States, Canada and other countries outside the UK and the EU where Polar and its payment processor Stripe operate",
+  safeguard:
+    "Standard contractual clauses, with the UK’s International Data Transfer Addendum",
+  retention:
+    "While you have an account or subscription with Polar, and longer where tax and accounting law requires",
+  ownUse:
+    "Polar also uses this data for fraud protection and security, and keeps the records tax and accounting law requires, under its own privacy policy. Its payment processor, Stripe, takes your card details.",
+  // The final address, checked to resolve with no redirect on 3 October 2026.
+  policyUrl: "https://polar.sh/legal/privacy-policy",
+  scriptOrigins: Object.freeze([]),
+  connectOrigins: Object.freeze([]),
+  imageOrigins: Object.freeze([]),
+});
+
 export const OUTSIDE_SERVICES: readonly OutsideService[] = Object.freeze([
   Object.freeze({
     name: "Vercel",
@@ -121,32 +150,7 @@ export const OUTSIDE_SERVICES: readonly OutsideService[] = Object.freeze([
     connectOrigins: CLERK_ORIGINS,
     imageOrigins: Object.freeze(["https://img.clerk.com"]),
   }),
-  // Spec 0012. Each fact below was read from Polar's privacy policy (effective
-  // 8 September 2026), its buyer terms (updated 25 March 2026) and its DPA
-  // (updated 9 June 2026) on 3 October 2026. Polar sells Pro as merchant of
-  // record and reseller; checkout and the billing portal are Polar's own pages,
-  // reached by a redirect, so it names no origin for any policy here.
-  Object.freeze({
-    name: "Polar",
-    role: "Sells Pro to you as our merchant of record, under the name EdiventStudio, and takes your payment",
-    receives:
-      "Your email address, billing address, payment details and IP address, and your RedactNest account id",
-    purpose:
-      "To sell and renew Pro, charge your card, work out tax, send receipts and handle refunds",
-    location:
-      "The United States, Canada and other countries outside the UK and the EU where Polar and its payment processor Stripe operate",
-    safeguard:
-      "Standard contractual clauses, with the UK’s International Data Transfer Addendum",
-    retention:
-      "While you have an account or subscription with Polar, and longer where tax and accounting law requires",
-    ownUse:
-      "Polar also uses this data for fraud protection and security, and keeps the records tax and accounting law requires, under its own privacy policy. Its payment processor, Stripe, takes your card details.",
-    // The final address, checked to resolve with no redirect on 3 October 2026.
-    policyUrl: "https://polar.sh/legal/privacy-policy",
-    scriptOrigins: Object.freeze([]),
-    connectOrigins: Object.freeze([]),
-    imageOrigins: Object.freeze([]),
-  }),
+  POLAR_SERVICE,
 ]);
 
 /**

@@ -1,6 +1,7 @@
 /**
- * The privacy policy and the terms of use, as rendered. Spec 0011, AC-1, AC-2,
- * AC-6 to AC-10, AC-18 and AC-19.
+ * The privacy policy and the Terms of service, as rendered. Spec 0011, AC-1,
+ * AC-2, AC-6 to AC-10, AC-18 and AC-19, and the account and Pro claims spec
+ * 0012 adds (AC-22).
  *
  * Both pages are plain server components, so they render here as they do at
  * build. The browser suite (`tests/e2e/legal-pages.spec.ts`) proves the same
@@ -12,7 +13,12 @@ import { describe, expect, it } from "vitest";
 
 import PrivacyPage, { metadata as privacyMetadata } from "@/app/privacy/page";
 import TermsPage, { metadata as termsMetadata } from "@/app/terms/page";
-import { COMPLAINT_AUTHORITIES, OUTSIDE_SERVICES } from "@/config/privacy";
+import {
+  CLERK_PRODUCTION_ORIGIN,
+  COMPLAINT_AUTHORITIES,
+  OUTSIDE_SERVICES,
+  POLAR_SERVICE,
+} from "@/config/privacy";
 import { LEGAL } from "@/lib/legal";
 import {
   formatPolicyDate,
@@ -36,9 +42,9 @@ const PAGES = [
     metadata: privacyMetadata,
   },
   {
-    name: "the terms of use",
+    name: "the Terms of service",
     Page: TermsPage,
-    title: "Terms of use",
+    title: "Terms of service",
     sections: TERMS_SECTIONS,
     changes: TERMS_CHANGES,
     metadata: termsMetadata,
@@ -48,6 +54,14 @@ const PAGES = [
 /** The text of `main`, which is where AC-19 looks. */
 function mainText(): string {
   return screen.getByRole("main").textContent ?? "";
+}
+
+/** The text of the section under one h2. */
+function sectionText(heading: string): string {
+  return (
+    screen.getByRole("heading", { level: 2, name: heading }).closest("section")
+      ?.textContent ?? ""
+  );
 }
 
 describe.each(PAGES)("$name", ({ Page, title, sections, changes, metadata }) => {
@@ -202,6 +216,62 @@ describe("the privacy policy's facts", () => {
     expect(text).toContain("no profiling");
   });
 
+  /**
+   * covers: spec 0012, AC-22 and claim C6. By owner, purpose and place, on
+   * Clerk's production host whatever keys built the page, with no cookie
+   * named and no cookie list linked. "What we do not do" keeps one line, word
+   * for word.
+   */
+  it("states the cookie claim by owner, purpose and place", () => {
+    render(<PrivacyPage />);
+    const text = mainText();
+    const host = new URL(CLERK_PRODUCTION_ORIGIN).host;
+
+    expect(text).toContain(
+      `Clerk sets the cookies that sign in needs, on our site and on ${host}, its address for us.`,
+    );
+    expect(text).toContain("Cloudflare, the network Clerk uses");
+    expect(text).toContain("strictly necessary for signing in and keeping it secure");
+    expect(text).toContain(
+      `Nothing else sets a cookie on our site or on ${host}, and we set none of our own.`,
+    );
+    expect(text).toContain("Polar’s checkout and billing pages are Polar’s own site");
+    expect(
+      screen.getByText(
+        "No page sets a cookie except the sign in and account pages, and we set none of our own (see Your account).",
+      ).tagName,
+    ).toBe("LI");
+    expect(text).not.toMatch(/__session|__client|_cfuvid|__cf_bm/);
+    for (const link of screen.getAllByRole("link")) {
+      expect(link.getAttribute("href")).not.toMatch(/cookie/i);
+    }
+  });
+
+  /**
+   * covers: spec 0012, AC-22 and claims C12 and C13. The seller, the account's
+   * legal basis, what Polar learns and keeps, and Polar's own policy from its
+   * entry. Polar is our processor: no sentence naming it calls it a controller.
+   */
+  it("covers accounts and payments, with Polar as our processor", () => {
+    render(<PrivacyPage />);
+    const text = mainText();
+
+    expect(text).toContain(LEGAL.soldThroughLine);
+    expect(text).toContain("Your account holds your email address and nothing else.");
+    expect(text).toContain("Article 6(1)(b)");
+    expect(text).toContain(LEGAL.merchantLine);
+    expect(text).toContain("We never see your card");
+    expect(text).toContain("we send Polar your account id and email address");
+    expect(text).toContain("Polar still keeps the records tax law requires.");
+    expect(text).toContain("as our processor");
+    expect(
+      screen.getByRole("link", { name: "Polar’s own privacy policy" }),
+    ).toHaveAttribute("href", POLAR_SERVICE.policyUrl);
+    for (const heading of [PRIVACY_SECTIONS.yourAccount, PRIVACY_SECTIONS.payments]) {
+      expect(sectionText(heading)).not.toMatch(/controller/i);
+    }
+  });
+
   /** covers: AC-6. Nothing about representatives while none is recorded. */
   it("says nothing about representatives while none is recorded", () => {
     // Only meaningful while the repository's decision names nobody, as the
@@ -234,5 +304,26 @@ describe("the terms' points", () => {
     expect(text).toContain("removes rights you have by law where you live");
     expect(text).toContain("the law of Pakistan, and the courts of Pakistan");
     expect(text).toContain("may bring a claim in your own country’s courts");
+  });
+
+  /** covers: spec 0012, AC-22 and INV-8. The account and Pro points, no price as a number. */
+  it("makes the account and Pro points the outline names", () => {
+    render(<TermsPage />);
+    const text = mainText();
+
+    expect(text).toContain(LEGAL.soldThroughLine);
+    expect(text).toContain("An account is for one person");
+    expect(text).toContain("once nothing renews");
+    expect(text).toContain("at the price shown on Pricing when you subscribe");
+    expect(text).toContain("It renews each month until you cancel.");
+    expect(text).toContain("lasts to the end of the month you have paid for");
+    expect(text).toContain("We do not refund part months.");
+    expect(text).toContain("including any right to withdraw");
+    expect(text).toContain("Pro continues while the payment is retried");
+    expect(text).toContain("buyer terms also apply to the purchase");
+    expect(text).toContain("at least 30 days before");
+    expect(sectionText(TERMS_SECTIONS.proSubscriptions)).not.toMatch(
+      /\$|\bUSD\b|dollar/i,
+    );
   });
 });

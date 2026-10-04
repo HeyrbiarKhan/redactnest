@@ -3104,7 +3104,7 @@ describe("the redact flow (spec 0007)", () => {
  */
 describe("the terms notice (spec 0011, AC-5)", () => {
   const NOTICE =
-    "By choosing a PDF you agree to the Terms of use. The Privacy policy explains what happens to your data.";
+    "By choosing a PDF you agree to the Terms of service. The Privacy policy explains what happens to your data.";
 
   it("reads in full under the drop zone while nothing is open, with its two links", async () => {
     const { container } = render(<ToolClient />);
@@ -3117,7 +3117,7 @@ describe("the terms notice (spec 0011, AC-5)", () => {
         .getAllByRole("link")
         .map((link) => [link.textContent, link.getAttribute("href")]),
     ).toEqual([
-      ["Terms of use", "/terms"],
+      ["Terms of service", "/terms"],
       ["Privacy policy", "/privacy"],
     ]);
     for (const link of within(notice).getAllByRole("link")) {

@@ -7,14 +7,18 @@ import { TERMS_SECTIONS } from "@/lib/policy-sections";
 import { ChangeList, ContactLink, LegalPage } from "../legal-page";
 
 /**
- * The terms of use. Spec 0011, AC-1, AC-3 and AC-10.
+ * The Terms of service. Spec 0011, AC-1, AC-3 and AC-10, renamed from "Terms of
+ * use" at the same path, with the account and Pro points spec 0012 adds
+ * (AC-22).
  *
  * Each point of the terms outline, in its order. The free tier's limits are
  * "the limits shown in the tool", never a number, because the caps live in
- * `src/config` and change by environment (INV-6). The liability floor and its
- * 12 months are not limits on the visitor, so they are written here. Nothing
- * here limits rights under the software licence, whichever licence that is
- * (INV-10).
+ * `src/config` and change by environment (INV-6). Pro's price is "the price
+ * shown on Pricing when you subscribe", never a number, for the same reason
+ * (spec 0012, INV-8). The liability floor and its 12 months, and the 30 days'
+ * notice of a price change, are not limits on the visitor, so they are written
+ * here. Nothing here limits rights under the software licence, whichever
+ * licence that is (INV-10).
  *
  * Prerendered static, with no client component and no script of its own
  * (INV-7).
@@ -24,7 +28,7 @@ export const dynamic = "force-static";
 export const metadata: Metadata = {
   title: LEGAL.termsLabel,
   description:
-    "The terms for using RedactNest to remove text from PDFs in your browser, including checking the cleaned file before you share it.",
+    "The terms for using RedactNest to remove text from PDFs in your browser and for Pro subscriptions, including checking the cleaned file before you share it.",
 };
 
 export default function TermsPage() {
@@ -33,9 +37,9 @@ export default function TermsPage() {
       <section>
         <h2>{TERMS_SECTIONS.about}</h2>
         <p>
-          These terms are an agreement between you and {LEGAL.operatorLine} (“we”, “us”).
-          By choosing a PDF in the tool, or by using this site at all, you agree to them.
-          If you do not agree, please do not use RedactNest.
+          These terms are an agreement between you and {LEGAL.operatorLine} (“we”, “us”).{" "}
+          {LEGAL.soldThroughLine} By choosing a PDF in the tool, or by using this site at
+          all, you agree to them. If you do not agree, please do not use RedactNest.
         </p>
         <p>
           You can reach us about these terms at <ContactLink />.
@@ -61,6 +65,47 @@ export default function TermsPage() {
         <p>
           Review the cleaned file before you share it. You decide whether it is fit for
           your purpose.
+        </p>
+      </section>
+
+      <section>
+        <h2>{TERMS_SECTIONS.yourAccount}</h2>
+        <p>
+          You need an account only to buy Pro. An account is for one person, so do not
+          share it. Keep your email secure, because anyone who can read it can sign in as
+          you.
+        </p>
+        <p>
+          You can delete your account at any time in Account, once nothing renews: cancel
+          Pro first in Manage billing.
+        </p>
+      </section>
+
+      <section>
+        <h2>{TERMS_SECTIONS.proSubscriptions}</h2>
+        <p>
+          Pro is a monthly subscription, at the price shown on Pricing when you subscribe.
+          It renews each month until you cancel.
+        </p>
+        <p>
+          You can cancel at any time in Manage billing, on your Account page. Pro then
+          lasts to the end of the month you have paid for.
+        </p>
+        <p>
+          We do not refund part months. Your legal rights stay, including any right to
+          withdraw from the purchase.
+        </p>
+        <p>
+          If a renewal payment fails, Pro continues while the payment is retried. If it
+          still fails, the free limits apply again.
+        </p>
+        <p>
+          Polar is the merchant of record that sells Pro to you, under the name{" "}
+          {LEGAL.sellerName}, and Polar’s buyer terms also apply to the purchase.
+        </p>
+        <p>
+          If we change the price, we will email you at least 30 days before, and the new
+          price applies from your next renewal.
         </p>
       </section>
 

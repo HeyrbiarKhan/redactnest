@@ -20,7 +20,7 @@ import {
 
 const LISTS = [
   ["the privacy policy", PRIVACY_CHANGES],
-  ["the terms of use", TERMS_CHANGES],
+  ["the terms of service", TERMS_CHANGES],
 ] as const;
 
 describe.each(LISTS)("the change list for %s", (_page, changes) => {

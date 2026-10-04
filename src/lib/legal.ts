@@ -108,14 +108,17 @@ export const LEGAL = Object.freeze({
   contactEmail,
   representatives,
 
-  /** The footer's nav (spec 0011, AC-4). */
+  /**
+   * The footer's nav (spec 0011, AC-4). The terms were renamed "Terms of
+   * service" at the same path once they covered Pro (spec 0012, AC-22).
+   */
   legalNavLabel: "Legal",
   privacyLabel: "Privacy policy",
-  termsLabel: "Terms of use",
+  termsLabel: "Terms of service",
   /**
    * The line under the drop zone, around its two links (spec 0011, AC-5): "By
-   * choosing a PDF you agree to the Terms of use. The Privacy policy explains
-   * what happens to your data."
+   * choosing a PDF you agree to the Terms of service. The Privacy policy
+   * explains what happens to your data."
    */
   toolNotice: Object.freeze({
     beforeTerms: "By choosing a PDF you agree to the ",
@@ -129,6 +132,11 @@ export const LEGAL = Object.freeze({
    * operator line does not change.
    */
   sellerName,
+  /**
+   * Who we are and About these terms (spec 0012, *Policy and terms changes*):
+   * the name on a receipt belongs to the same person as the operator line.
+   */
+  soldThroughLine: `${tradingName} is sold through ${sellerName}, another trading name of ${holder}.`,
   /** Under Subscribe on Pricing (spec 0012, AC-13). */
   merchantLine: `Payments are handled by Polar, our merchant of record. Your receipt and card statement show ${sellerName}, the studio RedactNest is sold through.`,
   /**

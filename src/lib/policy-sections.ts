@@ -7,11 +7,17 @@
  * changing here first. Records rather than arrays, so a page names the section
  * it is writing (`PRIVACY_SECTIONS.yourRights`); insertion order is the page's
  * order.
+ *
+ * Spec 0012 adds accounts and Pro: "Your account" and "Payments" after "Your
+ * documents" in the privacy policy, and "Your account" and "Pro subscriptions"
+ * after "Checking the result is your job" in the Terms of service (AC-22).
  */
 
 export const PRIVACY_SECTIONS = Object.freeze({
   whoWeAre: "Who we are",
   yourDocuments: "Your documents",
+  yourAccount: "Your account",
+  payments: "Payments",
   whatWeReceive: "What we receive when you visit",
   whatWeDoNotDo: "What we do not do",
   services: "Services we use",
@@ -27,6 +33,8 @@ export const TERMS_SECTIONS = Object.freeze({
   about: "About these terms",
   whatItDoes: "What RedactNest does",
   checkingTheResult: "Checking the result is your job",
+  yourAccount: "Your account",
+  proSubscriptions: "Pro subscriptions",
   usingItFairly: "Using it fairly",
   softwareLicence: "The software licence",
   noWarranty: "No warranty",

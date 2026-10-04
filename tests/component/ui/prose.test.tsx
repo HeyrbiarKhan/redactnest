@@ -15,7 +15,7 @@ function Sample() {
       <section>
         <h2>Your documents</h2>
         <p>
-          Read the <a href="/terms">Terms of use</a> first.
+          Read the <a href="/terms">Terms of service</a> first.
         </p>
         <ul>
           <li>One</li>
@@ -40,7 +40,7 @@ describe("Prose", () => {
     expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(2);
     expect(screen.getByRole("heading", { level: 3, name: "Vercel" })).toBeVisible();
     expect(screen.getAllByRole("list")).toHaveLength(2);
-    expect(screen.getByRole("link", { name: "Terms of use" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Terms of service" })).toHaveAttribute(
       "href",
       "/terms",
     );

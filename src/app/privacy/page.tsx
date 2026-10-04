@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 
-import { COMPLAINT_AUTHORITIES, OUTSIDE_SERVICES } from "@/config/privacy";
+import {
+  CLERK_PRODUCTION_ORIGIN,
+  COMPLAINT_AUTHORITIES,
+  OUTSIDE_SERVICES,
+  POLAR_SERVICE,
+} from "@/config/privacy";
 import { LEGAL } from "@/lib/legal";
 import { PRIVACY_CHANGES } from "@/lib/policy-changes";
 import { PRIVACY_SECTIONS } from "@/lib/policy-sections";
@@ -11,24 +16,30 @@ import { RepresentativesBlock } from "./representatives-block";
 import { ServicesSection } from "./services-section";
 
 /**
- * The privacy policy. Spec 0011, AC-1, AC-3 and AC-6 to AC-9.
+ * The privacy policy. Spec 0011, AC-1, AC-3 and AC-6 to AC-9, with the claims
+ * spec 0012 changed and added for accounts and Pro (AC-22).
  *
- * It makes only the claims in spec 0011's claims register (C1 to C12), each
- * held by the test or gate the register names, and no other claim about data
- * (AC-7, INV-3). A change that weakens a claim's holder changes this page and
- * adds an entry to `PRIVACY_CHANGES` in the same change. The comments name the
- * claim each paragraph makes, so `/check verify` can walk the register.
+ * It makes only the claims in spec 0011's claims register as spec 0012 amends
+ * it (C1 to C13), each held by the test or gate the register names, and no
+ * other claim about data (AC-7, INV-3). A change that weakens a claim's holder
+ * changes this page and adds an entry to `PRIVACY_CHANGES` in the same change.
+ * The comments name the claim each paragraph makes, so `/check verify` can
+ * walk the register.
  *
  * Prerendered static, with no client component and no script of its own
  * (INV-7). No cap is stated as a number and the source repository is never
- * named (INV-6).
+ * named (INV-6). It describes production in every build, billing off
+ * included, so Clerk's host is always its production address.
  */
 export const dynamic = "force-static";
+
+/** Where Clerk's cookies sit beside ours, as claim C6 names it. */
+const CLERK_HOST = new URL(CLERK_PRODUCTION_ORIGIN).host;
 
 export const metadata: Metadata = {
   title: LEGAL.privacyLabel,
   description:
-    "What happens to your data on RedactNest: your document is processed only in your browser and never uploaded, and no cookies or tracking are used.",
+    "What happens to your data on RedactNest: your document is processed only in your browser and never uploaded, there is no tracking, and only the sign in and account pages set cookies.",
 };
 
 export default function PrivacyPage() {
@@ -38,8 +49,8 @@ export default function PrivacyPage() {
         <h2>{PRIVACY_SECTIONS.whoWeAre}</h2>
         {/* AC-6 */}
         <p>
-          {LEGAL.operatorLine}, runs this website and the redaction tool on it. In this
-          policy, “we”, “us” and “our” mean RedactNest.
+          {LEGAL.operatorLine}, runs this website and the redaction tool on it.{" "}
+          {LEGAL.soldThroughLine} In this policy, “we”, “us” and “our” mean RedactNest.
         </p>
         <p>
           We are the controller for the little personal data this site involves. A
@@ -80,12 +91,78 @@ export default function PrivacyPage() {
         {/* C5 */}
         <p>
           Apart from loading the page and its own files, the tool page asks our server one
-          question only: which plan applies to you. That request carries nothing about
-          your document.
+          question only: which plan applies to you. That request carries your sign in
+          cookie if you have one, and nothing about your document. To answer, our server
+          checks your sign in cookie itself and, when it shows you are signed in, asks
+          Polar whether you hold Pro, sending your account id and nothing else.
         </p>
         <p>
           The cleaned file is saved wherever your browser saves downloads. We cannot see,
           recover or delete your documents, because we never have them.
+        </p>
+      </section>
+
+      <section>
+        <h2>{PRIVACY_SECTIONS.yourAccount}</h2>
+        <p>You can use the tool without an account. You need one only to buy Pro.</p>
+        {/* C12 */}
+        <p>
+          Your account holds your email address and nothing else. There is no name and no
+          password: you sign in with a code sent to that address. Clerk, our sign in
+          provider, keeps it for us until you delete the account, which you can do in
+          Account. Clerk also records details of each sign in, listed under Services we
+          use.
+        </p>
+        <p>
+          We use your email address to sign you in and to run your Pro subscription. Our
+          legal basis is the contract between us (Article 6(1)(b) of the UK GDPR and the
+          EU GDPR).
+        </p>
+        {/* AC-11 of spec 0012 */}
+        <p>
+          When you delete your account, we delete it at Clerk and delete your customer
+          record at Polar. Polar still keeps the records tax law requires.
+        </p>
+        {/* C6 */}
+        <p>
+          No page on this site sets a cookie, except the sign in and account pages. There,
+          Clerk sets the cookies that sign in needs, on our site and on {CLERK_HOST}, its
+          address for us. On that address, Cloudflare, the network Clerk uses, also sets
+          cookies that protect sign in from abuse. All of them are strictly necessary for
+          signing in and keeping it secure.
+        </p>
+        <p>
+          Nothing else sets a cookie on our site or on {CLERK_HOST}, and we set none of
+          our own. Polar’s checkout and billing pages are Polar’s own site, not ours: any
+          cookies there are set by Polar or the services it uses, not by us.
+        </p>
+      </section>
+
+      <section>
+        <h2>{PRIVACY_SECTIONS.payments}</h2>
+        {/* C13 */}
+        <p>{LEGAL.merchantLine}</p>
+        <p>
+          A merchant of record is the seller in law: Polar sells Pro to you, works out the
+          tax and sends your receipts. We never see your card: Polar’s payment processor,
+          Stripe, takes your card details.
+        </p>
+        <p>
+          When you start to subscribe, before you pay, we send Polar your account id and
+          email address, so your payment is tied to your account. Polar keeps that
+          customer record even if you leave checkout, until you delete your account.
+        </p>
+        <p>
+          From Polar we learn only whether you hold Pro, when your subscription renews or
+          ends, and whether it already knows your email address.
+        </p>
+        <p>
+          Polar handles your details for us as our processor, as its privacy policy and
+          data processing agreement say. As merchant of record, it also uses your billing
+          details for fraud protection and security, and keeps the records tax law
+          requires, under <a href={POLAR_SERVICE.policyUrl}>Polar’s own privacy policy</a>
+          . Our legal basis for sending Polar your details is the contract between us, as
+          for your account.
         </p>
       </section>
 
@@ -112,27 +189,29 @@ export default function PrivacyPage() {
       <section>
         <h2>{PRIVACY_SECTIONS.whatWeDoNotDo}</h2>
         <ul>
-          {/* C6 */}
-          <li>No cookies. No page on this site sets one.</li>
+          {/* C6, word for word (spec 0012, *Policy and terms changes*) */}
+          <li>
+            No page sets a cookie except the sign in and account pages, and we set none of
+            our own (see Your account).
+          </li>
           {/* C7 */}
           <li>
-            No analytics, advertising, tracking or error reporting, and no script from
-            anyone else.
+            No analytics, advertising, tracking or error reporting. The only script from
+            anyone else is Clerk’s, on the sign in and account pages.
           </li>
           {/* C8 */}
           <li>Our own code keeps no logs.</li>
           {/* C9 */}
           <li>
             Fonts and files come from our own site, so loading a page tells no one else
-            that you visited.
+            that you visited. The sign in and account pages are the exception: they load
+            Clerk’s sign in.
           </li>
           {/* C11 */}
           <li>
-            We do not sell or share data, combine it with anything else, or make automated
-            decisions about you. There is no profiling.
+            We do not sell your data, share it for advertising, combine it with anything
+            else, or make automated decisions about you. There is no profiling.
           </li>
-          {/* C12 */}
-          <li>There are no accounts or payments yet.</li>
         </ul>
       </section>
 
@@ -159,9 +238,11 @@ export default function PrivacyPage() {
         </ul>
         <p>
           The Data Privacy Framework is an agreement under which certified US companies
-          promise to protect personal data to the EU’s standard. Standard contractual
-          clauses are contract terms, approved by the European Commission, that bind the
-          receiver to protect the data.
+          promise to protect personal data to the EU’s standard, and its UK Extension does
+          the same for data from the UK. Standard contractual clauses are contract terms,
+          approved by the European Commission, that bind the receiver to protect the data,
+          and the UK’s International Data Transfer Addendum makes them work for data from
+          the UK.
         </p>
       </section>
 
@@ -178,9 +259,11 @@ export default function PrivacyPage() {
           <li>receive it in a form you can take elsewhere (portability)</li>
         </ul>
         <p>
-          The only personal data involved is the request data our host keeps for one day,
-          and we cannot link it to you. So most requests will find nothing, and if that
-          happens we will tell you.
+          Without an account, the only personal data involved is the request data our host
+          keeps for one day, and we cannot link it to you. So most requests will find
+          nothing, and if that happens we will tell you. With an account, Account shows
+          your email address and lets you delete the account, and we can help with
+          anything else.
         </p>
         <p>
           To ask, write to <ContactLink />. We will reply within one month, and there is
@@ -211,17 +294,17 @@ export default function PrivacyPage() {
       <section>
         <h2>{PRIVACY_SECTIONS.children}</h2>
         <p>
-          RedactNest is not aimed at children, and it asks no one for personal details,
-          children included.
+          RedactNest is not aimed at children. The tool asks no one for personal details,
+          and an account asks only for an email address.
         </p>
       </section>
 
       <section>
         <h2>{PRIVACY_SECTIONS.links}</h2>
         <p>
-          This page links to other sites, such as our host’s privacy policy and the data
-          protection authorities above. Their own privacy policies apply there, not this
-          one.
+          This page links to other sites, such as the services’ own privacy policies and
+          the data protection authorities above. Their own privacy policies apply there,
+          not this one.
         </p>
       </section>
 
