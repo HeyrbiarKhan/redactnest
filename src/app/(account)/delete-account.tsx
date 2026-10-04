@@ -7,6 +7,7 @@ import { loadDocument } from "@/lib/document-load";
 import { LEGAL } from "@/lib/legal";
 import { SIGN_IN_PATH } from "@/lib/routes";
 import { Button } from "@/ui/button";
+import { Spinner } from "@/ui/spinner";
 
 import { deleteAccountAction, type DeleteResult } from "./account/actions";
 import { ContactLink } from "./contact-link";
@@ -51,10 +52,23 @@ const PROBLEM_TEXT: Readonly<Record<Problem, ReactNode>> = Object.freeze({
   ),
 });
 
-type Step = "idle" | "confirming" | "deleting" | "leaving";
+type Step = "idle" | "confirming" | "deleting" | "leaving" | "to-sign-in";
 
-/** Which button takes focus once the step it belongs to has rendered. */
-type FocusTarget = "delete" | "confirm" | "cancel";
+/** The steps that wait, with both buttons disabled. */
+type BusyStep = Exclude<Step, "idle" | "confirming">;
+
+/**
+ * What a waiting step says, so a screen reader hears that something is under
+ * way (WCAG 4.1.3): the delete, and leaving can each take seconds.
+ */
+const BUSY_TEXT: Readonly<Record<BusyStep, string>> = Object.freeze({
+  deleting: "Deleting your account",
+  leaving: "Your account is deleted. Signing you out",
+  "to-sign-in": "Taking you to sign in",
+});
+
+/** What takes focus once the step it belongs to has rendered. */
+type FocusTarget = "delete" | "confirm" | "cancel" | "busy";
 
 /**
  * Delete account, a two step confirm in place. Spec 0012, AC-11 and INV-13.
@@ -75,18 +89,25 @@ export function DeleteAccount({ endsOn }: { readonly endsOn: string | null }) {
   const deleteRef = useRef<HTMLButtonElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const busyRef = useRef<HTMLParagraphElement>(null);
   const focusNext = useRef<FocusTarget | null>(null);
   const warningId = useId();
 
   // Focus follows the step, so it is never left on a button that just went or
   // was disabled. Cancel, not the delete, takes it on opening, so a held Enter
-  // key cannot run straight through both steps; after a problem it goes back
-  // to the button that was pressed.
+  // key cannot run straight through both steps; while it waits, the line that
+  // says so holds it; after a problem it goes back to the button that was
+  // pressed.
   useEffect(() => {
     const target = focusNext.current;
     if (target === null) return;
     focusNext.current = null;
-    const refs = { delete: deleteRef, confirm: confirmRef, cancel: cancelRef };
+    const refs = {
+      delete: deleteRef,
+      confirm: confirmRef,
+      cancel: cancelRef,
+      busy: busyRef,
+    };
     refs[target].current?.focus();
   }, [step, problem]);
 
@@ -102,6 +123,7 @@ export function DeleteAccount({ endsOn }: { readonly endsOn: string | null }) {
   }
 
   async function confirm() {
+    focusNext.current = "busy";
     setProblem(null);
     setStep("deleting");
     let result: DeleteResult;
@@ -119,7 +141,7 @@ export function DeleteAccount({ endsOn }: { readonly endsOn: string | null }) {
     if (result === "sign-in") {
       // The session ended in the meantime. Sign in is inside the account
       // group, but a page load keeps every way through here alike.
-      setStep("leaving");
+      setStep("to-sign-in");
       loadDocument(SIGN_IN_PATH);
       return;
     }
@@ -132,7 +154,9 @@ export function DeleteAccount({ endsOn }: { readonly endsOn: string | null }) {
     setStep("idle");
   }
 
-  const busy = step === "deleting" || step === "leaving";
+  const busyStep: BusyStep | null =
+    step === "idle" || step === "confirming" ? null : step;
+  const busy = busyStep !== null;
 
   return (
     <div className="flex flex-col gap-3 border-t border-border pt-4">
@@ -163,6 +187,19 @@ export function DeleteAccount({ endsOn }: { readonly endsOn: string | null }) {
             </Button>
           </div>
         </div>
+      )}
+      {/* One line from the delete to the page load, so its words change in
+          place and are announced as a status rather than mounted afresh. */}
+      {busyStep !== null && (
+        <p
+          ref={busyRef}
+          role="status"
+          tabIndex={-1}
+          className="flex items-center gap-3 text-ink"
+        >
+          <Spinner />
+          {BUSY_TEXT[busyStep]}
+        </p>
       )}
       {/* An alert, because it appears only when there is something to say. */}
       {problem !== null && (

@@ -255,3 +255,19 @@ _Not from `/develop`: a failure `/check verify` met while running slice 1b's sig
 
 ## UI / manual
 - [x] Click Sign out on `/account` before Clerk's script has loaded (hold `clerk.browser.js` back 5 s) → the session still ends: `/` as a document load, both `__client_uat` cookies `0`, no `__session`, and the answer free, `none` → AC-12, INV-13 (failed 2026-10-04: `/` in 0.2 s with both `__session` cookies kept and the answer `signed-in`. Until Clerk loads, its `signOut` only queues the call and resolves at once, so `leaveAccount` loads `/` and the queued call never runs. Passed after 2240a58: clicked at 0.6 s with `window.Clerk` unset, `/` 6.1 s later as `navigate`, both `__client_uat` `0`, no `__session`, the answer free, `none`. Held 13 s instead, the failure line showed at 10.1 s, the session survived Clerk loading late, and Try again signed out)
+
+# Review fixes · 2026-10-04
+_From the fresh model review (`docs/reviews/2026-10-04-feat-billing-paid-plan.md`): the action row, progress said out loud during sign out and delete, Clerk failing to load said at once, and a budget on each welcome ask. Signed in on the Clerk development instance as in slice 1, unless a step says otherwise._
+
+## UI / manual
+- [ ] Open `/account` on a free account with a Polar customer → the action row reads Sign out, Get Pro, Manage billing, in that order, and reloading with the network throttled leaves Sign out at the row's start while the page loads → AC-10, AC-12 (review Minor, the row shifting)
+- [ ] Go offline in DevTools, then press Sign out with a keyboard → "Signing you out" appears with a spinner below the row and takes focus (a screen reader reads it); after 10 s "We couldn't sign you out. Try again." is announced and focus is back on Sign out, enabled → AC-12, WCAG 4.1.3
+- [ ] Block `clerk.browser.js` in DevTools, load `/account` and press Sign out → the failure line appears as soon as Clerk reports its script failed, not after 10 s, and nothing navigates → AC-12 (review nit, the early failure)
+- [ ] Delete account on a throwaway account with nothing renewing, by keyboard → "Deleting your account" takes focus, then the same line reads "Your account is deleted. Signing you out", then `/` loads as a document → AC-11, WCAG 4.1.3
+- [ ] Open `/account/welcome` with `/api/entitlement` held unanswered (a Playwright route that never fulfils) → still "Confirming your payment" at 3.9 s, the second ask at 6 s, and after about 88 s "Your payment is still being confirmed. This can take a few minutes." with Check again → AC-16 (review Minor, no request timeout)
+
+## Commands
+- [ ] `pnpm exec vitest run tests/component/app/sign-out.test.tsx tests/component/app/delete-account.test.tsx tests/component/app/welcome-poll.test.tsx tests/unit/billing-account.test.ts` → all pass: the status lines and their focus, Clerk's `error` status failing at once, the listener released at the limit, a stalled ask failing at 4 s, a Strict Mode round of 16, and Sign out first in the row → AC-10, AC-11, AC-12, AC-16
+
+## Acceptance-criteria coverage
+- AC-10 … the row order step and its unit case · AC-11 … the delete status step · AC-12 … the offline and blocked script steps · AC-16 … the stalled ask step and its component cases

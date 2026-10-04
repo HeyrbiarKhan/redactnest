@@ -1,22 +1,26 @@
 "use client";
 
 import { useClerk } from "@clerk/nextjs";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { loadDocument } from "@/lib/document-load";
 import { HOME_PATH } from "@/lib/routes";
 import { Button } from "@/ui/button";
+import { Spinner } from "@/ui/spinner";
 
 /** The control's words, beside it, as the account pages keep theirs. */
 const SIGN_OUT_LABEL = "Sign out";
+const SIGNING_OUT = "Signing you out";
 const SIGN_OUT_FAILED = "We couldn't sign you out. Try again.";
 
 /**
  * Clerk, as far as leaving needs it: `useClerk()` itself, never a copy of
- * `loaded`, which changes once Clerk's script has loaded.
+ * `loaded` or `status`, which change as Clerk's script loads or fails to.
  */
 export interface LeavingClerk {
   readonly loaded: boolean;
+  /** `"error"` once Clerk's script has failed to load, and it never will. */
+  readonly status: string;
   readonly on: (
     event: "status",
     handler: () => void,
@@ -40,37 +44,56 @@ export interface LeavingClerk {
 export const SIGN_OUT_LIMIT_MS = 10_000;
 
 /**
- * `work`'s outcome, or a rejection once `ms` pass without one. `work` can ask
- * whether the limit has passed, so it can stop rather than act after it.
+ * `work`'s outcome, or a rejection once `ms` pass without one. `work` gets a
+ * signal that aborts at the limit, so it can stop rather than act after it,
+ * and let go of whatever it was waiting on.
  */
 function withinLimit<T>(
-  work: (late: () => boolean) => Promise<T>,
+  work: (limit: AbortSignal) => Promise<T>,
   ms: number,
 ): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let late = false;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
   const limit = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      late = true;
-      reject(new Error("time limit"));
-    }, ms);
+    controller.signal.addEventListener("abort", () => reject(new Error("time limit")), {
+      once: true,
+    });
   });
-  return Promise.race([work(() => late), limit]).finally(() => clearTimeout(timer));
+  return Promise.race([work(controller.signal), limit]).finally(() =>
+    clearTimeout(timer),
+  );
 }
 
 /**
  * Settles once Clerk's script has loaded. Until then Clerk's `signOut` only
  * queues the call for that moment and resolves at once, so a page load right
  * after it drops the call and leaves the session signed in.
+ *
+ * Rejects as soon as Clerk says its script failed to load, rather than
+ * leaving the visitor to wait out the limit for a script that is not coming,
+ * and stops listening to Clerk once the limit passes.
  */
-function clerkLoaded(clerk: LeavingClerk): Promise<void> {
+function clerkLoaded(clerk: LeavingClerk, limit: AbortSignal): Promise<void> {
   if (clerk.loaded) return Promise.resolve();
-  return new Promise((resolve) => {
-    const onStatus = () => {
-      if (!clerk.loaded) return;
+  return new Promise((resolve, reject) => {
+    const stop = () => {
       clerk.off("status", onStatus);
-      resolve();
+      limit.removeEventListener("abort", onLimit);
     };
+    const onStatus = () => {
+      if (clerk.loaded) {
+        stop();
+        resolve();
+      } else if (clerk.status === "error") {
+        stop();
+        reject(new Error("Clerk did not load"));
+      }
+    };
+    const onLimit = () => {
+      stop();
+      reject(new Error("time limit"));
+    };
+    limit.addEventListener("abort", onLimit, { once: true });
     clerk.on("status", onStatus, { notify: true });
   });
 }
@@ -95,7 +118,8 @@ export type LeaveMode = "sign-out" | "after-deletion";
  *
  * `signOut` waits for Clerk's script, which may still be loading when the
  * visitor clicks. Clerk that has not loaded, or a `signOut` that has not
- * settled, within `SIGN_OUT_LIMIT_MS` counts as a `signOut` that threw.
+ * settled, within `SIGN_OUT_LIMIT_MS` counts as a `signOut` that threw, and
+ * so does Clerk's script failing to load, as soon as Clerk says so.
  *
  * True once the page load has started; false when signing out failed and the
  * visitor should stay to try again, which never happens after deletion.
@@ -105,11 +129,11 @@ export async function leaveAccount(
   mode: LeaveMode,
 ): Promise<boolean> {
   try {
-    await withinLimit(async (late) => {
-      await clerkLoaded(clerk);
+    await withinLimit(async (limit) => {
+      await clerkLoaded(clerk, limit);
       // Past the limit the visitor has been told it failed, so Clerk turning
       // up later must not end the session behind their back.
-      if (late()) return;
+      if (limit.aborted) return;
       await clerk.signOut(() => {});
     }, SIGN_OUT_LIMIT_MS);
   } catch {
@@ -122,10 +146,24 @@ export async function leaveAccount(
 /**
  * Account's Sign out: our own control, never Clerk's `SignOutButton`, which
  * lint bans in every zone for the reason `leaveAccount` gives (INV-13).
+ *
+ * Leaving can take up to `SIGN_OUT_LIMIT_MS`, so while it runs a status line
+ * says so (WCAG 4.1.3), and focus moves to it from the button that has just
+ * been disabled, which would otherwise drop focus to the page. On failure
+ * focus goes back to the button, now enabled, to try again.
  */
 export function SignOutControl() {
   const clerk = useClerk();
   const [state, setState] = useState<"idle" | "leaving" | "failed">("idle");
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const leavingRef = useRef<HTMLParagraphElement>(null);
+
+  // After the render that mounts the target, as the tool moves focus (spec
+  // 0007, *Focus*), never in the click handler.
+  useEffect(() => {
+    if (state === "leaving") leavingRef.current?.focus();
+    if (state === "failed") buttonRef.current?.focus();
+  }, [state]);
 
   async function handleClick() {
     setState("leaving");
@@ -134,16 +172,33 @@ export function SignOutControl() {
     if (!left) setState("failed");
   }
 
-  // A fragment, so the button sits in its row beside Get Pro, and the failure
-  // takes a line of its own below them. An alert, because it appears only
-  // when there is something to say.
+  // A fragment, so the button sits in its row beside Get Pro. Each line takes
+  // a row of its own below every button (`order-last`), while staying next to
+  // the button in reading order. The failure is an alert, because it appears
+  // only when there is something to say.
   return (
     <>
-      <Button variant="secondary" onClick={handleClick} disabled={state === "leaving"}>
+      <Button
+        ref={buttonRef}
+        variant="secondary"
+        onClick={handleClick}
+        disabled={state === "leaving"}
+      >
         {SIGN_OUT_LABEL}
       </Button>
+      {state === "leaving" && (
+        <p
+          ref={leavingRef}
+          role="status"
+          tabIndex={-1}
+          className="order-last flex w-full items-center gap-3 text-ink"
+        >
+          <Spinner />
+          {SIGNING_OUT}
+        </p>
+      )}
       {state === "failed" && (
-        <p role="alert" className="text-danger-ink w-full">
+        <p role="alert" className="order-last w-full text-danger-ink">
           {SIGN_OUT_FAILED}
         </p>
       )}

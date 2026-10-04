@@ -16,22 +16,39 @@ import { Spinner } from "@/ui/spinner";
 const POLL_MS = 2_000;
 const ASKS_PER_ROUND = 15;
 
+/**
+ * How long one ask may take, its answer read included, before it counts as a
+ * failed ask. Without it a request that never settles would hold the buyer on
+ * "Confirming your payment" with no way on. The tool's wait budget (spec
+ * 0012, AC-4), named again here as a rule about this page.
+ */
+const ASK_BUDGET_MS = 4_000;
+
 /** The same answer the tool gets, so Pro here means Pro there. */
 const ENTITLEMENT_URL = "/api/entitlement";
 
 type Phase = "confirming" | "pro" | "still-waiting";
 
-/** One ask. Anything but a clean paid answer keeps the page asking. */
+/**
+ * One ask. Anything but a clean paid answer keeps the page asking. Past its
+ * budget the request is aborted, which `fetch` turns into a rejection, so a
+ * stalled ask fails like a dropped one and counts toward the round.
+ */
 async function askIsPro(): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ASK_BUDGET_MS);
   try {
     const response = await fetch(ENTITLEMENT_URL, {
       credentials: "same-origin",
       headers: { Accept: "application/json" },
+      signal: controller.signal,
     });
     if (!response.ok) return false;
     return readSnapshot(await response.json()).tier === "paid";
   } catch {
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -39,7 +56,8 @@ async function askIsPro(): Promise<boolean> {
  * Confirming the payment after Polar's checkout. Spec 0012, AC-16.
  *
  * Asks every 2 s while the tab is visible, up to 15 asks a round. An
- * `unknown` or `sign-in-needed` answer is not Pro, so it keeps asking. Names
+ * `unknown` or `sign-in-needed` answer is not Pro, so it keeps asking, and so
+ * does an ask that runs out of its budget, so every round ends. Names
  * no amount and no card. The tool link is a real page load (spec 0003,
  * INV-10), so the tool opens under its own content security policy.
  */

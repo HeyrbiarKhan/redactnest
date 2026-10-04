@@ -248,6 +248,21 @@ describe("Get Pro and Manage billing (AC-10, AC-17)", () => {
     expect(text).not.toContain("Get Pro");
   });
 
+  /**
+   * Review 2026-10-04: Sign out first, so no sibling changing width as the
+   * page loads can slide Manage billing, a working link before hydration,
+   * under a pointer aimed at Sign out.
+   */
+  it("puts Sign out first in the action row, ahead of Get Pro and Manage billing", async () => {
+    const text = await accountText();
+    const signOut = text.search(/<button [^>]*>Sign out<\/button>/);
+    const getPro = text.search(GET_PRO);
+    const manageBilling = text.search(MANAGE_BILLING);
+    expect(signOut).toBeGreaterThanOrEqual(0);
+    expect(signOut).toBeLessThan(getPro);
+    expect(getPro).toBeLessThan(manageBilling);
+  });
+
   it("says when Subscribe found the account already on Pro", async () => {
     polar.state = state([PRO_GRANT]);
     expect(await accountText({ notice: "already-pro" })).toContain(

@@ -19,6 +19,8 @@ export type DeleteResult = DeleteOutcome["kind"];
  */
 export async function deleteAccountAction(): Promise<DeleteResult> {
   const seams = accountSeams();
+  // Not "sign-in": with billing off there is no sign in to send anyone to,
+  // and "billing-failed" says only what is true, that nothing was removed.
   if (seams === null) return "billing-failed";
   const { userId } = await auth();
   const outcome = await deleteAccount(userId, seams);

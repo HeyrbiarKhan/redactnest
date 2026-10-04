@@ -6,12 +6,13 @@
  * reads what the buyer meets: "Confirming your payment" while it asks every
  * 2 s, Pro once the same answer the tool gets says paid, and after 15 asks
  * with no Pro, the still being confirmed line with Check again. A hidden tab
- * stops asking. Testing Library's async helpers never return under fake
+ * stops asking, and an ask that stalls fails at its budget, so a round always
+ * ends. Testing Library's async helpers never return under fake
  * timers, so time moves by `act` and the DOM is read with `getBy`.
  */
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import type { ReactElement } from "react";
+import { type ReactElement, StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { WelcomePoll } from "@/app/(account)/account/welcome/welcome-poll";
@@ -49,6 +50,7 @@ vi.mock("next/navigation", () => ({
 
 const POLL_MS = 2_000;
 const ASKS_PER_ROUND = 15;
+const ASK_BUDGET_MS = 4_000;
 
 const PRO = { tier: "paid", pageCap: 50, maxFileBytes: 4242, account: "signed-in" };
 const FREE = { tier: "free", pageCap: 3, maxFileBytes: 4242, account: "signed-in" };
@@ -61,6 +63,17 @@ const STILL_WAITING =
 /** A response as `fetch` gives one, with only what the page reads. */
 const reply = (body: unknown, ok = true) =>
   Promise.resolve({ ok, json: () => Promise.resolve(body) });
+
+/**
+ * A request that never settles on its own, as a stalled connection behaves,
+ * until its signal aborts, which `fetch` answers with an `AbortError`.
+ */
+const stalls = (_url: string, init?: RequestInit) =>
+  new Promise<never>((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () =>
+      reject(new DOMException("The operation was aborted.", "AbortError")),
+    );
+  });
 
 const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>();
 
@@ -115,6 +128,7 @@ describe("confirming (AC-16)", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/entitlement", {
       credentials: "same-origin",
       headers: { Accept: "application/json" },
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -143,6 +157,41 @@ describe("confirming (AC-16)", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(screen.getByRole("status")).toHaveTextContent(CONFIRMING);
+  });
+});
+
+describe("an ask that never settles (AC-16)", () => {
+  it("counts as a failed ask once its 4 s budget runs out, then asks again", async () => {
+    fetchMock.mockImplementation(stalls);
+    await open();
+
+    await elapse(ASK_BUDGET_MS - 1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await elapse(1);
+    await elapse(POLL_MS);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("status")).toHaveTextContent(CONFIRMING);
+  });
+
+  it("still ends the round, so the buyer is never left on the spinner", async () => {
+    fetchMock.mockImplementation(stalls);
+    await open();
+
+    await elapse(ASKS_PER_ROUND * ASK_BUDGET_MS + (ASKS_PER_ROUND - 1) * POLL_MS);
+
+    expect(fetchMock).toHaveBeenCalledTimes(ASKS_PER_ROUND);
+    expect(screen.getByRole("status")).toHaveTextContent(STILL_WAITING);
+    expect(screen.getByRole("button", { name: "Check again" })).toBeInTheDocument();
+  });
+
+  it("finds Pro on the ask after a stalled one", async () => {
+    fetchMock.mockImplementationOnce(stalls).mockImplementation(() => reply(PRO));
+    await open();
+
+    await elapse(ASK_BUDGET_MS + POLL_MS);
+
+    expect(screen.getByRole("status")).toHaveTextContent(ON_PRO);
   });
 });
 
@@ -271,6 +320,29 @@ describe("leaving the page", () => {
     await elapse(10 * POLL_MS);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * Development's Strict Mode runs the effect, its cleanup and the effect
+   * again. The first run's ask is already out, and once stopped its answer
+   * schedules nothing, so a round is one ask longer there (16, which verify
+   * saw) and never two chains at once.
+   */
+  it("asks one extra time under Strict Mode, and still stops after a round", async () => {
+    render(
+      <StrictMode>
+        <WelcomePoll />
+      </StrictMode>,
+    );
+    await elapse();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await elapse((ASKS_PER_ROUND - 1) * POLL_MS);
+    expect(fetchMock).toHaveBeenCalledTimes(ASKS_PER_ROUND + 1);
+    expect(screen.getByRole("status")).toHaveTextContent(STILL_WAITING);
+
+    await elapse(10 * POLL_MS);
+    expect(fetchMock).toHaveBeenCalledTimes(ASKS_PER_ROUND + 1);
   });
 });
 

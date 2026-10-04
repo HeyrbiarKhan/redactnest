@@ -97,7 +97,12 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
             ...renewalItems(renewal),
           ]}
         />
+        {/* Sign out first, so its place never depends on the buttons beside
+            it: one that changes width as the font loads, or a row Clerk's
+            refresh replaces, cannot slide Manage billing (a working link
+            before the page hydrates) under a pointer aimed at Sign out. */}
         <div className="flex flex-wrap gap-3">
+          <SignOutControl />
           {plan !== null && !plan.pro && (
             <Button href={PRICING_PATH} reload>
               Get Pro
@@ -109,7 +114,6 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
               Manage billing
             </Button>
           )}
-          <SignOutControl />
         </div>
         {/* Not while the plan cannot be checked: the confirm could not say
             what deleting ends, and the delete itself would fail on the same

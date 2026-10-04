@@ -35,6 +35,7 @@ vi.mock("@/lib/document-load", async (importOriginal) => ({
 /** Clerk once its script has loaded, with `mocks.signOut` as its `signOut`. */
 const loadedClerk = (): LeavingClerk => ({
   loaded: true,
+  status: "ready",
   on: () => {},
   off: () => {},
   signOut: mocks.signOut,
@@ -59,17 +60,23 @@ const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 /**
  * Clerk before its script has loaded, as `@clerk/react` 6 behaves: `signOut`
  * only queues the call and resolves at once, and `load()` runs that queue,
- * then tells every `status` listener. `ended` records the session really
- * ending, which a page load before `load()` would have thrown away.
+ * then tells every `status` listener. `fail()` is the script failing to load
+ * instead: the status turns `error` and `loaded` stays false. `ended` records
+ * the session really ending, which a page load before `load()` would have
+ * thrown away.
  */
 function clerkNotLoadedYet() {
   let loaded = false;
+  let status = "loading";
   let queued: (() => void) | undefined;
   const listeners = new Set<() => void>();
   const ended = vi.fn<() => void>();
   const clerk = {
     get loaded() {
       return loaded;
+    },
+    get status() {
+      return status;
     },
     on: (_event: "status", handler: () => void, options: { notify: boolean }) => {
       listeners.add(handler);
@@ -89,10 +96,15 @@ function clerkNotLoadedYet() {
   } satisfies LeavingClerk;
   const load = () => {
     loaded = true;
+    status = "ready";
     queued?.();
     listeners.forEach((handler) => handler());
   };
-  return { clerk, ended, load };
+  const fail = () => {
+    status = "error";
+    listeners.forEach((handler) => handler());
+  };
+  return { clerk, ended, load, fail, listeners };
 }
 
 describe("SignOutControl", () => {
@@ -133,6 +145,8 @@ describe("SignOutControl", () => {
     );
     expect(mocks.loadDocument).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Sign out" })).toHaveFocus();
+    expect(screen.queryByRole("status")).toBeNull();
     await expectNoAxeViolations(container);
   });
 
@@ -160,6 +174,7 @@ describe("SignOutControl", () => {
       "We couldn't sign you out. Try again.",
     );
     expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Sign out" })).toHaveFocus();
     expect(mocks.loadDocument).not.toHaveBeenCalled();
   });
 
@@ -172,6 +187,23 @@ describe("SignOutControl", () => {
 
     expect(screen.getByRole("button", { name: "Sign out" })).toBeDisabled();
     expect(mocks.signOut).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * WCAG 4.1.3. The wait can last the whole limit, so a screen reader hears
+   * that it is under way, and focus is not dropped by the disabled button.
+   */
+  it("says it is signing you out in a status line, which takes focus", async () => {
+    mocks.signOut.mockReturnValue(hangs());
+    const { container } = render(<SignOutControl />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Signing you out");
+    expect(status).toHaveFocus();
+    expect(screen.queryByRole("alert")).toBeNull();
+    await expectNoAxeViolations(container);
   });
 
   it("has no axe violations at rest", async () => {
@@ -230,6 +262,9 @@ describe("SignOutControl before Clerk's script has loaded", () => {
     );
     expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
 
+    // It stopped listening at the limit, so nothing is left to hear Clerk.
+    expect(stub.listeners.size).toBe(0);
+
     await act(async () => {
       stub.load();
       await vi.advanceTimersByTimeAsync(0);
@@ -237,6 +272,34 @@ describe("SignOutControl before Clerk's script has loaded", () => {
 
     expect(stub.clerk.signOut).not.toHaveBeenCalled();
     expect(stub.ended).not.toHaveBeenCalled();
+    expect(mocks.loadDocument).not.toHaveBeenCalled();
+  });
+
+  /**
+   * covers: AC-12. Clerk's script failing to load is a sign out that failed,
+   * said as soon as Clerk reports it rather than after the whole limit.
+   */
+  it("stays and says so at once when Clerk's script fails to load", async () => {
+    vi.useFakeTimers();
+    const stub = clerkNotLoadedYet();
+    mocks.useClerk.mockReturnValue(stub.clerk);
+    render(<SignOutControl />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    await act(async () => {
+      stub.fail();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "We couldn't sign you out. Try again.",
+    );
+    expect(screen.getByRole("button", { name: "Sign out" })).toHaveFocus();
+    expect(stub.listeners.size).toBe(0);
+    expect(stub.clerk.signOut).not.toHaveBeenCalled();
     expect(mocks.loadDocument).not.toHaveBeenCalled();
   });
 });
@@ -298,6 +361,21 @@ describe("leaveAccount after deletion", () => {
     expect(mocks.loadDocument).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(1);
+    expect(await left).toBe(true);
+    expect(mocks.loadDocument).toHaveBeenCalledWith("/");
+    expect(stub.clerk.signOut).not.toHaveBeenCalled();
+  });
+
+  /** covers: AC-11. A script that failed to load is not waited out either. */
+  it("loads / at once when Clerk's script fails to load", async () => {
+    const stub = clerkNotLoadedYet();
+
+    const left = leaveAccount(stub.clerk, "after-deletion");
+    await settle();
+    expect(mocks.loadDocument).not.toHaveBeenCalled();
+
+    stub.fail();
+
     expect(await left).toBe(true);
     expect(mocks.loadDocument).toHaveBeenCalledWith("/");
     expect(stub.clerk.signOut).not.toHaveBeenCalled();

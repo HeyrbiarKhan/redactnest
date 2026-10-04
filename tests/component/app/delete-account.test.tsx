@@ -30,7 +30,13 @@ vi.mock("@/app/(account)/account/actions", () => ({
 }));
 // Clerk once its script has loaded; Sign out's tests cover the wait before.
 vi.mock("@clerk/nextjs", () => ({
-  useClerk: () => ({ loaded: true, on: () => {}, off: () => {}, signOut: mocks.signOut }),
+  useClerk: () => ({
+    loaded: true,
+    status: "ready",
+    on: () => {},
+    off: () => {},
+    signOut: mocks.signOut,
+  }),
 }));
 vi.mock("@/lib/document-load", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/document-load")>()),
@@ -142,6 +148,7 @@ describe("a deleted account (AC-11, INV-13)", () => {
 
     await waitFor(() => expect(mocks.loadDocument).toHaveBeenCalledWith("/sign-in"));
     expect(mocks.signOut).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent("Taking you to sign in");
   });
 
   it("cannot be sent twice while it runs", async () => {
@@ -153,6 +160,40 @@ describe("a deleted account (AC-11, INV-13)", () => {
     expect(screen.getByRole("button", CONFIRM)).toBeDisabled();
     expect(screen.getByRole("button", CANCEL)).toBeDisabled();
     expect(mocks.deleteAccountAction).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * WCAG 4.1.3. The delete and the sign out after it can each take seconds,
+   * so a status line says which is under way, and holds the focus the
+   * disabled confirm would otherwise drop.
+   */
+  it("says it is deleting in a status line, which takes focus", async () => {
+    mocks.deleteAccountAction.mockReturnValue(new Promise(() => {}));
+    const { container } = await openConfirm();
+
+    await userEvent.click(screen.getByRole("button", CONFIRM));
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Deleting your account");
+    expect(status).toHaveFocus();
+    await expectNoAxeViolations(container);
+  });
+
+  it("says the account is deleted while it signs out, on the same line", async () => {
+    mocks.deleteAccountAction.mockResolvedValue("deleted");
+    mocks.signOut.mockReturnValue(new Promise(() => {}));
+    await openConfirm();
+
+    await userEvent.click(screen.getByRole("button", CONFIRM));
+    const status = screen.getByRole("status");
+
+    await waitFor(() =>
+      expect(status).toHaveTextContent("Your account is deleted. Signing you out"),
+    );
+    // The same element, so the change is announced in place, and focus stays.
+    expect(screen.getByRole("status")).toBe(status);
+    expect(status).toHaveFocus();
+    expect(screen.getByRole("button", CONFIRM)).toBeDisabled();
   });
 });
 
@@ -182,6 +223,7 @@ describe("refusals and failures (AC-11)", () => {
       const alert = await screen.findByRole("alert");
       expect(alert).toHaveTextContent(words);
       expect(screen.getByRole("button", CONFIRM)).toHaveFocus();
+      expect(screen.queryByRole("status")).toBeNull();
       expect(mocks.loadDocument).not.toHaveBeenCalled();
       expect(mocks.signOut).not.toHaveBeenCalled();
       await expectNoAxeViolations(container);
