@@ -157,10 +157,10 @@ _Steps marked "seen" were run once at build time against the sandbox with throwa
 - [ ] A free account with a Polar customer and no subscription → the confirm shows no warning, and deleting lands on `/` with the tool answering `none` → AC-11 (seen)
 - [ ] With the plan check failing (for example a wrong `POLAR_ACCESS_TOKEN` locally) → Account says "We couldn't check your plan just now." and shows no Delete account → AC-10, AC-11
 - [ ] An account whose customer holds another EdiventStudio product's active subscription (needs a second sandbox product) → "Your email also has a subscription to another EdiventStudio product, so we can't remove your billing details here. Write to privacy@redactnest.com." with a mail link, and nothing deleted → AC-11
-- [ ] **Open with `/architect`:** a payment to Pro being retried (`past_due`) → AC-11 asks for the renewal refusal, but Polar's customer state never lists a `past_due` subscription, so the build cannot see it yet → AC-11
+- [ ] A payment to Pro being retried (`past_due`) is not refused (settled in task 12a): Polar's customer state never lists it, and Polar's delete cancels it and voids its pending orders. If the sandbox can put a subscription into `past_due` (a card that fails on renewal), delete it and check in Polar's dashboard that the subscription is cancelled and no further charge is tried → AC-11
 
 ## Commands
-- [ ] `pnpm exec vitest run tests/unit/billing-delete.test.ts` → no session calls nothing; Polar by external id with `anonymize: true` before Clerk; a 404 from either counts as done; a second try after Clerk failed finishes; refused while Pro renews, while a payment settles, with a second Pro subscription that renews, and while another product's subscription is active; nothing removed when the state lookup fails or cannot be read, or Polar's delete fails; "sign in kept" when Clerk fails after Polar; the server action acts on the session's user only, and with billing off asks nothing; one `todo` for the retry refusal → AC-11, INV-3
+- [ ] `pnpm exec vitest run tests/unit/billing-delete.test.ts` → no session calls nothing; Polar by external id with `anonymize: true` before Clerk; a 404 from either counts as done; a second try after Clerk failed finishes; refused while Pro renews, while a payment settles, with a second Pro subscription that renews, and while another product's subscription is active; nothing removed when the state lookup fails or cannot be read, or Polar's delete fails; "sign in kept" when Clerk fails after Polar; the server action acts on the session's user only, and with billing off asks nothing; the Pro benefit with no subscription (a payment being retried) deletes, with no `todo` left (task 12a) → AC-11, INV-3
 - [ ] `pnpm exec vitest run tests/component/app/delete-account.test.tsx` → the two steps, focus on Cancel and back, the "ends now" warning tied to the confirm, every refusal and failure line with the contact link, a call that never answers, a second try, the sign in case, and leaving through Sign out's after deletion mode even when `signOut` fails; axe clean → AC-11, AC-12, INV-13
 - [ ] `pnpm exec vitest run tests/unit/billing-account.test.ts` → Delete account shows for a free account, a free customer and Pro, gets the ending day only for Pro set to end, and is absent when the plan cannot be checked → AC-10, AC-11
 
@@ -171,4 +171,29 @@ _Steps marked "seen" were run once at build time against the sandbox with throwa
 - [ ] The failure lines' contact: `LEGAL.contactEmail`, as a mail link; the other product line's seller name: `LEGAL.sellerName` → AC-11
 
 ## Acceptance-criteria coverage
-- AC-11 … the confirm, renewing refusal, "ends now", delete with Pro set to end, dashboard, re-signup, free account, plan check failing and other product steps, `billing-delete.test.ts`, `delete-account.test.tsx` and `billing-account.test.ts`; the retry refusal is open with `/architect` · AC-12 … the after deletion mode in the delete step and the component test · INV-3 … the server action's session cases · INV-13 … the document load to `/` after deletion
+- AC-11 … the confirm, renewing refusal, "ends now", delete with Pro set to end, dashboard, re-signup, free account, plan check failing and other product steps, `billing-delete.test.ts`, `delete-account.test.tsx` and `billing-account.test.ts`; the retry case is settled in task 12a · AC-12 … the after deletion mode in the delete step and the component test · INV-3 … the server action's session cases · INV-13 … the document load to `/` after deletion
+
+# Slice 3, task 12a (three points after tasks 11 and 12) · updated 2026-10-04
+
+_The same local setup as slice 1. Use only a new throwaway account for any step that pays or deletes._
+
+## UI / manual
+- [ ] Make Manage billing's call fail (for example a wrong `POLAR_ACCESS_TOKEN` locally), then open `/account/billing` signed in → "Billing didn't open", "We couldn't open billing. Try again, or write to privacy@redactnest.com." with a mail link, and Try again reloads the page; no redirect → AC-17
+- [ ] Pay the sandbox checkout with a throwaway account, with DevTools' network log kept across pages → the first request to `/account/welcome` carries `customer_session_token`, the next response is a 307 to `/account/welcome` without it, any request to Clerk's `/v1/client/handshake` that follows has a `redirect_url` without it, and Welcome reaches "You're on Pro." with a clean address bar → AC-26
+- [ ] Signed in, open `/account?customer_session_token=x&keep=1` → the address becomes `/account?keep=1` before the page shows → AC-26
+- [ ] On `/account/welcome` after paying, look at the request for Clerk's script and Clerk's API calls → each `Referer` is our origin alone, never a path or query → AC-26, AC-27
+- [ ] With the header in place, run task 12's "Delete with Pro set to end" step again on a new throwaway account → the delete still lands on `/`, so the server action runs under the new policy → AC-27
+
+## Commands
+- [ ] `pnpm exec vitest run tests/unit/proxy-matcher.test.ts` → the matcher unchanged; the token dropped (one value, several, empty, no `=`, encoded name) while `Customer_Session_Token` and every other parameter stay in order; a 307 on the request's own origin; Clerk's middleware never called for a request carrying it, called for one without it; billing off still does nothing → AC-26, AC-23
+- [ ] `pnpm build`, then `pnpm exec playwright test tests/e2e/headers.spec.ts --project=chromium` → `/`, `/tool`, `/pricing`, `/privacy`, `/terms`, `/engine/VERSION` and a script read from `/`'s HTML each carry exactly one `Referrer-Policy: strict-origin-when-cross-origin`; sent as a page load, `/account/welcome?customer_session_token=x&keep=1` answers 307 to our own origin, `/account/welcome?keep=1`, while the control without the token answers 307 to the Clerk host → AC-26, AC-27
+- [ ] `pnpm exec vitest run tests/unit/billing-delete.test.ts` → no `todo` left; the Pro benefit with no subscription deletes → AC-11
+
+## Value sourcing
+- [ ] Which parameter the proxy drops: `PORTAL_TOKEN_PARAM` in `src/billing/portal.ts`, `customer_session_token`, the name Polar added in the walk → AC-26
+- [ ] The clean address: `request.nextUrl`'s own origin and path, never `config.siteUrl` or a host from the query; locally, open `http://127.0.0.1:3000/account?customer_session_token=x` and the redirect stays on `127.0.0.1` → AC-26
+- [ ] The referrer policy: `REFERRER_POLICY` in `src/config/csp.ts`, the one source `next.config.ts` sends → AC-27
+- [ ] The billing failure line: the words in `src/app/(account)/account/billing/page.tsx`, the contact from `LEGAL.contactEmail` → AC-17
+
+## Acceptance-criteria coverage
+- AC-11 … the retry case in `billing-delete.test.ts` · AC-17 … the failure step and its value row · AC-26 … the payment, Account and `Referer` steps, the proxy unit test and the e2e case · AC-27 … the header e2e, the `Referer` step and the delete step under the new policy
