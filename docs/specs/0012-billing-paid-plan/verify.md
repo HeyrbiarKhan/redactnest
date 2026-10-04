@@ -230,7 +230,8 @@ _Built and run at build time: the component, privacy, shell and legal page tests
 - [ ] Open `/terms` → h1 "Terms of service", tab title "Terms of service · RedactNest", Your account and Pro subscriptions after "Checking the result is your job", About these terms naming EdiventStudio, and no price written as a number in Pro subscriptions → AC-22, INV-8
 - [ ] The footer's Legal nav on every page, the line under the drop zone on `/tool`, and Pricing's "By subscribing you agree to the Terms of service." all say "Terms of service" and link `/terms` → AC-22, AC-13
 - [ ] In the Polar sandbox checkout, try to pay with the terms box unticked → Polar refuses until it is ticked → AC-15 (open since task 13)
-- [ ] Task 18: read every word of Pricing, Account (`/account`, Subscribe's and Billing's lines, the delete confirm), the plan line and the cap copy (`PLAN_TEXT` and `too-many-pages` in `src/lib/flow-text.ts`), and both legal pages, and correct anything before merge → AC-5, AC-6, AC-13, AC-22
+- [x] Task 18: read every word of Pricing, Account (`/account`, Subscribe's and Billing's lines, the delete confirm), the plan line and the cap copy (`PLAN_TEXT` and `too-many-pages` in `src/lib/flow-text.ts`), and both legal pages, and correct anything before merge → AC-5, AC-6, AC-13, AC-22 (done 2026-10-04: one change, the merchant line names the receipt only; everything else approved)
+- [ ] On `/pricing` and in the privacy policy's Payments → "Payments are handled by Polar, our merchant of record. Your receipt shows EdiventStudio, the studio RedactNest is sold through.", with no mention of a card statement (unverified until Go live step 7) → AC-13, AC-22
 
 ## Commands
 - [ ] `pnpm exec vitest run --project component tests/component/app/legal-pages.test.tsx` → the cookie claim by owner, purpose and place on Clerk's production host, accounts and payments with Polar as our processor, and the terms' account and Pro points all pass → AC-22

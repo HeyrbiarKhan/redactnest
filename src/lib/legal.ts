@@ -127,9 +127,9 @@ export const LEGAL = Object.freeze({
   }),
 
   /**
-   * The studio RedactNest is sold through, the name on a buyer's receipt and
-   * card statement (spec 0012). A trading name of the operator above, so the
-   * operator line does not change.
+   * The studio RedactNest is sold through, the name on a buyer's receipt (spec
+   * 0012). A trading name of the operator above, so the operator line does not
+   * change.
    */
   sellerName,
   /**
@@ -137,8 +137,13 @@ export const LEGAL = Object.freeze({
    * the name on a receipt belongs to the same person as the operator line.
    */
   soldThroughLine: `${tradingName} is sold through ${sellerName}, another trading name of ${holder}.`,
-  /** Under Subscribe on Pricing (spec 0012, AC-13). */
-  merchantLine: `Payments are handled by Polar, our merchant of record. Your receipt and card statement show ${sellerName}, the studio RedactNest is sold through.`,
+  /**
+   * Under Subscribe on Pricing (spec 0012, AC-13), and the first line of the
+   * privacy policy's Payments. It names the receipt only: the sandbox never
+   * charges a real card and Polar's docs do not say what a card statement
+   * shows, so that waits for Go live step 7's real purchase (task 18).
+   */
+  merchantLine: `Payments are handled by Polar, our merchant of record. Your receipt shows ${sellerName}, the studio RedactNest is sold through.`,
   /**
    * Set by task 1's sandbox check (spec 0012, AC-13): Polar takes tax out of
    * the price in some countries and adds it on top in others, such as the US.
