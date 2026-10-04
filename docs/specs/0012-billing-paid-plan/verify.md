@@ -216,3 +216,35 @@ _Run once at build time with two throwaway accounts, `walk-two` and `walk-three`
 
 ## Acceptance-criteria coverage
 - AC-7 … the upgrade step · AC-8 … the switch from sign in to sign up on the way to checkout · AC-10 … the cancel, revoke and renewal date steps · AC-11 … the free delete · AC-12 … the sign out step · AC-15 … the checkout step (the refusal open) · AC-16 … Welcome in the upgrade step · AC-18 … the cancel and hand revoke steps · AC-19 … the cookie step (claim C6 reworded 2026-10-04; production is Go live step 6)
+
+# Slice 4, tasks 14 to 17 (the words, the proofs and the measure) · updated 2026-10-04
+
+_Built and run at build time: the component, privacy, shell and legal page tests, the full chromium suite (286 passed) and the speed project. Task 18 is your read of every word, before merge. The AC-15 refusal stays open from task 13: you did not try paying with the box unticked, so `/check verify` does it._
+
+## UI / manual
+- [ ] Open `/privacy` → h1 "Privacy policy", then the h2s in order: Who we are, Your documents, Your account, Payments, What we receive when you visit, What we do not do, Services we use, Transfers outside the UK and the EU, Your rights, Complaints, Children, Links to other sites, Changes; one change entry, "3 October 2026: First published." → AC-22
+- [ ] On `/privacy`, Who we are → "RedactNest is sold through EdiventStudio, another trading name of Heyrbiar Khan." → AC-22
+- [ ] On `/privacy`, Your account → C12 ("Your account holds your email address and nothing else."), the contract as the legal basis (Article 6(1)(b)), deletion at Clerk and at Polar with Polar keeping the tax records, then C6 in full: Clerk's cookies on our site and on `clerk.redactnest.com`, Cloudflare's on that address, all strictly necessary, nothing else, none of our own, and Polar's pages as Polar's own site. No cookie is named and no cookie list is linked → AC-22, claim C6
+- [ ] On `/privacy`, Payments → the merchant line, "We never see your card", the account id and email sent to Polar before you pay, what we learn from Polar, Polar as our processor, and "Polar’s own privacy policy" linking `https://polar.sh/legal/privacy-policy`. Neither Your account nor Payments calls Polar a controller → AC-22, claim C13
+- [ ] On `/privacy`, What we do not do → its first item reads, word for word, "No page sets a cookie except the sign in and account pages, and we set none of our own (see Your account)."; C7 names Clerk's script as the only outside one; C9 names the sign in and account pages as the exception; C11 reads "We do not sell your data, share it for advertising, …"; the old "There are no accounts or payments yet" is gone → AC-22
+- [ ] Open `/terms` → h1 "Terms of service", tab title "Terms of service · RedactNest", Your account and Pro subscriptions after "Checking the result is your job", About these terms naming EdiventStudio, and no price written as a number in Pro subscriptions → AC-22, INV-8
+- [ ] The footer's Legal nav on every page, the line under the drop zone on `/tool`, and Pricing's "By subscribing you agree to the Terms of service." all say "Terms of service" and link `/terms` → AC-22, AC-13
+- [ ] In the Polar sandbox checkout, try to pay with the terms box unticked → Polar refuses until it is ticked → AC-15 (open since task 13)
+- [ ] Task 18: read every word of Pricing, Account (`/account`, Subscribe's and Billing's lines, the delete confirm), the plan line and the cap copy (`PLAN_TEXT` and `too-many-pages` in `src/lib/flow-text.ts`), and both legal pages, and correct anything before merge → AC-5, AC-6, AC-13, AC-22
+
+## Commands
+- [ ] `pnpm exec vitest run --project component tests/component/app/legal-pages.test.tsx` → the cookie claim by owner, purpose and place on Clerk's production host, accounts and payments with Polar as our processor, and the terms' account and Pro points all pass → AC-22
+- [ ] `pnpm build`, then `pnpm exec playwright test tests/e2e/privacy.spec.ts --project=chromium` → no cookie and no `Set-Cookie` after a full `/tool` run and visits to `/`, `/pricing`, `/privacy`, `/terms`, `/no-such-page` (404) and `/licence.txt`; no request to a Clerk host from the five public routes with the header's links hovered; every request on `/pricing` stays on our origin; `/tool` still asks for the entitlement alone with Pricing and Account in its header → AC-9, AC-19, AC-20
+- [ ] `pnpm exec playwright test tests/e2e/shell.spec.ts --project=chromium` → on `/`, `/tool`, `/pricing`, `/privacy` and `/terms`, Pricing and Account are plain links and hovering them requests nothing under `/pricing`, `/account`, `/sign-in` or `/sign-up` → AC-9, INV-10
+- [ ] `pnpm exec playwright test tests/e2e/legal-pages.spec.ts --project=chromium` → both pages' headings in order from `policy-sections.ts`, axe clean, no sideways scroll at 320 pixels or at 200% text, no cap as a number → AC-22
+- [ ] `pnpm exec playwright test --project=speed --no-deps` → the paid cap open at most 10 s and the slowest read at most 1 s (recorded: 2,471 to 2,719 ms, and 8 to 14 ms during detection, 58 to 81 ms during inspection) → AC-24
+- [ ] `git grep -n -i "terms of use" -- . ':!docs/specs'` → nothing → AC-22
+
+## Value sourcing
+- [ ] C6's host: the e2e build's publishable key names a `*.clerk.accounts.dev` host, yet `/privacy` names `clerk.redactnest.com`, from `CLERK_PRODUCTION_ORIGIN`; change that constant in a scratch build and the page follows → AC-22, claim C6
+- [ ] Polar's policy link in Payments comes from `POLAR_SERVICE.policyUrl` in `src/config/privacy.ts`, the same entry Services we use renders → AC-22
+- [ ] The seller words: change `LEGAL.sellerName` in a scratch build → Who we are, About these terms, the merchant line and Pro subscriptions all follow → AC-22, INV-9
+- [ ] The paid cap: the measure ran at `config.maxPages` 50 and the bar held, so the default stays 50 and the sandbox product's "up to 50 pages" matches → AC-24, AC-15
+
+## Acceptance-criteria coverage
+- AC-5, AC-6, AC-13 … your read (task 18) · AC-9 … the request, prefetch and `/tool` entitlement steps · AC-15 … the unticked box step (still open) and the cap value row · AC-19 … the cookie command · AC-20 … the `/tool` entitlement step · AC-22 … the page steps, the component test, the rename grep and the value rows · AC-24 … the speed command and the cap value row
