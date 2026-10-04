@@ -221,3 +221,9 @@ Run under `pnpm dev` against the Clerk development instance and the Polar sandbo
 **A subscriber's customer state (task 1's open check).** Read from the sandbox for the same customer, ids masked. `granted_benefits` holds one `feature_flag` grant whose `benefit_id` is `POLAR_PRO_BENEFIT_ID`. `active_subscriptions` holds one subscription to `POLAR_PRO_PRODUCT_ID`, with `status` `active`, `cancel_at_period_end` false and `current_period_end` as an ISO string with microseconds (`2026-11-03T14:26:19.781686Z`), the form task 11's renewal date has to read. These are exactly the fields `planFromState` reads. Where a payment being retried appears is still open, for task 12 or task 13's walk.
 
 **Still to do by hand.** The "email Polar already knows" scenario through to a fresh payment: an untied customer with no Pro, then sign up, Subscribe and pay through the bound checkout, until Welcome shows "You're on Pro". It moves to task 13's walk, and slice 1b's verify step for it stays open for `/check verify`.
+
+### Slice 3 (4 October 2026)
+
+**The portal's scope (task 11).** Polar names it `customer_sessions:write` (the SDK's `Scope` type). The sandbox token already holds it: a scratch script, run against the sandbox only, created a customer session for the `walk-one` customer by its external id, and Polar answered with an `https` portal address on `sandbox.polar.sh` under the EdiventStudio organisation. So the token's least privilege set is `customers:read`, `customers:write`, `checkouts:write` and `customer_sessions:write`, which Go live step 2 gives the production token.
+
+**An external id Polar does not know (task 11).** A customer session for an external id with no customer is refused with a 422 (`Customer does not exist.`), not a 404. AC-17 already reads both as "no such customer" and sends the visitor to Pricing, and `tests/unit/billing-subscribe.test.ts` holds both.

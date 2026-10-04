@@ -1,4 +1,4 @@
-# Verify: Billing and the paid plan · spec 0012 · updated 2026-10-03
+# Verify: Billing and the paid plan · spec 0012 · updated 2026-10-04
 _Steps derived from spec 0012 acceptance criteria. `/check verify` runs these; `/test` locks the durable ones._
 
 _Slice 1 (the money path) as built. Locally, billing needs `NEXT_PUBLIC_SITE_URL=http://localhost:3000`, because the plan check accepts a token only from the site's own origin. Sign in on the Clerk development instance with an address containing `+clerk_test` (for example `walk-one+clerk_test@redactnest.com`) and the code `424242`; no email is sent. Pay in the Polar sandbox by hand with the card `4242 4242 4242 4242`, any future date and any CVC, because Stripe's card form runs a bot check that holds an automated browser._
@@ -113,3 +113,31 @@ _Steps for tasks 8 to 10. The same local setup as slice 1. To show an answer the
 
 ## Acceptance-criteria coverage
 - AC-3 … the blocked request step and the entitlement unit test · AC-4 … the revoke, keep paid and tab switching steps, the unit test · AC-5 … the plan line steps for each account, the component and browser tests · AC-6 … the cap callout, changed file and which words steps · AC-7 … the end to end step and the browser test
+
+# Slice 3, task 11 (Account in full and Manage billing) · updated 2026-10-04
+
+_Steps marked "seen" were run once at build time against the sandbox (`walk-one+clerk_test@redactnest.com`, Pro, renewing). `/check verify` runs them all again._
+
+## UI / manual
+- [ ] Signed out, open `/account` → lands on `/sign-in` → AC-10 (seen)
+- [ ] Sign in as a Pro account that renews → Email, Plan Pro, "Renews on" with Polar's `current_period_end` as a British date in UTC, Manage billing and Sign out, and no Get Pro → AC-10 (seen: 3 November 2026)
+- [ ] Cancel in Polar's portal, then come back to Account → "Ends on" with the same date, and still Plan Pro → AC-10, AC-18 (fits task 13's walk)
+- [ ] A free account that has a Polar customer (one that opened Subscribe and left checkout) → Plan Free, Get Pro goes to `/pricing` (never straight to Subscribe), and Manage billing shows → AC-10
+- [ ] A new account that never opened Subscribe → Plan Free, Get Pro, and no Manage billing → AC-10
+- [ ] Manage billing → Polar's portal for this customer only, and its "Back to EdiventStudio" link returns to `/account` → AC-17 (seen)
+- [ ] Signed out, open `/account/billing` → `/sign-in`, and signing in lands on Account (AC-8 allows no other landing) → AC-17, AC-8
+- [ ] Signed in with no Polar customer, open `/account/billing` directly → `/pricing` → AC-17
+
+## Commands
+- [ ] `pnpm exec vitest run tests/unit/billing-account.test.ts` → the renewal and end dates, the day read in UTC whatever the offset, Pro alone (a benefit by hand, another product, an unreadable date), Free while settling, Get Pro to Pricing, Manage billing by customer, and the plan check failure → AC-10
+- [ ] `pnpm exec vitest run tests/unit/billing-subscribe.test.ts` → Manage billing's INV-3 cases (A's id only, no call signed out, B's details in the query ignored), a 404 or 422 to Pricing, every other failure to the billing line → AC-17, INV-3
+
+## Value sourcing
+- [ ] Account email: the row shows the signed in account's primary email, and nothing in the address changes it → AC-10
+- [ ] "Renews on" or "Ends on" and the date: `cancel_at_period_end` and `current_period_end` of the subscription to `POLAR_PRO_PRODUCT_ID`; a subscription to another product alone shows Pro with no date → AC-10
+- [ ] Whether Manage billing shows: a Polar customer exists for the account (`hasCustomer`), whether or not it holds Pro → AC-10
+- [ ] The portal's way back: `config.siteUrl` plus `/account`, so with `NEXT_PUBLIC_SITE_URL=http://localhost:3000` the portal's back link is `http://localhost:3000/account` → AC-17 (seen)
+- [ ] The billing failure line's contact: `LEGAL.contactEmail`, as a mail link → AC-17
+
+## Acceptance-criteria coverage
+- AC-10 … the signed out, Pro renewing, cancelled, free with and without a customer steps, and `billing-account.test.ts` · AC-17 … the Manage billing, signed out and no customer steps, and the portal cases in `billing-subscribe.test.ts` · INV-3 … Manage billing's session cases
