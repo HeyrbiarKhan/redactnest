@@ -8,6 +8,33 @@
  * product's palette without a second copy of it. Whether Clerk accepts CSS
  * variables here was task 1's check, recorded in the spec's `rationale.md`.
  */
+
+/**
+ * Clerk's text links, given the look of `Button`'s link variant. Links are
+ * always underlined, so none is told apart by colour alone (spec 0003,
+ * INV-8), and Clerk's are not by default.
+ *
+ * A style object, not utility classes: Clerk's own style is unlayered and sets
+ * `text-decoration: none`, which beats anything in Tailwind's layers, while an
+ * object joins Clerk's style after its own rules. The colour is
+ * `accent-strong` in every state, as for all teal text, because Clerk shades
+ * the primary colour lighter on hover and darker while pressed, and `accent`
+ * already falls short on Clerk's `subtle` footer band (4.43:1, spec 0003's
+ * contrast contract).
+ */
+const LINK = Object.freeze({
+  color: "var(--color-accent-strong)",
+  textDecorationLine: "underline",
+  textDecorationThickness: "1px",
+  textUnderlineOffset: "4px",
+  "&:hover": Object.freeze({
+    color: "var(--color-accent-strong)",
+    textDecorationLine: "underline",
+    textDecorationThickness: "2px",
+  }),
+  "&:active": Object.freeze({ color: "var(--color-accent-strong)" }),
+});
+
 export const CLERK_APPEARANCE = Object.freeze({
   variables: Object.freeze({
     colorPrimary: "var(--color-accent)",
@@ -26,10 +53,10 @@ export const CLERK_APPEARANCE = Object.freeze({
     fontSize: "1rem",
     borderRadius: "0.5rem",
   }),
-  // Links are always underlined, so none is told apart by colour alone (spec
-  // 0003, INV-8). Clerk's own footer links ("Sign up", "Sign in") are not by
-  // default, so they take the underline here, as token free utility classes.
+  // The footer's "Sign up" or "Sign in", and the code step's "Didn't receive a
+  // code? Resend".
   elements: Object.freeze({
-    footerActionLink: "underline underline-offset-2",
+    footerActionLink: LINK,
+    formResendCodeLink: LINK,
   }),
 });
