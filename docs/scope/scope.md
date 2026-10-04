@@ -234,7 +234,7 @@ spec [0012](../specs/0012-billing-paid-plan/index.md) · code in `src/billing`, 
   - [x] Never silently free: the tool's ask and refresh rules, the plan line, the cap words by account, and "Check my plan and open it again" · AC-3, AC-4, AC-5, AC-6, AC-7
   - [x] Managing it: the full account page, the billing portal, delete and sign out, the portal token stripped before Clerk and the referrer policy (task 12a), and the sandbox walk · AC-7, AC-10, AC-11, AC-12, AC-17, AC-18, AC-26, AC-27
   - [x] The words, the proofs and the measure: both legal pages (renamed Terms of service), the cookie and request checks, the paid cap measure, the amends to older specs, and your read of every word · AC-5, AC-6, AC-13, AC-19, AC-20, AC-22, AC-24
-- [ ] Verify it: `/check verify billing & paid plan`
+- [x] Verify it: `/check verify billing & paid plan`
 - [ ] Test it: `/test billing & paid plan`
 - [ ] Review it (fresh model): `/check review billing & paid plan`
 - [ ] Document it: `/document billing & paid plan`

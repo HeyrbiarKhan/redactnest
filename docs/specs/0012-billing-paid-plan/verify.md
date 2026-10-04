@@ -62,7 +62,7 @@ _Steps for tasks 7a to 7d. The same local setup as slice 1. Slice 1's command st
 - [x] On the checkout Subscribe opened → the email field shows your address and is disabled, so the order can only land on the tied customer → AC-14, AC-25
 - [x] Signed out, open `/sign-in/factor-one?sign_in_force_redirect_url=/pricing&redirect_url=/account/subscribe&keep=1` → the address becomes `/sign-in/factor-one?keep=1&redirect_url=%2Faccount%2Fsubscribe` before Clerk shows; sign in from `/sign-in?sign_in_force_redirect_url=/pricing` → lands on `/account` → AC-8, INV-13
 - [x] Sign out from `/account` → `/` arrives as a document load (its navigation entry is `/`, type `navigate`), no request to a Clerk origin, `window.Clerk` undefined, and the next `/api/entitlement` answer is `free`, `none` with no `Set-Cookie` → AC-12, INV-13
-- [x] Go offline in DevTools, then Sign out → "We couldn't sign you out. Try again." and the page stays → AC-12
+- [x] Go offline in DevTools, then Sign out → "We couldn't sign you out. Try again." and the page stays → AC-12 (rerun after 2240a58: the line at 10.4 s, the same document, the button enabled again; back online, Try again signed out)
 - [x] A sandbox customer holding your email but tied to another external id → Subscribe shows "This email is already linked to another account with us, so we didn't start a checkout. Write to privacy@redactnest.com and we'll sort it out." and starts no checkout → AC-25
 
 ## Commands
@@ -251,7 +251,7 @@ _Built and run at build time: the component, privacy, shell and legal page tests
 - AC-5, AC-6, AC-13 … your read (task 18) · AC-9 … the request, prefetch and `/tool` entitlement steps · AC-15 … the unticked box step (still open) and the cap value row · AC-19 … the cookie command · AC-20 … the `/tool` entitlement step · AC-22 … the page steps, the component test, the rename grep and the value rows · AC-24 … the speed command and the cap value row
 
 # Found in the rerun · 2026-10-04
-_Not from `/develop`: a failure `/check verify` met while running slice 1b's sign up switch. Open until `/debug` fixes it._
+_Not from `/develop`: a failure `/check verify` met while running slice 1b's sign up switch. Fixed by `/debug` in 2240a58, and passed on the rerun._
 
 ## UI / manual
-- [ ] Click Sign out on `/account` before Clerk's script has loaded (hold `clerk.browser.js` back 5 s) → the session still ends: `/` as a document load, both `__client_uat` cookies `0`, no `__session`, and the answer free, `none` → AC-12, INV-13 (failed 2026-10-04: `/` in 0.2 s with both `__session` cookies kept and the answer `signed-in`. Until Clerk loads, its `signOut` only queues the call and resolves at once, so `leaveAccount` loads `/` and the queued call never runs)
+- [x] Click Sign out on `/account` before Clerk's script has loaded (hold `clerk.browser.js` back 5 s) → the session still ends: `/` as a document load, both `__client_uat` cookies `0`, no `__session`, and the answer free, `none` → AC-12, INV-13 (failed 2026-10-04: `/` in 0.2 s with both `__session` cookies kept and the answer `signed-in`. Until Clerk loads, its `signOut` only queues the call and resolves at once, so `leaveAccount` loads `/` and the queued call never runs. Passed after 2240a58: clicked at 0.6 s with `window.Clerk` unset, `/` 6.1 s later as `navigate`, both `__client_uat` `0`, no `__session`, the answer free, `none`. Held 13 s instead, the failure line showed at 10.1 s, the session survived Clerk loading late, and Try again signed out)
