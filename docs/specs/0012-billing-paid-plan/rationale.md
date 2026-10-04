@@ -333,7 +333,7 @@ walk-three repeated it step for step at 11:34:21. In each payment the token appe
 - Welcome reached "You're on Pro."
 - Back on the tool tab, the plan line read "Signed in with Pro.", and "Check my plan and open it again" opened the same 50 page file past the free cap with no file picker.
 
-Whether Polar refuses payment with the box unticked was asked on walk-three, but your note left it open. So that part of AC-15 still rests on task 1's setup, which made the box required.
+Whether Polar refuses payment with the box unticked was asked on walk-three, but your note left it open. So that part of AC-15 still rests on task 1's setup, which made the box required. On 4 October 2026 you confirmed it was not tried and left it to `/check verify`.
 
 **Cancel and the hand revoke (AC-10, AC-18).** On walk-three, signed in on the automated browser:
 - Account showed Pro, "Renews on 4 November 2026".
@@ -353,3 +353,19 @@ Whether Polar refuses payment with the box unticked was asked on walk-three, but
 - `clerk_active_context`
 
 `/api/entitlement` set none. Clerk's host held two of Cloudflare's cookies, `_cfuvid` and `__cf_bm`. Clerk's cookie page (https://clerk.com/docs/guides/how-clerk-works/cookies, read raw on 4 October 2026) lists only three: `__session` and `__client_uat` as first party, and Cloudflare's `_cfuvid` as third party. `__refresh_<suffix>`, `clerk_active_context`, `__clerk_db_jwt`, the suffixed names and Cloudflare's `__cf_bm` are not on it, so task 13's check ("every cookie set while signed in is one Clerk's cookie page lists") fails. C6's "we set none of our own" still holds: nothing outside Clerk set a cookie on the site. What fails is the promise that Clerk's page lists them. The Cloudflare cookies are a second point: in production they would sit on `clerk.redactnest.com`, our own subdomain (unchecked until go live). Both are for `/architect` before task 14 writes C6. The Polar, Stripe and Google cookies in the browser sit on their own domains, from the portal and the checkout.
+
+### Task 16: the paid cap measure (4 October 2026)
+
+Recorded with `tests/e2e/paid-cap-speed.spec.ts` in the `speed` project (`pnpm exec playwright test --project=speed --no-deps`), against a production build of commit `abcc8c1` with task 14's words on top (nothing in the engine, the worker or the tool's flow changed). Playwright 1.63.0's Chromium, on the machine spec 0007's checklist measure ran on: a 13th Gen Intel Core i5-1335U laptop with 16 GB of memory, running Windows 11. One worker, four runs (the first while the spec was being proved, then three in a row).
+
+**The fixture.** `tests/fixtures/detect-dense.pdf`, 50 pages and 2,200 matches, with the entitlement routed to the paid tier so all 50 pages open.
+
+**How a read is timed.** The product exposes no checkpoint and should not, so the test serves Turbopack's worker bootstrap with a probe in front of it. The probe wraps the worker's `setTimeout` and `postMessage`: it notes when each zero delay timeout is asked for (a checkpoint's yield) and when it fires (the next read starts), and when each message leaves the worker. A read is the stretch from one checkpoint's return to the next checkpoint, so it holds everything the worker does without stopping, the detectors included. A control holds the probe to what it claims: it must see at least one checkpoint per page during inspection and three per page during detection. It saw 100 (two a page) and 150, so each phase timed 101 and 151 reads, the extra one being the stretch before the first checkpoint.
+
+**The open**, from the file input's `change` to the checklist's rows committed to the page, the engine's 10 MB load included: 2,719, 2,471, 2,548 and 2,484 ms. Split by the worker's phases: loading the engine 447 to 580 ms, opening 4 to 8 ms, inspecting 731 to 841 ms, detecting 978 to 1,077 ms. The slowest is 27% of the 10 s bar.
+
+**The slowest single read.** During detection: 14, 8, 8 and 14 ms. During inspection, which the spec's bar does not name but which also decides how soon a cancel is noticed (spec 0006, AC-29): 63, 58, 81 and 58 ms. Both under the 1 s bar by more than ten times. A cancel during inspection or detection of this document is noticed within a tenth of a second. The engine's load is one stretch with no checkpoint, but it is the same for every document and so plays no part in the cap.
+
+**The decision.** Both halves of AC-24's bar hold, so Pro ships at 50 pages. The default of `NEXT_PUBLIC_MAX_PAGES` stays 50, and the sandbox product description's "up to 50 pages" already matches `config.maxPages`. The test keeps asserting both lines on every speed run, so a regression fails `pnpm test:e2e` rather than going unnoticed.
+
+**What it does not cover.** A crafted page can still hold one detection read longer: the phone detector's budget is 2 s per 100,000 characters (spec 0005, *Consequences*). That is a worst case built on purpose, not a dense document, and it is unchanged by the cap. The scan memory limit (scope Deferred) is about memory, not time, and this measure says nothing about it.
