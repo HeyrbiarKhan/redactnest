@@ -1,15 +1,18 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ReactElement } from "react";
+import { isValidElement, type ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DeleteAccount } from "@/app/(account)/delete-account";
+
 /**
- * Account. Spec 0012, AC-10.
+ * Account. Spec 0012, AC-10 and AC-11.
  *
  * The page, called as Next.js would, over a fake session and a fake Polar
  * that answers one customer state and records every call. Each case reads
  * the words the page renders: the plan, the day Pro renews or ends (a British
  * date, read in UTC), Get Pro to Pricing, Manage billing once a customer
- * exists, and the plan check's failure said out loud.
+ * exists, the plan check's failure said out loud, and Delete account with
+ * the day its confirm warns of (the control itself is tested on its own).
  */
 
 /** What `redirect` throws, so a test can see where a page sent the visitor. */
@@ -229,6 +232,51 @@ describe("when the plan cannot be checked (AC-10)", () => {
     expect(text).toContain("We couldn&#x27;t check your plan just now.");
     expect(text).toMatch(/<a [^>]*href="\/account"[^>]*>Check again<\/a>/);
     expect(text).toMatch(row("Email", "a@redactnest.com"));
-    expect(text).not.toMatch(/Plan<\/dt>|Get Pro|Manage billing|Renews on|Ends on/);
+    expect(text).not.toMatch(
+      /Plan<\/dt>|Get Pro|Manage billing|Renews on|Ends on|Delete account/,
+    );
+    expect(deleteProps(await openAccount())).toBeNull();
+  });
+});
+
+/** The props the page hands Delete account, or `null` when it renders none. */
+function deleteProps(node: unknown): { readonly endsOn: string | null } | null {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = deleteProps(child);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+  if (!isValidElement<{ children?: unknown }>(node)) return null;
+  if (node.type === DeleteAccount) return node.props as { endsOn: string | null };
+  return deleteProps(node.props.children);
+}
+
+describe("Delete account (AC-11)", () => {
+  const DELETE_BUTTON = /<button[^>]*>Delete account<\/button>/;
+
+  it.each([
+    ["no Polar customer", () => (polar.status = 404)],
+    ["a free customer", () => (polar.state = state([]))],
+    [
+      "Pro that renews",
+      () => (polar.state = state([PRO_GRANT], [proSubscription(false)])),
+    ],
+  ])("offers it for %s, with no ending day to warn of", async (_name, arrange) => {
+    arrange();
+    expect(await accountText()).toMatch(DELETE_BUTTON);
+    expect(deleteProps(await openAccount())).toEqual({ endsOn: null });
+  });
+
+  it("hands the confirm the day Pro was set to end", async () => {
+    polar.state = state([PRO_GRANT], [proSubscription(true)]);
+    expect(deleteProps(await openAccount())).toEqual({ endsOn: "3 November 2026" });
+  });
+
+  it("asks nothing more of Polar to show it: the deletion checks again itself", async () => {
+    polar.state = state([PRO_GRANT], [proSubscription(true)]);
+    await accountText();
+    expect(polar.calls).toEqual([USER_A]);
   });
 });

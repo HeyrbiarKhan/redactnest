@@ -7,8 +7,8 @@
  * subscription", because the Polar organisation will sell other products
  * (INV-6). The only thing sent is the Clerk user id, as Polar's external
  * customer id, and the only things read back are the benefit list, the
- * product of each active subscription, and the dates of the one to Pro
- * (claim C13 in the privacy policy).
+ * product of each active subscription, whether each one to Pro renews, and
+ * the dates of the first (claim C13 in the privacy policy).
  *
  * Polar's answer is narrowed from `unknown`, as every boundary is: a shape we
  * cannot read means we cannot say, which is `null` here and the free limit,
@@ -42,6 +42,14 @@ export interface Plan {
   /** The subscription to the Pro product, if the customer state lists one. */
   readonly renewal: Renewal | null;
   /**
+   * Any subscription to the Pro product in the state is set to renew
+   * (`cancel_at_period_end` false). Delete account refuses while one is
+   * (AC-11). The state lists only `active` and `trialing` subscriptions, so a
+   * payment being retried (`past_due`) never shows here (task 12, open with
+   * `/architect`).
+   */
+  readonly renewing: boolean;
+  /**
    * An active subscription to another EdiventStudio product. Subscribe can
    * tie a customer who already bought one (AC-25), and the organisation
    * allows one subscription per customer across its products (AC-14).
@@ -56,6 +64,7 @@ const NO_CUSTOMER: Plan = Object.freeze({
   pro: false,
   hasCustomer: false,
   renewal: null,
+  renewing: false,
   otherProduct: false,
 });
 
@@ -85,6 +94,7 @@ export function planFromState(state: unknown, deps: PlanIds): Plan | null {
   }
 
   let renewal: Renewal | null = null;
+  let renewing = false;
   let otherProduct = false;
   for (const subscription of subscriptions) {
     if (!isRecord(subscription) || typeof subscription.product_id !== "string")
@@ -93,9 +103,13 @@ export function planFromState(state: unknown, deps: PlanIds): Plan | null {
       otherProduct = true;
       continue;
     }
-    if (renewal !== null) continue;
+    // Every one to Pro is read for `renewing`, so deletion never misses a
+    // second one the organisation's one subscription rule should have stopped.
     const { current_period_end: endsAt, cancel_at_period_end: cancels } = subscription;
-    if (typeof endsAt !== "string" || typeof cancels !== "boolean") return null;
+    if (typeof cancels !== "boolean") return null;
+    if (!cancels) renewing = true;
+    if (renewal !== null) continue;
+    if (typeof endsAt !== "string") return null;
     renewal = Object.freeze({ endsAt, renews: !cancels });
   }
 
@@ -103,6 +117,7 @@ export function planFromState(state: unknown, deps: PlanIds): Plan | null {
     pro: benefitIds.includes(deps.proBenefitId),
     hasCustomer: true,
     renewal,
+    renewing,
     otherProduct,
   });
 }

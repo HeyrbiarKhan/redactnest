@@ -16,6 +16,7 @@ import { createPolar } from "@polar-sh/sdk/2026-10";
 import { config } from "@/config";
 import { billing } from "@/config/billing";
 
+import type { CustomerDeleteQuery } from "./delete";
 import type { BillingSeams } from "./entitlement";
 import type { PortalRequest } from "./portal";
 import type { CheckoutRequest } from "./subscribe";
@@ -50,18 +51,20 @@ export const polar =
       });
 
 /**
- * What the account pages need from Polar, or `null` with billing off. These
- * calls keep the SDK's own timeout: a person waiting on Subscribe or Account
- * is waiting on that page, not on the tool's budget.
+ * What the account pages need from Polar and Clerk, or `null` with billing
+ * off. These calls keep each SDK's own timeout: a person waiting on Subscribe
+ * or Account is waiting on that page, not on the tool's budget.
  *
  * The three customer writes and the email search are Subscribe's alone, for
  * tying the customer before checkout (AC-25); the customer session is Manage
- * billing's (AC-17). Each passes only what it is given, so INV-3's test can
- * hold that Polar sees the session's user and nobody else.
+ * billing's (AC-17); the two deletions are Delete account's (AC-11). Each
+ * passes only what it is given, so INV-3's test can hold that Polar sees the
+ * session's user and nobody else.
  */
 export function accountSeams() {
-  if (billing === null || polar === null) return null;
+  if (billing === null || polar === null || clerk === null) return null;
   const client = polar;
+  const accounts = clerk;
   const site = config.siteUrl;
   return Object.freeze({
     proBenefitId: billing.proBenefitId,
@@ -78,6 +81,9 @@ export function accountSeams() {
       client.checkouts.create({ ...body, products: [...body.products] }),
     createCustomerSession: (body: PortalRequest) =>
       client.customerSessions.create({ ...body }),
+    deleteCustomer: (externalId: string, query: CustomerDeleteQuery) =>
+      client.customers.deleteExternal(externalId, { ...query }),
+    deleteUser: (userId: string) => accounts.users.deleteUser(userId),
   });
 }
 

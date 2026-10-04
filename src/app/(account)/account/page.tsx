@@ -14,6 +14,7 @@ import { Card } from "@/ui/card";
 import { type SummaryItem, SummaryList } from "@/ui/summary-list";
 
 import { AccountColumn } from "../account-shell";
+import { DeleteAccount } from "../delete-account";
 import { SignOutControl } from "../sign-out";
 
 export const metadata: Metadata = {
@@ -22,25 +23,25 @@ export const metadata: Metadata = {
 
 /**
  * The day Pro renews or ends, for Pro with a subscription to the Pro product
- * (AC-10). Pro alone otherwise, as while a payment is retried or for a benefit
+ * (AC-10). `null` otherwise, as while a payment is retried or for a benefit
  * granted by hand, and also when Polar's date cannot be read, so the page
  * never shows a date it made up.
  */
-function renewalItems(plan: Plan | null): readonly SummaryItem[] {
-  if (plan === null || !plan.pro || plan.renewal === null) return [];
+function renewalDay(plan: Plan | null): { renews: boolean; day: string } | null {
+  if (plan === null || !plan.pro || plan.renewal === null) return null;
   const endsAt = new Date(plan.renewal.endsAt);
-  if (Number.isNaN(endsAt.getTime())) return [];
-  return [
-    {
-      term: plan.renewal.renews ? "Renews on" : "Ends on",
-      description: formatBritishDate(endsAt),
-    },
-  ];
+  if (Number.isNaN(endsAt.getTime())) return null;
+  return { renews: plan.renewal.renews, day: formatBritishDate(endsAt) };
+}
+
+function renewalItems(renewal: ReturnType<typeof renewalDay>): readonly SummaryItem[] {
+  if (renewal === null) return [];
+  return [{ term: renewal.renews ? "Renews on" : "Ends on", description: renewal.day }];
 }
 
 /**
- * Account. Spec 0012, AC-10 (the email, the plan and its renewal, Get Pro,
- * Manage billing and Sign out; Delete account follows in task 12).
+ * Account. Spec 0012, AC-10 and AC-11 (the email, the plan and its renewal,
+ * Get Pro, Manage billing, Sign out and Delete account).
  *
  * Everything shown comes from the verified session: the user from `auth()`,
  * the email from `currentUser()`, and the plan from Polar by that user's id,
@@ -63,6 +64,7 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
   ]);
   const email = user?.primaryEmailAddress?.emailAddress ?? "";
   const planName = plan === null ? null : plan.pro ? PRO_PLAN.name : FREE_PLAN.name;
+  const renewal = renewalDay(plan);
 
   return (
     <AccountColumn>
@@ -92,7 +94,7 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
           items={[
             { term: "Email", description: email },
             ...(planName === null ? [] : [{ term: "Plan", description: planName }]),
-            ...renewalItems(plan),
+            ...renewalItems(renewal),
           ]}
         />
         <div className="flex flex-wrap gap-3">
@@ -109,6 +111,14 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
           )}
           <SignOutControl />
         </div>
+        {/* Not while the plan cannot be checked: the confirm could not say
+            what deleting ends, and the delete itself would fail on the same
+            check (AC-11). */}
+        {plan !== null && (
+          <DeleteAccount
+            endsOn={renewal !== null && !renewal.renews ? renewal.day : null}
+          />
+        )}
       </Card>
     </AccountColumn>
   );
