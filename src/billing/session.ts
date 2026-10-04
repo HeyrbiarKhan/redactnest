@@ -15,8 +15,10 @@
  * expiry, so an expiry verdict proves the token genuine, and the route trusts
  * a genuine token for up to `SESSION_TRUST_MS` after it was issued. Everything
  * else is checked in full on both paths, by `verifyToken` and then here on the
- * decoded payload, because `verifyToken` checks no issuer, lets a token with
- * no `azp` through, and on an expired token stops before `nbf` and `iat`.
+ * decoded payload, because `verifyToken` checks no issuer, and on an expired
+ * token stops before `nbf` and `iat`. A token with no `azp` `verifyToken`
+ * refuses itself (`@clerk/backend` 3.22, before the expiry), and the presence
+ * check here stays as a second guard, so a Clerk change cannot quietly drop it.
  * `tests/unit/billing-entitlement.test.ts` pins that order, so a Clerk change
  * to it fails a test rather than quietly granting or refusing.
  */
