@@ -168,6 +168,33 @@ The walk's recorded list already meets the new wording, so task 13's check passe
 
 Its shorter rewording was not taken: it drops "strictly necessary", which you asked for, and "nothing else sets a cookie", which is what makes a Vercel challenge cookie a breach of C6.
 
+### After the fresh model review (2026-10-05)
+
+The fresh model review (`docs/reviews/2026-10-04-feat-billing-paid-plan.md`) and the fixes that followed it (db0f8c9) left points the spec did not yet state. You asked for them to be recorded as wording, with nothing in the build changed.
+
+**1. Why sign out has a 10 s limit.** Two things about `signOut` in `@clerk/nextjs` 7.9.10 came to light while running verify:
+- Before Clerk's script has loaded, `signOut` only queues the call for that moment and resolves at once. A page load straight after it drops the queued call, so the visitor landed on `/` still signed in (verify, *Found in the rerun*, 2026-10-04). 2240a58 made the control wait for Clerk to load first.
+- Offline, it never settles. Before it ends the session, `@clerk/nextjs` awaits a server action of its own, and when that request fails, the promise it hands Clerk never settles, so neither does `signOut`. Nothing throws, so without a limit the control would wait for ever. The offline rerun shows it: the failure line came at 10.4 s, from the limit.
+
+So one limit, `SIGN_OUT_LIMIT_MS`, runs from the press and covers both waits: Clerk's script loading, then `signOut` settling. Sign out is a few requests, so 10 s leaves a slow connection plenty of time. AC-12 said only "if `signOut` throws", while the failure offline actually produces is one that never settles, so "or has not settled within 10 s" now sits beside it.
+
+**2. A sign out still in flight at the limit.** Past the limit the control never starts a `signOut` (a Clerk that loads late is ignored), but one that started before the limit may still end the session after the failure line shows. The review raised it as a nit. It stays as it is, because it is harmless: Try again then lands on `/` (with no session left, `signOut` resolves at once and the page load follows), and a reload of Account sends the visitor to sign in. Either way they see the true state. Runner up: reword the line to "check whether you are still signed in", which would hedge every failure to cover a rare one.
+
+**3. When Clerk reports its script failed.** Review fixes row 3 asked for the failure line "as soon as Clerk reports its script failed, not after 10 s". The 2026-10-05 run showed when that is. Clerk sets its `error` status only when its own `scriptLoadTimeout` runs out, 15 s after load by default. The script's own failure is rethrown as an unhandled rejection that nothing awaits, so the status is the first signal the control can use. Pressed 1.2 s after load, the line came at 10.1 s, from our limit. Pressed after Clerk had reported, it came in 35 ms. Pressed at 8 s, it came 0.2 s after Clerk reported at 15.9 s. Nothing navigated in any run. The row now says what the run holds: the line comes as soon as Clerk reports, and at the latest 10 s after the press.
+
+Shortening `scriptLoadTimeout` (a `ClerkProvider` prop) was weighed and set aside. It is how long Clerk waits for its script before giving up, so a shorter one would make sign in itself fail on a slow connection, to win a few seconds on a page whose script is already broken.
+
+**4. Subscribe acts on a GET.** The review's Minor: loading `/account/subscribe` ties or creates the Polar customer and creates a checkout, and Clerk's cookies go with a top level navigation from another site, so a link elsewhere, or a prefetch by a browser or an extension, can make a signed in visitor's browser do it. It is deliberate, for AC-8. Clerk's landing after sign in is a navigation, a GET, so for sign in to go straight on to checkout, Subscribe has to do its work as the page loads. The effect is bounded: only for the session's own user and verified email (INV-3), no money moves, and the visitor lands on Polar's checkout, where nothing happens unless they pay. The cost is the one *Consequences* already names for someone who leaves checkout (a Polar customer record with their email and account id), plus an open checkout nobody pays. Our own pages never prefetch it, since every link to it is a plain `a` (INV-10). Runner up: a button on Subscribe that posts a server action, which adds a click between sign in and checkout on every purchase, to stop a stray record for the visitor's own email.
+
+**5. Clerk's development origin in the production policy.** The review's Minor: `https://*.clerk.accounts.dev` sits in the standard policy's `script-src` and `connect-src` in every build, production included, so any tenant of Clerk's shared development domain is an allowed source on every page but `/tool`. It stays, for three reasons:
+- `script-src` on those pages already holds `'unsafe-inline'`, which the App Router's inline hydration scripts need on prerendered pages (no nonce, spec 0001). A script injected there already runs without naming any origin, so the wildcard adds almost no risk.
+- A production build never loads from it. A Vercel production build refuses any publishable key whose host is not `clerk.redactnest.com` (AC-23).
+- `/tool` never holds it, since its policy takes nothing from `OUTSIDE_SERVICES` (INV-1, and spec 0011 INV-2).
+
+Limiting it to builds that are not production would make the Clerk entry differ by build, and that changes three contracts. AC-21: the entry names both origins. AC-23: a development key builds because its host is one of the entry's origins, which is how local runs and the e2e build work. Spec 0011 INV-1: every outside origin in the standard policy comes from `OUTSIDE_SERVICES`, the list the privacy policy renders entry by entry. Runner up: the wildcard only outside production, a small hardening at the price of those three changes.
+
+**Also recorded.** The verify rows that said "Not held" on 2026-10-04 now name the tests 4441c1c added. The types table names `askAgain()`, which replaced `forgetEntitlement`. A Follow-up records the blocked background fetch of Polar's checkout after sign up. Go live step 6 also checks that no `__refresh_*` cookie is left after sign out, which the review suggested (its question 4).
+
 ## Research findings
 
 A web pass on 2026-10-03 (full notes in `docs/.agent-cache/research/billing-clerk.md` and `billing-polar.md`), plus a scratch install of the packages, read directly.
