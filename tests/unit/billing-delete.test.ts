@@ -189,9 +189,14 @@ describe("the refusals (AC-11)", () => {
 
   // Polar's customer state lists only `active` and `trialing` subscriptions,
   // so a payment being retried (`past_due`) shows as the benefit alone, the
-  // same as a benefit granted by hand. AC-11's retry refusal has no source
-  // there; task 12 leaves it open with /architect.
-  it.todo("refuses while a payment to Pro is being retried");
+  // same as a benefit granted by hand. It is not refused: Polar's delete
+  // cancels every billable subscription, `past_due` included, and voids its
+  // pending orders, so no further charge is tried (task 12a).
+  it("does not refuse a payment to Pro being retried, the benefit with no subscription", async () => {
+    world.state = state([PRO_GRANT]);
+    expect(await run()).toEqual({ kind: "deleted" });
+    expect(world.calls).toEqual([["getStateExternal", USER_A], ...DELETES]);
+  });
 });
 
 describe("the failures (AC-11)", () => {

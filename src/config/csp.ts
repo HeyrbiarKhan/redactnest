@@ -84,6 +84,19 @@ function buildPolicy(options: {
   ].join("; ");
 }
 
+/**
+ * The referrer policy every page and file is sent with. Spec 0012, AC-27.
+ *
+ * Another origin (Clerk, Polar, GitHub) learns at most our origin, never a
+ * path or a query, whatever the browser's own default. It is what current
+ * browsers already do, so nothing that works changes. Never `no-referrer`:
+ * a browser then sends `Origin: null` on a same origin `POST`, and Next.js
+ * aborts that server action as a cross site request, which would break
+ * Delete account. It lives here, beside the policies, because
+ * `next.config.ts` loads only this module and `privacy.ts` (spec 0011, INV-8).
+ */
+export const REFERRER_POLICY = "strict-origin-when-cross-origin";
+
 export function buildPolicies({
   services,
   dev,

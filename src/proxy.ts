@@ -1,6 +1,7 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
-import type { NextFetchEvent, NextRequest } from "next/server";
+import { type NextFetchEvent, type NextRequest, NextResponse } from "next/server";
 
+import { withoutPortalToken } from "@/billing/portal";
 import { config as appConfig } from "@/config";
 import { SIGN_IN_PATH, SIGN_UP_PATH } from "@/lib/routes";
 
@@ -18,13 +19,23 @@ import { SIGN_IN_PATH, SIGN_UP_PATH } from "@/lib/routes";
  * never start. It reads `config.billingEnabled` rather than the server only
  * billing module, which is the same switch: the root layout's gate fails any
  * build where the two could disagree.
+ *
+ * One thing runs before Clerk (AC-26). After a payment Polar adds its portal
+ * token to the welcome address, and on a page load whose session token has
+ * expired (as it always has after a checkout) Clerk redirects to its own
+ * handshake with the full address as `redirect_url`. So a request carrying
+ * the token gets a 307 to the same address without it, and Clerk only ever
+ * sees the clean one. A 307 keeps the method and body, so it holds for any
+ * method, on every page in the matcher.
  */
 const clerk = appConfig.billingEnabled
   ? clerkMiddleware({ signInUrl: SIGN_IN_PATH, signUpUrl: SIGN_UP_PATH })
   : null;
 
 export default function proxy(request: NextRequest, event: NextFetchEvent) {
-  return clerk === null ? undefined : clerk(request, event);
+  if (clerk === null) return undefined;
+  const clean = withoutPortalToken(request.nextUrl);
+  return clean === null ? clerk(request, event) : NextResponse.redirect(clean, 307);
 }
 
 // Literal paths, because a matcher must be a constant Next.js can read at

@@ -11,6 +11,11 @@
  * Polar's portal does the managing (cancel, the card, invoices). This page
  * only opens it, so it writes nothing to Polar but the session itself
  * (INV-5).
+ *
+ * The portal's other door lives here too: the token Polar adds to the
+ * welcome address after a payment, which the proxy drops (AC-26). Nothing it
+ * needs reaches beyond `plan.ts`, which holds no SDK and no config, so the
+ * proxy can import it without pulling either in.
  */
 
 import "server-only";
@@ -78,4 +83,29 @@ export async function openPortal(
 
   const url = portalUrl(session);
   return url === null ? { kind: "portal-failed" } : { kind: "portal", url };
+}
+
+/**
+ * The name Polar gives the portal token it adds to `success_url` after a
+ * payment, as task 12's walk saw it. The token opens that customer's billing
+ * portal, so it is a credential, not a parameter of ours. Spec 0012, AC-26.
+ */
+export const PORTAL_TOKEN_PARAM = "customer_session_token";
+
+/**
+ * `url` without Polar's portal token, or `null` when it carries none. Spec
+ * 0012, AC-26.
+ *
+ * `searchParams` compares names once decoded, so an encoded spelling counts,
+ * but exactly, so `Customer_Session_Token` is left alone. Every value goes,
+ * an empty one included, and every other parameter keeps its place, as the
+ * sign in pages' clean redirect keeps Clerk's. The origin and path are the
+ * request's own, never `config.siteUrl`, so a preview or alias host is never
+ * sent to production.
+ */
+export function withoutPortalToken(url: URL): URL | null {
+  if (!url.searchParams.has(PORTAL_TOKEN_PARAM)) return null;
+  const clean = new URL(url.href);
+  clean.searchParams.delete(PORTAL_TOKEN_PARAM);
+  return clean;
 }
