@@ -160,6 +160,34 @@ Checked by an independent read on another model (2026-10-06), whose fixes you ch
 | How the steps line grows | the steps 1.5rem apart, the line keeping its 0.25rem clearance at each circle, so 1rem long | a join you can see, with the clearance that keeps the circles distinct; the rail grows by 1.5rem | the steps 1rem apart with the line touching both circles (also about 1rem, but the line and the circles merge into one shape) |
 | The signing in line's signal | the first of `signIn.status` or `signUp.status` becoming `"complete"` (the signal hooks `@clerk/nextjs` exports) and `useAuth()` leaving "loaded and signed out", with a 100 ms limit after Clerk's spinner, timed on both walks | the status is set the moment the code is accepted, before `setActive`'s slow steps, and the backstop keeps today's proven signal, so the line is never later than it is now | the legacy hooks in `@clerk/nextjs/legacy` (they read the client's sign in, which Clerk updates in place in the same reply, so likely the same timing; kept as the named fallback rather than adopting the API Clerk now calls legacy) |
 
+### Recorded during the build (tasks 34 and 35)
+
+Checked on 2026-10-06 under `pnpm dev` (Clerk 7.9.10 for Next.js; Clerk's servers loaded clerk-js 6.38.0), with a scratch script on the page's frame clock: each frame it read Clerk's spinner in the card, our line, the sign in and sign up signals (`Clerk.__internal_state`, what `useSignIn()` and `useSignUp()` return), and the session (what `useAuth()` follows). Times run from the keydown of the sixth digit, which submits the code. Signing in as `walk-one`; signing up as new throwaways `walk-0013b`, `walk-0013c` and `walk-0013d` from Subscribe, and `walk-0013e` with no landing, all `+clerk_test` with code 424242.
+
+**Task 34, the steps line (AC-15).** On `/tool` at idle, 1280 pixels: each line is 16 pixels long (its `::after` height), starts 4 pixels below one circle and stops 4 pixels above the next, and the steps sit 24 pixels apart. The browser check now holds at least 16 pixels in all three runs (default text, forced colours, 200% text at 320 pixels).
+
+**Task 35, the signing in line (AC-32).**
+
+| Walk | Clerk's spinner | Status `"complete"` | Our line shows | Line blank again | Session moves (`useAuth()`) | Next page |
+|---|---|---|---|---|---|---|
+| Sign in to Account, 1 | 29 to 1,429 ms | 562 ms | 562 ms (867 ms before the spinner ends) | never | 1,812 ms | `/account` at 2,312 ms |
+| Sign in to Account, 2 | 29 to 1,462 ms | 579 ms | 579 ms (883 ms before) | never | 1,795 ms | `/account` at 2,362 ms |
+| Sign in to Account, 3 | 31 to 1,414 ms | 547 ms | 547 ms (867 ms before) | never | 1,847 ms | `/account` at 2,331 ms |
+| Sign up from Subscribe, 1 | 32 to 615 ms | 615 ms | 615 ms (the same frame) | 1,498 ms | 1,899 ms | `/account/subscribe` at 4,665 ms, Polar's checkout at 5,591 ms |
+| Sign up from Subscribe, 2 | 32 to 632 ms | 632 ms | 632 ms (the same frame) | 1,516 ms | 1,932 ms | `/account/subscribe` at 4,198 ms, Polar's checkout at 5,386 ms |
+| Sign up from Subscribe, 3 | 30 to 630 ms | 630 ms | 630 ms (the same frame) | 1,497 ms | 1,880 ms | `/account/subscribe` at 4,047 ms, Polar's checkout at 4,702 ms |
+
+Also walked once each, outside the six: a sign in from Subscribe (`walk-one` holds Pro, so it ended on `/account?notice=already-pro`), whose line showed at 565 ms and stayed; a sign up with no landing, whose line showed at 548 ms, the frame the spinner ended, and stayed until `/account`; and a wrong code then a right one on sign in: after "111111" the line stayed empty, Clerk showed "Incorrect code" with `aria-invalid="true"` on every box and the status stayed `needs_first_factor`, and the right code then showed the line at 595 ms, before the spinner ended at 1,479 ms.
+
+- **The status signal fired first in every walk**, 1.2 to 1.3 s before the session moved, and our line showed in the same frame as it. The 100 ms limit holds on all six timed walks: the line never came after the spinner ended.
+- **The legacy hooks would not help.** In every walk `Clerk.client.signIn.status` and `Clerk.client.signUp.status`, what the legacy hooks read, went straight from the pending status to `null` in the frame the signal reported `"complete"`, and never showed `"complete"` in any frame.
+- **The network log** held only Clerk's flow and the page loads: Clerk's attempt request, the server action Clerk posts to the page, Clerk's session touch, the landing's fetches, and in development Clerk's catch all route check. Nothing went to Clerk's telemetry, and the line made no request.
+- Each sign up from Subscribe ended where Subscribe sends a new free account, Polar's sandbox checkout.
+
+**Open, for `/architect`: the line goes blank on a sign up from Subscribe.** On all three, the line showed on time and then the status region became a new element about 0.9 s later, with the address unchanged: Next.js's router committed a new tree for the same address (a `replaceState` from its own commit effect) about 6 ms after Clerk's session touch returned. The server action Clerk posts returned 200, so it is not a redirect from our page. It happens only on the sign up page with `redirect_url` in the address: there the action is posted to `/sign-up/verify-email-address?redirect_url=…` and the page is rebuilt in place, while with no query it is posted to `/sign-up`, the router pushes `/sign-up`, and the element survives. Sign in keeps its element with or without the query.
+
+The new element starts over at "loading" and first sees Clerk loaded, signed out, and the sign up already `"complete"` (the signal keeps reporting it until the session is set). AC-32 arms the line only after seeing signed out with neither status complete, so the new element never arms, and the backstop cannot fire either. The line stays blank from about 1.5 s until the next page, 2.5 to 3.2 s in development mode. Before this amendment the remounted line armed again on `useAuth()` alone and showed at about 1.8 s (task 27's 1,828 ms), a 1.2 s gap; so the amendment closes the gap after the spinner but opens a longer one after the remount. Ways out seen during the walk, for `/architect` to weigh: let a line that mounts with Clerk already loaded arm on `"complete"` too (a page load always starts with Clerk loading, so only a mount partway through a flow sees it loaded); hold the latch above the page, in the account group's layout, which a rebuild of the page keeps; or stop the rebuild itself, if Clerk or Next.js offer a way. Task 35's code is built to AC-32 as written and its component test passes; it is not committed.
+
 ### What each reference gave, and what stayed out
 
 | Reference | Kept | Left out, and why |
