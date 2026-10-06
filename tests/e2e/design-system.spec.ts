@@ -1396,3 +1396,65 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     await expectContained(page.getByRole("main"));
   });
 });
+
+/**
+ * Spec 0013, AC-26. Every page the refresh touched, in a real browser: axe at
+ * desktop, at 320 pixels and in forced colours, reflow at 320 pixels, nothing
+ * clipped at 200% text, and the mark still drawn in forced colours because it
+ * paints with `currentColor`.
+ */
+test.describe("every page (spec 0013, AC-26)", () => {
+  const PAGES = ["/", "/pricing", "/privacy", "/terms", "/no-such-page"] as const;
+
+  for (const path of PAGES) {
+    test(`${path}: axe reports nothing at desktop width`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(path);
+
+      await expectNoAxeViolations(page);
+    });
+
+    test(`${path}: axe reports nothing at 320 pixels, with no sideways scroll`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 320, height: 640 });
+      await page.goto(path);
+
+      await expectNoHorizontalScroll(page);
+      await expectNoAxeViolations(page);
+    });
+
+    test(`${path}: axe reports nothing in forced colours, and the mark still shows`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ forcedColors: "active" });
+      await page.goto(path);
+
+      await expectNoAxeViolations(page);
+      const mark = await page
+        .getByRole("banner")
+        .locator("svg")
+        .first()
+        .evaluate((svg) => {
+          const box = svg.getBoundingClientRect();
+          return {
+            fill: getComputedStyle(svg).fill,
+            ground: getComputedStyle(document.querySelector("header") ?? svg)
+              .backgroundColor,
+            drawn: box.width > 0 && box.height > 0,
+          };
+        });
+      expect(mark.drawn).toBe(true);
+      expect(mark.fill).not.toBe(mark.ground);
+    });
+
+    test(`${path}: clips nothing with the root font size doubled`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(path);
+      await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+
+      await expectNoHorizontalScroll(page);
+      await expectContained(page.getByRole("main"));
+    });
+  }
+});
