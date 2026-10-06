@@ -23,6 +23,11 @@ export interface PolicyChange {
 export type PolicyChanges = readonly [PolicyChange, ...PolicyChange[]];
 
 export const PRIVACY_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
+  Object.freeze({
+    date: "2026-10-07",
+    summary:
+      "Made clear that the one day applies to the logs our host keeps for us, and that what it keeps for itself follows its own privacy policy.",
+  }),
   Object.freeze({ date: "2026-10-06", summary: "First published." }),
 ]);
 

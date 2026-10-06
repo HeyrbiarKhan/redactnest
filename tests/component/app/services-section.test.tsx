@@ -109,7 +109,11 @@ describe("ServicesSection", () => {
     render(<ServicesSection services={OUTSIDE_SERVICES} />);
 
     expect(screen.getByRole("heading", { level: 3, name: "Vercel" })).toBeVisible();
-    expect(screen.getByText("One day")).toBeVisible();
+    expect(
+      screen.getByText(
+        "The logs it keeps for us are deleted after one day. What it keeps for itself follows its own privacy policy",
+      ),
+    ).toBeVisible();
     expect(screen.getByRole("link", { name: "Vercel’s privacy policy" })).toHaveAttribute(
       "href",
       "https://vercel.com/legal/privacy-notice",

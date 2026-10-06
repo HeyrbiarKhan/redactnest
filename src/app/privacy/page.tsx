@@ -184,8 +184,13 @@ export default function PrivacyPage() {
           EU GDPR). A browser cannot load a page without sending its IP address, so this
           data is needed for you to load a page at all.
         </p>
+        {/* The one day is the logs Vercel keeps for us. What Vercel keeps for
+            itself is its own, under its privacy notice (spec 0011, Launch
+            readiness step 6). */}
         <p>
-          Our host keeps it for one day. We keep no copy of it, and we do not try to
+          The logs our host keeps for us are deleted after one day. Our host also keeps
+          what it uses for itself, such as for platform security, under its own privacy
+          policy (see Services we use). We keep no copy of this data, and we do not try to
           identify you from it.
         </p>
       </section>
@@ -263,11 +268,12 @@ export default function PrivacyPage() {
           <li>receive it in a form you can take elsewhere (portability)</li>
         </ul>
         <p>
-          Without an account, the only personal data involved is the request data our host
-          keeps for one day, and we cannot link it to you. So most requests will find
-          nothing, and if that happens we will tell you. With an account, Account shows
-          your email address and lets you delete the account, and we can help with
-          anything else.
+          Without an account, the only personal data involved is our host’s request data.
+          The logs it keeps for us are deleted after one day, and we cannot link them to
+          you, so most requests will find nothing, and if that happens we will tell you.
+          What our host keeps for itself follows its own privacy policy. With an account,
+          Account shows your email address and lets you delete the account, and we can
+          help with anything else.
         </p>
         <p>
           To ask, write to <ContactLink />. We will reply within one month, and there is

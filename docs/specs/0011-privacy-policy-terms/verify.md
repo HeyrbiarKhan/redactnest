@@ -1,4 +1,4 @@
-# Verify: Privacy policy & terms · spec 0011 · updated 2026-10-02
+# Verify: Privacy policy & terms · spec 0011 · updated 2026-10-07
 _Steps derived from spec 0011 acceptance criteria and its Value sourcing table. `/check verify` runs these; `/test` locks the durable ones._
 
 Run against a production build (`pnpm build && pnpm start` with the Playwright build values from `playwright.config.ts`), never `next dev`, whose policy is looser.
@@ -15,7 +15,7 @@ Run against a production build (`pnpm build && pnpm start` with the Playwright b
 - [x] With a screen reader on `/tool`, choose a file and let it open → the terms line is never announced as news (it sits outside the polite region) → AC-5
 - [x] Read "Who we are" → "RedactNest, operated by Heyrbiar Khan, an individual based in Pakistan", what a controller is, and `privacy@redactnest.invalid` as a `mailto:` link; nothing about representatives → AC-6
 - [x] Walk the privacy policy against the claims register (C1 to C12) → each claim is stated in plain words, and no other claim about data appears; the comments in `src/app/privacy/page.tsx` name the claim each paragraph makes → AC-7
-- [x] Read "Services we use" → one h3 "Vercel" with what it does, what it receives, why, where, the safeguard, "One day", Vercel's own use, and a link to `https://vercel.com/legal/privacy-notice` → AC-8
+- [x] Read "Services we use" → one h3 "Vercel" with what it does, what it receives, why, where, the safeguard, "One day", Vercel's own use, and a link to `https://vercel.com/legal/privacy-notice` → AC-8 · _Amended 2026-10-07 (Launch readiness step 6): "How long" now reads "The logs it keeps for us are deleted after one day. What it keeps for itself follows its own privacy policy", held by `services-section.test.tsx` "renders the real list"._
 - [x] Read "What we receive", "Transfers", "Your rights" and "Complaints" → legitimate interests (Article 6(1)(f)), that a page cannot load without the IP address, the transfer safeguards each explained, the six rights, one month, no fee, the ICO and the EDPB list both linked, and no automated decisions or profiling → AC-9
 - [x] Read the terms → each outline point in order: checking the result is your job, the licence kept separate, the cap at the greater of 12 months' fees or US$100 with the carve outs, consumer rights kept, Pakistani law and courts with UK and EU consumers keeping their own → AC-10
 - [x] Keyboard only on `/privacy` and `/terms` → every link reachable, underlined, with the 2px focus ring; headings run h1, h2, h3 with no level skipped → AC-18
@@ -46,9 +46,9 @@ Run against a production build (`pnpm build && pnpm start` with the Playwright b
 - [x] Add an older entry above a newer one, or `2026-02-30` → `pnpm test` fails → change list row
 - [x] Rename one heading in `PRIVACY_SECTIONS` → the page and `legal-pages.spec.ts` both follow it → h2 headings row
 - [x] Add a sample entry to `OUTSIDE_SERVICES` with a `connectOrigins` origin → it appears as an h3 on `/privacy`, its origin reaches the standard policy's `connect-src` and not `/tool`'s; remove it → Services row, AC-13, AC-14
-- [x] Check Vercel's entry reads "One day" and its safeguard text, and both complaint links resolve (ICO make a complaint; EDPB members) → Vercel retention, safeguard, complaint links rows
+- [x] Check Vercel's entry reads "One day" (since 2026-10-07: the logs kept for us deleted after one day, and Vercel's own copy under its own privacy policy) and its safeguard text, and both complaint links resolve (ICO make a complaint; EDPB members) → Vercel retention, safeguard, complaint links rows
 - [x] Read the terms → the cap reads "US$100", the free tier reads "the limits shown in the tool" with no number, the law reads Pakistan from `LEGAL.country` → Terms rows
-- [ ] On a Vercel preview deploy, read `/privacy` → the placeholder address shows; a production deploy refuses to build → Gate row
+- [ ] On a Vercel preview deploy, read `/privacy` → ~~the placeholder address shows; a production deploy refuses to build~~ `privacy@redactnest.com` shows, as on production: Launch readiness steps 1 and 2 set the real address and the Article 27 decision, so no deploy shows the placeholder any more, and the production refusal of a `.invalid` address or a `pending` decision is held by `legal.test.ts` and `config.test.ts` (Commands row 11; row 8's build now passes, since the facts are real) → Gate row · _Amended 2026-10-07. Production checked that day: `https://redactnest.com/privacy` links `mailto:privacy@redactnest.com`. The preview half is not read: previews sit behind Vercel's login (the latest, for 764b888, answers 302), so you read it signed in._
 
 ## Acceptance-criteria coverage
 - AC-1 … shell, h1, Last updated, h2s, change list: UI 1, 2; Commands 1

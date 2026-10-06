@@ -116,8 +116,13 @@ export const OUTSIDE_SERVICES: readonly OutsideService[] = Object.freeze([
     location: "The United States and other countries where Vercel operates",
     safeguard:
       "The Data Privacy Framework between the EU and the US, and standard contractual clauses",
-    // Vercel's runtime log retention on Pro, which spec 0011 decided.
-    retention: "One day",
+    // The one day is Vercel's log retention on Pro, which spec 0011 decided:
+    // those logs are kept for us, as our processor (Vercel's DPA, 2.5 and
+    // 4.1). What Vercel keeps for itself is Service-Generated Data, held as a
+    // controller under its privacy notice (DPA 2.11 and 4.2), so it has no day
+    // of ours to state. Read 7 October 2026 (Launch readiness step 6).
+    retention:
+      "The logs it keeps for us are deleted after one day. What it keeps for itself follows its own privacy policy",
     ownUse:
       "Vercel may also use some of this data, such as for platform security, as a controller in its own right under its own privacy policy.",
     // The final address, checked to resolve with no redirect on 2 October

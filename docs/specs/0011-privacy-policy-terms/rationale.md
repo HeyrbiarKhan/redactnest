@@ -60,11 +60,30 @@ A cheap web research pass on 2026-10-02 (full notes in `docs/.agent-cache/resear
 
 **Article 27 (EU and UK).** A controller outside the EU or the UK that offers services there needs a representative unless its processing is occasional, involves no large scale special category or criminal data, and is unlikely to risk people's rights. All three must hold. The EDPB reads "occasional" narrowly (not regular, outside the normal course of business). The host logs every visit, so the exemption is doubtful. The research put it more firmly than its sources (the EDPB guidelines were located, not read in full), so treat it as likely, not settled. Representative services exist; no price was confirmed. **Needs a lawyer.**
 
-**Vercel.** Runtime logs are kept 1 hour on Hobby, 1 day on Pro, 3 days on Enterprise, and 30 days with Observability Plus. Request, firewall and static asset logs follow the same periods and record the client IP address and user agent by default. Vercel processes data in the US and elsewhere, under the EU and US Data Privacy Framework and standard contractual clauses. Its DPA covers customer personal data as a processor, but treats "service generated data" (logs, metrics) as Vercel's own, and does not say plainly which side deployment request logs fall on: medium confidence, so it is Launch readiness step 6. Hobby forbids commercial use.
+**Vercel.** Runtime logs are kept 1 hour on Hobby, 1 day on Pro, 3 days on Enterprise, and 30 days with Observability Plus. Request, firewall and static asset logs follow the same periods and record the client IP address and user agent by default. Vercel processes data in the US and elsewhere, under the EU and US Data Privacy Framework and standard contractual clauses. Its DPA covers customer personal data as a processor, but treats "service generated data" (logs, metrics) as Vercel's own, and does not say plainly which side deployment request logs fall on: medium confidence, so it is Launch readiness step 6. Hobby forbids commercial use. _Settled 2026-10-07, below._
 
 **Choice of law.** Under Rome I Article 6, and the UK's retained version, a consumer keeps the mandatory protections of their own country whatever law the contract chooses, so Pakistani law cannot strip a UK or EU consumer of them. For business customers the choice may hold. **Needs a lawyer**, who should also name a city for the courts.
 
 **Article 13, easy to miss from outside the EU and the UK.** Name the representative if appointed; name the supervisory authority (the ICO, and each EU country's own); explain transfer safeguards rather than just naming them; state a retention period or the criteria for one.
+
+## Launch readiness step 6 (2026-10-07)
+
+Step 6 asked Vercel in writing whose the request logs are. You answered it from Vercel's published documents instead, read on 7 October 2026, because they already say it:
+
+| Source | What it says | What it means here |
+|---|---|---|
+| Vercel DPA, 2.5 and 4.1 | Customer Data, processed by Vercel as a processor on Pro | The logs Vercel keeps for us in the project are processed for us |
+| Vercel DPA, 2.11 and 4.2 | Service-Generated Data, "usage data and metadata", held by Vercel as a controller under its Privacy Notice | What Vercel takes from serving our site, for itself, is its own, kept as its Privacy Notice says |
+| Vercel terms, 10.4 | System Data, Vercel's own | The same, in the terms |
+| Vercel runtime logs docs | One day on Pro, 30 days with Observability Plus | The one day is how long the logs kept for us last, and INV-9 already keeps Observability Plus off |
+
+Our own code writes no log (AC-15, `no-console` in every zone), so those logs hold only Vercel's own request data, never a line of ours.
+
+**The answer: both.** The logs kept for us are ours, processed by Vercel, and deleted after one day. The usage data and metadata Vercel takes from them is its own, under its Privacy Notice, with no period we can state. The Vercel entry's `ownUse` ("as a controller in its own right under its own privacy policy") already said the second half, so it stands.
+
+**What was wrong.** Three places stated the one day as everything the host keeps: "Our host keeps it for one day" in What we receive, "the request data our host keeps for one day" in Your rights, and the entry's retention, "One day". The one day only describes the logs kept for us; Vercel's own copy follows its Privacy Notice. Each now says the logs kept for us are deleted after one day and that Vercel keeps what it uses for itself under its own privacy policy. The page keeps the words "privacy policy" for Vercel's document, as the entry's `ownUse` and its link ("Vercel's privacy policy") already do, so a reader meets one name for it; Vercel titles it Privacy Notice. Claim C10 follows, and the privacy policy gains a change entry dated 2026-10-07 (INV-3): the pages went live on 2026-10-06, so the change can no longer fold into `First published.`.
+
+Runners up: email Vercel anyway (slower, and an email answer is weaker than the signed DPA it would quote); drop the one day and point only to Vercel's notice (true, but it hides a period we can state and Article 13 asks for one where it exists).
 
 ## References
 
@@ -92,6 +111,7 @@ A cheap web research pass on 2026-10-02 (full notes in `docs/.agent-cache/resear
 - Vercel terms of service: https://vercel.com/legal/terms
 - Vercel data processing addendum: https://vercel.com/legal/dpa
 - Vercel runtime logs (retention by plan): https://vercel.com/docs/logs/runtime
+- Read by you on 2026-10-07 for Launch readiness step 6: the Vercel DPA (2.5, 2.11, 4.1, 4.2), the Vercel terms (10.4) and the runtime logs page, at the three addresses above
 - Vercel log drains reference (fields, client IP): https://vercel.com/docs/drains/reference/logs
 - Vercel deployment retention: https://vercel.com/docs/deployment-retention
 - The ICO's complaints page and the EDPB's list of member authorities: none verified; `/develop` confirms both addresses when it writes `COMPLAINT_AUTHORITIES`
