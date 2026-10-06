@@ -1,33 +1,35 @@
 import type { ReactNode } from "react";
 
-import { TOOL_PATH } from "@/lib/routes";
-import { Button } from "@/ui/button";
-import { PageContainer } from "@/ui/page-container";
-import { SiteHeader } from "@/ui/site-header";
+import { PageContainer, type PageWidth } from "@/ui/page-container";
 
-import { SiteNav } from "../site-nav";
+import { type NavItem, PageHeader } from "../site-nav";
 
 /**
- * The frame every page in the account group shares: the shell every page
- * has (spec 0003), and one narrow column. The header's button is a real page
- * load into the tool (`reload`), never `next/link`, so the tool opens under its
- * own content security policy with none of Clerk's script still running
- * (spec 0003, INV-10; spec 0012, INV-1).
+ * The frame every page in the account group shares: the header every page
+ * has, with Account current on Account and the pages under it and nothing
+ * current on sign in and sign up (spec 0013, AC-7 and AC-24), then one
+ * column. Narrow for the account pages; wide where sign in sets a panel
+ * beside Clerk's card (AC-23).
+ *
+ * The header's button is a real page load into the tool (`reload`), never
+ * `next/link`, so the tool opens under its own content security policy with
+ * none of Clerk's script still running (spec 0003, INV-10; spec 0012, INV-1).
  */
-export function AccountShell({ children }: { readonly children: ReactNode }) {
+export function AccountShell({
+  current,
+  width = "narrow",
+  children,
+}: {
+  readonly current?: NavItem;
+  readonly width?: PageWidth;
+  readonly children: ReactNode;
+}) {
   return (
     <>
-      <SiteHeader
-        nav={<SiteNav />}
-        action={
-          <Button href={TOOL_PATH} reload>
-            Redact a PDF
-          </Button>
-        }
-      />
+      <PageHeader current={current} />
       {/* The skip link's target, allowed to drop its outline (spec 0003, AC-14). */}
       <main id="main" tabIndex={-1} className="flex-1 py-10 focus:outline-none sm:py-14">
-        <PageContainer width="narrow" className="flex flex-col items-center gap-6">
+        <PageContainer width={width} className="flex flex-col items-center gap-6">
           {children}
         </PageContainer>
       </main>

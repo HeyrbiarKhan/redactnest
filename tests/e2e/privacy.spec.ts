@@ -41,8 +41,17 @@ const ENGINE_TIMEOUT = 60_000;
  */
 const FILE_NAME = "zzsecretpayroll2026.pdf";
 
-/** Same origin and not a document request: the page's own code and the engine. */
-const ASSET_PATHS = [/^\/_next\//, /^\/engine\//, /^\/favicon\./];
+/**
+ * Same origin and not a document request: the page's own code, the engine,
+ * and the icon files every page links (spec 0013, AC-3 and AC-21), all static.
+ */
+const ASSET_PATHS = [
+  /^\/_next\//,
+  /^\/engine\//,
+  /^\/favicon\./,
+  /^\/icon\.svg$/,
+  /^\/apple-icon\.png$/,
+];
 
 /**
  * Spec 0012, AC-9: the routes outside the account group, none of which may
@@ -66,11 +75,15 @@ const isClerkHost = (url: string): boolean => {
   return CLERK_HOST_ORIGINS.some((origin) => originCoversHost(origin, host));
 };
 
-/** The header's links into the account group, which plain `a` elements never prefetch. */
+/**
+ * Every link the header shows on this page (the lockup, Pricing, Account and,
+ * off `/tool`, Try it free), which plain `a` elements never prefetch.
+ */
 async function hoverHeaderLinks(page: Page): Promise<void> {
-  const header = page.getByRole("banner");
-  for (const name of ["Pricing", "Account"]) {
-    await header.getByRole("link", { name, exact: true }).hover();
+  const links = page.getByRole("banner").getByRole("link");
+  await expect(links.first()).toBeVisible();
+  for (const link of await links.all()) {
+    await link.hover();
   }
   await page.waitForLoadState("networkidle");
 }
@@ -300,6 +313,10 @@ test("no request carries the document, its text or its name", async ({ page }) =
  * The font requests are counted too, so this cannot pass on a page that simply
  * never asked for a font: a regression to a CDN stylesheet would show up as a
  * font request to someone else, not as no font request at all.
+ *
+ * Spec 0013, AC-29: the brand's icons and the home page's product shot are
+ * held to it as well, and the shot is counted on `/` for the same reason the
+ * fonts are, so an image moved to a CDN cannot pass as no image at all.
  */
 for (const path of PUBLIC_ROUTES) {
   test(`every request on ${path}, fonts included, stays on our own origin`, async ({
@@ -314,6 +331,14 @@ for (const path of PUBLIC_ROUTES) {
     const fonts = requests.filter((request) => request.resourceType() === "font");
 
     expect(fonts.length, "the page asked for no font file at all").toBeGreaterThan(0);
+    if (path === "/") {
+      const shots = requests.filter(
+        (request) =>
+          request.resourceType() === "image" &&
+          new URL(request.url()).pathname === "/_next/image",
+      );
+      expect(shots.length, "the home page asked for no product shot").toBeGreaterThan(0);
+    }
     for (const request of requests) {
       expect(new URL(request.url()).origin, `${request.url()} is a third party`).toBe(
         origin,

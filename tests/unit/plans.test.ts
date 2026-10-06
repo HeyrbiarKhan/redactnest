@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
+import { FREE_PLAN, PRO_PLAN, SIGN_IN_PANEL } from "@/lib/plans";
 
 /**
  * The two plans' names and Pro's price line. Spec 0012, AC-13, AC-15 and
@@ -47,5 +47,17 @@ describe("both plans", () => {
     expect(() => {
       (PRO_PLAN as { priceLine: string }).priceLine = "$0 a month";
     }).toThrow(TypeError);
+  });
+});
+
+/** Spec 0013, AC-23: the panel beside Clerk's card. */
+describe("SIGN_IN_PANEL", () => {
+  it("says what signing in is for, with the cap it is given", () => {
+    expect(SIGN_IN_PANEL.title).toBe("Sign in to use Pro");
+    expect(SIGN_IN_PANEL.line(50)).toBe(
+      "Pro opens documents up to 50 pages. Your account needs only your email address, and your documents never touch it: they stay in your browser.",
+    );
+    expect(SIGN_IN_PANEL.line(80)).toContain("up to 80 pages");
+    expect(SIGN_IN_PANEL.pricing).toBe("See pricing");
   });
 });

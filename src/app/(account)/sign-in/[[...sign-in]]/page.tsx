@@ -7,7 +7,9 @@ import { config } from "@/config";
 import { billing } from "@/config/billing";
 import { ACCOUNT_PATH, SIGN_IN_PATH, SIGN_UP_PATH } from "@/lib/routes";
 
+import { AccountShell } from "../../account-shell";
 import { landingAfterSignIn, pagePath } from "../../landing";
+import { SignInPanel } from "../../sign-in-panel";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -38,12 +40,19 @@ export default async function SignInPage({
     redirect(`${pagePath(SIGN_IN_PATH, (await params)["sign-in"])}${clean}`);
   }
 
+  // Nothing is current in the header here (spec 0013, AC-7). Wide, with our
+  // panel beside Clerk's card from md and above it below (AC-23).
   return (
-    <SignIn
-      path={SIGN_IN_PATH}
-      signUpUrl={SIGN_UP_PATH}
-      forceRedirectUrl={landing}
-      signUpForceRedirectUrl={landing}
-    />
+    <AccountShell width="wide">
+      <div className="grid w-full items-center gap-10 md:grid-cols-[minmax(0,1fr)_auto]">
+        <SignInPanel />
+        <SignIn
+          path={SIGN_IN_PATH}
+          signUpUrl={SIGN_UP_PATH}
+          forceRedirectUrl={landing}
+          signUpForceRedirectUrl={landing}
+        />
+      </div>
+    </AccountShell>
   );
 }

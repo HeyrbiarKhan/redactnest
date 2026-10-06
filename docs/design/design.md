@@ -1,11 +1,13 @@
 ---
 name: redactnest-calm-teal
 source: image
-references: "docs/design/references/01-tool-review.png, 02-upload-empty.png, 03-warnings.png, 04-landing-hero.png (visual style only; their layouts, logos, navigation, copy and claims are not used)"
+references: "docs/design/references/01-tool-review.png, 02-upload-empty.png, 03-warnings.png, 04-landing-hero.png (visual style, and since spec 0013 layout and composition too; their logos, navigation items, copy and claims are not used)"
 character: "Calm, careful and plain spoken. A warm off white page, white cards with quiet edges, one soft teal accent and Inter for every word. It should feel like a trustworthy tool a small business hands its most sensitive files to, never like a marketing page."
 tokens: "real values live in src/app/globals.css (@theme); read them there, never duplicated here. The decision and the full token table are spec 0003."
 contrast: "checked by tests/unit/contrast.test.ts on every run: body ink 14.97:1 on canvas, muted ink 5.91:1, white on accent 5.09:1, focus ring 7.96:1 on canvas. Light only."
 ---
+
+**Updated**: 2026-10-06, from spec [0013](../0013-brand-ui-refresh/index.md): the references give layout and composition as well as visual style; the composition patterns describe the shell, the three area tool grid with its rail, and the landing hero; header nav items are the one link not underlined at rest; and the `frontend-design` skill yields to spec 0013 and spec 0003 wherever they pin a choice. Then, after your read of the built pages (spec 0013's task 20): the finds and strips band became two cards on the page's `canvas`, and one rule in `globals.css` sets every cursor. Then, on 2026-10-07, after your read of slice 6 (spec 0013's task 32, built by its slice 7): the two cards follow your mockup, with square teal tiles and subtitles, Finds as soft rows, Strips in ruled columns set by the card's own width, and a closing rule and info line, in `Card`'s `spacious` form; `Button` gains the `danger` and `danger-secondary` variants, for deleting an account only, and a `busy` state; and an icon tile may be square.
 
 ## Build mandate
 
@@ -14,26 +16,30 @@ You are a senior product designer shipping a real product surface, at the bar in
 ## Character & direction
 
 - **Warm, not clinical.** The page is the warm off white `canvas`; content sits on white `surface` cards with a 1px `border` and the lightest shadow. Depth comes from edges, not from heavy shadows.
-- **One accent, used sparingly.** Teal marks the primary action, a checked box, the drag over state, line icons and the highlighted match. It is never decoration and never a background for a whole section.
+- **One accent, used sparingly.** Teal marks the primary action, a checked box, the drag over state, line icons and the highlighted match. It is never decoration and never a background for a whole section. Red is not a second accent: it marks only the two buttons that delete an account (spec 0013, INV-12).
 - **Honest type.** Inter only, one clear hierarchy: a bold display line on the home page, a semibold title on the tool, 16px body, 14px secondary text and nothing smaller.
-- **Tone carries more than colour.** Every warning, note and error has its own icon shape and a hidden tone word; a highlighted match is also semibold; links are always underlined.
+- **Tone carries more than colour.** Every warning, note and error has its own icon shape and a hidden tone word; a highlighted match is also semibold; links are always underlined, except the header's nav items, which sit in a labelled row and mark the current page with `aria-current`, semibold text and a 2px accent bar (spec 0013, AC-7).
 
 ## Composition patterns
 
-- **Shell.** Every page: skip link, a static white header (wordmark home on the left, at most one action on the right), `<main id="main">`, then the footer with the AGPL source link. The header never sticks.
-- **Tool page.** One centred column, `PageContainer narrow` (44rem). Title and a lock line, then the drop zone, then a polite live region for progress and the opened document card, then any failure as a `danger` callout beside that region, never inside it.
-- **Home and marketing pages.** `PageContainer wide` (72rem), left aligned. Feature 15 owns the full landing page (eyebrow, feature trio); until then the home page is exactly what spec 0003, AC-13 lists.
+- **Shell.** Every page: skip link, a static white header (the lockup home on the left, then the Site nav, Account and one action at the right, wrapping below the lockup on a phone), `<main id="main">`, then the footer: a brand column and the Product and Legal groups, ending with the AGPL notice. The header never sticks. Spec 0013, AC-7 and AC-8.
+- **Tool page.** `PageContainer wide`, the title, then one grid of three areas that keep their order in every step: A, the document (the full drop zone and terms line, or the file bar); B, the rail (the polite region, the plan card, the refusal or lost callout, then the action panel with the lock line, sticky from `lg`; or at idle the steps and the lock line); C, the found items in one card. From `lg` A sits beside B while nothing is open, then across the top with C left of B; on a phone it reads A, B, C. Spec 0013, AC-14 to AC-19.
+- **Home page.** `PageContainer wide`, reference 04's hero: the eyebrow, the display headline, the lead, two large buttons and the cap line on the left, the real product shot (the one larger shadow on the site) on the right from `lg`; the feature trio; then what RedactNest finds and strips, as two white cards on the page's `canvas` (no full width strip), side by side and equal height from `md`, built to your mockup (`references/05-finds-and-strips.png`). Each is a `Card` in its `spacious` form (`p-7`, and `gap-6` between its parts), kept for these two cards, in three parts: a 64px square `accent-soft` tile holding the card's 28px `accent` icon beside the `h3` and a muted subtitle; a real list; and a close, a `border` rule, then an `accent` info icon beside a muted line. Finds puts each detector on a `canvas` row with a 48px square tile of its own icon, and nothing in a row acts. Strips gives each stripped kind a 32px check circle and sets the one list in CSS columns by the card's own width, never the window's (a container query): one column below 26rem of content, two 48px apart with a `border` rule between them from 26rem, and 64px apart from 29rem. Spec 0013, AC-10 to AC-13. Feature 15's search pages reuse the shell and `FeatureList`.
+- **Other pages.** Pricing's two plan cards with Pro's accent edge; sign in's panel beside Clerk's card; the legal pages' On this page list beside a 44rem text column from `lg`. Spec 0013, AC-22 to AC-25.
 - **Review (feature 8).** A card of `ChecklistGroup`s, each a `details` with rows of `ChecklistItem`. A "select all" for a group goes in the card header or as its first row, never in the summary.
 
 ## Component & usage rules (do's and don'ts)
 
 - Do use a token for every colour. Don't use Tailwind's default palette (it is wiped), an arbitrary colour (`bg-[#…]`), or an alpha modifier (`text-ink/70`); lint rejects all three. A quieter text colour is `ink-muted`.
 - Do add a new foreground and background pairing to spec 0003's contract and to `tests/unit/contrast.test.ts` in the same change that introduces it.
-- Do use `Button` for anything that acts or navigates like a button: `primary` for the one main action in view, `secondary` beside it, `link` for inline actions. Heights are minimums (40px `md`, 48px `lg`), never fixed.
+- Do use `Button` for anything that acts or navigates like a button: `primary` for the one main action in view, `secondary` beside it, `link` for inline actions. Heights are minimums (40px `md`, 48px `lg`), never fixed. Red is for deleting an account and nothing else (spec 0013, AC-35 and INV-12): `danger`, solid red with white words, for the step that destroys it, and `danger-secondary`, a red outline, for the button that opens that step. A failure stays a `danger` callout or a red line, never a red button.
+- Do make a button `busy` while its work keeps the visitor waiting: it shows a spinner before its working words, keeps focus and its rest colours, and drops every press until the work ends, and a visually hidden polite region that was in the page from the first render says the same words. Don't disable it instead, because a disabled button drops focus to the page (spec 0013, AC-34 and INV-13).
 - Don't use `next/link` to enter or leave `/tool`. Leaving has to be a real page load so `pagehide` ends the session (spec 0002, INV-6), and entering should be one so the tool runs under its own strict content security policy.
-- Radius: `rounded-lg` on controls, `rounded-xl` on cards, callouts and the drop zone, `rounded-full` on badges and icon circles, `rounded-md` on the checkbox. Card padding `p-5`, column gaps `gap-6`.
+- Radius: `rounded-lg` on controls, `rounded-xl` on cards, callouts and the drop zone, `rounded-full` on badges and icon circles, `rounded-md` on the checkbox. A square icon tile is `rounded-lg` at `sm` and `rounded-xl` at `md` and `lg`, never rounder than the card it sits in. Card padding `p-5` with `gap-4` between its parts, or `p-7` with `gap-6` in `Card`'s `spacious` form, which only the home page's two cards use; column gaps `gap-6`.
 - Icons come from `lucide-react`, imported by name, 20px with a 1.75 stroke, and hidden from assistive technology unless they are the only label.
+- Don't set a cursor in a component. One rule in `src/app/globals.css` gives whatever can be clicked the pointer and whatever is disabled `not-allowed`, Clerk's card included, and lint rejects a `cursor-` utility (spec 0013, AC-33).
 - Document derived text reaches a primitive only as a prop and renders only as React text. Never `dangerouslySetInnerHTML`, never `document.title`, never the URL.
+- The `frontend-design` skill guides any axis these rules and the specs leave free. Where spec 0013 or spec 0003 pins a choice (Inter alone, the warm `canvas`, the one teal, rounded cards, the eyebrow), the spec wins.
 
 ## Responsive & accessibility direction
 

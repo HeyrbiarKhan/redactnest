@@ -5,7 +5,7 @@ import { cx } from "@/lib/cx";
 export type PageWidth = "narrow" | "wide";
 
 interface PageContainerProps {
-  /** `narrow` (44rem) for the tool's one column, `wide` (72rem) for everything else. */
+  /** `narrow` (44rem) for a reading or account column, `wide` (72rem) for everything else. */
   readonly width: PageWidth;
   /** Layout only, such as the gap between the column's children. */
   readonly className?: string;

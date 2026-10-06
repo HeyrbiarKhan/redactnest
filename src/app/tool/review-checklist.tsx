@@ -9,6 +9,7 @@ import {
   NOTHING_FOUND,
   NOTHING_FOUND_PARTLY,
 } from "@/lib/detectors";
+import { FOUND_ITEMS_NOUN, FOUND_ITEMS_TITLE } from "@/lib/flow-text";
 import { CONCEALED_TEXT } from "@/lib/page-findings";
 import {
   DETECTOR_KINDS,
@@ -21,6 +22,7 @@ import { Card } from "@/ui/card";
 import { ChecklistGroup } from "@/ui/checklist-group";
 import { ChecklistItem } from "@/ui/checklist-item";
 import { ChecklistSelectAll, type SelectAllState } from "@/ui/checklist-select-all";
+import { CountBadge } from "@/ui/count-badge";
 import { EmptyState } from "@/ui/empty-state";
 
 interface ReviewChecklistProps {
@@ -80,9 +82,10 @@ function selectAllState(
  * that row and its group's select all again and nothing else.
  *
  * Rendered by `tool-client` outside the polite live region: a list this long
- * read out as it appeared would drown the phase line. The coverage note sits
- * above it always, so a short list, or an empty one, never reads as a
- * complete redaction.
+ * read out as it appeared would drown the phase line. One card, titled Found
+ * items with a count of every row found, blocked ones included (spec 0013,
+ * AC-19); the coverage note comes first inside it, always, so a short list, or
+ * an empty one, never reads as a complete redaction.
  */
 export function ReviewChecklist({
   matches,
@@ -105,12 +108,18 @@ export function ReviewChecklist({
   const nothingFound = partly ? NOTHING_FOUND_PARTLY : NOTHING_FOUND;
 
   return (
-    <div data-testid="review" className="flex flex-col gap-4">
-      <Callout tone="info" data-testid="coverage">
-        {partly ? COVERAGE_NOTE_PARTLY : COVERAGE_NOTE}
-      </Callout>
+    <div data-testid="review">
+      <Card
+        title={FOUND_ITEMS_TITLE}
+        badge={
+          <CountBadge count={matches.length} noun={FOUND_ITEMS_NOUN} tone="neutral" />
+        }
+        data-testid="checklist"
+      >
+        <Callout tone="info" data-testid="coverage">
+          {partly ? COVERAGE_NOTE_PARTLY : COVERAGE_NOTE}
+        </Callout>
 
-      <Card title="What RedactNest found" data-testid="checklist">
         {groups.length === 0 ? (
           <EmptyState
             icon={SearchCheck}

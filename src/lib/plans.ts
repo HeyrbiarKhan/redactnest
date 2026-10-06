@@ -17,3 +17,14 @@ export const PRO_PLAN = Object.freeze({
   /** Polar's "RedactNest Pro" product, $19 monthly. */
   priceLine: "$19 a month",
 });
+
+/**
+ * The panel beside Clerk's card on sign in and sign up (spec 0013, AC-23).
+ * Pro's cap arrives from `config` as an argument, never written here (INV-8).
+ */
+export const SIGN_IN_PANEL = Object.freeze({
+  title: `Sign in to use ${PRO_PLAN.name}`,
+  line: (paid: number) =>
+    `${PRO_PLAN.name} opens documents up to ${paid} pages. Your account needs only your email address, and your documents never touch it: they stay in your browser.`,
+  pricing: "See pricing",
+});

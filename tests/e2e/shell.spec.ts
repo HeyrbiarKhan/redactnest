@@ -5,7 +5,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { SOURCE_URL } from "./build-env";
 
 /**
- * The routes around the tool: the landing page and the layout every page shares.
+ * The routes around the tool: the landing page and the layout every page shares,
+ * and since spec 0013 the brand on every page: the header, the footer, the head
+ * tags and the 404.
  *
  * Deliberately thin. Feature 15 builds the real landing page, so nothing here
  * asserts wording it will replace. What is asserted is what the scaffold
@@ -22,7 +24,7 @@ test.describe("getting to the tool", () => {
     await page.goto("/");
 
     await expect(
-      page.getByRole("main").getByRole("link", { name: /redact a pdf/i }),
+      page.getByRole("main").getByRole("link", { name: "Remove text from a PDF" }),
     ).toBeVisible();
   });
 
@@ -32,7 +34,7 @@ test.describe("getting to the tool", () => {
 
     await page
       .getByRole("main")
-      .getByRole("link", { name: /redact a pdf/i })
+      .getByRole("link", { name: "Remove text from a PDF" })
       .focus();
     await page.keyboard.press("Enter");
 
@@ -49,12 +51,12 @@ test.describe("getting to the tool", () => {
  */
 test.describe("every way into the tool is a real page load", () => {
   const BUTTONS = [
-    ["the header's", "banner"],
-    ["the page's", "main"],
+    ["the header's", "banner", "Try it free"],
+    ["the hero's", "main", "Remove text from a PDF"],
   ] as const;
 
-  for (const [which, landmark] of BUTTONS) {
-    test(`${which} Redact a PDF button loads /tool as a document`, async ({ page }) => {
+  for (const [which, landmark, name] of BUTTONS) {
+    test(`${which} ${name} button loads /tool as a document`, async ({ page }) => {
       await page.goto("/");
 
       const documentLoads: string[] = [];
@@ -64,10 +66,7 @@ test.describe("every way into the tool is a real page load", () => {
         }
       });
 
-      await page
-        .getByRole(landmark)
-        .getByRole("link", { name: /redact a pdf/i })
-        .click();
+      await page.getByRole(landmark).getByRole("link", { name }).click();
       await expect(page).toHaveURL(/\/tool$/);
 
       expect(documentLoads).toContain("/tool");
@@ -79,6 +78,19 @@ test.describe("every way into the tool is a real page load", () => {
       expect(new URL(loadedAt).pathname).toBe("/tool");
     });
   }
+
+  /** Spec 0013, AC-9: the 404's own Try it free, as every other way in. */
+  test("the 404's Try it free button loads /tool as a document", async ({ page }) => {
+    await page.goto("/no-such-page");
+
+    await page.getByRole("main").getByRole("link", { name: "Try it free" }).click();
+    await expect(page).toHaveURL(/\/tool$/);
+
+    const loadedAt = await page.evaluate(
+      () => performance.getEntriesByType("navigation")[0]?.name ?? "",
+    );
+    expect(new URL(loadedAt).pathname).toBe("/tool");
+  });
 
   /**
    * INV-11, in a real browser. The links above are real page loads, but a stray
@@ -148,11 +160,11 @@ test.describe("every way into the tool is a real page load", () => {
 
     // `next/link` prefetches on sight and again on hover, so both are given
     // their chance before the count is read.
-    for (const landmark of ["banner", "main"] as const) {
-      await page
-        .getByRole(landmark)
-        .getByRole("link", { name: /redact a pdf/i })
-        .hover();
+    for (const [landmark, name] of [
+      ["banner", "Try it free"],
+      ["main", "Remove text from a PDF"],
+    ] as const) {
+      await page.getByRole(landmark).getByRole("link", { name }).hover();
     }
     await page.waitForLoadState("networkidle");
 
@@ -273,5 +285,352 @@ test.describe("the document title", () => {
     await page.goto("/tool");
 
     await expect(page).toHaveTitle(/Redact a PDF.*RedactNest/);
+  });
+});
+
+/**
+ * Spec 0013, AC-7 and AC-30. The header every page shows: the lockup home, the
+ * Site nav with Pricing, Account, then the "Try it free" button everywhere but
+ * `/tool`. No item names the tool, so on `/tool` nothing is current.
+ */
+test.describe("the header", () => {
+  const CURRENT = [
+    ["/tool", null],
+    ["/pricing", "Pricing"],
+    ["/", null],
+    ["/privacy", null],
+    ["/terms", null],
+    ["/no-such-page", null],
+  ] as const;
+
+  for (const [path, current] of CURRENT) {
+    test(`marks ${current ?? "nothing"} as the current page on ${path}`, async ({
+      page,
+    }) => {
+      await page.goto(path);
+      const header = page.getByRole("banner");
+
+      const marked = header.locator('[aria-current="page"]');
+      if (current === null) {
+        await expect(marked).toHaveCount(0);
+      } else {
+        await expect(marked).toHaveText([current]);
+        // Semibold, and the 2 pixel accent bar beneath.
+        expect(await marked.evaluate((link) => getComputedStyle(link).fontWeight)).toBe(
+          "600",
+        );
+        const bar = await marked.evaluate((link) => {
+          const after = getComputedStyle(link, "::after");
+          return { width: after.borderBottomWidth, style: after.borderBottomStyle };
+        });
+        expect(bar).toEqual({ width: "2px", style: "solid" });
+      }
+      // One way home per page: the footer's lockup is not a link.
+      await expect(
+        page.getByRole("link", { name: "RedactNest", exact: true }),
+      ).toHaveCount(1);
+    });
+  }
+
+  test("offers Try it free on every page but the tool", async ({ page }) => {
+    await page.goto("/pricing");
+    await expect(
+      page.getByRole("banner").getByRole("link", { name: "Try it free" }),
+    ).toHaveAttribute("href", "/tool");
+
+    await page.goto("/tool");
+    await expect(
+      page.getByRole("banner").getByRole("link", { name: "Try it free" }),
+    ).toHaveCount(0);
+  });
+
+  test("gives every nav item a target at least 40 pixels tall", async ({ page }) => {
+    await page.goto("/");
+    const header = page.getByRole("banner");
+
+    for (const name of ["Pricing", "Account"]) {
+      const box = await header.getByRole("link", { name, exact: true }).boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(40);
+    }
+  });
+
+  /** AC-30: the button is the way in, so no header link is named for the tool. */
+  for (const path of ["/", "/tool", "/pricing"]) {
+    test(`names no Redact item on ${path}`, async ({ page }) => {
+      await page.goto(path);
+      const header = page.getByRole("banner");
+
+      for (const name of ["Redact", "Redact a PDF"]) {
+        await expect(header.getByRole("link", { name, exact: true })).toHaveCount(0);
+      }
+    });
+  }
+
+  /**
+   * Below `sm` the lockup sits alone on the first row and everything else
+   * wraps beneath it in page order, so focus never moves back up the screen.
+   */
+  test("wraps below the lockup in page order at 320 pixels, with no sideways scroll", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto("/");
+    const header = page.getByRole("banner");
+
+    const tops: number[] = [];
+    for (const name of ["RedactNest", "Pricing", "Account", "Try it free"]) {
+      const box = await header.getByRole("link", { name, exact: true }).boundingBox();
+      tops.push(box?.y ?? Number.NaN);
+    }
+    const [lockup = Number.NaN, ...rest] = tops;
+    for (const top of rest) expect(top).toBeGreaterThan(lockup);
+    expect(rest).toEqual([...rest].sort((a, b) => a - b));
+
+    const scroll = await page.evaluate(() => ({
+      width: document.documentElement.scrollWidth,
+      viewport: document.documentElement.clientWidth,
+    }));
+    expect(scroll.width).toBeLessThanOrEqual(scroll.viewport);
+  });
+
+  /** From `sm`, the lockup, the nav, Account and the button on one row, the button last. */
+  for (const width of [640, 1280]) {
+    test(`sits on one row with the button at the right at ${width} pixels`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/");
+      const header = page.getByRole("banner");
+
+      const boxes = [];
+      for (const name of ["RedactNest", "Pricing", "Account", "Try it free"]) {
+        const box = await header.getByRole("link", { name, exact: true }).boundingBox();
+        if (box === null) throw new Error(`${name} has no box`);
+        boxes.push(box);
+      }
+      const middles = boxes.map(({ y, height }) => y + height / 2);
+      for (const middle of middles) expect(Math.abs(middle - middles[0])).toBeLessThan(2);
+      const lefts = boxes.map(({ x }) => x);
+      expect(lefts).toEqual([...lefts].sort((a, b) => a - b));
+    });
+  }
+
+  /**
+   * The current item in semibold `ink` over its `accent` bar, the others in
+   * `ink-muted`, underlined under the pointer only, read as the browser paints
+   * them against the tokens in `globals.css`.
+   */
+  test("paints the current item ink over an accent bar, and underlines only the others on hover", async ({
+    page,
+  }) => {
+    await page.goto("/pricing");
+    const header = page.getByRole("banner");
+    const current = header.getByRole("link", { name: "Pricing", exact: true });
+    const other = header.getByRole("link", { name: "Account", exact: true });
+    const token = (role: string) =>
+      page.evaluate((name) => {
+        const probe = document.createElement("span");
+        probe.style.color = `var(--color-${name})`;
+        document.body.append(probe);
+        const colour = getComputedStyle(probe).color;
+        probe.remove();
+        return colour;
+      }, role);
+    const look = (link: typeof current) =>
+      link.evaluate((element) => ({
+        colour: getComputedStyle(element).color,
+        underline: getComputedStyle(element).textDecorationLine,
+        bar: getComputedStyle(element, "::after").borderBottomColor,
+      }));
+
+    const [ink, muted, accent] = [
+      await token("ink"),
+      await token("ink-muted"),
+      await token("accent"),
+    ];
+    expect(await look(current)).toMatchObject({
+      colour: ink,
+      underline: "none",
+      bar: accent,
+    });
+    expect(await look(other)).toMatchObject({ colour: muted, underline: "none" });
+
+    await other.hover();
+    expect((await look(other)).underline).toBe("underline");
+    await current.hover();
+    expect((await look(current)).underline).toBe("none");
+  });
+});
+
+/** Spec 0013, AC-8. The footer's brand column and link groups. */
+test.describe("the footer", () => {
+  for (const path of ["/", "/tool"]) {
+    test(`shows the brand line and both groups on ${path}`, async ({ page }) => {
+      await page.goto(path);
+      const footer = page.getByRole("contentinfo");
+
+      await expect(footer).toContainText("RedactNest");
+      await expect(footer).toContainText("PDF redaction in your browser.");
+      await expect(
+        footer.getByRole("navigation", { name: "Product" }).getByRole("link"),
+      ).toHaveText(["Redact a PDF", "Pricing"]);
+      await expect(
+        footer.getByRole("navigation", { name: "Legal" }).getByRole("link"),
+      ).toHaveText(["Privacy policy", "Terms of service"]);
+      // The lockup here is not a link, and the notice is still the one paragraph.
+      await expect(footer.getByRole("link", { name: "RedactNest" })).toHaveCount(0);
+      await expect(footer.locator("p")).toHaveCount(1);
+    });
+  }
+});
+
+/**
+ * Spec 0013, AC-3 to AC-5. The icons and the social card every page links,
+ * all from our own origin, with neither content security policy changed: no
+ * manifest, and no policy violation on any page.
+ */
+test.describe("the head tags", () => {
+  for (const path of ["/", "/tool", "/pricing", "/privacy"]) {
+    test(`link the icons and the social card on ${path}, with no policy violation`, async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        const seen: string[] = [];
+        Reflect.set(window, "__violations", seen);
+        document.addEventListener("securitypolicyviolation", (event) => {
+          seen.push(`${event.violatedDirective} ${event.blockedURI}`);
+        });
+      });
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+
+      const icons = await page.evaluate(() =>
+        [
+          ...document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]'),
+        ].map((link) => ({
+          rel: link.getAttribute("rel"),
+          path: new URL(link.getAttribute("href") ?? "", location.href).pathname,
+          type: link.getAttribute("type"),
+        })),
+      );
+      expect(icons).toEqual([
+        { rel: "icon", path: "/favicon.ico", type: "image/x-icon" },
+        { rel: "icon", path: "/icon.svg", type: "image/svg+xml" },
+        { rel: "apple-touch-icon", path: "/apple-icon.png", type: "image/png" },
+      ]);
+      for (const { path: iconPath, type } of icons) {
+        const response = await page.request.get(iconPath);
+        expect(response.status()).toBe(200);
+        expect(response.headers()["content-type"]).toContain(type ?? "");
+      }
+
+      const meta = (selector: string) =>
+        page.locator(selector).first().getAttribute("content");
+      for (const selector of [
+        'meta[property="og:image"]',
+        'meta[name="twitter:image"]',
+      ]) {
+        expect(await meta(selector)).toMatch(
+          /^https:\/\/redactnest\.test\/opengraph-image\.png(\?|$)/,
+        );
+      }
+      expect(await meta('meta[name="twitter:card"]')).toBe("summary_large_image");
+      expect(await meta('meta[property="og:image:alt"]')).toBe(
+        "RedactNest. PDF redaction in your browser. Redaction that actually removes the text.",
+      );
+      await expect(page.locator('link[rel="manifest"]')).toHaveCount(0);
+
+      expect(await page.evaluate(() => Reflect.get(window, "__violations"))).toEqual([]);
+    });
+  }
+});
+
+/** Spec 0013, AC-9. Every address that is not a page. */
+test.describe("the 404 page", () => {
+  test("answers 404, unindexed, with a way into the tool and a way home", async ({
+    page,
+  }) => {
+    const response = await page.goto("/no-such-page");
+
+    expect(response?.status()).toBe(404);
+    await expect(page).toHaveTitle("Page not found · RedactNest");
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+      "content",
+      /noindex/,
+    );
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "This page doesn’t exist",
+    );
+    const main = page.getByRole("main");
+    await expect(main).toContainText(
+      "The address may be mistyped, or the page may have moved.",
+    );
+    await expect(main.getByRole("link", { name: "Try it free" })).toHaveAttribute(
+      "href",
+      "/tool",
+    );
+    await expect(main.getByRole("link", { name: "Go to the home page" })).toHaveAttribute(
+      "href",
+      "/",
+    );
+    // The shell every page has.
+    await expect(page.getByRole("banner")).toHaveCount(1);
+    await expect(page.getByRole("contentinfo")).toHaveCount(1);
+  });
+});
+
+/** Spec 0013, AC-22. Pricing's two cards, under today's title and lead. */
+test.describe("the pricing page", () => {
+  test("keeps its title and lead, then sets Free and Pro side by side from md", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/pricing");
+
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Pricing");
+    await expect(page.getByRole("main")).toContainText(
+      "Every plan redacts in your own browser, and your document never leaves your machine.",
+    );
+    const free = page.getByRole("region", { name: "Free" });
+    const pro = page.getByRole("region", { name: "Pro" });
+    await expect(free).toContainText("Up to 3 pages a document");
+    await expect(pro).toContainText("$19 a month");
+    await expect(pro).toContainText("Up to 50 pages a document");
+    await expect(pro).toContainText("Everything in Free");
+    const [freeBox, proBox] = [await free.boundingBox(), await pro.boundingBox()];
+    expect(freeBox?.y).toBe(proBox?.y);
+    expect((freeBox?.x ?? 0) + (freeBox?.width ?? 0)).toBeLessThan(proBox?.x ?? 0);
+    expect(await pro.evaluate((card) => getComputedStyle(card).borderTopWidth)).toBe(
+      "2px",
+    );
+
+    await expect(pro.getByRole("link", { name: "Subscribe" })).toHaveAttribute(
+      "href",
+      "/account/subscribe",
+    );
+  });
+
+  test("stacks the cards below md", async ({ page }) => {
+    await page.setViewportSize({ width: 600, height: 900 });
+    await page.goto("/pricing");
+
+    const free = await page.getByRole("region", { name: "Free" }).boundingBox();
+    const pro = await page.getByRole("region", { name: "Pro" }).boundingBox();
+    expect((free?.y ?? 0) + (free?.height ?? 0)).toBeLessThanOrEqual(pro?.y ?? 0);
+  });
+
+  /** INV-4: Free's way into the tool is a real page load. */
+  test("loads /tool as a document from Free's card", async ({ page }) => {
+    await page.goto("/pricing");
+
+    await page
+      .getByRole("region", { name: "Free" })
+      .getByRole("link", { name: "Try it free" })
+      .click();
+    await expect(page).toHaveURL(/\/tool$/);
+    const loadedAt = await page.evaluate(
+      () => performance.getEntriesByType("navigation")[0]?.name ?? "",
+    );
+    expect(new URL(loadedAt).pathname).toBe("/tool");
   });
 });

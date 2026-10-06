@@ -86,9 +86,9 @@ export function ChecklistItem({
         htmlFor={id}
         className={cx(
           "flex items-start gap-3 rounded-lg px-3 py-3",
-          inactive
-            ? "cursor-not-allowed"
-            : "cursor-pointer transition-colors duration-150 hover:bg-canvas motion-reduce:transition-none",
+          // The cursor comes from the one rule in `globals.css` (spec 0013, AC-33).
+          !inactive &&
+            "transition-colors duration-150 hover:bg-canvas motion-reduce:transition-none",
         )}
       >
         <Checkbox

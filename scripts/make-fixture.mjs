@@ -21,6 +21,7 @@ import {
   detectPhone,
   detectUnicode,
   detectWraps,
+  sampleAgreement,
 } from "./lib/detection-fixtures.mjs";
 import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
@@ -441,6 +442,11 @@ const FIXTURES = [
     "detect-wraps.pdf",
     detectWraps(),
     "addresses wrapped across lines, and across blocks",
+  ],
+  [
+    "sample-agreement.pdf",
+    sampleAgreement(),
+    "a two page employment agreement, 4 email addresses and 3 phone numbers",
   ],
   // Spec 0006: reading every page before review.
   ["read-pages.pdf", readPages(), "one page per reading rule and near miss"],

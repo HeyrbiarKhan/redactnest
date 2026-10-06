@@ -27,6 +27,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToolClient } from "@/app/tool/tool-client";
 import { config } from "@/config";
+import { IDLE_STEPS } from "@/lib/flow-text";
 import {
   asMatchId,
   EngineError,
@@ -894,20 +895,56 @@ describe("the plan, said out loud (spec 0012, AC-5 and AC-6)", () => {
       expect(screen.getByRole("status")).toHaveFocus();
     });
 
-    it("sits directly above the drop zone, and stays there once a file opens", async () => {
+    /**
+     * Spec 0013, AC-15 and AC-16, as spec 0012 AC-5 is amended: the plan card
+     * sits in the rail, after the full drop zone, and after the document card
+     * once a file opens.
+     */
+    it("follows the drop zone, and the document card once a file opens", async () => {
       render(<ToolClient />);
       answerWith(answer("none"));
 
-      const above = (element: HTMLElement) =>
+      const follows = (element: HTMLElement) =>
         Boolean(
-          screen.getByRole("status").compareDocumentPosition(element) &
+          element.compareDocumentPosition(screen.getByRole("status")) &
           Node.DOCUMENT_POSITION_FOLLOWING,
         );
-      expect(above(screen.getByTestId("drop-area"))).toBe(true);
+      expect(follows(screen.getByTestId("drop-area"))).toBe(true);
 
       await chooseFile(pdfFile());
       await screen.findByTestId("page-count");
-      expect(above(screen.getByTestId("file-bar"))).toBe(true);
+      expect(follows(screen.getByTestId("file-bar"))).toBe(true);
+      expect(follows(screen.getByRole("region", { name: "Document opened" }))).toBe(true);
+    });
+
+    /**
+     * Spec 0013, AC-18. Its own markup in an `info-bg` box, not a callout, so
+     * nothing but the plan's words is announced, with its links in
+     * `accent-strong`. Hidden, never drawn empty, until the first answer.
+     */
+    it("is a box of its own words, with no icon and no hidden tone word", () => {
+      render(<ToolClient />);
+      const card = screen.getByTestId("plan-card");
+      expect(card).toHaveClass("sr-only");
+
+      answerWith(answer("none"));
+
+      expect(card).not.toHaveClass("sr-only");
+      expect(card).toHaveClass(
+        "rounded-xl",
+        "border",
+        "border-info-border",
+        "bg-info-bg",
+        "p-5",
+      );
+      expect(card.querySelector("svg")).toBeNull();
+      expect(card.querySelector(".sr-only:not(a .sr-only)")).toBeNull();
+      expect(card.textContent).toBe(
+        "Sign in (opens in a new tab), or see what Pro adds (opens in a new tab).",
+      );
+      for (const link of within(card).getAllByRole("link")) {
+        expect(link).toHaveClass("text-accent-strong");
+      }
     });
 
     it("shows no plan line with billing off, and names the free cap with no plan", () => {
@@ -2400,7 +2437,11 @@ describe("the redact flow (spec 0007)", () => {
       expect(confirm).not.toHaveBeenCalled();
     });
 
-    it("reads from the top: file bar, document, refusal, action panel, coverage note, checklist (AC-5)", async () => {
+    /**
+     * AC-5, as spec 0013 AC-16 amends it: the rail comes before the list in
+     * the page, and the coverage note is the first thing inside the list.
+     */
+    it("reads from the top: file bar, document, refusal, action panel, then the found items with the coverage note first (AC-5)", async () => {
       const run = controllable();
       await openFlow(run.session);
       await userEvent.setup().click(screen.getByTestId("redact"));
@@ -2411,13 +2452,271 @@ describe("the redact flow (spec 0007)", () => {
         screen.getByRole("region", { name: "Document opened" }),
         screen.getByTestId("run-refusal"),
         screen.getByTestId("action-panel"),
+        screen.getByTestId("checklist"),
         screen.getByTestId("coverage"),
+        screen.getByRole("checkbox", { name: "ann@example.com" }),
+      ];
+      for (let at = 1; at < order.length; at += 1) {
+        expect(before(order[at - 1], order[at])).toBe(true);
+      }
+      expect(screen.getByTestId("checklist")).toContainElement(
+        screen.getByTestId("coverage"),
+      );
+    });
+
+    /**
+     * Spec 0013, AC-14 and AC-20 (INV-5). The three areas keep their order
+     * and their elements in every step, so neither polite region remounts as
+     * a file is chosen and its first announcement is heard.
+     */
+    it("keeps the three areas in page order, and both polite regions the same nodes, as a file opens", async () => {
+      mocks.billingEnabled = true;
+      const run = controllable();
+      mocks.openSession.mockResolvedValue(run.session);
+      render(<ToolClient />);
+
+      const grid = screen.getByTestId("tool-grid");
+      const areas = () =>
+        [...grid.children].map((area) => area.getAttribute("data-testid"));
+      const documentArea = screen.getByTestId("area-document");
+      const rail = screen.getByTestId("area-rail");
+      const polite = rail.querySelector('[aria-live="polite"]');
+      const plan = screen.getByRole("status");
+      expect(areas()).toEqual(["area-document", "area-rail"]);
+      expect(rail.firstElementChild).toBe(polite);
+
+      await chooseFile(pdfFile());
+      await screen.findByTestId("review");
+
+      expect(areas()).toEqual(["area-document", "area-rail", "area-found"]);
+      expect(screen.getByTestId("area-document")).toBe(documentArea);
+      expect(screen.getByTestId("area-rail")).toBe(rail);
+      expect(rail.querySelector('[aria-live="polite"]')).toBe(polite);
+      expect(screen.getByRole("status")).toBe(plan);
+      expect(screen.getByTestId("area-found")).toContainElement(
+        screen.getByTestId("checklist"),
+      );
+    });
+
+    /** AC-14 and AC-16: one template while nothing is open, the other with a file. */
+    it("lays A beside B while nothing is open, then A across the top with C left of B", async () => {
+      const run = controllable();
+      mocks.openSession.mockResolvedValue(run.session);
+      render(<ToolClient />);
+      const grid = screen.getByTestId("tool-grid");
+      expect(grid).toHaveClass(
+        "@min-[61rem]:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]",
+        "@min-[61rem]:[grid-template-areas:'a_b']",
+      );
+
+      await chooseFile(pdfFile());
+      await screen.findByTestId("review");
+      expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_a'_'c_b']");
+      expect(grid).not.toHaveClass("@min-[61rem]:[grid-template-areas:'a_b']");
+    });
+
+    /** AC-15: the idle rail, in order. */
+    it("holds the plan card, the three steps and the lock line in the idle rail", () => {
+      mocks.billingEnabled = true;
+      render(<ToolClient />);
+      answerWith(FREE);
+
+      const rail = screen.getByTestId("area-rail");
+      const steps = within(rail).getByRole("list");
+      expect(
+        within(steps)
+          .getAllByRole("listitem")
+          .map((item) => item.textContent),
+      ).toEqual(["1Open a PDF", "2Tick what to remove", "3Download your new file"]);
+      const order = [
+        rail.querySelector('[aria-live="polite"]'),
+        screen.getByTestId("plan-card"),
+        steps,
+        screen.getByTestId("lock-line"),
+      ];
+      for (let at = 1; at < order.length; at += 1) {
+        expect(before(order[at - 1] as Element, order[at] as Element)).toBe(true);
+      }
+      expect(screen.getByTestId("lock-line")).toHaveTextContent(
+        "Your file never leaves your browser.",
+      );
+      expect(rail.lastElementChild).toBe(screen.getByTestId("lock-line"));
+    });
+
+    /** AC-15: "Checking your plan" in the rail's polite region, as today. */
+    it("says it is checking the plan in the rail's polite region while a chosen file waits", async () => {
+      mocks.getEntitlement.mockImplementation(
+        ({ onWaiting }: { onWaiting?: () => void }) => {
+          onWaiting?.();
+          return new Promise<EntitlementSnapshot>(() => {});
+        },
+      );
+      render(<ToolClient />);
+      const polite = screen
+        .getByTestId("area-rail")
+        .querySelector('[aria-live="polite"]');
+      expect(polite).toHaveClass("sr-only");
+
+      await chooseFile(pdfFile());
+
+      expect(polite).toHaveTextContent("Checking your plan…");
+      expect(polite).not.toHaveClass("sr-only");
+    });
+
+    /**
+     * AC-16 and AC-17: the lock line rides inside the action panel, the
+     * rail's last block, sticky from `lg` only; the result card takes the
+     * panel's place, never sticky, with the lock line after it.
+     */
+    it("carries the lock line in the sticky action panel, and after the result card", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      const rail = screen.getByTestId("area-rail");
+      const panel = screen.getByTestId("action-panel");
+
+      expect(rail.lastElementChild).toBe(panel);
+      expect(panel).toContainElement(screen.getByTestId("lock-line"));
+      expect(screen.getAllByTestId("lock-line")).toHaveLength(1);
+      expect(panel).toHaveClass("@min-[61rem]:sticky", "@min-[61rem]:top-6");
+      expect(panel.className).not.toMatch(/(^|\s)(sticky|top-6)(\s|$)/);
+
+      await userEvent.setup().click(screen.getByTestId("redact"));
+      await run.finish();
+
+      const result = screen.getByTestId("result");
+      expect(result.className).not.toMatch(/sticky/);
+      expect(rail.lastElementChild).toBe(screen.getByTestId("lock-line"));
+      expect(before(result, screen.getByTestId("lock-line"))).toBe(true);
+    });
+
+    /** AC-19: one card, titled Found items, counting every row found. */
+    it("titles the found items card and counts every row, blocked ones included", async () => {
+      await openFlow(controllable().session);
+
+      const card = screen.getByRole("region", { name: "Found items" });
+      expect(card).toBe(screen.getByTestId("checklist"));
+      expect(
+        within(card).getByRole("heading", { level: 2 }).parentElement,
+      ).toHaveTextContent("4 found items");
+    });
+
+    /**
+     * Spec 0013, AC-16, with billing on, so the plan card takes its place:
+     * file bar, document card, plan card, run refusal, action panel, then the
+     * list, each in its own area. The test above runs with billing off.
+     */
+    it("reads file bar, document, plan card, refusal, action panel, then the list, with billing on (AC-16)", async () => {
+      mocks.billingEnabled = true;
+      const run = controllable();
+      await openFlow(run.session);
+      answerWith(FREE);
+      await userEvent.setup().click(screen.getByTestId("redact"));
+      await run.refuse("slanted-text");
+
+      const order = [
+        screen.getByTestId("file-bar"),
+        screen.getByRole("region", { name: "Document opened" }),
+        screen.getByTestId("plan-card"),
+        screen.getByTestId("run-refusal"),
+        screen.getByTestId("action-panel"),
         screen.getByTestId("checklist"),
       ];
       for (let at = 1; at < order.length; at += 1) {
         expect(before(order[at - 1], order[at])).toBe(true);
       }
+      const [fileBar, document, plan, refusal, panel, list] = order;
+      expect(screen.getByTestId("area-document")).toContainElement(fileBar);
+      const rail = screen.getByTestId("area-rail");
+      for (const block of [document, plan, refusal, panel]) {
+        expect(rail).toContainElement(block);
+      }
+      expect(rail.lastElementChild).toBe(panel);
+      expect(screen.getByTestId("area-found")).toContainElement(list);
     });
+
+    /** AC-16: the lost callout in the run refusal's place, after the plan card. */
+    it("puts the lost callout in the rail after the plan card, with the lock line at its foot (AC-16)", async () => {
+      mocks.billingEnabled = true;
+      await openFlow(controllable().session);
+      answerWith(FREE);
+
+      await fireEngineLost();
+
+      const rail = screen.getByTestId("area-rail");
+      const lost = screen.getByTestId("lost");
+      expect(rail).toContainElement(lost);
+      expect(before(screen.getByTestId("plan-card"), lost)).toBe(true);
+      expect(rail.lastElementChild).toBe(screen.getByTestId("lock-line"));
+      expect(screen.getAllByTestId("lock-line")).toHaveLength(1);
+      // Nothing left to review, so no list and no action panel.
+      expect(screen.queryByTestId("area-found")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("action-panel")).not.toBeInTheDocument();
+    });
+
+    /**
+     * AC-15: after a failed open the page is laid out as at idle, A beside B,
+     * the failure above the full drop zone in A, and the rail still showing
+     * the three steps and the lock line.
+     */
+    it("lays a failed open out as idle, the failure in the document area (AC-15)", async () => {
+      mocks.openSession.mockRejectedValue(new EngineError("corrupt"));
+      render(<ToolClient />);
+      await chooseFile(pdfFile());
+
+      const error = await screen.findByTestId("error");
+      const grid = screen.getByTestId("tool-grid");
+      expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_b']");
+      expect([...grid.children].map((area) => area.getAttribute("data-testid"))).toEqual([
+        "area-document",
+        "area-rail",
+      ]);
+      expect(screen.getByTestId("area-document")).toContainElement(error);
+      const rail = screen.getByTestId("area-rail");
+      expect(within(rail).getAllByRole("listitem")).toHaveLength(IDLE_STEPS.length);
+      expect(rail.lastElementChild).toBe(screen.getByTestId("lock-line"));
+    });
+
+    /** AC-16: while a file opens, the file bar takes A and the list is not there yet. */
+    it("lays the page out for a document while it opens, with no list yet (AC-16)", async () => {
+      mocks.openSession.mockImplementation(hangsAt("opening"));
+      render(<ToolClient />);
+      await chooseFile(pdfFile());
+      await screen.findByTestId("progress");
+
+      const grid = screen.getByTestId("tool-grid");
+      expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_a'_'c_b']");
+      expect(screen.getByTestId("area-document")).toContainElement(
+        screen.getByTestId("file-bar"),
+      );
+      expect(screen.queryByTestId("area-found")).not.toBeInTheDocument();
+      expect(within(screen.getByTestId("area-rail")).queryByRole("list")).toBeNull();
+    });
+
+    /**
+     * Spec 0013, AC-30: on `/tool` the document's privacy is said once, by the
+     * lock line in the rail, at idle and in review alike.
+     */
+    it.each(["idle", "reviewing"] as const)(
+      "says the file stays in the browser once, by the lock line, while %s (AC-30)",
+      async (step) => {
+        mocks.billingEnabled = true;
+        if (step === "idle") render(<ToolClient />);
+        else await openFlow(controllable().session);
+        answerWith(FREE);
+
+        // Every piece of text on the page that speaks of where the file goes.
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        const saying: Node[] = [];
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (/\bbrowser\b|never leaves|uploaded/i.test(node.textContent ?? "")) {
+            saying.push(node);
+          }
+        }
+
+        expect(saying).toHaveLength(1);
+        expect(screen.getByTestId("lock-line")).toContainElement(saying[0].parentElement);
+      },
+    );
 
     it("says what each phase is doing, and that a run with nothing ticked only strips (AC-4)", async () => {
       const run = controllable();

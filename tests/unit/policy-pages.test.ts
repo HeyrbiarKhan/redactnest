@@ -29,6 +29,7 @@ const PAGE_FILES = [
   ...filesUnder("src/app/terms"),
   "src/app/legal-page.tsx",
   "src/ui/prose.tsx",
+  "src/ui/link-group.tsx",
 ];
 
 /** A directive is the first statement, after any comments. */
@@ -66,6 +67,8 @@ const PRICING_FILES = [
   ...filesUnder("src/app/pricing"),
   "src/app/site-nav.tsx",
   "src/ui/site-header.tsx",
+  "src/ui/brand-mark.tsx",
+  "src/ui/link-group.tsx",
   "src/ui/page-container.tsx",
   "src/ui/card.tsx",
   "src/ui/button.tsx",
@@ -80,6 +83,31 @@ describe("Pricing", () => {
 
   /** covers: AC-13 */
   it.each(PRICING_FILES)("%s is not a client component", (file) => {
+    expect(readFileSync(join(ROOT, file), "utf8")).not.toMatch(USE_CLIENT);
+  });
+});
+
+/**
+ * The home page ships no script of its own either. Spec 0013, AC-13: a static
+ * server component with no client component, so its words and its picture
+ * arrive as HTML and nothing on it runs.
+ */
+const HOME_FILES = [
+  "src/app/page.tsx",
+  "src/lib/home-text.ts",
+  "src/app/site-nav.tsx",
+  "src/ui/site-header.tsx",
+  "src/ui/brand-mark.tsx",
+  "src/ui/link-group.tsx",
+  "src/ui/feature-list.tsx",
+  "src/ui/icon-circle.tsx",
+  "src/ui/page-container.tsx",
+  "src/ui/button.tsx",
+];
+
+describe("the home page", () => {
+  /** covers: spec 0013, AC-13 */
+  it.each(HOME_FILES)("%s is not a client component", (file) => {
     expect(readFileSync(join(ROOT, file), "utf8")).not.toMatch(USE_CLIENT);
   });
 });

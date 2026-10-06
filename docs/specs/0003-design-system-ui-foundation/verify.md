@@ -1,4 +1,4 @@
-# Verify: Design system & UI foundation · spec 0003 · updated 2026-09-28
+# Verify: Design system & UI foundation · spec 0003 · updated 2026-10-06 (from spec 0013: the danger buttons, the busy state, `danger-strong` and its pairs)
 _Steps derived from spec 0003 acceptance criteria and its Value sourcing table. `/check verify` runs these; `/test` locks the durable ones._
 
 Run against a production build (`pnpm build && pnpm start`, with the environment in `playwright.config.ts`), because the tool route's content security policy is looser under `next dev`.
@@ -48,10 +48,22 @@ Run against a production build (`pnpm build && pnpm start`, with the environment
 - [x] A screen reader reads a row as the match, then "Page N" and the context line → AC-9, AC-11
 - [x] The compact count badge reads its count with its noun: a group of email addresses reads "12 email addresses" → AC-10
 
+## Added by spec 0013 after its slice 6 read · 2026-10-06
+
+Built by spec [0013](../0013-brand-ui-refresh/index.md)'s slice 7 (its AC-11, AC-34 and AC-35). The danger buttons and the busy state are placed only on `/account`, which needs a real sign in, so their browser checks run in the Clerk development sandbox; spec 0013's `verify.md` holds the same steps.
+
+- [ ] `pnpm exec vitest run tests/unit/contrast.test.ts` → `danger-strong` is a defined token, and `on-accent` on `danger-ink` (7.19) and `danger-strong` (9.11) and `focus` on `surface` at 4.5 (8.53) all pass → AC-1, AC-2
+- [ ] Change `--color-danger-strong` to `#d9534f`, rerun the contrast test → the `on-accent` on `danger-strong` row fails; revert → AC-2
+- [ ] `pnpm exec vitest run tests/component/ui` → the danger variants, `busy` (aria disabled, focus kept, presses dropped), `Spinner`'s `current` tone and `IconCircle`'s `sm` and `square` cases pass, and every earlier case still passes → AC-5, AC-6
+- [ ] Sandbox, `/account`: Tab to Delete account and to Delete my account for good → the 2px `focus` ring sits on the white just outside the red, never on it; computed `outline-offset` is `2px` → AC-6, AC-35 (spec 0013)
+- [ ] Sandbox, forced colours on `/account` → both red buttons keep a visible edge and words, and the busy spinner draws in the button's text colour → AC-17
+- [ ] Sandbox, reduced motion, a busy Sign out → its spinner is still → AC-16
+- [ ] `/` and `/tool` look as before wherever `IconCircle`, `Spinner` and `Button` are used without the new props (the drop zone's circle, the empty state, the phase line's spinner, every teal button) → AC-5
+
 ## Not verifiable in a real browser
 
 - The `lost` worker callout has no real browser run, because Playwright cannot kill a worker. Its component test covers it.
 
 ## Acceptance-criteria coverage
 
-- AC-1 … contrast test (token set, palette wipe, light scheme) · AC-2 … contrast test, the mutation step · AC-3 … lint steps, `engine-wall.test.ts` · AC-4 … font network and computed style steps, contrast test, `git grep` · AC-5 … `tests/component/ui/*` · AC-6 … keyboard walk steps · AC-7 … e2e target size tests · AC-8 … tab stop and picker steps, drop zone tests · AC-9 … `checklist.test.tsx`, the checklist steps placed by feature 6 · AC-10 … `checklist.test.tsx`, the checklist steps placed by feature 6 · AC-11 … screen reader and unsupported steps, `callout.test.tsx` · AC-12 … tool page state steps, `tool-client.test.tsx` live region tests · AC-13 … home page step · AC-14 … skip link, landmarks, footer steps · AC-15 … 320px and 200% steps · AC-16 … reduced motion step · AC-17 … forced colours step · AC-18 … `pnpm test`, `pnpm test:e2e` · AC-19 … `src/ui` lint step · AC-20 … network and header steps · AC-21 … the real page load step, `shell.spec.ts`, `button.test.tsx`, the guard cases in `tool-client.test.tsx`
+- AC-1 … contrast test (token set, palette wipe, light scheme; `danger-strong` from spec 0013) · AC-2 … contrast test, the mutation steps (`ink-muted`, and `danger-strong` from spec 0013) · AC-3 … lint steps, `engine-wall.test.ts` · AC-4 … font network and computed style steps, contrast test, `git grep` · AC-5 … `tests/component/ui/*` · AC-6 … keyboard walk steps · AC-7 … e2e target size tests · AC-8 … tab stop and picker steps, drop zone tests · AC-9 … `checklist.test.tsx`, the checklist steps placed by feature 6 · AC-10 … `checklist.test.tsx`, the checklist steps placed by feature 6 · AC-11 … screen reader and unsupported steps, `callout.test.tsx` · AC-12 … tool page state steps, `tool-client.test.tsx` live region tests · AC-13 … home page step · AC-14 … skip link, landmarks, footer steps · AC-15 … 320px and 200% steps · AC-16 … reduced motion step · AC-17 … forced colours step · AC-18 … `pnpm test`, `pnpm test:e2e` · AC-19 … `src/ui` lint step · AC-20 … network and header steps · AC-21 … the real page load step, `shell.spec.ts`, `button.test.tsx`, the guard cases in `tool-client.test.tsx`

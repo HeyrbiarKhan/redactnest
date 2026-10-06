@@ -43,6 +43,7 @@
   --color-danger-border: #f0c3bd;
   --color-danger-icon: #b3261e;
   --color-danger-ink: #a8231c;
+  --color-danger-strong: #8c1d18;
 
   /*
    * Nothing renders below 14px (INV-6), so the one size under it goes. Sizes
@@ -123,6 +124,19 @@
     outline: 2px solid var(--color-focus);
     outline-offset: 2px;
   }
+
+  /*
+   * The legal pages' On this page links glide to their heading (spec 0013,
+   * AC-25). Only where `main` carries `data-smooth-scroll`, which those two
+   * pages alone set, so no other page changes how it scrolls, `/tool`'s focus
+   * moves included; and only for a visitor who has not asked for reduced
+   * motion, who still jumps at once.
+   */
+  @media (prefers-reduced-motion: no-preference) {
+    :root:has(main[data-smooth-scroll]) {
+      scroll-behavior: smooth;
+    }
+  }
 }
 
 /*
@@ -141,4 +155,38 @@
     background-color: Highlight;
     color: HighlightText;
   }
+}
+
+/*
+ * Every cursor on the site, from one rule (spec 0013, AC-33 and INV-10). The
+ * pointer on whatever can be clicked: links, buttons, a disclosure's summary,
+ * a select, a checkbox or radio, and a label wrapping one, which is how every
+ * checklist row and select all row takes its whole width as the target.
+ * `not-allowed` on whatever is disabled, a blocked row's label included. Each
+ * pointer selector leaves out what the second set matches, so the two never
+ * overlap and their order does not matter. Text fields keep the text cursor
+ * and everything else the browser's default.
+ *
+ * Outside every layer, and the only `!important` in the site's CSS, on
+ * purpose: Clerk's card brings its own unlayered style, which beats anything
+ * layered whatever its selector, and this has to win over it and over every
+ * utility. Lint rejects a `cursor-` utility in every zone, so no component
+ * competes with it; a control that needs another cursor changes this rule.
+ */
+a[href]:not([aria-disabled="true"]),
+button:enabled:not([aria-disabled="true"]),
+summary:not([aria-disabled="true"]),
+select:enabled:not([aria-disabled="true"]),
+input:is([type="checkbox"], [type="radio"]):enabled:not([aria-disabled="true"]),
+[role="button"]:not(:disabled):not([aria-disabled="true"]),
+label:has(input:is([type="checkbox"], [type="radio"]):enabled):not(
+    :has(input:is([type="checkbox"], [type="radio"]):disabled)
+  ):not([aria-disabled="true"]) {
+  cursor: pointer !important;
+}
+
+:disabled,
+[aria-disabled="true"],
+label:has(input:is([type="checkbox"], [type="radio"]):disabled) {
+  cursor: not-allowed !important;
 }

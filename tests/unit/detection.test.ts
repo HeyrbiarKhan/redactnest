@@ -35,6 +35,7 @@ import {
   DETECT_WRAPS,
   denseRow,
   manyAddress,
+  SAMPLE_AGREEMENT,
 } from "../../scripts/lib/detection-fixtures.mjs";
 import { fixture } from "../support/bytes";
 import { inspect, LIMITS, mupdf, pageText } from "../support/mupdf";
@@ -936,5 +937,64 @@ describe("wraps", () => {
     expect(text).not.toContain("smith@example.com");
     expect(text).toContain("CallBob.");
     expect(text).toContain("Pleasewriteto");
+  });
+});
+
+/**
+ * Spec 0013, AC-12. The home page's product shot is a capture of the review of
+ * `sample-agreement.pdf`, so the engine has to read it the way the shot shows
+ * it: four email addresses and three phone numbers, every one tickable and
+ * ticked, on pages with nothing to warn about. The browser test in
+ * `tests/e2e/review.spec.ts` proves the same through the page; this one fails
+ * in the unit suite first, before a rerun of `scripts/make-brand.mjs` would
+ * capture a different review.
+ */
+describe("the sample agreement behind the product shot (spec 0013, AC-12)", () => {
+  const [person, payroll, hr, legal] = SAMPLE_AGREEMENT.emails;
+  const [direct, pay, us] = SAMPLE_AGREEMENT.phones;
+
+  it("opens two pages with nothing to warn about", async () => {
+    const doc = await openDocumentWith(mupdf, fixture("sample-agreement.pdf"), LIMITS);
+    try {
+      expect(doc.summary).toEqual({
+        pageCount: 2,
+        pages: [{ findings: [] }, { findings: [] }],
+      });
+    } finally {
+      doc.close();
+    }
+  });
+
+  it("finds the four addresses and three numbers, by page, then in reading order", async () => {
+    const found = await find("sample-agreement.pdf");
+
+    expect(found.map(({ page, kind, text }) => [page, kind, text])).toEqual([
+      [0, "email", person],
+      [0, "phone", direct],
+      [0, "email", payroll],
+      [0, "phone", pay],
+      [1, "email", hr],
+      [1, "email", legal],
+      [1, "phone", us],
+    ]);
+  });
+
+  it("ticks every one by default, with none blocked or kept from view", async () => {
+    for (const match of await find("sample-agreement.pdf")) {
+      expect(match).toMatchObject({
+        tickedByDefault: true,
+        blocked: null,
+        concealed: null,
+      });
+    }
+  });
+
+  it("removes all seven, and the self check passes", async () => {
+    const targets = targetsOf(await find("sample-agreement.pdf"));
+
+    const output = await expectRemoved("sample-agreement.pdf", targets);
+
+    expect(packedText(output, 0)).toContain("EmploymentAgreement");
+    expect(packedText(output, 1)).toContain("6.Signatures");
   });
 });

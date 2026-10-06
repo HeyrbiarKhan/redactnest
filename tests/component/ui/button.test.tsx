@@ -190,7 +190,167 @@ describe("Button", () => {
     expect(screen.getByRole("button")).toHaveClass(height);
   });
 
-  it.each(["primary", "secondary", "link"] as const)(
+  describe("the danger variants (spec 0013, AC-35)", () => {
+    it("fills danger with the red and white words, darker under the pointer", () => {
+      render(<Button variant="danger">Delete my account for good</Button>);
+
+      // The edge is transparent, as on `primary`, so forced colours draws it.
+      expect(screen.getByRole("button")).toHaveClass(
+        "bg-danger-ink",
+        "text-on-accent",
+        "border-transparent",
+        "hover:bg-danger-strong",
+      );
+    });
+
+    it("outlines danger-secondary in the red on white, light red under the pointer", () => {
+      render(<Button variant="danger-secondary">Delete account</Button>);
+
+      expect(screen.getByRole("button")).toHaveClass(
+        "border-danger-ink",
+        "text-danger-ink",
+        "bg-surface",
+        "hover:bg-danger-bg",
+      );
+    });
+
+    it.each([
+      ["danger", "primary"],
+      ["danger-secondary", "secondary"],
+    ] as const)("gives %s the box, sizes and disabled look of %s", (danger, plain) => {
+      const shared = (classes: string) =>
+        classes
+          .split(" ")
+          .filter((name) =>
+            /^(min-h|px|py|text-(small|body)$|font|rounded|disabled:)/.test(name),
+          );
+      for (const size of ["md", "lg"] as const) {
+        const { unmount } = render(
+          <>
+            <Button variant={danger} size={size}>
+              Red
+            </Button>
+            <Button variant={plain} size={size}>
+              Plain
+            </Button>
+          </>,
+        );
+        expect(shared(screen.getByRole("button", { name: "Red" }).className)).toEqual(
+          shared(screen.getByRole("button", { name: "Plain" }).className),
+        );
+        unmount();
+      }
+    });
+  });
+
+  describe("busy (spec 0013, AC-34)", () => {
+    it("stays a focusable button, aria-disabled and never disabled, named by its words", () => {
+      const { container } = render(
+        <Button busy variant="danger" icon={Upload}>
+          Deleting your account
+        </Button>,
+      );
+
+      const button = screen.getByRole("button", { name: "Deleting your account" });
+      expect(button).toHaveAttribute("aria-disabled", "true");
+      expect(button).not.toHaveAttribute("disabled");
+
+      button.focus();
+      expect(button).toHaveFocus();
+
+      // The spinner in place of the icon, hidden, in the button's own colour.
+      const spinner = screen.getByTestId("spinner");
+      expect(button).toContainElement(spinner);
+      expect(spinner).toHaveAttribute("aria-hidden", "true");
+      expect(container.querySelectorAll("svg")).toHaveLength(1);
+      expect(spinner.querySelector("path")).toHaveClass("stroke-current");
+    });
+
+    it("drops every press: a click, Enter and Space call no onClick", async () => {
+      const onClick = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <Button busy onClick={onClick}>
+          Signing you out
+        </Button>,
+      );
+
+      const button = screen.getByRole("button", { name: "Signing you out" });
+      await user.click(button);
+      await user.keyboard("{Enter}");
+      await user.keyboard(" ");
+
+      expect(onClick).not.toHaveBeenCalled();
+      expect(button).toHaveFocus();
+    });
+
+    it("submits no form it sits in", async () => {
+      const onSubmit = vi.fn((event: SubmitEvent) => event.preventDefault());
+      const user = userEvent.setup();
+      render(
+        <form onSubmit={(event) => onSubmit(event.nativeEvent as SubmitEvent)}>
+          <Button busy type="submit">
+            Sending
+          </Button>
+        </form>,
+      );
+
+      await user.click(screen.getByRole("button", { name: "Sending" }));
+
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it.each(["primary", "secondary", "danger", "danger-secondary"] as const)(
+      "keeps the %s rest colours under the pointer",
+      (variant) => {
+        render(
+          <>
+            <Button variant={variant}>At rest</Button>
+            <Button variant={variant} busy>
+              Busy
+            </Button>
+          </>,
+        );
+
+        const rest = screen.getByRole("button", { name: "At rest" });
+        const busy = screen.getByRole("button", { name: "Busy" });
+        const hover = [...rest.classList].filter((name) => name.startsWith("hover:"));
+        expect(hover).toHaveLength(1);
+        expect(busy).not.toHaveClass(hover[0] ?? "");
+        // Everything else is the same, so it looks exactly as it did at rest.
+        expect([...busy.classList]).toEqual(
+          [...rest.classList].filter((name) => !name.startsWith("hover:")),
+        );
+      },
+    );
+
+    it("changes nothing without it", async () => {
+      const onClick = vi.fn();
+      render(
+        <Button variant="danger" icon={Upload} onClick={onClick}>
+          Delete my account for good
+        </Button>,
+      );
+
+      const button = screen.getByRole("button");
+      expect(button).not.toHaveAttribute("aria-disabled");
+      expect(screen.queryByTestId("spinner")).toBeNull();
+      await userEvent.click(button);
+      expect(onClick).toHaveBeenCalledOnce();
+    });
+
+    it("passes axe", async () => {
+      const { container } = render(
+        <Button busy variant="danger">
+          Deleting your account
+        </Button>,
+      );
+
+      await expectNoAxeViolations(container);
+    });
+  });
+
+  it.each(["primary", "secondary", "link", "danger", "danger-secondary"] as const)(
     "passes axe as the %s variant",
     async (variant) => {
       const { container } = render(

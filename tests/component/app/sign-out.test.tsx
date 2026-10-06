@@ -1,5 +1,6 @@
 /**
- * Sign out, our own control. Spec 0012, AC-11, AC-12 and INV-13.
+ * Sign out, our own control. Spec 0012, AC-11, AC-12 and INV-13, and spec
+ * 0013, AC-34: the button shows the wait itself and keeps focus.
  *
  * Clerk's `signOut` is called with a callback, so Clerk does not navigate
  * itself, and the home page then loads as a new document, so Clerk's script
@@ -7,7 +8,7 @@
  * module boundaries: jsdom cannot redefine `location.assign`.
  */
 
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -15,6 +16,7 @@ import {
   leaveAccount,
   type LeavingClerk,
   SIGN_OUT_LIMIT_MS,
+  SIGNING_OUT,
   SignOutControl,
 } from "@/app/(account)/sign-out";
 
@@ -56,6 +58,24 @@ const hangs = () => new Promise<never>(() => {});
 
 /** Lets every pending promise run, as real time passing would. */
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+const SIGN_OUT = { name: "Sign out" };
+const SIGNING = { name: SIGNING_OUT };
+
+/** The button while it waits: still a button, busy, never `disabled`. */
+function expectBusy(button: HTMLElement) {
+  expect(button).toHaveAttribute("aria-disabled", "true");
+  expect(button).not.toHaveAttribute("disabled");
+  expect(within(button).getByTestId("spinner")).toBeInTheDocument();
+}
+
+/** The button once it can be pressed again, with focus on it. */
+function expectReady(button: HTMLElement) {
+  expect(button).toBeEnabled();
+  expect(button).not.toHaveAttribute("aria-disabled");
+  expect(within(button).queryByTestId("spinner")).toBeNull();
+  expect(button).toHaveFocus();
+}
 
 /**
  * Clerk before its script has loaded, as `@clerk/react` 6 behaves: `signOut`
@@ -114,13 +134,16 @@ describe("SignOutControl", () => {
     mocks.signOut.mockImplementation(async (callback) => callback?.());
     render(<SignOutControl />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    await userEvent.click(screen.getByRole("button", SIGN_OUT));
 
     await waitFor(() => expect(mocks.loadDocument).toHaveBeenCalledWith("/"));
     expect(mocks.signOut).toHaveBeenCalledTimes(1);
     const [callback, ...rest] = mocks.signOut.mock.calls[0];
     expect(typeof callback).toBe("function");
     expect(rest).toEqual([]);
+    // Busy until the browser leaves, not just until the load starts (AC-34).
+    expectBusy(screen.getByRole("button", SIGNING));
+    expect(screen.getByRole("status")).toHaveTextContent(SIGNING_OUT);
   });
 
   /** covers: AC-12. Clerk skips the callback when no session is left. */
@@ -128,7 +151,7 @@ describe("SignOutControl", () => {
     mocks.signOut.mockResolvedValue(undefined);
     render(<SignOutControl />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    await userEvent.click(screen.getByRole("button", SIGN_OUT));
 
     await waitFor(() => expect(mocks.loadDocument).toHaveBeenCalledWith("/"));
   });
@@ -138,15 +161,14 @@ describe("SignOutControl", () => {
     mocks.signOut.mockRejectedValue(new Error("network"));
     const { container } = render(<SignOutControl />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    await userEvent.click(screen.getByRole("button", SIGN_OUT));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "We couldn't sign you out. Try again.",
     );
     expect(mocks.loadDocument).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Sign out" })).toHaveFocus();
-    expect(screen.queryByRole("status")).toBeNull();
+    expectReady(screen.getByRole("button", SIGN_OUT));
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
     await expectNoAxeViolations(container);
   });
 
@@ -162,10 +184,13 @@ describe("SignOutControl", () => {
     mocks.signOut.mockReturnValue(hangs());
     render(<SignOutControl />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    // Focus first, as a real press leaves it: `fireEvent` moves none.
+    screen.getByRole("button", SIGN_OUT).focus();
+    fireEvent.click(screen.getByRole("button", SIGN_OUT));
     await act(() => vi.advanceTimersByTimeAsync(SIGN_OUT_LIMIT_MS - 1));
 
-    expect(screen.getByRole("button", { name: "Sign out" })).toBeDisabled();
+    expectBusy(screen.getByRole("button", SIGNING));
+    expect(screen.getByRole("button", SIGNING)).toHaveFocus();
     expect(screen.queryByRole("alert")).toBeNull();
 
     await act(() => vi.advanceTimersByTimeAsync(1));
@@ -173,35 +198,51 @@ describe("SignOutControl", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "We couldn't sign you out. Try again.",
     );
-    expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Sign out" })).toHaveFocus();
+    expectReady(screen.getByRole("button", SIGN_OUT));
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
     expect(mocks.loadDocument).not.toHaveBeenCalled();
   });
 
-  /** covers: AC-12. A second click while leaving cannot start a second sign out. */
-  it("is disabled while signing out", async () => {
+  /** covers: AC-12. A second press while leaving cannot start a second sign out. */
+  it("drops a second press while signing out", async () => {
     mocks.signOut.mockReturnValue(hangs());
+    const user = userEvent.setup();
     render(<SignOutControl />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    await user.click(screen.getByRole("button", SIGN_OUT));
+    await user.click(screen.getByRole("button", SIGNING));
+    await user.keyboard("{Enter}");
 
-    expect(screen.getByRole("button", { name: "Sign out" })).toBeDisabled();
+    expectBusy(screen.getByRole("button", SIGNING));
     expect(mocks.signOut).toHaveBeenCalledTimes(1);
   });
 
   /**
-   * WCAG 4.1.3. The wait can last the whole limit, so a screen reader hears
-   * that it is under way, and focus is not dropped by the disabled button.
+   * Spec 0013, AC-34 and INV-13, and WCAG 4.1.3. The wait can last the whole
+   * limit, so the button shows it, focus stays on the button that was
+   * pressed, and a region that was in the page before the press says it to a
+   * screen reader without showing it twice.
    */
-  it("says it is signing you out in a status line, which takes focus", async () => {
+  it("shows the wait on the button it keeps focus on, and says it in a hidden region", async () => {
     mocks.signOut.mockReturnValue(hangs());
     const { container } = render(<SignOutControl />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
-
     const status = screen.getByRole("status");
-    expect(status).toHaveTextContent("Signing you out");
-    expect(status).toHaveFocus();
+    expect(status).toHaveClass("sr-only");
+    expect(status).toBeEmptyDOMElement();
+
+    await userEvent.click(screen.getByRole("button", SIGN_OUT));
+
+    const button = screen.getByRole("button", SIGNING);
+    expectBusy(button);
+    expect(button).toHaveFocus();
+    // The same region, so the change is announced in place.
+    expect(screen.getByRole("status")).toBe(status);
+    expect(status).toHaveTextContent(SIGNING_OUT);
+    expect(status).not.toHaveAttribute("tabindex");
+    // Nothing new shows under the buttons: the page holds the button's words
+    // and the hidden region's, and nothing else.
+    expect(container.textContent).toBe(`${SIGNING_OUT}${SIGNING_OUT}`);
     expect(screen.queryByRole("alert")).toBeNull();
     await expectNoAxeViolations(container);
   });
@@ -224,10 +265,10 @@ describe("SignOutControl before Clerk's script has loaded", () => {
     mocks.useClerk.mockReturnValue(stub.clerk);
     render(<SignOutControl />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    await userEvent.click(screen.getByRole("button", SIGN_OUT));
     await act(settle);
 
-    expect(screen.getByRole("button", { name: "Sign out" })).toBeDisabled();
+    expectBusy(screen.getByRole("button", SIGNING));
     expect(stub.clerk.signOut).not.toHaveBeenCalled();
     expect(mocks.loadDocument).not.toHaveBeenCalled();
 
@@ -249,10 +290,10 @@ describe("SignOutControl before Clerk's script has loaded", () => {
     mocks.useClerk.mockReturnValue(stub.clerk);
     render(<SignOutControl />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    fireEvent.click(screen.getByRole("button", SIGN_OUT));
     await act(() => vi.advanceTimersByTimeAsync(SIGN_OUT_LIMIT_MS - 1));
 
-    expect(screen.getByRole("button", { name: "Sign out" })).toBeDisabled();
+    expectBusy(screen.getByRole("button", SIGNING));
     expect(screen.queryByRole("alert")).toBeNull();
 
     await act(() => vi.advanceTimersByTimeAsync(1));
@@ -260,7 +301,7 @@ describe("SignOutControl before Clerk's script has loaded", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "We couldn't sign you out. Try again.",
     );
-    expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
+    expectReady(screen.getByRole("button", SIGN_OUT));
 
     // It stopped listening at the limit, so nothing is left to hear Clerk.
     expect(stub.listeners.size).toBe(0);
@@ -285,7 +326,7 @@ describe("SignOutControl before Clerk's script has loaded", () => {
     mocks.useClerk.mockReturnValue(stub.clerk);
     render(<SignOutControl />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    fireEvent.click(screen.getByRole("button", SIGN_OUT));
     await act(() => vi.advanceTimersByTimeAsync(1_000));
     expect(screen.queryByRole("alert")).toBeNull();
 
@@ -297,7 +338,7 @@ describe("SignOutControl before Clerk's script has loaded", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "We couldn't sign you out. Try again.",
     );
-    expect(screen.getByRole("button", { name: "Sign out" })).toHaveFocus();
+    expectReady(screen.getByRole("button", SIGN_OUT));
     expect(stub.listeners.size).toBe(0);
     expect(stub.clerk.signOut).not.toHaveBeenCalled();
     expect(mocks.loadDocument).not.toHaveBeenCalled();

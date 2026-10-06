@@ -13,6 +13,7 @@ import {
 } from "react";
 
 import { config } from "@/config";
+import { cx } from "@/lib/cx";
 import { resultCounts } from "@/lib/detectors";
 import { currentPath, loadedAt, loadGuard, reloadDocument } from "@/lib/document-load";
 import { offerDownload } from "@/lib/download";
@@ -27,6 +28,7 @@ import {
 import {
   dropZoneHelper,
   failureText,
+  IDLE_STEPS,
   isTickCaused,
   LOST_TEXT,
   PHASE_TEXT,
@@ -73,9 +75,11 @@ import { Callout } from "@/ui/callout";
 import { Card } from "@/ui/card";
 import { DropZone } from "@/ui/drop-zone";
 import { Spinner } from "@/ui/spinner";
+import { StepList } from "@/ui/step-list";
 
 import { ActionPanel } from "./action-panel";
 import { FailureCallout } from "./failure-callout";
+import { LockLine } from "./lock-line";
 import { NewTabLink, PlanLine } from "./plan-line";
 import { ResultCard } from "./result-card";
 import { ReviewChecklist } from "./review-checklist";
@@ -752,199 +756,246 @@ export function ToolClient() {
     session.state === "reviewing" ||
     session.state === "redacting" ||
     session.state === "complete";
+  const acting = session.state === "reviewing" || session.state === "redacting";
+  const phaseText = checkingEntitlement
+    ? PHASE_TEXT["checking-entitlement"]
+    : (session.state === "opening" || session.state === "redacting") &&
+        session.phase !== null
+      ? phaseLine(session.phase, session.ticked.size)
+      : null;
 
+  /*
+   * Spec 0013, AC-14 to AC-17. One grid of three areas, always rendered in the
+   * same order with the same keys, so no live region remounts when a file is
+   * chosen and a phone reads them top to bottom: A, the document (the full
+   * drop zone, or the file bar); B, the rail; C, the found items, from
+   * `reviewing` on. Only the area template changes from `lg`: A beside B
+   * while nothing is open, then A across the top with C left of B.
+   *
+   * `lg` here is a container query, 61rem of this column, which is a 1024
+   * pixel window less the page's gutters at the default text size. A media
+   * query reads `rem` as the browser's default size, so it would keep two
+   * columns and a sticky panel at 200% text; a container query reads the
+   * page's own root size, so enlarged text gets one column and nothing sticky
+   * (AC-17, INV-6; WCAG 1.4.4 and 1.4.10).
+   */
   return (
-    <div className="flex flex-col">
-      {/*
-        Spec 0007, AC-15. An open that failed says so above the full drop zone,
-        so the next file is one drop away. Nothing of the failed document is
-        held beyond its name and its frozen caps.
-      */}
-      {session.state === "failed" && (
-        <div className="mb-6">
-          <OpenFailure
-            session={session}
-            titleRef={failureRef}
-            onRecheck={handleRecheck}
-          />
-        </div>
-      )}
-
-      {/*
-        Spec 0012, AC-5. Directly above the drop zone in either form, so it
-        stays put as a file opens, and only on a build that sells Pro.
-      */}
-      {config.billingEnabled && (
-        <div className="mb-3">
-          <PlanLine
-            answer={planAnswer}
-            checking={planChecking}
-            onTryAgain={() => void handleTryAgain()}
-            lineRef={planLineRef}
-          />
-        </div>
-      )}
-
-      {live !== null && compact ? (
-        <DropZone
+    <div className="@container">
+      <div
+        data-testid="tool-grid"
+        className={cx(
+          "grid gap-6 @min-[61rem]:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]",
           compact
-          fileName={live.file.name}
-          pageCount={live.summary?.pageCount ?? null}
-          buttonLabel="Choose another PDF"
-          accept="application/pdf"
-          onFile={(file) => void handleFile(file)}
-          onWarm={warm}
-          buttonRef={chooseRef}
-          action={
-            <Button variant="link" data-testid="start-over" onClick={handleStartOver}>
-              Start over
-            </Button>
-          }
-        />
-      ) : (
-        <>
-          <DropZone
-            title="Drop a PDF here, or choose one"
-            helper={dropZoneHelper(planAnswer)}
-            buttonLabel="Choose a PDF"
-            accept="application/pdf"
-            onFile={(file) => void handleFile(file)}
-            onWarm={warm}
-            buttonRef={chooseRef}
-          />
+            ? "@min-[61rem]:[grid-template-areas:'a_a'_'c_b']"
+            : "@min-[61rem]:[grid-template-areas:'a_b']",
+        )}
+      >
+        <div
+          key="a"
+          data-testid="area-document"
+          className="flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:a]"
+        >
           {/*
-            Spec 0011, AC-5. Choosing a PDF is agreeing to the terms, so the
-            line sits under the full drop zone and goes with it once the file
-            bar takes its place. Outside the polite region below, so it is
-            never announced as news.
-          */}
-          <TermsNotice className="mt-3" />
-        </>
-      )}
+          Spec 0007, AC-15. An open that failed says so above the full drop
+          zone, so the next file is one drop away. Nothing of the failed
+          document is held beyond its name and its frozen caps.
+        */}
+          {session.state === "failed" && (
+            <OpenFailure
+              session={session}
+              titleRef={failureRef}
+              onRecheck={handleRecheck}
+            />
+          )}
 
-      {/*
-        Spec 0003, AC-12, and spec 0007, AC-4. The polite region holds only
-        what is worth hearing as it changes: the opened document card, heard
-        once with the open and then left alone, and the one phase line while a
-        document opens or a run works. A failure is an alert of its own and
-        renders beside this, never inside it, or a screen reader would announce
-        it twice. The margin appears only once there is something in here,
-        because the region itself has to stay in the page from the start for
-        its first announcement to be heard.
+          {live !== null && compact ? (
+            <DropZone
+              compact
+              fileName={live.file.name}
+              pageCount={live.summary?.pageCount ?? null}
+              buttonLabel="Choose another PDF"
+              accept="application/pdf"
+              onFile={(file) => void handleFile(file)}
+              onWarm={warm}
+              buttonRef={chooseRef}
+              action={
+                <Button variant="link" data-testid="start-over" onClick={handleStartOver}>
+                  Start over
+                </Button>
+              }
+            />
+          ) : (
+            <div className="flex flex-col gap-3">
+              <DropZone
+                title="Drop a PDF here, or choose one"
+                helper={dropZoneHelper(planAnswer)}
+                buttonLabel="Choose a PDF"
+                accept="application/pdf"
+                onFile={(file) => void handleFile(file)}
+                onWarm={warm}
+                buttonRef={chooseRef}
+              />
+              {/*
+              Spec 0011, AC-5. Choosing a PDF is agreeing to the terms, so the
+              line sits under the full drop zone and goes with it once the file
+              bar takes its place. Outside the polite region, so it is never
+              announced as news.
+            */}
+              <TermsNotice />
+            </div>
+          )}
+        </div>
+
+        <div
+          key="b"
+          data-testid="area-rail"
+          className="flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:b]"
+        >
+          {/*
+          Spec 0003, AC-12, and spec 0007, AC-4. The polite region holds only
+          what is worth hearing as it changes: the opened document card, heard
+          once with the open and then left alone, and the one phase line while
+          a document opens or a run works. A failure is an alert of its own
+          and renders beside this, never inside it, or a screen reader would
+          announce it twice. First in the rail and in the page from the start,
+          so its first announcement is heard; visually hidden while it has
+          nothing to say, so it takes no room (spec 0013, AC-15 and AC-16).
+        */}
+          <div
+            aria-live="polite"
+            className={cx(
+              "flex flex-col gap-6",
+              !reviewable && phaseText === null && "sr-only",
+            )}
+          >
+            {reviewable && <OpenedDocument session={session} />}
+            {phaseText !== null && <StatusLine text={phaseText} />}
+          </div>
+
+          {/*
+          Spec 0012, AC-5, as spec 0013 places it (AC-18): the plan card, after
+          the drop zone and after the document card, and only on a build that
+          sells Pro.
+        */}
+          {config.billingEnabled && (
+            <PlanLine
+              answer={planAnswer}
+              checking={planChecking}
+              onTryAgain={() => void handleTryAgain()}
+              lineRef={planLineRef}
+            />
+          )}
+
+          {/* AC-15: while nothing is open, what happens next, in three steps. */}
+          {!compact && <StepList steps={IDLE_STEPS} />}
+
+          {session.state === "lost" && (
+            <FailureCallout
+              data-testid="lost"
+              title={LOST_TEXT.title}
+              body={LOST_TEXT.body}
+              action={
+                <Button
+                  ref={retryRef}
+                  variant="secondary"
+                  data-testid="retry"
+                  onClick={handleRetry}
+                >
+                  Try again
+                </Button>
+              }
+            />
+          )}
+
+          {/*
+          Spec 0007, AC-14. A refused run keeps the review, so the refusal sits
+          before the action it asks to change, and stays through tick changes.
+        */}
+          {session.state === "reviewing" && session.runFailure !== null && (
+            <FailureCallout
+              data-testid="run-refusal"
+              lead={RUN_REFUSAL_LEAD}
+              titleRef={refusalRef}
+              {...runRefusalText(
+                session.runFailure,
+                session.entitlement,
+                session.ticked.size,
+              )}
+              action={
+                isTickCaused(session.runFailure) ? undefined : (
+                  <Button
+                    variant="secondary"
+                    data-testid="refusal-choose"
+                    onClick={() => chooseRef.current?.click()}
+                  >
+                    Choose another PDF
+                  </Button>
+                )
+              }
+            />
+          )}
+
+          {/*
+          AC-16 and AC-17: the rail's last block, carrying the lock line, and
+          sticky from `lg` so it stays in reach beside a long list.
+        */}
+          {acting && (
+            <ActionPanel
+              line={tickCountLine(
+                session.ticked.size,
+                session.matches.filter((match) => match.blocked === null).length,
+                session.matches.length,
+              )}
+              label={redactLabel(session.ticked.size)}
+              running={session.state === "redacting"}
+              onRedact={() => void runRedaction("redact-started")}
+              onCancel={handleCancel}
+              redactRef={redactRef}
+              cancelRef={cancelRef}
+            />
+          )}
+
+          {session.state === "complete" && counts !== null && (
+            <ResultCard
+              counts={counts}
+              summary={session.summary}
+              outputName={session.outputName}
+              downloaded={session.downloaded}
+              onDownload={handleDownload}
+              onRedactAnother={handleStartOver}
+              onMakeAgain={() => void runRedaction("rerun")}
+              headingRef={resultRef}
+              redactAnotherRef={redactAnotherRef}
+            />
+          )}
+
+          {/* Inside the action panel while it shows; at the rail's foot otherwise. */}
+          {!acting && <LockLine />}
+        </div>
+
+        {/*
+        Spec 0005, AC-13, and spec 0013, AC-19. The found items, outside the
+        live region for the same reason the failure is: a list read out as it
+        appears would drown the phase line. Shown for every step that has a
+        document open to review.
       */}
-      <div aria-live="polite" className="flex flex-col gap-6 not-empty:mt-6">
-        {reviewable && <OpenedDocument session={session} />}
-        {checkingEntitlement ? (
-          <StatusLine text={PHASE_TEXT["checking-entitlement"]} />
-        ) : (
-          (session.state === "opening" || session.state === "redacting") &&
-          session.phase !== null && (
-            <StatusLine text={phaseLine(session.phase, session.ticked.size)} />
-          )
+        {reviewable && (
+          <div
+            key="c"
+            data-testid="area-found"
+            className="min-w-0 @min-[61rem]:[grid-area:c]"
+          >
+            <ReviewChecklist
+              matches={session.matches}
+              ticked={session.ticked}
+              running={session.state === "redacting"}
+              partly={session.summary !== null && isPartly(session.summary)}
+              onToggle={handleToggle}
+              onTicksSet={handleTicksSet}
+            />
+          </div>
         )}
       </div>
-
-      {session.state === "lost" && (
-        <div className="mt-6">
-          <FailureCallout
-            data-testid="lost"
-            title={LOST_TEXT.title}
-            body={LOST_TEXT.body}
-            action={
-              <Button
-                ref={retryRef}
-                variant="secondary"
-                data-testid="retry"
-                onClick={handleRetry}
-              >
-                Try again
-              </Button>
-            }
-          />
-        </div>
-      )}
-
-      {/*
-        Spec 0007, AC-14. A refused run keeps the review, so the refusal sits
-        above the list it asks to change, and stays through tick changes.
-      */}
-      {session.state === "reviewing" && session.runFailure !== null && (
-        <div className="mt-6">
-          <FailureCallout
-            data-testid="run-refusal"
-            lead={RUN_REFUSAL_LEAD}
-            titleRef={refusalRef}
-            {...runRefusalText(
-              session.runFailure,
-              session.entitlement,
-              session.ticked.size,
-            )}
-            action={
-              isTickCaused(session.runFailure) ? undefined : (
-                <Button
-                  variant="secondary"
-                  data-testid="refusal-choose"
-                  onClick={() => chooseRef.current?.click()}
-                >
-                  Choose another PDF
-                </Button>
-              )
-            }
-          />
-        </div>
-      )}
-
-      {(session.state === "reviewing" || session.state === "redacting") && (
-        <div className="mt-6">
-          <ActionPanel
-            line={tickCountLine(
-              session.ticked.size,
-              session.matches.filter((match) => match.blocked === null).length,
-              session.matches.length,
-            )}
-            label={redactLabel(session.ticked.size)}
-            running={session.state === "redacting"}
-            onRedact={() => void runRedaction("redact-started")}
-            onCancel={handleCancel}
-            redactRef={redactRef}
-            cancelRef={cancelRef}
-          />
-        </div>
-      )}
-
-      {session.state === "complete" && counts !== null && (
-        <div className="mt-6">
-          <ResultCard
-            counts={counts}
-            summary={session.summary}
-            outputName={session.outputName}
-            downloaded={session.downloaded}
-            onDownload={handleDownload}
-            onRedactAnother={handleStartOver}
-            onMakeAgain={() => void runRedaction("rerun")}
-            headingRef={resultRef}
-            redactAnotherRef={redactAnotherRef}
-          />
-        </div>
-      )}
-
-      {/*
-        Spec 0005, AC-13. The checklist, outside the live region for the same
-        reason the failure is: a list read out as it appears would drown the
-        phase line. Shown for every step that has a document open to review.
-      */}
-      {reviewable && (
-        <div className="mt-6">
-          <ReviewChecklist
-            matches={session.matches}
-            ticked={session.ticked}
-            running={session.state === "redacting"}
-            partly={session.summary !== null && isPartly(session.summary)}
-            onToggle={handleToggle}
-            onTicksSet={handleTicksSet}
-          />
-        </div>
-      )}
     </div>
   );
 }

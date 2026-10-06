@@ -1,6 +1,33 @@
+import { readFileSync } from "node:fs";
+import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { defineConfig } from "vitest/config";
+import { defineConfig, type Plugin } from "vitest/config";
+
+/**
+ * A static `.png` import as Next.js gives one to `next/image`: its URL and its
+ * pixel size, read from the file's own PNG header. Vite alone gives a bare
+ * path, which `next/image` refuses for want of a width, so without this no
+ * component holding a static image (the home page's product shot, spec 0013
+ * AC-12) could render in a test.
+ */
+function staticImages(): Plugin {
+  return {
+    name: "redactnest:static-images",
+    enforce: "pre",
+    load(id) {
+      const [file = ""] = id.split("?");
+      if (!file.endsWith(".png")) return null;
+      const bytes = readFileSync(file);
+      const image = {
+        src: `/${basename(file)}`,
+        width: bytes.readUInt32BE(16),
+        height: bytes.readUInt32BE(20),
+      };
+      return `export default ${JSON.stringify(image)};`;
+    },
+  };
+}
 
 /**
  * Two projects, because the two kinds of test need two different worlds.
@@ -15,11 +42,12 @@ import { defineConfig } from "vitest/config";
  * `environmentMatchGlobs`, so `projects` is the way to do this now.
  *
  * Inline projects inherit this file (`extends` defaults to `true`), so the `@`
- * alias and the exclude list below are set once and apply to both. Neither
- * project sets a Vite level option, so they also share one Vite server and its
- * transform cache rather than starting two.
+ * alias, the static image loader and the exclude list below are set once and
+ * apply to both. Neither project sets a Vite level option, so they also share
+ * one Vite server and its transform cache rather than starting two.
  */
 export default defineConfig({
+  plugins: [staticImages()],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

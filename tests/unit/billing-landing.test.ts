@@ -1,12 +1,15 @@
-import type { ReactElement } from "react";
+import { SignIn, SignUp } from "@clerk/nextjs";
+import { isValidElement, type ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { AccountShell } from "@/app/(account)/account-shell";
 import {
   CLERK_REDIRECT_PARAMS,
   landingAfterSignIn,
   pagePath,
   type SearchParams,
 } from "@/app/(account)/landing";
+import { SignInPanel } from "@/app/(account)/sign-in-panel";
 
 /**
  * Where Clerk lands after signing in or up, and the clean redirect that sheds
@@ -172,14 +175,29 @@ describe("the pages", () => {
     }
   }
 
+  /**
+   * The props of Clerk's card, wherever the page places it: spec 0013 sets it
+   * inside the account shell (AC-23), so the page's own element is the shell.
+   */
+  function clerkCard(
+    element: Redirected | ReactElement<Record<string, unknown>>,
+  ): Record<string, unknown> {
+    expect(element).not.toBeInstanceOf(Redirected);
+    const found = findElement(
+      element as ReactElement<Record<string, unknown>>,
+      (props) => "forceRedirectUrl" in props,
+    );
+    expect(found).not.toBeNull();
+    return found?.props ?? {};
+  }
+
   it("has sign in force the landing, and sign up's too, every time", async () => {
     for (const [params, expected] of [
       [{ redirect_url: `${SITE}${SUBSCRIBE}` }, SUBSCRIBE],
       [{ redirect_url: "/tool" }, ACCOUNT],
     ] as const) {
       const element = await open("sign-in", undefined, params);
-      expect(element).not.toBeInstanceOf(Redirected);
-      expect((element as ReactElement<Record<string, unknown>>).props).toMatchObject({
+      expect(clerkCard(element)).toMatchObject({
         forceRedirectUrl: expected,
         signUpForceRedirectUrl: expected,
       });
@@ -188,7 +206,7 @@ describe("the pages", () => {
 
   it("has sign up force the landing, and sign in's too, every time", async () => {
     const element = await open("sign-up", undefined, { redirect_url: SUBSCRIBE });
-    expect((element as ReactElement<Record<string, unknown>>).props).toMatchObject({
+    expect(clerkCard(element)).toMatchObject({
       forceRedirectUrl: SUBSCRIBE,
       signInForceRedirectUrl: SUBSCRIBE,
     });
@@ -213,4 +231,47 @@ describe("the pages", () => {
       new Redirected("/sign-up"),
     );
   });
+
+  /**
+   * Spec 0013, AC-7 and AC-23: the wide account shell with nothing current in
+   * the header, then our panel and Clerk's card side by side, the panel
+   * first, and nothing of ours after Clerk's card, so its own spinner is the
+   * only thing that moves after Continue.
+   */
+  it.each([
+    ["sign-in", SignIn],
+    ["sign-up", SignUp],
+  ] as const)(
+    "sets %s in the wide shell, the panel then Clerk's card and nothing after",
+    async (which, card) => {
+      const element = await open(which, undefined, {});
+
+      expect(element).not.toBeInstanceOf(Redirected);
+      const shell = element as ReactElement<Record<string, unknown>>;
+      expect(shell.type).toBe(AccountShell);
+      expect(shell.props.width).toBe("wide");
+      expect(shell.props.current).toBeUndefined();
+      const grid = shell.props.children as ReactElement<{ children: unknown }>;
+      expect(isValidElement(grid)).toBe(true);
+      const parts = [grid.props.children].flat() as ReactElement[];
+      expect(parts.map((part) => part.type)).toEqual([SignInPanel, card]);
+    },
+  );
 });
+
+/** The first element in a tree whose props pass the test, depth first. */
+function findElement(
+  node: unknown,
+  test: (props: Record<string, unknown>) => boolean,
+): ReactElement<Record<string, unknown>> | null {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findElement(child, test);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+  if (!isValidElement<Record<string, unknown>>(node)) return null;
+  if (test(node.props)) return node;
+  return findElement(node.props.children, test);
+}

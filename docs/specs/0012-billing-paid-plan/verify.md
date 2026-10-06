@@ -1,4 +1,4 @@
-# Verify: Billing and the paid plan · spec 0012 · updated 2026-10-05
+# Verify: Billing and the paid plan · spec 0012 · updated 2026-10-06 (from spec 0013: the busy buttons and the red delete buttons, AC-11 and AC-12)
 _Steps derived from spec 0012 acceptance criteria. `/check verify` runs these; `/test` locks the durable ones._
 
 _Slice 1 (the money path) as built. Locally, billing needs `NEXT_PUBLIC_SITE_URL=http://localhost:3000`, because the plan check accepts a token only from the site's own origin. Sign in on the Clerk development instance with an address containing `+clerk_test` (for example `walk-one+clerk_test@redactnest.com`) and the code `424242`; no email is sent. Pay in the Polar sandbox by hand with the card `4242 4242 4242 4242`, any future date and any CVC, because Stripe's card form runs a bot check that holds an automated browser._
@@ -261,13 +261,28 @@ _From the fresh model review (`docs/reviews/2026-10-04-feat-billing-paid-plan.md
 
 ## UI / manual
 - [x] Open `/account` on a free account with a Polar customer → the action row reads Sign out, Get Pro, Manage billing, in that order, and reloading with the network throttled leaves Sign out at the row's start while the page loads → AC-10, AC-12 (review Minor, the row shifting)
-- [x] Go offline in DevTools, then press Sign out with a keyboard → "Signing you out" appears with a spinner below the row and takes focus (a screen reader reads it); after 10 s "We couldn't sign you out. Try again." is announced and focus is back on Sign out, enabled → AC-12, WCAG 4.1.3 (2026-10-05: the status role and focus checked, no screen reader run)
+- [x] Go offline in DevTools, then press Sign out with a keyboard → "Signing you out" appears with a spinner below the row and takes focus (a screen reader reads it); after 10 s "We couldn't sign you out. Try again." is announced and focus is back on Sign out, enabled → AC-12, WCAG 4.1.3 (2026-10-05: the status role and focus checked, no screen reader run) · **Replaced 2026-10-06** by spec 0013, AC-34: the line below the row is gone and the wait shows on the button, which keeps focus. The new check is under *From spec 0013* below.
 - [x] Block `clerk.browser.js` in DevTools, load `/account` and press Sign out → the failure line appears as soon as Clerk reports its script failed (Clerk reports it only when its own `scriptLoadTimeout` runs out, 15 s after load by default), and at the latest 10 s after the press, and nothing navigates → AC-12 (review nit, the early failure) (2026-10-05: pressed after Clerk had reported, the line came in 35 ms; pressed 1.2 s after load, it came at 10.1 s, from the limit; pressed at 8 s, it came 0.2 s after Clerk reported at 15.9 s. Nothing navigated in any run. The script's own failure is rethrown as an unhandled rejection that nothing awaits, so Clerk's `error` status is the first signal. `scriptLoadTimeout` stays at its default, because a shorter one would make sign in fail on a slow connection; `rationale.md`, *After the fresh model review*)
-- [x] Delete account on a throwaway account with nothing renewing, by keyboard → "Deleting your account" takes focus, then the same line reads "Your account is deleted. Signing you out", then `/` loads as a document → AC-11, WCAG 4.1.3
+- [x] Delete account on a throwaway account with nothing renewing, by keyboard → "Deleting your account" takes focus, then the same line reads "Your account is deleted. Signing you out", then `/` loads as a document → AC-11, WCAG 4.1.3 · **Replaced 2026-10-06** by spec 0013, AC-34: the words are announced from a hidden region and the pressed button shows the wait and keeps focus. The new check is under *From spec 0013* below.
 - [x] Open `/account/welcome` with `/api/entitlement` held unanswered (a Playwright route that never fulfils) → still "Confirming your payment" at 3.9 s, the second ask at 6 s, and after about 88 s "Your payment is still being confirmed. This can take a few minutes." with Check again → AC-16 (review Minor, no request timeout)
 
 ## Commands
-- [x] `pnpm exec vitest run tests/component/app/sign-out.test.tsx tests/component/app/delete-account.test.tsx tests/component/app/welcome-poll.test.tsx tests/unit/billing-account.test.ts` → all pass: the status lines and their focus, Clerk's `error` status failing at once, the listener released at the limit, a stalled ask failing at 4 s, a Strict Mode round of 16, and Sign out first in the row → AC-10, AC-11, AC-12, AC-16
+- [x] `pnpm exec vitest run tests/component/app/sign-out.test.tsx tests/component/app/delete-account.test.tsx tests/component/app/welcome-poll.test.tsx tests/unit/billing-account.test.ts` → all pass: the status lines and their focus, Clerk's `error` status failing at once, the listener released at the limit, a stalled ask failing at 4 s, a Strict Mode round of 16, and Sign out first in the row → AC-10, AC-11, AC-12, AC-16 · **Partly replaced 2026-10-06**: the status line and focus cases become spec 0013's busy button cases (AC-34); the rest stand.
 
 ## Acceptance-criteria coverage
 - AC-10 … the row order step and its unit case · AC-11 … the delete status step · AC-12 … the offline and blocked script steps · AC-16 … the stalled ask step and its component cases
+
+# From spec 0013 · 2026-10-06
+_Applied to AC-11 and AC-12 by spec [0013](../0013-brand-ui-refresh/index.md) after your read of its slice 6 (its AC-34 and AC-35), and built by its slice 7. Signed in on the Clerk development instance, on a throwaway account where a step deletes one (ask before each delete). Spec 0013's `verify.md` holds the same checks; tick both._
+
+## UI / manual
+- [ ] Go offline in DevTools, then press Sign out with a keyboard → the button shows a small spinner and "Signing you out", stays focused and ignores presses, and nothing appears below the row; the accessibility tree (or a screen reader) shows a polite status reading "Signing you out"; at 10 s the button is "Sign out" again with focus on it, and "We couldn't sign you out. Try again." shows below the row → AC-12, WCAG 4.1.3
+- [ ] Block `clerk.browser.js` and press Sign out → the button is busy until Clerk reports its script failed or the 10 s limit, then the failure line shows as before and nothing navigates → AC-12
+- [ ] Delete account on a throwaway account with nothing renewing, by keyboard → Delete account is a red outline button; Delete my account for good is solid red; once pressed it shows the spinner and "Deleting your account", then "Signing you out", with focus on it and Cancel greyed out, nothing below the buttons, and the hidden status reading "Deleting your account" then "Your account is deleted. Signing you out"; then `/` loads as a document → AC-11, WCAG 4.1.3
+- [ ] Delete account while Pro renews → the button returns to "Delete my account for good" with focus on it, and "Cancel your subscription in Manage billing first." shows below the buttons as before → AC-11
+
+## Commands
+- [ ] `pnpm exec vitest run tests/component/app/sign-out.test.tsx tests/component/app/delete-account.test.tsx` → all pass, the busy button, its focus and the hidden region included → AC-11, AC-12
+
+## Acceptance-criteria coverage
+- AC-11 … the delete and refusal steps and the delete component cases · AC-12 … the offline and blocked script steps and the sign out component cases

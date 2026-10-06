@@ -290,6 +290,24 @@ const noUncheckedColour = [ALPHA_MODIFIER, ARBITRARY_COLOUR].flatMap((pattern) =
   ];
 });
 
+const CURSOR_MESSAGE =
+  "No cursor utility (spec 0013, AC-33 and INV-10). One rule in " +
+  "`src/app/globals.css` sets every cursor on the site, Clerk's card included: " +
+  "the pointer on whatever can be clicked and `not-allowed` on whatever is " +
+  "disabled. A component that sets its own competes with that rule, so a " +
+  "control that needs a different cursor changes the rule instead.";
+
+/**
+ * Any `cursor-` utility, bare or behind a variant or the important mark
+ * (`cursor-pointer`, `hover:cursor-pointer`, `!cursor-pointer`), in plain
+ * strings and template literals alike, as the colour patterns are written.
+ */
+const CURSOR_UTILITY = String.raw`(^|[\s:!])cursor-`;
+const noCursorUtility = [
+  { selector: `Literal[value=/${CURSOR_UTILITY}/]`, message: CURSOR_MESSAGE },
+  { selector: `TemplateElement[value.raw=/${CURSOR_UTILITY}/]`, message: CURSOR_MESSAGE },
+];
+
 const UI_IMPORT_MESSAGE =
   "src/ui is presentation only (spec 0003, INV-7). It never reaches the worker, " +
   "the config, the session or the entitlement. The caller reads those and " +
@@ -489,10 +507,10 @@ const BILLING_SYNTAX = [...noClerkPolarAnywhere, ...noBillingAnywhere];
 /**
  * A zone's rules, from the restrictions it does not get to relax.
  *
- * The storage ban, the colour patterns, the log ban and the ban on Clerk's
- * sign out components are applied to every zone here rather than passed in,
- * so a zone can only ever relax what it explicitly names, and no zone can
- * name these.
+ * The storage ban, the colour patterns, the cursor ban, the log ban and the
+ * ban on Clerk's sign out components are applied to every zone here rather
+ * than passed in, so a zone can only ever relax what it explicitly names, and
+ * no zone can name these.
  */
 const zone = (imports, syntax) => ({
   "no-restricted-imports": ["error", { patterns: imports }],
@@ -501,6 +519,7 @@ const zone = (imports, syntax) => ({
     ...syntax,
     ...noStorageAnywhere,
     ...noUncheckedColour,
+    ...noCursorUtility,
     ...noProcessStreams,
     ...noClerkSignOut,
   ],

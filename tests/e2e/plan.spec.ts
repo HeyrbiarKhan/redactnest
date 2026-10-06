@@ -146,7 +146,7 @@ test.describe("the helper and the plan line (AC-5)", () => {
   ];
 
   for (const [label, answer, helper, words, links] of LINES) {
-    test(`shows the next step above the drop zone when ${label}`, async ({ page }) => {
+    test(`shows the next step in the plan card when ${label}`, async ({ page }) => {
       await answerWith(page, () => answer);
       await page.goto("/tool");
 

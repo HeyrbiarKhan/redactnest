@@ -30,6 +30,11 @@ export const metadata: Metadata = {
  * The paths and the fallback landing come from `src/lib/routes.ts` as props,
  * never environment variables, and telemetry is off, so no setting can turn
  * telemetry on or send sign in to `/tool`.
+ *
+ * With billing on, each page draws its own shell (spec 0013, AC-7, AC-23 and
+ * AC-24): sign in and sign up wide with nothing current in the header, and
+ * Account's pages, through `account/layout.tsx`, with Account current. A
+ * layout cannot tell which page it holds, so the frame is decided below it.
  */
 export default function AccountLayout({ children }: { readonly children: ReactNode }) {
   if (billing === null) {
@@ -57,7 +62,7 @@ export default function AccountLayout({ children }: { readonly children: ReactNo
       telemetry={false}
       appearance={CLERK_APPEARANCE}
     >
-      <AccountShell>{children}</AccountShell>
+      {children}
     </ClerkProvider>
   );
 }

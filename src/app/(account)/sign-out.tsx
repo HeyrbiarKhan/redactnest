@@ -6,11 +6,11 @@ import { useEffect, useRef, useState } from "react";
 import { loadDocument } from "@/lib/document-load";
 import { HOME_PATH } from "@/lib/routes";
 import { Button } from "@/ui/button";
-import { Spinner } from "@/ui/spinner";
 
 /** The control's words, beside it, as the account pages keep theirs. */
 const SIGN_OUT_LABEL = "Sign out";
-const SIGNING_OUT = "Signing you out";
+/** Exported, so the delete's button says the same once the account is gone. */
+export const SIGNING_OUT = "Signing you out";
 const SIGN_OUT_FAILED = "We couldn't sign you out. Try again.";
 
 /**
@@ -147,56 +147,48 @@ export async function leaveAccount(
  * Account's Sign out: our own control, never Clerk's `SignOutButton`, which
  * lint bans in every zone for the reason `leaveAccount` gives (INV-13).
  *
- * Leaving can take up to `SIGN_OUT_LIMIT_MS`, so while it runs a status line
- * says so (WCAG 4.1.3), and focus moves to it from the button that has just
- * been disabled, which would otherwise drop focus to the page. On failure
- * focus goes back to the button, now enabled, to try again.
+ * Leaving can take up to `SIGN_OUT_LIMIT_MS`, so while it runs the button
+ * itself says so, busy with a spinner and the working words, and a polite
+ * region says it to a screen reader (WCAG 4.1.3). Spec 0013, AC-34 and
+ * INV-13. Busy keeps the button focusable, so focus stays where the visitor
+ * pressed. On failure the button is enabled again and takes focus, where a
+ * press left it in most browsers; Safari's click focuses no button, so this
+ * puts it there to try again.
  */
 export function SignOutControl() {
   const clerk = useClerk();
   const [state, setState] = useState<"idle" | "leaving" | "failed">("idle");
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const leavingRef = useRef<HTMLParagraphElement>(null);
+  const leaving = state === "leaving";
 
-  // After the render that mounts the target, as the tool moves focus (spec
-  // 0007, *Focus*), never in the click handler.
+  // After the render that enables it, as the tool moves focus (spec 0007,
+  // *Focus*), never in the click handler.
   useEffect(() => {
-    if (state === "leaving") leavingRef.current?.focus();
     if (state === "failed") buttonRef.current?.focus();
   }, [state]);
 
   async function handleClick() {
     setState("leaving");
     const left = await leaveAccount(clerk, "sign-out");
-    // A page that is loading keeps the control disabled until it goes.
+    // A page that is loading keeps the button busy until it goes.
     if (!left) setState("failed");
   }
 
-  // A fragment, so the button sits in its row beside Get Pro. Each line takes
-  // a row of its own below every button (`order-last`), while staying next to
-  // the button in reading order. The failure is an alert, because it appears
+  // A fragment, so the button sits in its row beside Get Pro. The region is
+  // in the page from the first render, empty until leaving starts, so its
+  // words are announced as a change rather than mounted with it; it is
+  // visually hidden, because the button already shows them. The failure
+  // takes a row of its own below every button (`order-last`), while staying
+  // next to the button in reading order, and is an alert, because it appears
   // only when there is something to say.
   return (
     <>
-      <Button
-        ref={buttonRef}
-        variant="secondary"
-        onClick={handleClick}
-        disabled={state === "leaving"}
-      >
-        {SIGN_OUT_LABEL}
+      <Button ref={buttonRef} variant="secondary" onClick={handleClick} busy={leaving}>
+        {leaving ? SIGNING_OUT : SIGN_OUT_LABEL}
       </Button>
-      {state === "leaving" && (
-        <p
-          ref={leavingRef}
-          role="status"
-          tabIndex={-1}
-          className="order-last flex w-full items-center gap-3 text-ink"
-        >
-          <Spinner />
-          {SIGNING_OUT}
-        </p>
-      )}
+      <p role="status" className="sr-only">
+        {leaving ? SIGNING_OUT : ""}
+      </p>
       {state === "failed" && (
         <p role="alert" className="order-last w-full text-danger-ink">
           {SIGN_OUT_FAILED}

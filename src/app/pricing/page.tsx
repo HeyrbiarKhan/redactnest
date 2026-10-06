@@ -9,9 +9,8 @@ import { SUBSCRIBE_PATH, TERMS_PATH, TOOL_PATH } from "@/lib/routes";
 import { Button } from "@/ui/button";
 import { Card } from "@/ui/card";
 import { PageContainer } from "@/ui/page-container";
-import { SiteHeader } from "@/ui/site-header";
 
-import { SiteNav } from "../site-nav";
+import { NAV_TEXT, PageHeader } from "../site-nav";
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -19,7 +18,11 @@ export const metadata: Metadata = {
 };
 
 /**
- * Pricing. Spec 0012, AC-13 and INV-8.
+ * Pricing. Spec 0012, AC-13 and INV-8, laid out as spec 0013 amends it
+ * (AC-22): today's title and lead, then the two plans as cards, side by side
+ * from `md`. Pro's card has the accent edge, which only marks it: Pro is named
+ * in its heading, so nothing rests on the colour. Free's card offers the tool,
+ * a real page load (`reload`, spec 0003, INV-10).
  *
  * A prerendered static page under the standard policy, with no client
  * component and no outside script. It promises only what Pro does today, and
@@ -35,14 +38,7 @@ export default function PricingPage() {
 
   return (
     <>
-      <SiteHeader
-        nav={<SiteNav />}
-        action={
-          <Button href={TOOL_PATH} reload>
-            Redact a PDF
-          </Button>
-        }
-      />
+      <PageHeader current="pricing" />
       {/* The skip link's target, allowed to drop its outline (spec 0003, AC-14). */}
       <main id="main" tabIndex={-1} className="flex-1 py-10 focus:outline-none sm:py-14">
         <PageContainer width="wide" className="flex flex-col gap-8">
@@ -57,9 +53,12 @@ export default function PricingPage() {
           <div className="grid gap-6 md:grid-cols-2 md:items-start">
             <Card title={FREE_PLAN.name} headingLevel={2}>
               <PlanFeatures items={[`Up to ${config.freePageCap} pages a document`]} />
+              <Button href={TOOL_PATH} reload variant="secondary" className="self-start">
+                {NAV_TEXT.tryFree}
+              </Button>
             </Card>
 
-            <Card title={PRO_PLAN.name} headingLevel={2}>
+            <Card title={PRO_PLAN.name} headingLevel={2} accent>
               <p className="text-heading font-semibold text-ink">{PRO_PLAN.priceLine}</p>
               <PlanFeatures
                 items={[

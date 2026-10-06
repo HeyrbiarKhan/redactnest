@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!--
+    RedactNest's mark: a redaction bar resting in a shallow nest of two
+    concentric bands. Spec 0013, AC-1. The paths equal MARK_PATHS in
+    src/ui/brand-mark.tsx, and the two fills are the accent and accent-soft
+    tokens in src/app/globals.css, both checked by
+    tests/unit/brand-files.test.ts. Generated files are made from this one by
+    scripts/make-brand.mjs. The dark rule keeps it visible on a dark tab bar;
+    the site itself is light only.
+  -->
+  <style>
+    path { fill: #1f7a7a; }
+    @media (prefers-color-scheme: dark) { path { fill: #d5eeea; } }
+  </style>
+  <path d="M22.5 13H41.5A5.5 5.5 0 0 1 41.5 24H22.5A5.5 5.5 0 0 1 22.5 13Z"/>
+  <path d="M4.642 36.453A33 33 0 0 0 59.358 36.453A3 3 0 0 0 54.384 33.098A27 27 0 0 1 9.616 33.098A3 3 0 0 0 4.642 36.453Z"/>
+  <path d="M12.932 30.861A23 23 0 0 0 51.068 30.861A3 3 0 0 0 46.094 27.506A17 17 0 0 1 17.906 27.506A3 3 0 0 0 12.932 30.861Z"/>
+</svg>
