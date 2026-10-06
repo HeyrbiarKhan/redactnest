@@ -2,9 +2,8 @@ import { Lock } from "lucide-react";
 import type { Metadata } from "next";
 
 import { PageContainer } from "@/ui/page-container";
-import { SiteHeader } from "@/ui/site-header";
 
-import { SiteNav } from "../site-nav";
+import { PageHeader } from "../site-nav";
 import { ToolClient } from "./tool-client";
 
 /**
@@ -29,7 +28,8 @@ export const metadata: Metadata = {
 export default function ToolPage() {
   return (
     <>
-      <SiteHeader nav={<SiteNav />} />
+      {/* Redact current, and no "Redact a PDF" button on its own page (spec 0013, AC-7). */}
+      <PageHeader current="tool" />
       {/*
         The skip link's target (spec 0003, AC-14). Focusable so the link can
         move focus here, and the one element allowed to drop its outline,

@@ -13,13 +13,14 @@ import { SiteFooter } from "@/ui/site-footer";
 
 import { expectNoAxeViolations } from "../../setup/component";
 
-/** The footer as the layout builds it, the nav before the licence notice. */
+/** The footer as the layout builds it, the groups before the licence notice. */
 function Footer() {
   return (
-    <SiteFooter>
-      <LegalNav />
-      <LicenceNotice sourceUrl="" />
-    </SiteFooter>
+    <SiteFooter
+      brand={<div>{LEGAL.brandLine}</div>}
+      groups={<LegalNav />}
+      notice={<LicenceNotice sourceUrl="" />}
+    />
   );
 }
 
@@ -58,13 +59,20 @@ describe("LegalNav", () => {
     );
   });
 
-  /** covers: AC-4. A list, with no separators and no paragraph of its own. */
-  it("holds a list and no paragraph", () => {
+  /**
+   * covers: AC-4. A list, with no separators and no paragraph of its own, under
+   * a label shown on screen and hidden from assistive technology, which hears
+   * the nav's own name instead (spec 0013, AC-8).
+   */
+  it("holds a list and no paragraph, under its label", () => {
     const { container } = render(<LegalNav />);
 
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(container.querySelector("p")).toBeNull();
-    expect(container.textContent).toBe("Privacy policyTerms of service");
+    expect(screen.getByRole("list").textContent).toBe("Privacy policyTerms of service");
+    const label = container.querySelector("nav > [aria-hidden='true']");
+    expect(label).toHaveTextContent(LEGAL.legalNavLabel);
+    expect(label?.tagName).toBe("DIV");
   });
 
   /**

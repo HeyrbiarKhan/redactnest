@@ -234,11 +234,19 @@ async function downloaded(page: Page): Promise<void> {
 }
 
 /**
+ * Idle, once the page's plan answer is in. The plan line's links arrive with
+ * it, so a walk listed before then would miss them and then meet them.
+ */
+async function planAnswered(page: Page): Promise<void> {
+  await expect(page.getByTestId("plan-line").getByRole("link")).toHaveCount(2);
+}
+
+/**
  * The states the tool page can settle in (AC-18; spec 0005, AC-13; spec 0007,
  * AC-22).
  */
 const TOOL_STATES: readonly (readonly [string, (page: Page) => Promise<void>])[] = [
-  ["idle", async () => {}],
+  ["idle", planAnswered],
   ["failed", failToOpen],
   ["opening", openingHeld],
   ["opened", openDocument],
@@ -464,9 +472,11 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "RedactNest" })).toBeFocused();
 
-    // Spec 0012, AC-9: Pricing and Account sit in the header on every page,
-    // /tool included, because the test build has billing on.
+    // Spec 0013, AC-7: Redact, Pricing and Account sit in the header on every
+    // page, /tool included, because the test build has billing on.
     const header = page.getByRole("banner");
+    await page.keyboard.press("Tab");
+    await expect(header.getByRole("link", { name: "Redact", exact: true })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(header.getByRole("link", { name: "Pricing" })).toBeFocused();
     await page.keyboard.press("Tab");
@@ -1048,7 +1058,10 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18)", () => {
 
     await expect(page).toHaveTitle("RedactNest");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Truly redact a PDF.",
+      "Redaction that actually removes the text",
+    );
+    await expect(page.getByTestId("home-eyebrow")).toHaveText(
+      "PDF redaction in your browser",
     );
     await expect(page.getByRole("main")).toContainText(
       "The text is removed from the file itself rather than covered with a black box, and your document never leaves your machine.",
@@ -1084,7 +1097,11 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18)", () => {
     await expect(page.getByRole("link", { name: "Skip to main content" })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "RedactNest" })).toBeFocused();
-    // Spec 0012, AC-9: Pricing and Account, before the header's button.
+    // Spec 0013, AC-7: Redact, Pricing and Account, before the header's button.
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("banner").getByRole("link", { name: "Redact", exact: true }),
+    ).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(
       page.getByRole("banner").getByRole("link", { name: "Pricing" }),

@@ -116,6 +116,13 @@ export const LEGAL = Object.freeze({
   privacyLabel: "Privacy policy",
   termsLabel: "Terms of service",
   /**
+   * The footer's brand column and its other group (spec 0013, AC-8). The
+   * Product group's link words are the header's, `NAV_TEXT` in
+   * `src/app/site-nav.tsx`.
+   */
+  brandLine: "PDF redaction in your browser.",
+  productNavLabel: "Product",
+  /**
    * The line under the drop zone, around its two links (spec 0011, AC-5): "By
    * choosing a PDF you agree to the Terms of service. The Privacy policy
    * explains what happens to your data."

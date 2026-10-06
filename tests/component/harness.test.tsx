@@ -31,9 +31,9 @@ describe("the component test harness", () => {
     render(<HomePage />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Truly redact a PDF.",
+      "Redaction that actually removes the text",
     );
-    // Scoped to `main`, because the header carries the same link (spec 0003, AC-13).
+    // Scoped to `main`, because the header carries the same link (spec 0013, AC-7).
     expect(
       within(screen.getByRole("main")).getByRole("link", { name: "Redact a PDF" }),
     ).toHaveAttribute("href", "/tool");

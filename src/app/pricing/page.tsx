@@ -5,13 +5,12 @@ import { notFound } from "next/navigation";
 import { config } from "@/config";
 import { LEGAL } from "@/lib/legal";
 import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
-import { SUBSCRIBE_PATH, TERMS_PATH, TOOL_PATH } from "@/lib/routes";
+import { SUBSCRIBE_PATH, TERMS_PATH } from "@/lib/routes";
 import { Button } from "@/ui/button";
 import { Card } from "@/ui/card";
 import { PageContainer } from "@/ui/page-container";
-import { SiteHeader } from "@/ui/site-header";
 
-import { SiteNav } from "../site-nav";
+import { PageHeader } from "../site-nav";
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -35,14 +34,7 @@ export default function PricingPage() {
 
   return (
     <>
-      <SiteHeader
-        nav={<SiteNav />}
-        action={
-          <Button href={TOOL_PATH} reload>
-            Redact a PDF
-          </Button>
-        }
-      />
+      <PageHeader current="pricing" />
       {/* The skip link's target, allowed to drop its outline (spec 0003, AC-14). */}
       <main id="main" tabIndex={-1} className="flex-1 py-10 focus:outline-none sm:py-14">
         <PageContainer width="wide" className="flex flex-col gap-8">

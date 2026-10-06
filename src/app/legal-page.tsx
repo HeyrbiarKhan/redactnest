@@ -2,13 +2,10 @@ import type { ReactNode } from "react";
 
 import { LEGAL } from "@/lib/legal";
 import { formatPolicyDate, lastUpdated, type PolicyChanges } from "@/lib/policy-changes";
-import { TOOL_PATH } from "@/lib/routes";
-import { Button } from "@/ui/button";
 import { PageContainer } from "@/ui/page-container";
 import { Prose } from "@/ui/prose";
-import { SiteHeader } from "@/ui/site-header";
 
-import { SiteNav } from "./site-nav";
+import { PageHeader } from "./site-nav";
 
 /**
  * The frame both legal pages share. Spec 0011, AC-1, AC-2 and AC-18.
@@ -20,6 +17,7 @@ import { SiteNav } from "./site-nav";
  *
  * The header's button is a real page load (`reload`), never `next/link`, so
  * the tool opens under its own content security policy (spec 0003, INV-10).
+ * Nothing in the header is current here (spec 0013, AC-7).
  */
 export function LegalPage({
   title,
@@ -32,14 +30,7 @@ export function LegalPage({
 }) {
   return (
     <>
-      <SiteHeader
-        nav={<SiteNav />}
-        action={
-          <Button href={TOOL_PATH} reload>
-            Redact a PDF
-          </Button>
-        }
-      />
+      <PageHeader />
       {/* The skip link's target, allowed to drop its outline (spec 0003, AC-14). */}
       <main id="main" tabIndex={-1} className="flex-1 py-10 focus:outline-none sm:py-14">
         <PageContainer width="narrow" className="flex flex-col gap-10">

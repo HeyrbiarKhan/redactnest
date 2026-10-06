@@ -246,7 +246,7 @@ Make RedactNest look like the four reference images in `docs/design/references`,
 spec [0013](../specs/0013-brand-ui-refresh/index.md)
 - [x] Design it (spec): `/architect brand & UI refresh`
 - [ ] Build it: `/develop brand & UI refresh`
-  - [ ] The brand on every page: the Nest and bar mark and wordmark, the header and footer, the favicon and Apple icon, the social preview image and the Polar image from `scripts/make-brand.mjs`, and the 404 · AC-1 to AC-9, AC-27, AC-28
+  - [x] The brand on every page: the Nest and bar mark and wordmark, the header and footer, the favicon and Apple icon, the social preview image and the Polar image from `scripts/make-brand.mjs`, and the 404 · AC-1 to AC-9, AC-27, AC-28
   - [ ] The tool page in three areas: one keyed grid with the found items left and the rail right, the plan card, the steps and lock line, the sticky action panel, every step state proved · AC-14 to AC-21, AC-26, AC-29
   - [ ] The landing page: the sample fixture, `home-text.ts`, the real product shot, the hero, trio and finds and strips band · AC-10 to AC-13, AC-28
   - [ ] The other pages: Pricing's two cards, the sign in panel with no Clerk logo, the account pages, the legal pages' On this page list · AC-22 to AC-25

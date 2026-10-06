@@ -5,7 +5,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { SOURCE_URL } from "./build-env";
 
 /**
- * The routes around the tool: the landing page and the layout every page shares.
+ * The routes around the tool: the landing page and the layout every page shares,
+ * and since spec 0013 the brand on every page: the header, the footer, the head
+ * tags and the 404.
  *
  * Deliberately thin. Feature 15 builds the real landing page, so nothing here
  * asserts wording it will replace. What is asserted is what the scaffold
@@ -273,5 +275,230 @@ test.describe("the document title", () => {
     await page.goto("/tool");
 
     await expect(page).toHaveTitle(/Redact a PDF.*RedactNest/);
+  });
+});
+
+/**
+ * Spec 0013, AC-7. The header every page shows: the lockup home, the Site nav
+ * with Redact and Pricing, Account, then the button everywhere but `/tool`.
+ */
+test.describe("the header", () => {
+  const CURRENT = [
+    ["/tool", "Redact"],
+    ["/pricing", "Pricing"],
+    ["/", null],
+    ["/privacy", null],
+    ["/terms", null],
+  ] as const;
+
+  for (const [path, current] of CURRENT) {
+    test(`marks ${current ?? "nothing"} as the current page on ${path}`, async ({
+      page,
+    }) => {
+      await page.goto(path);
+      const header = page.getByRole("banner");
+
+      const marked = header.locator('[aria-current="page"]');
+      if (current === null) {
+        await expect(marked).toHaveCount(0);
+      } else {
+        await expect(marked).toHaveText([current]);
+        // Semibold, and the 2 pixel accent bar beneath.
+        expect(await marked.evaluate((link) => getComputedStyle(link).fontWeight)).toBe(
+          "600",
+        );
+        const bar = await marked.evaluate((link) => {
+          const after = getComputedStyle(link, "::after");
+          return { width: after.borderBottomWidth, style: after.borderBottomStyle };
+        });
+        expect(bar).toEqual({ width: "2px", style: "solid" });
+      }
+      // One way home per page: the footer's lockup is not a link.
+      await expect(
+        page.getByRole("link", { name: "RedactNest", exact: true }),
+      ).toHaveCount(1);
+    });
+  }
+
+  test("offers Redact a PDF on every page but the tool", async ({ page }) => {
+    await page.goto("/pricing");
+    await expect(
+      page.getByRole("banner").getByRole("link", { name: "Redact a PDF" }),
+    ).toHaveAttribute("href", "/tool");
+
+    await page.goto("/tool");
+    await expect(
+      page.getByRole("banner").getByRole("link", { name: "Redact a PDF" }),
+    ).toHaveCount(0);
+  });
+
+  test("gives every nav item a target at least 40 pixels tall", async ({ page }) => {
+    await page.goto("/");
+    const header = page.getByRole("banner");
+
+    for (const name of ["Redact", "Pricing", "Account"]) {
+      const box = await header.getByRole("link", { name, exact: true }).boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(40);
+    }
+  });
+
+  /** INV-4: the header's Redact is a real page load, like every way in. */
+  test("its Redact link loads /tool as a document", async ({ page }) => {
+    await page.goto("/pricing");
+
+    await page
+      .getByRole("banner")
+      .getByRole("link", { name: "Redact", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/tool$/);
+
+    const loadedAt = await page.evaluate(
+      () => performance.getEntriesByType("navigation")[0]?.name ?? "",
+    );
+    expect(new URL(loadedAt).pathname).toBe("/tool");
+  });
+
+  /**
+   * Below `sm` the lockup sits alone on the first row and everything else
+   * wraps beneath it in page order, so focus never moves back up the screen.
+   */
+  test("wraps below the lockup in page order at 320 pixels, with no sideways scroll", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto("/");
+    const header = page.getByRole("banner");
+
+    const tops: number[] = [];
+    for (const name of ["RedactNest", "Redact", "Pricing", "Account", "Redact a PDF"]) {
+      const box = await header.getByRole("link", { name, exact: true }).boundingBox();
+      tops.push(box?.y ?? Number.NaN);
+    }
+    const [lockup = Number.NaN, ...rest] = tops;
+    for (const top of rest) expect(top).toBeGreaterThan(lockup);
+    expect(rest).toEqual([...rest].sort((a, b) => a - b));
+
+    const scroll = await page.evaluate(() => ({
+      width: document.documentElement.scrollWidth,
+      viewport: document.documentElement.clientWidth,
+    }));
+    expect(scroll.width).toBeLessThanOrEqual(scroll.viewport);
+  });
+});
+
+/** Spec 0013, AC-8. The footer's brand column and link groups. */
+test.describe("the footer", () => {
+  for (const path of ["/", "/tool"]) {
+    test(`shows the brand line and both groups on ${path}`, async ({ page }) => {
+      await page.goto(path);
+      const footer = page.getByRole("contentinfo");
+
+      await expect(footer).toContainText("RedactNest");
+      await expect(footer).toContainText("PDF redaction in your browser.");
+      await expect(
+        footer.getByRole("navigation", { name: "Product" }).getByRole("link"),
+      ).toHaveText(["Redact a PDF", "Pricing"]);
+      await expect(
+        footer.getByRole("navigation", { name: "Legal" }).getByRole("link"),
+      ).toHaveText(["Privacy policy", "Terms of service"]);
+      // The lockup here is not a link, and the notice is still the one paragraph.
+      await expect(footer.getByRole("link", { name: "RedactNest" })).toHaveCount(0);
+      await expect(footer.locator("p")).toHaveCount(1);
+    });
+  }
+});
+
+/**
+ * Spec 0013, AC-3 to AC-5. The icons and the social card every page links,
+ * all from our own origin, with neither content security policy changed: no
+ * manifest, and no policy violation on any page.
+ */
+test.describe("the head tags", () => {
+  for (const path of ["/", "/tool", "/pricing", "/privacy"]) {
+    test(`link the icons and the social card on ${path}, with no policy violation`, async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        const seen: string[] = [];
+        Reflect.set(window, "__violations", seen);
+        document.addEventListener("securitypolicyviolation", (event) => {
+          seen.push(`${event.violatedDirective} ${event.blockedURI}`);
+        });
+      });
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+
+      const icons = await page.evaluate(() =>
+        [
+          ...document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]'),
+        ].map((link) => ({
+          rel: link.getAttribute("rel"),
+          path: new URL(link.getAttribute("href") ?? "", location.href).pathname,
+          type: link.getAttribute("type"),
+        })),
+      );
+      expect(icons).toEqual([
+        { rel: "icon", path: "/favicon.ico", type: "image/x-icon" },
+        { rel: "icon", path: "/icon.svg", type: "image/svg+xml" },
+        { rel: "apple-touch-icon", path: "/apple-icon.png", type: "image/png" },
+      ]);
+      for (const { path: iconPath, type } of icons) {
+        const response = await page.request.get(iconPath);
+        expect(response.status()).toBe(200);
+        expect(response.headers()["content-type"]).toContain(type ?? "");
+      }
+
+      const meta = (selector: string) =>
+        page.locator(selector).first().getAttribute("content");
+      for (const selector of [
+        'meta[property="og:image"]',
+        'meta[name="twitter:image"]',
+      ]) {
+        expect(await meta(selector)).toMatch(
+          /^https:\/\/redactnest\.test\/opengraph-image\.png(\?|$)/,
+        );
+      }
+      expect(await meta('meta[name="twitter:card"]')).toBe("summary_large_image");
+      expect(await meta('meta[property="og:image:alt"]')).toBe(
+        "RedactNest. PDF redaction in your browser. Redaction that actually removes the text.",
+      );
+      await expect(page.locator('link[rel="manifest"]')).toHaveCount(0);
+
+      expect(await page.evaluate(() => Reflect.get(window, "__violations"))).toEqual([]);
+    });
+  }
+});
+
+/** Spec 0013, AC-9. Every address that is not a page. */
+test.describe("the 404 page", () => {
+  test("answers 404, unindexed, with a way into the tool and a way home", async ({
+    page,
+  }) => {
+    const response = await page.goto("/no-such-page");
+
+    expect(response?.status()).toBe(404);
+    await expect(page).toHaveTitle("Page not found · RedactNest");
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+      "content",
+      /noindex/,
+    );
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "This page doesn’t exist",
+    );
+    const main = page.getByRole("main");
+    await expect(main).toContainText(
+      "The address may be mistyped, or the page may have moved.",
+    );
+    await expect(main.getByRole("link", { name: "Redact a PDF" })).toHaveAttribute(
+      "href",
+      "/tool",
+    );
+    await expect(main.getByRole("link", { name: "Go to the home page" })).toHaveAttribute(
+      "href",
+      "/",
+    );
+    // The shell every page has.
+    await expect(page.getByRole("banner")).toHaveCount(1);
+    await expect(page.getByRole("contentinfo")).toHaveCount(1);
   });
 });

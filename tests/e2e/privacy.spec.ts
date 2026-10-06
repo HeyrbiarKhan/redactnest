@@ -41,8 +41,17 @@ const ENGINE_TIMEOUT = 60_000;
  */
 const FILE_NAME = "zzsecretpayroll2026.pdf";
 
-/** Same origin and not a document request: the page's own code and the engine. */
-const ASSET_PATHS = [/^\/_next\//, /^\/engine\//, /^\/favicon\./];
+/**
+ * Same origin and not a document request: the page's own code, the engine,
+ * and the icon files every page links (spec 0013, AC-3 and AC-21), all static.
+ */
+const ASSET_PATHS = [
+  /^\/_next\//,
+  /^\/engine\//,
+  /^\/favicon\./,
+  /^\/icon\.svg$/,
+  /^\/apple-icon\.png$/,
+];
 
 /**
  * Spec 0012, AC-9: the routes outside the account group, none of which may
@@ -69,7 +78,7 @@ const isClerkHost = (url: string): boolean => {
 /** The header's links into the account group, which plain `a` elements never prefetch. */
 async function hoverHeaderLinks(page: Page): Promise<void> {
   const header = page.getByRole("banner");
-  for (const name of ["Pricing", "Account"]) {
+  for (const name of ["Redact", "Pricing", "Account"]) {
     await header.getByRole("link", { name, exact: true }).hover();
   }
   await page.waitForLoadState("networkidle");

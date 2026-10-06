@@ -7,6 +7,7 @@ import { config } from "@/config";
 import { billing } from "@/config/billing";
 import { ACCOUNT_PATH, SIGN_IN_PATH, SIGN_UP_PATH } from "@/lib/routes";
 
+import { AccountShell } from "../../account-shell";
 import { landingAfterSignIn, pagePath } from "../../landing";
 
 export const metadata: Metadata = {
@@ -38,12 +39,15 @@ export default async function SignInPage({
     redirect(`${pagePath(SIGN_IN_PATH, (await params)["sign-in"])}${clean}`);
   }
 
+  // Nothing is current in the header here (spec 0013, AC-7).
   return (
-    <SignIn
-      path={SIGN_IN_PATH}
-      signUpUrl={SIGN_UP_PATH}
-      forceRedirectUrl={landing}
-      signUpForceRedirectUrl={landing}
-    />
+    <AccountShell>
+      <SignIn
+        path={SIGN_IN_PATH}
+        signUpUrl={SIGN_UP_PATH}
+        forceRedirectUrl={landing}
+        signUpForceRedirectUrl={landing}
+      />
+    </AccountShell>
   );
 }

@@ -100,9 +100,11 @@ describe("LicenceNotice", () => {
   it("passes axe inside the footer, with and without a source link", async () => {
     for (const sourceUrl of [SOURCE_URL, ""]) {
       const { container, unmount } = render(
-        <SiteFooter>
-          <LicenceNotice sourceUrl={sourceUrl} />
-        </SiteFooter>,
+        <SiteFooter
+          brand={null}
+          groups={null}
+          notice={<LicenceNotice sourceUrl={sourceUrl} />}
+        />,
       );
       await expectNoAxeViolations(container);
       unmount();

@@ -1,10 +1,11 @@
 /**
  * The layout pieces and the quiet ones: `Card`, `PageContainer`, `SiteHeader`,
- * `SiteFooter`, `SkipLink`, `IconCircle`, `Spinner` and `EmptyState`.
- * Spec 0003, AC-5, AC-14, AC-16 and AC-18.
+ * `SiteFooter`, `FooterGroup`, `SkipLink`, `IconCircle`, `Spinner` and
+ * `EmptyState`. Spec 0003, AC-5, AC-14, AC-16 and AC-18, and spec 0013, AC-7
+ * and AC-8.
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FileText, Inbox } from "lucide-react";
 import { createRef } from "react";
@@ -14,6 +15,7 @@ import { Button } from "@/ui/button";
 import { Card } from "@/ui/card";
 import { CountBadge } from "@/ui/count-badge";
 import { EmptyState } from "@/ui/empty-state";
+import { FooterGroup } from "@/ui/footer-group";
 import { IconCircle } from "@/ui/icon-circle";
 import { PageContainer } from "@/ui/page-container";
 import { SiteFooter } from "@/ui/site-footer";
@@ -164,11 +166,57 @@ describe("PageContainer", () => {
 });
 
 describe("SiteHeader", () => {
-  it("is the banner landmark, with the wordmark linking home", () => {
+  it("is the banner landmark, with the lockup linking home by name", () => {
     render(<SiteHeader />);
 
     expect(screen.getByRole("banner")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "RedactNest" })).toHaveAttribute("href", "/");
+    const home = screen.getByRole("link", { name: "RedactNest" });
+    expect(home).toHaveAttribute("href", "/");
+    // A plain link, never `next/link`, so leaving `/tool` fires `pagehide`.
+    expect(home.tagName).toBe("A");
+    expect(home.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  /** Spec 0013, AC-7: lockup, nav, account, then the action. */
+  it("renders its slots in page order", () => {
+    render(
+      <SiteHeader
+        nav={
+          <nav aria-label="Site">
+            <a href="/tool">Redact</a>
+          </nav>
+        }
+        account={<a href="/account">Account</a>}
+        action={<Button href="/tool">Redact a PDF</Button>}
+      />,
+    );
+
+    expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "RedactNest",
+      "Redact",
+      "Account",
+      "Redact a PDF",
+    ]);
+  });
+
+  /**
+   * Spec 0013, AC-7: below `sm` the lockup takes the first row alone, and from
+   * `sm` the account link and the action sit together at the right.
+   */
+  it("gives the lockup its own row below sm, and pushes the end group right from sm", () => {
+    render(<SiteHeader account={<a href="/account">Account</a>} />);
+
+    const home = screen.getByRole("link", { name: "RedactNest" });
+    expect(home.parentElement).toHaveClass("w-full", "sm:w-auto");
+    expect(screen.getByRole("link", { name: "Account" }).parentElement).toHaveClass(
+      "sm:ml-auto",
+    );
+  });
+
+  it("leaves out the end group when there is nothing to put in it", () => {
+    const { container } = render(<SiteHeader />);
+
+    expect(container.querySelector(".sm\:ml-auto")).toBeNull();
   });
 
   it("carries the action it is given", () => {
@@ -183,7 +231,7 @@ describe("SiteHeader", () => {
   it("is never sticky, so it can never cover what has focus", () => {
     render(<SiteHeader />);
 
-    expect(screen.getByRole("banner").className).not.toMatch(/\b(sticky|fixed)\b/);
+    expect(screen.getByRole("banner").className).not.toMatch(/(sticky|fixed)/);
   });
 
   it("passes axe", async () => {
@@ -195,24 +243,85 @@ describe("SiteHeader", () => {
   });
 });
 
+/** Spec 0013, AC-8. */
 describe("SiteFooter", () => {
+  function Footer() {
+    return (
+      <SiteFooter
+        brand={<div>PDF redaction in your browser.</div>}
+        groups={
+          <FooterGroup label="Legal">
+            <li>
+              <a href="/privacy">Privacy policy</a>
+            </li>
+          </FooterGroup>
+        }
+        notice={
+          <p>
+            <a href="https://example.invalid/source">Source code for this version</a>
+          </p>
+        }
+      />
+    );
+  }
+
   it("is the content info landmark, holding what the layout passes in", () => {
-    render(
-      <SiteFooter>
-        <a href="https://example.invalid/source">Source code (AGPL 3.0)</a>
-      </SiteFooter>,
+    render(<Footer />);
+
+    const footer = screen.getByRole("contentinfo");
+    expect(footer).toHaveTextContent("PDF redaction in your browser.");
+    expect(footer).toContainElement(screen.getByRole("navigation", { name: "Legal" }));
+    expect(footer).toContainElement(
+      screen.getByRole("link", { name: "Source code for this version" }),
+    );
+  });
+
+  it("ends with the notice, across the full width", () => {
+    render(<Footer />);
+
+    const footer = screen.getByRole("contentinfo");
+    const notice = screen.getByText("Source code for this version").closest("p");
+    expect(footer.querySelector("p")).toBe(notice);
+    const grid = notice?.parentElement?.parentElement;
+    expect(grid?.lastElementChild).toBe(notice?.parentElement);
+    expect(notice?.parentElement).toHaveClass("md:col-span-2");
+  });
+
+  it("passes axe", async () => {
+    const { container } = render(<Footer />);
+
+    await expectNoAxeViolations(container);
+  });
+});
+
+/** Spec 0013, AC-8: a footer group's nav, its label and its list. */
+describe("FooterGroup", () => {
+  it("is a nav named by its label, shown once on screen and hidden from assistive technology", () => {
+    const { container } = render(
+      <FooterGroup label="Product">
+        <li>
+          <a href="/tool">Redact a PDF</a>
+        </li>
+      </FooterGroup>,
     );
 
-    expect(screen.getByRole("contentinfo")).toContainElement(
-      screen.getByRole("link", { name: "Source code (AGPL 3.0)" }),
-    );
+    const nav = screen.getByRole("navigation", { name: "Product" });
+    const label = nav.firstElementChild;
+    expect(label).toHaveTextContent("Product");
+    expect(label).toHaveAttribute("aria-hidden", "true");
+    // Never a heading and never a paragraph (spec 0009's notice is `footer p`).
+    expect(label?.tagName).toBe("DIV");
+    expect(container.querySelector("h1, h2, h3, h4, p")).toBeNull();
+    expect(within(nav).getByRole("list")).toHaveTextContent("Redact a PDF");
   });
 
   it("passes axe", async () => {
     const { container } = render(
-      <SiteFooter>
-        <a href="https://example.invalid/source">Source code (AGPL 3.0)</a>
-      </SiteFooter>,
+      <FooterGroup label="Product">
+        <li>
+          <a href="/tool">Redact a PDF</a>
+        </li>
+      </FooterGroup>,
     );
 
     await expectNoAxeViolations(container);
