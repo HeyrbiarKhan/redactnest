@@ -1,4 +1,3 @@
-import { Lock } from "lucide-react";
 import type { Metadata } from "next";
 
 import { PageContainer } from "@/ui/page-container";
@@ -36,21 +35,13 @@ export default function ToolPage() {
         because it is a place focus lands rather than a control.
       */}
       <main id="main" tabIndex={-1} className="flex-1 py-10 focus:outline-none sm:py-14">
-        <PageContainer width="narrow" className="flex flex-col gap-8">
-          <div className="flex flex-col gap-3">
-            <h1 className="text-title text-ink">Redact a PDF</h1>
-            <p className="flex items-start gap-2 text-ink-muted">
-              <Lock
-                aria-hidden="true"
-                className="mt-0.5 size-5 shrink-0 text-accent"
-                strokeWidth={1.75}
-              />
-              <span>
-                Your document is opened in your own browser and never uploaded. Nothing on
-                this page can send it anywhere.
-              </span>
-            </p>
-          </div>
+        {/*
+          Wide, for the three area grid (spec 0013, AC-14). The lock line that
+          sat under the title now ends the rail, beside the drop zone or inside
+          the action panel, where the file is.
+        */}
+        <PageContainer width="wide" className="flex flex-col gap-8">
+          <h1 className="text-title text-ink">Redact a PDF</h1>
 
           <ToolClient />
         </PageContainer>

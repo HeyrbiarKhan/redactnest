@@ -385,6 +385,20 @@ async function expectRingAtOnce(target: Locator): Promise<void> {
 }
 
 /**
+ * Spec 0013, AC-16: the plan card sits in the rail between the file bar and
+ * the action panel, so an anonymous visitor's two links come next.
+ */
+async function tabPastThePlanCard(page: Page): Promise<void> {
+  const plan = page.getByTestId("plan-line");
+  for (const name of ["Sign in", "see what Pro adds"]) {
+    await page.keyboard.press("Tab");
+    await expect(
+      plan.getByRole("link", { name: `${name} (opens in a new tab)` }),
+    ).toBeFocused();
+  }
+}
+
+/**
  * Spec 0007, AC-22. Tab from the top of `main` reaches every control in the
  * page's reading order, each with its ring. The controls are listed from the
  * page itself (everything focusable, enabled and drawn), so a control added in
@@ -455,7 +469,8 @@ test.describe("a short OCR scan (spec 0008)", () => {
 });
 
 test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
-  test("starts at the skip link, then the wordmark, the header's links, the plan line, then the file picker", async ({
+  /** Spec 0013, AC-20: the idle walk, in the order the page is read. */
+  test("starts at the skip link, then the lockup, the header's links, the file picker, the terms notice, then the plan card", async ({
     page,
   }) => {
     await page.goto("/tool");
@@ -482,21 +497,27 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await page.keyboard.press("Tab");
     await expect(header.getByRole("link", { name: "Account" })).toBeFocused();
 
-    // Spec 0012, AC-5: the plan line sits directly above the drop zone, so an
-    // anonymous visitor's two links come next, in the order they are read.
+    // Spec 0013, AC-15 and AC-20: the drop zone's button, the terms notice's
+    // two links under it, then the plan card in the rail beside it.
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("choose-file")).toBeFocused();
+    await expectFocusRing(page.getByTestId("choose-file"));
+
+    const notice = page.getByTestId("terms-notice");
+    for (const name of ["Terms of service", "Privacy policy"]) {
+      await page.keyboard.press("Tab");
+      await expect(notice.getByRole("link", { name })).toBeFocused();
+    }
+
     for (const name of ["Sign in", "see what Pro adds"]) {
       await page.keyboard.press("Tab");
       const link = plan.getByRole("link", { name: `${name} (opens in a new tab)` });
       await expect(link).toBeFocused();
       await expectFocusRing(link);
     }
-
-    await page.keyboard.press("Tab");
-    await expect(page.getByTestId("choose-file")).toBeFocused();
-    await expectFocusRing(page.getByTestId("choose-file"));
   });
 
-  test("the skip link moves focus to main, so the next Tabs are the plan line, then the file picker", async ({
+  test("the skip link moves focus to main, so the next Tab is the file picker, and the plan card follows", async ({
     page,
   }) => {
     await page.goto("/tool");
@@ -507,16 +528,18 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await expect(page.locator("main")).toBeFocused();
 
     await page.keyboard.press("Tab");
+    await expect(page.getByTestId("choose-file")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
     await expect(
       page.getByRole("link", { name: "Sign in (opens in a new tab)" }),
     ).toBeFocused();
-    await page.keyboard.press("Tab");
-    await page.keyboard.press("Tab");
-    await expect(page.getByTestId("choose-file")).toBeFocused();
   });
 
-  // Spec 0007, AC-5: the file bar's two buttons first, then the action panel's
-  // main action above the checklist, then the group summary and each row.
+  // Spec 0007, AC-5, as spec 0013 AC-16 amends it: the file bar's two buttons
+  // first, then the rail (the plan card, then the action panel's main action),
+  // then the found items' group summary and each row.
   test("Start over, Redact and the checklist are reached and ringed like every other control", async ({
     page,
   }) => {
@@ -529,6 +552,7 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await expect(page.getByTestId("start-over")).toBeFocused();
     await expectFocusRing(page.getByTestId("start-over"));
 
+    await tabPastThePlanCard(page);
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("redact")).toBeFocused();
     await expectFocusRing(page.getByTestId("redact"));
@@ -561,6 +585,7 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
 
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("start-over")).toBeFocused();
+    await tabPastThePlanCard(page);
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("redact")).toBeFocused();
     await expectFocusRing(page.getByTestId("redact"));
@@ -655,6 +680,106 @@ test.describe("target sizes on the tool page (AC-7)", () => {
   });
 });
 
+/**
+ * Spec 0013, AC-14 to AC-17. The three areas as a wide window draws them, and
+ * the action panel sticky beside the list only there.
+ */
+test.describe("the tool page's layout (spec 0013)", () => {
+  const box = (page: Page, testId: string) =>
+    page.getByTestId(testId).evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, top: rect.top };
+    });
+  const position = (page: Page, testId: string) =>
+    page.getByTestId(testId).evaluate((element) => getComputedStyle(element).position);
+
+  test("sets the drop zone left of the rail while nothing is open, and first in the page", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/tool");
+    await planAnswered(page);
+
+    const zone = await box(page, "area-document");
+    const rail = await box(page, "area-rail");
+    expect(zone.right).toBeLessThanOrEqual(rail.left);
+    expect(zone.top).toBe(rail.top);
+
+    const railArea = page.getByTestId("area-rail");
+    await expect(railArea.getByTestId("plan-card")).toBeVisible();
+    await expect(railArea.getByRole("list")).toHaveText(
+      /Open a PDF.*Tick what to remove.*Download your new file/,
+    );
+    await expect(railArea.getByTestId("lock-line")).toHaveText(
+      "Your file never leaves your browser.",
+    );
+  });
+
+  test("draws the found items left of the rail, while the rail comes first in the page", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/tool");
+    await reviewBothGroups(page);
+
+    const list = await box(page, "area-found");
+    const rail = await box(page, "area-rail");
+    expect(list.right).toBeLessThanOrEqual(rail.left);
+    const railFirst = await page.evaluate(() => {
+      const rail = document.querySelector('[data-testid="area-rail"]');
+      const list = document.querySelector('[data-testid="area-found"]');
+      return Boolean(
+        rail &&
+        list &&
+        rail.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    });
+    expect(railFirst).toBe(true);
+  });
+
+  test("keeps the action panel sticky at 1280 pixels, and static at 900 and at 200% text", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/tool");
+    await openDocument(page);
+    expect(await position(page, "action-panel")).toBe("sticky");
+    expect(
+      await page
+        .getByTestId("action-panel")
+        .evaluate((element) => getComputedStyle(element).top),
+    ).toBe("24px");
+
+    await page.setViewportSize({ width: 900, height: 800 });
+    expect(await position(page, "action-panel")).toBe("static");
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    expect(await position(page, "action-panel")).toBe("static");
+  });
+
+  test("keeps Redact in view beside a long list as the page scrolls", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/tool");
+    await reviewManyRows(page);
+
+    await page.getByTestId("area-found").evaluate((element) => {
+      element.scrollIntoView({ block: "end" });
+    });
+    await expect(page.getByTestId("redact")).toBeInViewport();
+  });
+
+  test("never makes the result card sticky", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/tool");
+    await completeARun(page);
+
+    expect(await position(page, "result")).toBe("static");
+  });
+});
+
 test.describe("reflow and zoom on the tool page (AC-15)", () => {
   test("needs no sideways scroll at 320 CSS pixels", async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 640 });
@@ -699,6 +824,28 @@ test.describe("reflow and zoom on the tool page (AC-15)", () => {
       await expectContained(row);
     }
   });
+
+  // Spec 0013, AC-17 and AC-26: every step state at 200% text is one column,
+  // with nothing sticky and nothing scrolling sideways.
+  for (const [state, reach] of TOOL_STATES) {
+    test(`is one column with nothing sticky at 200% text in the ${state} state`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto("/tool");
+      await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+      await reach(page);
+
+      await expectNoHorizontalScroll(page);
+      const sticky = await page.evaluate(
+        () =>
+          [...document.querySelectorAll("main *")].filter(
+            (element) => getComputedStyle(element).position === "sticky",
+          ).length,
+      );
+      expect(sticky).toBe(0);
+    });
+  }
 });
 
 test.describe("reduced motion (AC-16)", () => {

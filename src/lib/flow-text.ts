@@ -417,6 +417,32 @@ export function redactLabel(ticked: number): string {
   return `Redact ${ticked} ${ticked === 1 ? "item" : "items"}`;
 }
 
+/* The rail and the found items column (spec 0013, AC-14 to AC-19). */
+
+/**
+ * The lock line, at the foot of the rail, and inside the action panel beneath
+ * Redact while one shows (AC-14, AC-16).
+ */
+export const LOCK_LINE = "Your file never leaves your browser.";
+
+/**
+ * The rail's three steps while nothing is open (AC-15). None repeats a button's
+ * name, and none promises a "cleaned copy", which is only the button's label
+ * when nothing is ticked.
+ */
+export const IDLE_STEPS: readonly string[] = Object.freeze([
+  "Open a PDF",
+  "Tick what to remove",
+  "Download your new file",
+]);
+
+/** The found items column's card, and its count of every row found (AC-19). */
+export const FOUND_ITEMS_TITLE = "Found items";
+export const FOUND_ITEMS_NOUN = Object.freeze({
+  one: "found item",
+  other: "found items",
+});
+
 /* The result card. */
 
 /** A run that removed nothing is never titled as a redaction (AC-12, INV-2). */

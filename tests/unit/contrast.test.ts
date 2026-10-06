@@ -79,6 +79,10 @@ const CONTRACT: readonly Pairing[] = Object.freeze([
   ...pairings(["accent"], ["canvas", "surface", "accent-soft"], GRAPHIC),
   ...pairings(["border-strong"], ["canvas", "surface"], GRAPHIC),
   ...pairings(["focus"], ["canvas", "surface", "accent-soft"], GRAPHIC),
+  // The plan card on `/tool`: its links and Try again, and the ring around
+  // them, on the card's `info-bg` fill (spec 0013, AC-18 and AC-27).
+  { foreground: "accent-strong", background: "info-bg", minimum: TEXT },
+  { foreground: "focus", background: "info-bg", minimum: GRAPHIC },
   { foreground: "warning-icon", background: "warning-bg", minimum: GRAPHIC },
   { foreground: "info-icon", background: "info-bg", minimum: GRAPHIC },
   { foreground: "danger-icon", background: "danger-bg", minimum: GRAPHIC },

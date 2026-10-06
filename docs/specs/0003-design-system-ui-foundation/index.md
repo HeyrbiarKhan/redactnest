@@ -101,6 +101,8 @@ Contrast contract, mirrored as a frozen array in `tests/unit/contrast.test.ts`. 
 | `accent` | `canvas`, `surface`, `accent-soft` | 3 | 4.75, 5.09, 4.18 |
 | `border-strong` | `canvas`, `surface` | 3 | 3.53, 3.79 |
 | `focus` | `canvas`, `surface`, `accent-soft` | 3 | 7.96, 8.53, 7.01 |
+| `accent-strong` | `info-bg` | 4.5 | 6.14 (the plan card's links and Try again on `/tool`; added by spec 0013, AC-18) |
+| `focus` | `info-bg` | 3 | 7.60 (the ring around those controls; added by spec 0013) |
 | `warning-icon`, `info-icon`, `danger-icon` | their own `-bg` | 3 | 4.93, 5.95, 5.78 |
 
 `focus` measures only 1.68 against `accent`, which is why the 2px outline offset in AC-6 is mandatory: the offset puts the ring against the page background, never against the button it surrounds.

@@ -47,18 +47,34 @@ interface PlanLineProps {
 }
 
 /**
- * The plan line directly above the drop zone: the account's next step, from
- * the page's answer rather than any job's snapshot (spec 0012, AC-5).
+ * The plan card in the tool's rail: the account's next step, from the page's
+ * answer rather than any job's snapshot (spec 0012, AC-5; spec 0013, AC-18).
+ *
+ * Its own markup in a box, never a `Callout`, so no icon and no hidden tone
+ * word join what is announced: an `info-bg` fill, an `info-border` edge. Its
+ * links and Try again are `accent-strong` on that fill, a pairing in the
+ * contrast contract (6.14:1). It never says the free plan covers part of a
+ * document, because a document over the cap is refused whole (spec 0012,
+ * AC-6).
  *
  * Its own polite status region, in the page from the start (empty until the
- * first answer) so its first announcement is heard. Try again sits outside the
- * region, so a change of words is heard without the button read into it.
+ * first answer) so its first announcement is heard. Until then the card is
+ * visually hidden rather than drawn empty, which also keeps it out of the
+ * rail's spacing; it stays in the accessibility tree either way. Try again
+ * sits outside the region, so a change of words is heard without the button
+ * read into it.
  */
 export function PlanLine({ answer, checking, onTryAgain, lineRef }: PlanLineProps) {
   const line = answer === null ? null : planLine(answer);
 
   return (
-    <div className="flex min-h-6 flex-wrap items-center gap-x-3">
+    <div
+      data-testid="plan-card"
+      className={cx(
+        "flex flex-wrap items-center gap-x-3 gap-y-1",
+        line === null ? "sr-only" : "rounded-xl border border-info-border bg-info-bg p-5",
+      )}
+    >
       <p
         ref={lineRef}
         // A place Try again can hand focus to, once there are words to land
@@ -66,7 +82,7 @@ export function PlanLine({ answer, checking, onTryAgain, lineRef }: PlanLineProp
         tabIndex={line === null ? undefined : -1}
         role="status"
         data-testid="plan-line"
-        className="text-small text-ink-muted"
+        className="text-ink"
       >
         {line !== null &&
           (checking
@@ -75,7 +91,11 @@ export function PlanLine({ answer, checking, onTryAgain, lineRef }: PlanLineProp
                 typeof part === "string" ? (
                   <Fragment key={index}>{part}</Fragment>
                 ) : (
-                  <NewTabLink key={index} link={part} />
+                  <NewTabLink
+                    key={index}
+                    link={part}
+                    className="font-medium text-accent-strong"
+                  />
                 ),
               ))}
       </p>

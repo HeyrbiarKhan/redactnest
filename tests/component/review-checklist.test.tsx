@@ -208,7 +208,11 @@ describe("a blocked match", () => {
 
 /** AC-14: what was looked for, always; nothing found, when so. */
 describe("the coverage note and the empty state", () => {
-  it("always sits above the checklist, naming what was looked for", () => {
+  /**
+   * Spec 0013, AC-19: the first thing inside the Found items card, before
+   * any group, so the list never reads as a complete redaction.
+   */
+  it("always comes first inside the found items card, naming what was looked for", () => {
     const { container } = show();
 
     const note = screen.getByTestId("coverage");
@@ -216,11 +220,22 @@ describe("the coverage note and the empty state", () => {
     expect(COVERAGE_NOTE).toBe(
       "RedactNest looked for email addresses and phone numbers. Anything else, such as names and addresses, stays in the file.",
     );
+    const card = screen.getByTestId("checklist");
+    expect(card).toContainElement(note);
     expect(
-      note.compareDocumentPosition(screen.getByTestId("checklist")) &
+      note.compareDocumentPosition(container.querySelector("details") as Element) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(container.querySelector("[role]")).toBeNull();
+  });
+
+  /** Spec 0013, AC-19: titled Found items, with a neutral count of every row. */
+  it("titles the card Found items, with a count of every row found", () => {
+    show();
+
+    const card = screen.getByRole("region", { name: "Found items" });
+    const badge = within(card).getByText(/found items?$/);
+    expect(badge).toHaveClass("bg-subtle", "text-ink-muted");
   });
 
   it("says nothing was found, and that a cleaned copy is still on offer, when there is nothing", () => {
