@@ -219,6 +219,31 @@ What was left was how to build it, decided here with the runner up:
 | The Strips columns and divider | one `ul` in CSS multi column with a 1 pixel `border` `column-rule` | one list of seven for a screen reader, with the divider drawn by the browser between the columns and gone at one column | two lists side by side (a screen reader hears two lists); a grid with a drawn divider (more markup, and it reads across rather than down) |
 | The info icon's colour | `accent` | it ties the close to the header's tile, and the line beside it carries the meaning | `ink-muted` (quieter, and equally clear) |
 
+### Recorded during the build (task 39)
+
+Built on 2026-10-06 (commit `d9c042e`), recorded the same day, no new design. You chose to skip the cross check for this record. Your mockup, saved as `docs/design/references/05-finds-and-strips.png`, is `/` at 1280 pixels drawn at 1.5x, so `/develop` divided its pixels by 1.5 and set each size on Tailwind's spacing scale. The sizes were measured afterwards on `/` at 1280 pixels in a headed Chromium with a 15 pixel scrollbar, and the gaps read from the classes:
+
+| Part | As built |
+|---|---|
+| Card | 540 pixels wide (the wide container's cap), 28 pixels of padding, 24 between its parts; the `h2` 28 pixels above the cards |
+| Header tile | 64 pixels, `rounded-xl`, a 28 pixel icon, 20 pixels before the title column |
+| Finds row | 68 pixels tall, `rounded-xl`, a 48 pixel tile with a 20 pixel icon, 20 pixels before the semibold label; rows 12 apart |
+| Strips item | a 32 pixel circle with a 20 pixel check, 20 pixels before the words; items 8 apart down a column |
+| Close | the rule, then 20 pixels down, a 28 pixel info icon 12 pixels before the line |
+| Strips columns | 482 pixels of content, so two columns 64 pixels apart |
+
+The Strips labels measure 80 to 125 pixels, the longest "Page thumbnails" at 125.4, so an item needs 177.4 with its circle and gap, and two columns at a 48 pixel gap need about 403 pixels of content (25.2rem). The build switches at 26rem (416).
+
+**The 1024 pixel check.** The commit's e2e case asserted two columns at 1024 pixels and passed. Measured in the headed browser at 1024, the page is 1009 pixels wide inside the scrollbar, the card 468.4 and its content 411, so the list is one column. Playwright 1.63.0 passes `--hide-scrollbars` to Chromium only when headless, so the e2e run had 1024 pixels of page and 476 of card, 2 pixels over the threshold. At 1074 the headed browser showed two columns 48 apart (content 436), and at 600, stacked, two columns 64 apart (content 495).
+
+| Decision | Pick | Why | Runner up |
+|---|---|---|---|
+| The cards' padding | `Card`'s `spacious` prop, `p-7` and `gap-6` | `className` on a primitive is layout only, never size, so a prop keeps one padding per card and no two classes compete | `className="p-7 gap-6"` on the two cards (two paddings in one class list, and the winner depends on the generated CSS order) |
+| The check in a `sm` circle | 20 pixels, the site's icon size | at 16 the check read thin and faint beside 16 pixel words | 16 pixels, half the circle, as AC-11 first wrote |
+| What decides the Strips columns | the card's content width, by a container query | from `md` to about 1020 pixels the card sits beside Finds with too little room, which no window breakpoint can see without restating the container's arithmetic | the window at `sm`, as AC-11 first wrote (items wrap beside Finds from 768 to about 1020) |
+| The column gap | 48 pixels from 26rem, 64 (the mockup's) from 29rem | two columns start as soon as the longest item fits, and take the mockup's gap once there is room | 64 throughout (two columns only from about 1116 pixels) |
+| The 1024 check (your pick) | record the true rule and move the probes to 1080, 960 and 600, each 20 pixels or more from a threshold (task 43) | the rule is right at every width; only the probe sat on the edge, and it measured whether the browser draws a scrollbar | lower the threshold to 25.5rem so 1024 holds with a 17 pixel scrollbar (about 2.6 pixels to spare per column, so a slightly wider font wraps "Page thumbnails") |
+
 ### What each reference gave, and what stayed out
 
 | Reference | Kept | Left out, and why |
