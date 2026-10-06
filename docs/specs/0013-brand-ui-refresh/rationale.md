@@ -144,7 +144,21 @@ Checked in the Clerk development instance and the Polar sandbox on 2026-10-06, u
 
 The sign up from Subscribe ended where Subscribe sends a new free account, Polar's checkout, never on Account by way of the sign up page's own signed in redirect. Each line showed once and stayed until the next page.
 
-Open for your read: between the end of Clerk's loading state and our line there is a gap with no feedback, about 0.35 s on sign in and 1.2 s on sign up, in development mode. AC-32 names the fallback only for the case where `useAuth()` changes after the page does, which it did not, so the build keeps `useAuth()`. Closing the gap would mean showing the line from the sign in's or sign up's own `status` reaching `"complete"`, which likely comes at the end of Clerk's loading state; that is a change to AC-32 for `/architect`.
+Open for your read: between the end of Clerk's loading state and our line there is a gap with no feedback, about 0.35 s on sign in and 1.2 s on sign up, in development mode. AC-32 names the fallback only for the case where `useAuth()` changes after the page does, which it did not, so the build keeps `useAuth()`. Closing the gap would mean showing the line from the sign in's or sign up's own `status` reaching `"complete"`, which likely comes at the end of Clerk's loading state; that is a change to AC-32 for `/architect`. Settled below, in *Decided after slice 6's report*.
+
+### Decided after slice 6's report
+
+Two points from slice 6's report, settled on 2026-10-06 before your read (task 32), each amending one criterion and its checks only.
+
+- **The step line read as a tick.** With the steps 0.75rem apart, the line between two one line steps was 0.25rem long. You asked for at least about 1rem.
+- **A silent gap after Clerk's spinner.** Task 27's walks showed nothing for about 0.35 s on sign in and 1.2 s on sign up, in development mode. Clerk's public source (`clerk/javascript`, read on 2026-10-06, so the walk stays the proof) says why: the attempt request's reply updates the sign in resource and fires its signal straight away, while `useAuth()` changes only once `setActive` has run `__internal_onBeforeSetActive` (the cache invalidating server action), touched the session and fetched a token. Before Clerk loads, `@clerk/react` 6.17.5's state proxy reports `needs_identifier` and `missing_requirements`, never `"complete"`, so the new signal cannot fire early.
+
+Checked by an independent read on another model (2026-10-06), whose fixes you chose to apply. The line latches once shown, and a wrong code before a right one leaves it waiting. A failure after `"complete"` is recorded as a known limit in *Consequences*, not given new words. The 100 ms has a method (a scratch script on the page's frame clock in development mode, from Clerk's loading state gone to our line present) and three walks of each flow. The test mocks and AC-15's measurement are pinned.
+
+| Decision | Pick | Why | Runner up |
+|---|---|---|---|
+| How the steps line grows | the steps 1.5rem apart, the line keeping its 0.25rem clearance at each circle, so 1rem long | a join you can see, with the clearance that keeps the circles distinct; the rail grows by 1.5rem | the steps 1rem apart with the line touching both circles (also about 1rem, but the line and the circles merge into one shape) |
+| The signing in line's signal | the first of `signIn.status` or `signUp.status` becoming `"complete"` (the signal hooks `@clerk/nextjs` exports) and `useAuth()` leaving "loaded and signed out", with a 100 ms limit after Clerk's spinner, timed on both walks | the status is set the moment the code is accepted, before `setActive`'s slow steps, and the backstop keeps today's proven signal, so the line is never later than it is now | the legacy hooks in `@clerk/nextjs/legacy` (they read the client's sign in, which Clerk updates in place in the same reply, so likely the same timing; kept as the named fallback rather than adopting the API Clerk now calls legacy) |
 
 ### What each reference gave, and what stayed out
 
@@ -175,6 +189,7 @@ Three mark directions and three wordmark styles were drawn at 128, 64, 32 and 16
 - The `frontend-design` skill (`anthropics/skills`, `.claude/skills/frontend-design/`), installed for this feature
 - The research cache `docs/.agent-cache/research/brand-ui-refresh.md` (2026-10-06)
 - `@clerk/nextjs` 7.9.10, `dist/esm/app-router/client/ClerkProvider.js` (what runs between a finished sign in and the next page: the cache invalidating server action, the router push, the refresh)
+- `@clerk/react` 6.17.5 (under `@clerk/nextjs` 7.9.10): `dist/hooks-*.mjs` (`useSignIn()` and `useSignUp()` are signal hooks) and `dist/ClerkProvider-*.mjs` (the state proxy's statuses before Clerk loads); Clerk's `clerk/javascript` repository, `packages/clerk-js` (`Base.ts`, `Client.ts`, `SignIn.ts`, `clerk.ts`: when the sign in signal and `setActive`'s steps run), read 2026-10-06 (AC-32, after slice 6)
 - `src/app/(account)/sign-out.tsx` (the spinner and status line pattern the signing in line follows), `tests/unit/engine-wall.test.ts` (where every zone's class patterns are proved)
 
 **Practices and standards**:

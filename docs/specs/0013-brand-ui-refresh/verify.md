@@ -1,4 +1,4 @@
-# Verify: Brand & UI refresh · spec 0013 · updated 2026-10-06 (after task 20's read)
+# Verify: Brand & UI refresh · spec 0013 · updated 2026-10-06 (after slice 6's report: AC-15, AC-32)
 _Steps derived from spec 0013 acceptance criteria. `/check verify` runs these; `/test` locks the durable ones._
 
 ## UI / manual
@@ -15,7 +15,7 @@ _Steps derived from spec 0013 acceptance criteria. `/check verify` runs these; `
 - [ ] Read `/` top to bottom (footer aside) → "in your browser" only in the eyebrow, "never uploaded" only in the first card; the footer's "PDF redaction in your browser." is the one repeat, by choice → AC-30
 - [ ] Change `NEXT_PUBLIC_FREE_PAGE_CAP` and `NEXT_PUBLIC_MAX_PAGES` and rebuild → the cap line, Pricing and the sign in panel all follow → AC-10, AC-22, AC-23 (Value sourcing: caps from `config`)
 - [ ] Compare the product shot on `/` with `/tool` opened on `tests/fixtures/sample-agreement.pdf` at 1280 by 800 → they match: seven ticked, the all clear line, the plan card for nobody signed in → AC-12
-- [ ] `/tool` at idle, 1280 px → drop zone left; rail right with the plan card, the three steps joined by a grey line between their circles (none after the last), and the lock line; the line stays in forced colours and stretches at 200% text → AC-14, AC-15
+- [ ] `/tool` at idle, 1280 px → drop zone left; rail right with the plan card, the three steps joined by a grey line between their circles (none after the last), clearly a join and not a tick: about 1rem long, with a small gap at each circle; and the lock line; the line stays in forced colours and stretches at 200% text → AC-14, AC-15
 - [ ] Open `sample-agreement.pdf` → file bar across the top, Found items (7) on the left, the rail on the right: Document opened, plan card, action panel with Redact 7 items and the lock line → AC-16, AC-19
 - [ ] Open `tests/fixtures/detect-email.pdf` and scroll the list → Redact stays in view at the top of the rail; at 900 px and at 200% text it scrolls away with the page → AC-17
 - [ ] Run a redaction to the result → the result card sits in the panel's place, not sticky, the lock line after it → AC-16, AC-17
@@ -24,7 +24,7 @@ _Steps derived from spec 0013 acceptance criteria. `/check verify` runs these; `
 - [ ] `/pricing` → Free and Pro side by side from 768 px, Pro with a 2 px teal edge, Free's Try it free loads `/tool`, Subscribe goes to `/account/subscribe`, the three lines under it unchanged → AC-22
 - [ ] Sandbox: `/sign-in` and `/sign-up` → our panel beside Clerk's card from 768 px, with no lockup in the panel and no logo in Clerk's card, See pricing works; Clerk's card passes a hand check with axe and the keyboard → AC-23, AC-26
 - [ ] Sandbox: on every Clerk screen (email step, code step, sign up's code step) → each field and code box has a clear grey edge at rest, the focus ring when focused, and Clerk's red edge after a wrong code → AC-31
-- [ ] Sandbox: sign in from `/sign-in` to Account, then sign up from Subscribe → after the last Continue, Clerk's own spinner, then a spinner and "Signing you in" (or "Signing you in, then on to Subscribe") below the card until the next page shows, and the sign up from Subscribe ends where Subscribe sends it; a wrong code shows only Clerk's error; a screen reader hears the line once → AC-32
+- [ ] Sandbox: sign in from `/sign-in` to Account, then sign up from Subscribe → after the last Continue, Clerk's own spinner, then a spinner and "Signing you in" (or "Signing you in, then on to Subscribe") below the card until the next page shows, with no moment between where neither shows (task 35's three timed walks of each flow, each with the line no later than 100 ms after Clerk's spinner ends; showing before it ends also passes), and the sign up from Subscribe ends where Subscribe sends it; a wrong code shows only Clerk's error; a screen reader hears the line once; the Network panel shows no new request → AC-32
 - [ ] Sandbox: hover Clerk's Continue, the edit pencil, Resend and the footer link → the hand; Resend while it counts down → not allowed; the email field and code boxes → the text cursor → AC-33
 - [ ] Signed in: `/account`, Welcome, Subscribe and Billing's error lines → shared header with Account current, narrow column, words unchanged → AC-24
 - [ ] `/privacy` and `/terms` at 1280 px → On this page on the left, text no wider than 44rem; scroll to the end and the list stays in view 1.5rem from the top; each link glides to its heading, which lands just below the top edge; with reduced motion on, it jumps instead; at 768 px and at 200% text the list sits above the text and scrolls away → AC-25
