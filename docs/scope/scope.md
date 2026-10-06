@@ -32,6 +32,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 19 | Sparse OCR scans | Release 1 | done |
 | 20 | Dense text layers over pictures | Release 1 | done |
 | 21 | Launch readiness | Release 2 | in-progress |
+| 22 | Brand & UI refresh | Release 2 | planned |
 
 ## Foundations
 
@@ -219,7 +220,7 @@ spec [0011](../specs/0011-privacy-policy-terms/index.md) (its Launch readiness s
   - [ ] The other lawyer questions: PECA section 32, Pakistani law and courts, and a full review of both pages. Deferred until RedactNest has 100+ users, on the same lawyer's advice (2026-10-03): the pages and the app stay as they are until then · spec 0011 steps 3 and 4
   - [ ] Vercel (your steps on go live day): Pro, the logging and challenge settings off, and the log role confirmed in writing · spec 0011 steps 5 and 6
   - [x] The change lists folded into one launch day entry, dated 2026-10-03. Billing's policy changes join that same entry, and its date moves to go live day (spec 0012 Go live step 4) · spec 0011 step 7
-  - [ ] Billing (your steps on go live day, after feature 10): Clerk and Polar production, the billing values on Vercel, the spending cap and the deny only rate limit rule, the `First published.` date, the cookie check on the production domains, a real purchase made and refunded, then Polar's account review submitted · spec 0012 Go live steps 1 to 8, INV-12
+  - [ ] Billing (your steps on go live day, after feature 10): Clerk and Polar production, the billing values on Vercel, the spending cap and the deny only rate limit rule, the `First published.` date, the cookie check on the production domains, a real purchase made and refunded, then Polar's account review submitted, once feature 22 has shipped · spec 0012 Go live steps 1 to 8, INV-12
   - [ ] Going public (your steps on go live day): feature 18's last slice, gitleaks over every ref, the noreply address, the Vercel settings, public with secret scanning, push protection and rulesets, then the first tagged deploy checked · spec 0009 AC-7, AC-19, AC-20, AC-21
 
 ### 10. Billing & paid plan · done · GA
@@ -238,6 +239,11 @@ spec [0012](../specs/0012-billing-paid-plan/index.md) · code in `src/billing`, 
 - [x] Test it: `/test billing & paid plan`
 - [x] Review it (fresh model): `/check review billing & paid plan`
 - [x] Document it: `/document billing & paid plan`
+
+### 22. Brand & UI refresh · needs a decision · Beta + review
+Make RedactNest look like the four reference images in `docs/design/references`, their layouts and composition as well as their colours, before Polar's account review is submitted (feature 21). That means an original logo mark and wordmark, a full favicon and app icon set, a social preview image, and a header with real navigation. The landing page follows 04 (a headline, two buttons, a picture of the real product, a benefit trio) and `/tool` follows 01 to 03 (two columns, detected items grouped with counts, clear warning and plan cards). The footer, `/pricing`, the account and sign in screens, the legal pages and the 404 are polished to match. Whatever the product does not do stays out: no Documents, History or Settings, no "For teams", no "Trusted by", no testimonials, and no detector RedactNest lacks. Whether `/tool` gains a page preview (thumbnails, zoom) is the spec's call. Spec 0003 (AC-13) and `docs/design/design.md` (the references are "visual style only") change, so this needs a spec. The search pages, sitemap and SEO work stay in feature 15.
+**Done when:** every page listed above follows the references' layout and composition under RedactNest's own brand, every word and picture on them is true of the product today, `/tool` keeps its strict policy and loads no third party script, the core path still holds WCAG 2.2 AA, and a fresh model review (`/check review`) has passed after `/test`, because the change touches `/tool`.
+- [ ] Design it (spec): `/architect brand & UI refresh`
 
 ## Release 3: See it working, and widen the net
 
@@ -268,8 +274,8 @@ Draw a box, and everything under it goes. The only way to remove signatures, log
 ## Release 6: Get found and get trusted
 
 ### 15. Marketing site · needs a decision
-A landing page plus a small set of pages on what this audience actually searches for, since search is the acquisition channel for a self serve tool at this price.
-**Done when:** the landing page explains the guarantee and converts into the tool, the search pages are server rendered with metadata, sitemap and social cards, and Core Web Vitals pass on mobile.
+A small set of pages on what this audience actually searches for, since search is the acquisition channel for a self serve tool at this price. The landing page itself, the brand and the site wide social preview image are built in feature 22.
+**Done when:** the search pages are server rendered with metadata, a sitemap and their own social cards, they lead into the tool, and Core Web Vitals pass on mobile.
 - [ ] Design it (spec): `/architect marketing site`
 
 ### 16. Security & how it works page · Alpha
@@ -295,7 +301,7 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **Dark mode**: light only for now (spec 0003). Needs its own decision: the colour roles redefined for dark, a second contrast contract, and axe runs in both schemes. It would follow the system setting, since a toggle cannot remember a choice without storage · needs a decision · from spec 0003
 - **A memory limit for blanking scan pixels**: spec 0004's padded pass rewrites every scan page it touches as Flate. One ticked match on each page of a 50 page 300 dpi grey scan measured 917 MB and a file 4.9 times larger. Settle a limit before the paid page cap applies to scans · needs a decision · from spec 0006
 - **Name the item behind a refused run**: carry the `MatchId` with a run refusal where the engine can trace one, so the checklist can point at it. Waits for feature 11's refusal counts, alongside spec 0005's Follow-up on `replacement-text` · needs a decision · from spec 0007
-- **Page preview in review**: page images on the main thread are a new kind of document data (spec 0002, INV-1). Decide with feature 14, which renders pages for rectangles · needs a decision · from spec 0007
+- **Page preview in review**: page images on the main thread are a new kind of document data (spec 0002, INV-1). Decide with feature 14, which renders pages for rectangles, unless feature 22's spec decides it first · needs a decision · from spec 0007
 - **The crooked scan line on a straight scan**: spec 0006's line (AC-25) shows whenever a match is blocked `slanted-text` on a machine read page, and says the scan is slightly crooked. On a straight scan with a picture pasted before OCR, OCR's lines beside the picture can come out slanted, so the line shows and its advice to straighten the scan may not help (4 matches on the local `scan-dense-photo-before.pdf`). It fails safe: the matches stay blocked and shown. Decide what the line says, or when it shows, measured first · needs a decision · from spec 0010
 - **Host MuPDF's source ourselves**: attach each shipped version's source archive as a release asset on our own repository, if Artifex ever stop serving one we still ship. AGPL section 6(d) keeps its availability our duty (spec 0009, Option 4) · from spec 0009
 - **Open outside contributions**: choose a CLA or DCO, and look again at who can get a commit deployed before approving any fork deployment, since the tag workflow's copy that runs may be the contributor's (spec 0009, INV-3) · needs a decision · from spec 0009
