@@ -35,6 +35,51 @@ const LINK = Object.freeze({
   "&:active": Object.freeze({ color: "var(--color-accent-strong)" }),
 });
 
+/**
+ * Where a field shows our edge: at rest and on hover, never while focused or
+ * marked invalid, so Clerk's focus ring and its `danger-ink` error edge still
+ * show. The two `:not`s also outrank Clerk's own `:hover` rule, which would
+ * otherwise shade the edge back to its faint grey.
+ *
+ * Clerk marks the two states differently on each element, as the sandbox
+ * showed (spec 0013, task 26). The email field is a real `input`, so it is
+ * focused when `:focus` matches. Each code box is a `div` drawn over one
+ * hidden `input`, which `:focus` never matches, so Clerk marks the box it is
+ * filling with `data-focus-within="true"` and rings it by that. Both carry
+ * `aria-invalid`, "true" after a wrong code.
+ */
+export const FIELD_AT_REST = '&:not(:focus):not([aria-invalid="true"])';
+export const CODE_BOX_AT_REST =
+  '&:not([data-focus-within="true"]):not([aria-invalid="true"])';
+
+/**
+ * Our edge: a real 1 pixel border in `border-strong`, never a box shadow,
+ * because forced colours drops shadows and would leave the field with no edge
+ * at all. Clerk draws its own rest edge as a box shadow over a 0 pixel border
+ * (the sandbox again), so that shadow goes in the same scope and the edge is
+ * never doubled.
+ */
+const EDGE = Object.freeze({
+  borderWidth: "1px",
+  borderStyle: "solid",
+  borderColor: "var(--color-border-strong)",
+  boxShadow: "none",
+});
+
+/**
+ * Clerk's text fields and code boxes, with an edge a visitor can find them by.
+ * Spec 0013, AC-31 (WCAG 2.2, 1.4.11).
+ *
+ * Clerk's own edge is its shade of `border`, about 1.3:1 on `surface`;
+ * `border-strong` is about 3.8:1, a graphic pairing already in the contrast
+ * contract. `variables.colorBorder` stays `border`, so the card's own dividers
+ * stay quiet. Clerk's interface loads from Clerk's servers, so the element
+ * names, the attributes and the edge property were confirmed in the sandbox
+ * rather than in `node_modules`.
+ */
+const FIELD = Object.freeze({ [FIELD_AT_REST]: EDGE });
+const CODE_BOX = Object.freeze({ [CODE_BOX_AT_REST]: EDGE });
+
 export const CLERK_APPEARANCE = Object.freeze({
   variables: Object.freeze({
     colorPrimary: "var(--color-accent)",
@@ -61,10 +106,13 @@ export const CLERK_APPEARANCE = Object.freeze({
    * logo either (spec 0012, Go live step 6), so none is ever requested.
    */
   options: Object.freeze({ logoPlacement: "none" as const }),
-  // The footer's "Sign up" or "Sign in", and the code step's "Didn't receive a
-  // code? Resend".
   elements: Object.freeze({
+    // The footer's "Sign up" or "Sign in", and the code step's "Didn't receive
+    // a code? Resend".
     footerActionLink: LINK,
     formResendCodeLink: LINK,
+    // The email field, and each box of the emailed code.
+    formFieldInput: FIELD,
+    otpCodeFieldInput: CODE_BOX,
   }),
 });

@@ -10,6 +10,7 @@ import { ACCOUNT_PATH, SIGN_IN_PATH, SIGN_UP_PATH } from "@/lib/routes";
 import { AccountShell } from "../../account-shell";
 import { landingAfterSignIn, pagePath } from "../../landing";
 import { SignInPanel } from "../../sign-in-panel";
+import { SigningInStatus } from "../../signing-in";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -41,17 +42,21 @@ export default async function SignInPage({
   }
 
   // Nothing is current in the header here (spec 0013, AC-7). Wide, with our
-  // panel beside Clerk's card from md and above it below (AC-23).
+  // panel beside Clerk's card from md and above it below (AC-23). The card and
+  // the status line under it share one column, the grid's second (AC-32).
   return (
     <AccountShell width="wide">
       <div className="grid w-full items-center gap-10 md:grid-cols-[minmax(0,1fr)_auto]">
         <SignInPanel />
-        <SignIn
-          path={SIGN_IN_PATH}
-          signUpUrl={SIGN_UP_PATH}
-          forceRedirectUrl={landing}
-          signUpForceRedirectUrl={landing}
-        />
+        <div className="flex flex-col gap-4">
+          <SignIn
+            path={SIGN_IN_PATH}
+            signUpUrl={SIGN_UP_PATH}
+            forceRedirectUrl={landing}
+            signUpForceRedirectUrl={landing}
+          />
+          <SigningInStatus landing={landing} />
+        </div>
       </div>
     </AccountShell>
   );

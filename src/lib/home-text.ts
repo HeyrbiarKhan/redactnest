@@ -1,13 +1,18 @@
 /**
  * Every word in the home page's main content, in one place. Spec 0013, AC-10
- * to AC-13.
+ * to AC-13 and AC-30.
  *
  * Nothing here names a detector, a cap, a customer, a team or a capability
- * RedactNest does not have today (INV-1). The detectors come from `lookedFor`,
- * so the page names exactly the ones that exist; the stripped kinds from
- * `HOME_STRIPPED` over `SANITIZED_TEXT`; the plan names from `src/lib/plans.ts`.
- * The caps and whether billing is on arrive as arguments, because the page
- * reads them from `config` and this module never does.
+ * RedactNest does not have today (INV-1). The detectors come from `lookedFor`
+ * and `DETECTOR_LABELS`, so the page names exactly the ones that exist; the
+ * stripped kinds from `HOME_STRIPPED` over `SANITIZED_TEXT`; the plan names
+ * from `src/lib/plans.ts`. The caps and whether billing is on arrive as
+ * arguments, because the page reads them from `config` and this module never
+ * does.
+ *
+ * Each thing is said once (AC-30, INV-11): the document's privacy is "in your
+ * browser" in the eyebrow and "never uploaded" in the first trio card, and
+ * nowhere else in the main content. `tests/unit/home-text.test.ts` holds that.
  *
  * The social card and the Polar image carry the eyebrow and the headline:
  * `scripts/make-brand.mjs` reads both from the built home page
@@ -18,13 +23,10 @@
 
 import { Eraser, Laptop, ShieldCheck, type LucideIcon } from "lucide-react";
 
-import { lookedFor } from "@/lib/detectors";
+import { DETECTOR_LABELS, lookedFor } from "@/lib/detectors";
 import { SANITIZED_TEXT } from "@/lib/flow-text";
 import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
-import { SANITIZED_KINDS, type SanitizedKind } from "@/worker/protocol";
-
-/** `a, b and c`: British, like every list the redact flow shows. */
-const LIST = new Intl.ListFormat("en-GB", { type: "conjunction" });
+import { DETECTOR_KINDS, SANITIZED_KINDS, type SanitizedKind } from "@/worker/protocol";
 
 const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
@@ -32,6 +34,12 @@ export interface HomeFeature {
   readonly icon: LucideIcon;
   readonly title: string;
   readonly body: string;
+}
+
+/** One line of the Finds card: the detector's own icon and group name. */
+export interface HomeFind {
+  readonly icon: LucideIcon;
+  readonly label: string;
 }
 
 /**
@@ -58,16 +66,30 @@ export const HOME_STRIPPED: Readonly<Record<SanitizedKind, boolean>> = Object.fr
 });
 
 /**
- * The kinds the page claims, in `SANITIZED_KINDS` order, in the result card's
- * own words, as one list with its first letter capitalised: "Document info,
- * XMP metadata, attachments, …".
+ * The Finds card's list (AC-11): one item per detector, in `DETECTOR_KINDS`
+ * order, with the checklist's own icon and group name, so the card names
+ * exactly the detectors that exist and grows with feature 12.
  */
-export function strippedList(): string {
-  return capitalised(
-    LIST.format(
-      SANITIZED_KINDS.filter((kind) => HOME_STRIPPED[kind]).map(
-        (kind) => SANITIZED_TEXT[kind],
-      ),
+export function findsItems(): readonly HomeFind[] {
+  return Object.freeze(
+    DETECTOR_KINDS.map((kind) =>
+      Object.freeze({
+        icon: DETECTOR_LABELS[kind].icon,
+        label: DETECTOR_LABELS[kind].label,
+      }),
+    ),
+  );
+}
+
+/**
+ * The Strips card's list (AC-11): the kinds the page claims, in
+ * `SANITIZED_KINDS` order, in the result card's own words, each with its first
+ * letter capitalised ("Document info", "XMP metadata", "Attachments", …).
+ */
+export function strippedItems(): readonly string[] {
+  return Object.freeze(
+    SANITIZED_KINDS.filter((kind) => HOME_STRIPPED[kind]).map((kind) =>
+      capitalised(SANITIZED_TEXT[kind]),
     ),
   );
 }
@@ -82,14 +104,13 @@ export function capLine(billingEnabled: boolean, free: number, paid: number): st
     : `Up to ${free} pages a document.`;
 }
 
-const detectors = lookedFor("conjunction");
-
 export const HOME_TEXT = Object.freeze({
-  /** A true one, above the headline (AC-10). */
+  /** A true one, above the headline (AC-10), and the page's one "in your browser". */
   eyebrow: "PDF redaction in your browser",
   headline: "Redaction that actually removes the text",
-  lead: `RedactNest finds ${detectors} in your PDF, lets you tick what to remove, and takes that text out of the file itself. Your file never leaves your browser.`,
-  redact: "Redact a PDF",
+  lead: `RedactNest finds ${lookedFor("conjunction")} in your PDF, lets you tick what to remove, and takes that text out of the file itself.`,
+  /** The hero's way into the tool, named for what it does (AC-30). */
+  primary: "Remove text from a PDF",
   pricing: "See pricing",
 
   /** The trio under the hero (AC-10), each a line icon, a title and a line. */
@@ -97,7 +118,7 @@ export const HOME_TEXT = Object.freeze({
     Object.freeze({
       icon: Laptop,
       title: "Stays on your device",
-      body: "Opened and redacted in your browser. Never uploaded, and nothing is stored.",
+      body: "Never uploaded to us or to anyone else, and nothing is stored.",
     }),
     Object.freeze({
       icon: Eraser,
@@ -111,13 +132,21 @@ export const HOME_TEXT = Object.freeze({
     }),
   ]),
 
-  /** The band in place of "Trusted by" (AC-11). */
+  /**
+   * The two cards in place of "Trusted by" (AC-11). The lists themselves come
+   * from `findsItems()` and `strippedItems()`; these are the words around them.
+   */
   band: Object.freeze({
     title: "What RedactNest finds and strips",
-    findsTitle: "Finds",
-    finds: `${capitalised(detectors)}. Nothing is removed until you tick it.`,
-    stripsTitle: "Strips",
-    strips: `${strippedList()}, whenever a file carries them. Comments and form fields are flattened into the page: what showed stays, and nothing hidden behind them does.`,
+    finds: Object.freeze({
+      title: "Finds",
+      line: "Nothing is removed until you tick it.",
+    }),
+    strips: Object.freeze({
+      title: "Strips",
+      lead: "Whenever a file carries them:",
+      note: "Comments and form fields are flattened into the page: what showed stays, and nothing hidden behind them does.",
+    }),
   }),
 
   /** The product shot's alt text (AC-12). */

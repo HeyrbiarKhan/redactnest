@@ -104,7 +104,7 @@ for (const { path, title, sections } of PAGES) {
       await expect(page.locator("main h2")).toHaveText([...sections]);
 
       // The way into the tool is a real page load (spec 0003, INV-10).
-      const button = page.getByRole("banner").getByRole("link", { name: "Redact a PDF" });
+      const button = page.getByRole("banner").getByRole("link", { name: "Try it free" });
       await expect(button).toHaveAttribute("href", "/tool");
     });
 
@@ -155,6 +155,116 @@ for (const { path, title, sections } of PAGES) {
         .boundingBox();
       const first = await page.locator("main h2").first().boundingBox();
       expect((list?.y ?? 0) + (list?.height ?? 0)).toBeLessThanOrEqual(first?.y ?? 0);
+    });
+
+    /**
+     * Spec 0013, AC-25. From lg the list stays in view while the text scrolls,
+     * 1.5rem from the top, in its own column; on a short window it scrolls
+     * inside itself, with room for every focus ring. Below lg, and at 200%
+     * text, it scrolls away with the page.
+     */
+    test("keeps On this page in view from lg as the text scrolls", async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(path);
+      const nav = page.getByRole("navigation", { name: "On this page" });
+      const style = () =>
+        nav.evaluate((element) => {
+          const computed = getComputedStyle(element);
+          return {
+            position: computed.position,
+            top: computed.top,
+            maxHeight: computed.maxHeight,
+            overflowY: computed.overflowY,
+          };
+        });
+
+      expect(await style()).toEqual({
+        position: "sticky",
+        top: "24px",
+        maxHeight: `${800 - 48}px`,
+        overflowY: "auto",
+      });
+
+      await page
+        .locator("main h2")
+        .last()
+        .evaluate((heading) => {
+          heading.scrollIntoView({ behavior: "instant", block: "start" });
+        });
+      const stuck = await nav.boundingBox();
+      expect(stuck?.y).toBeCloseTo(24, 0);
+      // Beside the text, never over it.
+      const column = await page.locator("main h2").last().boundingBox();
+      expect((stuck?.x ?? 0) + (stuck?.width ?? 0)).toBeLessThanOrEqual(column?.x ?? 0);
+
+      await page.setViewportSize({ width: 900, height: 800 });
+      expect((await style()).position).toBe("static");
+
+      // 200% text in the same window: one column, the list above the text.
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+      expect((await style()).position).toBe("static");
+      const list = await nav.boundingBox();
+      const first = await page.locator("main h2").first().boundingBox();
+      expect((list?.y ?? 0) + (list?.height ?? 0)).toBeLessThanOrEqual(first?.y ?? 0);
+    });
+
+    test("scrolls the list inside itself on a short window, clipping no focus ring", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 300 });
+      await page.goto(path);
+      const nav = page.getByRole("navigation", { name: "On this page" });
+
+      const overflows = await nav.evaluate(
+        (element) => element.scrollHeight > element.clientHeight,
+      );
+      expect(overflows).toBe(true);
+
+      const links = nav.getByRole("link");
+      await links.first().focus();
+      for (const link of await links.all()) {
+        await expect(link).toBeFocused();
+        // The ring is 2 pixels offset by 2, so 4 pixels round the link must
+        // sit inside the list's scroll box.
+        const clear = await link.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          const list = element.closest("nav")?.getBoundingClientRect();
+          if (!list) return false;
+          return (
+            box.left - 4 >= list.left &&
+            box.right + 4 <= list.right &&
+            box.top - 4 >= list.top &&
+            box.bottom + 4 <= list.bottom
+          );
+        });
+        expect(clear, (await link.textContent()) ?? "").toBe(true);
+        await page.keyboard.press("Tab");
+      }
+    });
+
+    test("lands each heading 1.5rem below the top, and glides only without reduced motion", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.goto(path);
+      const behaviour = () =>
+        page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior);
+
+      // Reduced motion: the jump is instant, so the landing can be read at once.
+      expect(await behaviour()).toBe("auto");
+      const link = page
+        .getByRole("navigation", { name: "On this page" })
+        .getByRole("link")
+        .nth(1);
+      const href = (await link.getAttribute("href")) ?? "";
+      await link.click();
+      const heading = await page.locator(`main h2${href}`).boundingBox();
+      expect(heading?.y).toBeCloseTo(24, 0);
+
+      await page.emulateMedia({ reducedMotion: "no-preference" });
+      expect(await behaviour()).toBe("smooth");
     });
 
     test("is indexable, with its own description", async ({ page }) => {
@@ -416,4 +526,24 @@ test.describe("the terms notice on /tool", () => {
     await expect(page.getByTestId("file-bar")).toBeVisible();
     await expect(page.getByTestId("terms-notice")).toHaveCount(0);
   });
+});
+
+/**
+ * Spec 0013, AC-25. Smooth scrolling is the legal pages' alone: every other
+ * page jumps to an anchor as before, and `/tool`'s focus moves stay instant.
+ */
+test.describe("smooth scrolling elsewhere", () => {
+  for (const path of ["/", "/tool", "/pricing"]) {
+    test(`stays off on ${path}`, async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: "no-preference" });
+      await page.goto(path);
+
+      expect(
+        await page.evaluate(
+          () => getComputedStyle(document.documentElement).scrollBehavior,
+        ),
+      ).toBe("auto");
+      await expect(page.locator("main[data-smooth-scroll]")).toHaveCount(0);
+    });
+  }
 });

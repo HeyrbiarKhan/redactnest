@@ -452,7 +452,13 @@ describe("ChecklistItem, blocked or disabled", () => {
 
     const icon = screen.getByText(REASON).parentElement?.querySelector("svg");
     expect(icon).toHaveAttribute("aria-hidden", "true");
-    expect(container.querySelector("label")).toHaveClass("cursor-not-allowed");
+    // The not allowed cursor comes from the one rule in `globals.css`, which
+    // matches a label holding a disabled checkbox (spec 0013, AC-33). jsdom
+    // computes no cursor, so this holds what the rule matches, and the browser
+    // suite reads the cursor itself.
+    const row = container.querySelector("label");
+    expect(row?.querySelector('input[type="checkbox"]')).toBeDisabled();
+    expect(row?.className).not.toMatch(/cursor-/);
   });
 
   it("disables a row that is not blocked, without a reason, while a run is under way", () => {

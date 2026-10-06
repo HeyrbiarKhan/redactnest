@@ -74,9 +74,33 @@ describe.each(PAGES)("$name", ({ Page, title, sections, changes, metadata }) => 
       screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent),
     ).toEqual(Object.values(sections));
     expect(
-      within(screen.getByRole("banner")).getByRole("link", { name: "Redact a PDF" }),
+      within(screen.getByRole("banner")).getByRole("link", { name: "Try it free" }),
     ).toHaveAttribute("href", TOOL_PATH);
     expect(screen.getByRole("main")).toHaveAttribute("id", "main");
+  });
+
+  /**
+   * Spec 0013, AC-25: the marker the smooth scroll rule in `globals.css`
+   * matches, these two pages alone; each heading's 1.5rem scroll margin; and
+   * the list sticky from `lg` with room inside for every focus ring. The
+   * browser suite measures each of them.
+   */
+  it("marks main for smooth scrolling, and lands each heading below the top", () => {
+    render(<Page />);
+
+    expect(screen.getByRole("main")).toHaveAttribute("data-smooth-scroll");
+    for (const heading of screen.getAllByRole("heading", { level: 2 })) {
+      expect(heading).toHaveClass("scroll-mt-6");
+    }
+    // `lg` as a container query, so 200% text gets one column and no sticking.
+    expect(screen.getByRole("navigation", { name: "On this page" })).toHaveClass(
+      "@min-[61rem]:sticky",
+      "@min-[61rem]:top-6",
+      "@min-[61rem]:self-start",
+      "@min-[61rem]:overflow-y-auto",
+      "@min-[61rem]:p-2",
+      "@min-[61rem]:scroll-py-2",
+    );
   });
 
   /** covers: AC-2 */

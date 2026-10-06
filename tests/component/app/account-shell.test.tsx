@@ -33,7 +33,7 @@ describe("Account and the pages under it", () => {
 
     expect(current()).toEqual(["Account"]);
     expect(
-      within(screen.getByRole("banner")).getByRole("link", { name: "Redact a PDF" }),
+      within(screen.getByRole("banner")).getByRole("link", { name: "Try it free" }),
     ).toHaveAttribute("href", "/tool");
     expect(screen.getByRole("main").firstElementChild).toHaveClass("max-w-narrow");
   });

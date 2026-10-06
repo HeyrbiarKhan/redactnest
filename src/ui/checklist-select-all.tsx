@@ -47,9 +47,9 @@ export function ChecklistSelectAll({
         htmlFor={id}
         className={cx(
           "flex items-center gap-3 rounded-lg px-3 py-3",
-          disabled
-            ? "cursor-not-allowed"
-            : "cursor-pointer transition-colors duration-150 hover:bg-canvas motion-reduce:transition-none",
+          // The cursor comes from the one rule in `globals.css` (spec 0013, AC-33).
+          !disabled &&
+            "transition-colors duration-150 hover:bg-canvas motion-reduce:transition-none",
         )}
       >
         <Checkbox

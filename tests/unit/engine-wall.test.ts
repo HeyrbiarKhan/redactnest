@@ -335,6 +335,75 @@ describe("a colour the contrast test never checked", () => {
 });
 
 /**
+ * Spec 0013, AC-33 and INV-10. One rule in `globals.css` sets every cursor,
+ * Clerk's card included, so no component sets one: `zone()` adds the ban, so
+ * every zone carries it and none can relax it, as with the colour patterns.
+ */
+describe("a cursor utility", () => {
+  const CURSOR = /No cursor utility/;
+
+  it.each([
+    ["a bare utility", 'export const c = "flex cursor-pointer";\n'],
+    ["one behind a variant", 'export const c = "p-2 hover:cursor-pointer";\n'],
+    ["an important one", 'export const c = "!cursor-pointer";\n'],
+    ["a disabled one", 'export const c = "disabled:cursor-not-allowed";\n'],
+    [
+      "one inside a template literal",
+      "export const c = (on: boolean) => `p-2 ${on ? 'x' : 'y'} cursor-default`;\n",
+    ],
+  ])("is rejected as %s", async (_form, code) => {
+    expect(await wallErrors(ROUTE, code)).toContainEqual(expect.stringMatching(CURSOR));
+  });
+
+  it("is rejected in a JSX class name", async () => {
+    expect(
+      await wallErrors(
+        PAGE,
+        'export const P = () => <p className="cursor-pointer">x</p>;\n',
+      ),
+    ).toContainEqual(expect.stringMatching(CURSOR));
+  });
+
+  it.each([
+    ROUTE,
+    LIBRARY,
+    PRIMITIVE,
+    PAGE,
+    TOOL_PAGE,
+    ENGINE_MODULE,
+    WORKER,
+    CLIENT,
+    DETECTOR,
+    "src/billing/probe.ts",
+    "src/config/billing.ts",
+    "src/app/(account)/account/probe/page.tsx",
+    "src/proxy.ts",
+    "src/app/api/entitlement/route.ts",
+    "src/app/layout.tsx",
+  ])("is rejected in %s, because no zone gets to relax this one", async (path) => {
+    expect(await wallErrors(path, 'export const c = "cursor-pointer";\n')).toContainEqual(
+      expect.stringMatching(CURSOR),
+    );
+  });
+
+  /** Words that only contain the letters, none of them a utility. */
+  it.each([
+    ["a word ending in cursor", 'export const c = "precursor-free";\n'],
+    ["a data attribute", 'export const c = "data-cursor";\n'],
+    ["prose", 'export const c = "Move the cursor here.";\n'],
+  ])("allows %s", async (_form, code) => {
+    expect(await wallErrors(PAGE, code)).toEqual([]);
+  });
+
+  /** A test ships to nobody, and asserts on class names freely. */
+  it("leaves a unit test alone", async () => {
+    expect(await wallErrors(UNIT_TEST, 'export const c = "cursor-pointer";\n')).toEqual(
+      [],
+    );
+  });
+});
+
+/**
  * Spec 0003, AC-19. The primitives render what they are given and reach for
  * nothing, which is what keeps document state out of a presentation folder.
  */

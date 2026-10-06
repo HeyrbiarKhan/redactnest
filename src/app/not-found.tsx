@@ -37,7 +37,7 @@ export default function NotFound() {
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
             <Button href={TOOL_PATH} reload size="lg">
-              {NAV_TEXT.redactPdf}
+              {NAV_TEXT.tryFree}
             </Button>
             <Button href={HOME_PATH} reload variant="secondary" size="lg">
               Go to the home page

@@ -209,6 +209,22 @@ describe("the pages", () => {
     });
   });
 
+  /** Spec 0013, AC-32: the status line under the card names the same landing. */
+  it("gives the signing in line the landing Clerk is forced to, on both pages", async () => {
+    for (const page of ["sign-in", "sign-up"] as const) {
+      for (const [params, expected] of [
+        [{ redirect_url: SUBSCRIBE }, SUBSCRIBE],
+        [{}, ACCOUNT],
+      ] as const) {
+        const element = await open(page, undefined, params);
+        expect(element).not.toBeInstanceOf(Redirected);
+        const status = findElement(element, (props) => "landing" in props);
+        expect(status?.props.landing, `${page} ${JSON.stringify(params)}`).toBe(expected);
+        expect(clerkCard(element).forceRedirectUrl).toBe(expected);
+      }
+    }
+  });
+
   it("redirects sign in to the same step without the refused parameter", async () => {
     expect(
       await open("sign-in", ["factor-one"], {

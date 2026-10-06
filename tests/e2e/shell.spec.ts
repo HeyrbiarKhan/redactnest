@@ -24,7 +24,7 @@ test.describe("getting to the tool", () => {
     await page.goto("/");
 
     await expect(
-      page.getByRole("main").getByRole("link", { name: /redact a pdf/i }),
+      page.getByRole("main").getByRole("link", { name: "Remove text from a PDF" }),
     ).toBeVisible();
   });
 
@@ -34,7 +34,7 @@ test.describe("getting to the tool", () => {
 
     await page
       .getByRole("main")
-      .getByRole("link", { name: /redact a pdf/i })
+      .getByRole("link", { name: "Remove text from a PDF" })
       .focus();
     await page.keyboard.press("Enter");
 
@@ -51,12 +51,12 @@ test.describe("getting to the tool", () => {
  */
 test.describe("every way into the tool is a real page load", () => {
   const BUTTONS = [
-    ["the header's", "banner"],
-    ["the page's", "main"],
+    ["the header's", "banner", "Try it free"],
+    ["the hero's", "main", "Remove text from a PDF"],
   ] as const;
 
-  for (const [which, landmark] of BUTTONS) {
-    test(`${which} Redact a PDF button loads /tool as a document`, async ({ page }) => {
+  for (const [which, landmark, name] of BUTTONS) {
+    test(`${which} ${name} button loads /tool as a document`, async ({ page }) => {
       await page.goto("/");
 
       const documentLoads: string[] = [];
@@ -66,10 +66,7 @@ test.describe("every way into the tool is a real page load", () => {
         }
       });
 
-      await page
-        .getByRole(landmark)
-        .getByRole("link", { name: /redact a pdf/i })
-        .click();
+      await page.getByRole(landmark).getByRole("link", { name }).click();
       await expect(page).toHaveURL(/\/tool$/);
 
       expect(documentLoads).toContain("/tool");
@@ -150,11 +147,11 @@ test.describe("every way into the tool is a real page load", () => {
 
     // `next/link` prefetches on sight and again on hover, so both are given
     // their chance before the count is read.
-    for (const landmark of ["banner", "main"] as const) {
-      await page
-        .getByRole(landmark)
-        .getByRole("link", { name: /redact a pdf/i })
-        .hover();
+    for (const [landmark, name] of [
+      ["banner", "Try it free"],
+      ["main", "Remove text from a PDF"],
+    ] as const) {
+      await page.getByRole(landmark).getByRole("link", { name }).hover();
     }
     await page.waitForLoadState("networkidle");
 
@@ -279,12 +276,13 @@ test.describe("the document title", () => {
 });
 
 /**
- * Spec 0013, AC-7. The header every page shows: the lockup home, the Site nav
- * with Redact and Pricing, Account, then the button everywhere but `/tool`.
+ * Spec 0013, AC-7 and AC-30. The header every page shows: the lockup home, the
+ * Site nav with Pricing, Account, then the "Try it free" button everywhere but
+ * `/tool`. No item names the tool, so on `/tool` nothing is current.
  */
 test.describe("the header", () => {
   const CURRENT = [
-    ["/tool", "Redact"],
+    ["/tool", null],
     ["/pricing", "Pricing"],
     ["/", null],
     ["/privacy", null],
@@ -320,15 +318,15 @@ test.describe("the header", () => {
     });
   }
 
-  test("offers Redact a PDF on every page but the tool", async ({ page }) => {
+  test("offers Try it free on every page but the tool", async ({ page }) => {
     await page.goto("/pricing");
     await expect(
-      page.getByRole("banner").getByRole("link", { name: "Redact a PDF" }),
+      page.getByRole("banner").getByRole("link", { name: "Try it free" }),
     ).toHaveAttribute("href", "/tool");
 
     await page.goto("/tool");
     await expect(
-      page.getByRole("banner").getByRole("link", { name: "Redact a PDF" }),
+      page.getByRole("banner").getByRole("link", { name: "Try it free" }),
     ).toHaveCount(0);
   });
 
@@ -336,27 +334,23 @@ test.describe("the header", () => {
     await page.goto("/");
     const header = page.getByRole("banner");
 
-    for (const name of ["Redact", "Pricing", "Account"]) {
+    for (const name of ["Pricing", "Account"]) {
       const box = await header.getByRole("link", { name, exact: true }).boundingBox();
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(40);
     }
   });
 
-  /** INV-4: the header's Redact is a real page load, like every way in. */
-  test("its Redact link loads /tool as a document", async ({ page }) => {
-    await page.goto("/pricing");
+  /** AC-30: the button is the way in, so no header link is named for the tool. */
+  for (const path of ["/", "/tool", "/pricing"]) {
+    test(`names no Redact item on ${path}`, async ({ page }) => {
+      await page.goto(path);
+      const header = page.getByRole("banner");
 
-    await page
-      .getByRole("banner")
-      .getByRole("link", { name: "Redact", exact: true })
-      .click();
-    await expect(page).toHaveURL(/\/tool$/);
-
-    const loadedAt = await page.evaluate(
-      () => performance.getEntriesByType("navigation")[0]?.name ?? "",
-    );
-    expect(new URL(loadedAt).pathname).toBe("/tool");
-  });
+      for (const name of ["Redact", "Redact a PDF"]) {
+        await expect(header.getByRole("link", { name, exact: true })).toHaveCount(0);
+      }
+    });
+  }
 
   /**
    * Below `sm` the lockup sits alone on the first row and everything else
@@ -370,7 +364,7 @@ test.describe("the header", () => {
     const header = page.getByRole("banner");
 
     const tops: number[] = [];
-    for (const name of ["RedactNest", "Redact", "Pricing", "Account", "Redact a PDF"]) {
+    for (const name of ["RedactNest", "Pricing", "Account", "Try it free"]) {
       const box = await header.getByRole("link", { name, exact: true }).boundingBox();
       tops.push(box?.y ?? Number.NaN);
     }
@@ -489,7 +483,7 @@ test.describe("the 404 page", () => {
     await expect(main).toContainText(
       "The address may be mistyped, or the page may have moved.",
     );
-    await expect(main.getByRole("link", { name: "Redact a PDF" })).toHaveAttribute(
+    await expect(main.getByRole("link", { name: "Try it free" })).toHaveAttribute(
       "href",
       "/tool",
     );
@@ -549,7 +543,7 @@ test.describe("the pricing page", () => {
 
     await page
       .getByRole("region", { name: "Free" })
-      .getByRole("link", { name: "Redact a PDF" })
+      .getByRole("link", { name: "Try it free" })
       .click();
     await expect(page).toHaveURL(/\/tool$/);
     const loadedAt = await page.evaluate(

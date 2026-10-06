@@ -1,5 +1,5 @@
 /**
- * The home page. Spec 0013, AC-10 to AC-13.
+ * The home page. Spec 0013, AC-10 to AC-13 and AC-30.
  *
  * Every word in its main content comes from `src/lib/home-text.ts`, the caps
  * and the billing state from `config`; `tests/unit/home-text.test.ts` holds the
@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import HomePage from "@/app/page";
 import { config } from "@/config";
-import { capLine, HOME_TEXT } from "@/lib/home-text";
+import { capLine, findsItems, HOME_TEXT, strippedItems } from "@/lib/home-text";
 import { PRICING_PATH, TOOL_PATH } from "@/lib/routes";
 
 import { expectNoAxeViolations } from "../../setup/component";
@@ -68,9 +68,11 @@ describe("the hero (AC-10)", () => {
   it("offers the tool as a real page load, and pricing beside it with billing on", () => {
     render(<HomePage />);
 
-    const redact = main().getByRole("link", { name: "Redact a PDF" });
-    expect(redact).toHaveAttribute("href", TOOL_PATH);
-    expect(redact.tagName).toBe("A");
+    const primary = main().getByRole("link", { name: "Remove text from a PDF" });
+    expect(primary).toHaveAttribute("href", TOOL_PATH);
+    expect(primary.tagName).toBe("A");
+    // The header's button names it another way, so the page says it once (AC-30).
+    expect(main().queryByRole("link", { name: "Try it free" })).not.toBeInTheDocument();
     const pricing = main().getByRole("link", { name: "See pricing" });
     expect(pricing).toHaveAttribute("href", PRICING_PATH);
     expect(screen.getByTestId("home-caps")).toHaveTextContent(
@@ -120,7 +122,7 @@ describe("the trio and the band (AC-10, AC-11)", () => {
     }
   });
 
-  it("says what RedactNest finds and strips, under two headings", () => {
+  it("says what RedactNest finds and strips, as two cards with their headings", () => {
     render(<HomePage />);
 
     const band = screen.getByRole("region", { name: HOME_TEXT.band.title });
@@ -129,8 +131,69 @@ describe("the trio and the band (AC-10, AC-11)", () => {
         .getAllByRole("heading", { level: 3 })
         .map((heading) => heading.textContent),
     ).toEqual(["Finds", "Strips"]);
-    expect(band).toHaveTextContent(HOME_TEXT.band.finds);
-    expect(band).toHaveTextContent(HOME_TEXT.band.strips);
+    // Finds comes first in the page, so it comes first when the cards stack.
+    const finds = within(band).getByTestId("home-finds");
+    const strips = within(band).getByTestId("home-strips");
+    expect(
+      finds.compareDocumentPosition(strips) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("lists every detector in the Finds card, then says nothing goes unticked", () => {
+    render(<HomePage />);
+
+    const finds = screen.getByTestId("home-finds");
+    const list = within(finds).getByRole("list");
+    expect(list).toHaveAttribute("role", "list");
+    expect(
+      within(list)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(findsItems().map(({ label }) => label));
+    expect(
+      within(list)
+        .getAllByRole("listitem")
+        .map((item) => item.querySelector("svg")?.getAttribute("aria-hidden")),
+    ).toEqual(findsItems().map(() => "true"));
+    expect(within(finds).getByText(HOME_TEXT.band.finds.line)).toHaveClass(
+      "text-ink-muted",
+    );
+  });
+
+  it("leads into the Strips list, ticks every claimed kind and ends with the note", () => {
+    render(<HomePage />);
+
+    const strips = screen.getByTestId("home-strips");
+    const list = within(strips).getByRole("list");
+    const lead = within(strips).getByText(HOME_TEXT.band.strips.lead);
+    const note = within(strips).getByText(HOME_TEXT.band.strips.note);
+    expect(
+      within(list)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual([...strippedItems()]);
+    expect(list).toHaveClass("sm:grid-cols-2");
+    expect(
+      lead.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      list.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(note).toHaveClass("border-t", "border-border", "text-small", "text-ink-muted");
+  });
+
+  it("sets the band on the page's canvas, not a full width white strip", () => {
+    render(<HomePage />);
+
+    const band = screen.getByTestId("home-band");
+    expect(band).not.toHaveClass("bg-surface");
+    // The two cards are the white, each with the quiet edge.
+    for (const card of [
+      screen.getByTestId("home-finds"),
+      screen.getByTestId("home-strips"),
+    ]) {
+      expect(card).toHaveClass("bg-surface", "border", "border-border", "rounded-xl");
+    }
   });
 
   it("passes axe", async () => {

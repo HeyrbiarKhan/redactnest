@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { lookedFor } from "@/lib/detectors";
+import { DETECTOR_LABELS, lookedFor } from "@/lib/detectors";
 import { SANITIZED_TEXT } from "@/lib/flow-text";
-import { capLine, HOME_STRIPPED, HOME_TEXT, strippedList } from "@/lib/home-text";
+import {
+  capLine,
+  findsItems,
+  HOME_STRIPPED,
+  HOME_TEXT,
+  strippedItems,
+} from "@/lib/home-text";
 import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
-import { SANITIZED_KINDS } from "@/worker/protocol";
+import { DETECTOR_KINDS, SANITIZED_KINDS } from "@/worker/protocol";
 
 /**
  * The home page's words. Spec 0013, AC-10 to AC-13 and INV-1: every word true
@@ -16,13 +22,13 @@ describe("the hero (AC-10)", () => {
   it("says what the spec settled, word for word", () => {
     expect(HOME_TEXT.eyebrow).toBe("PDF redaction in your browser");
     expect(HOME_TEXT.headline).toBe("Redaction that actually removes the text");
-    expect(HOME_TEXT.redact).toBe("Redact a PDF");
+    expect(HOME_TEXT.primary).toBe("Remove text from a PDF");
     expect(HOME_TEXT.pricing).toBe("See pricing");
   });
 
   it("names exactly the detectors that exist, in the lead", () => {
     expect(HOME_TEXT.lead).toBe(
-      `RedactNest finds ${lookedFor("conjunction")} in your PDF, lets you tick what to remove, and takes that text out of the file itself. Your file never leaves your browser.`,
+      `RedactNest finds ${lookedFor("conjunction")} in your PDF, lets you tick what to remove, and takes that text out of the file itself.`,
     );
     expect(HOME_TEXT.lead).toContain("email addresses and phone numbers");
   });
@@ -34,7 +40,7 @@ describe("the hero (AC-10)", () => {
       [
         "Laptop",
         "Stays on your device",
-        "Opened and redacted in your browser. Never uploaded, and nothing is stored.",
+        "Never uploaded to us or to anyone else, and nothing is stored.",
       ],
       [
         "Eraser",
@@ -87,36 +93,53 @@ describe("what the home page says is stripped (AC-11)", () => {
     }
   });
 
-  it("claims the rest, in SANITIZED_KINDS order, in the result card's words", () => {
-    expect(strippedList()).toBe(
-      "Document info, XMP metadata, attachments, bookmarks, JavaScript, earlier versions and page thumbnails",
-    );
+  it("claims the rest, in SANITIZED_KINDS order, each capitalised", () => {
+    expect(strippedItems()).toEqual([
+      "Document info",
+      "XMP metadata",
+      "Attachments",
+      "Bookmarks",
+      "JavaScript",
+      "Earlier versions",
+      "Page thumbnails",
+    ]);
+  });
+
+  it("says each kind in the result card's own words", () => {
     const claimed = SANITIZED_KINDS.filter((kind) => HOME_STRIPPED[kind]);
-    let from = 0;
-    for (const kind of claimed) {
-      const at = strippedList()
-        .toLowerCase()
-        .indexOf(SANITIZED_TEXT[kind].toLowerCase(), from);
-      expect(at).toBeGreaterThanOrEqual(from);
-      from = at;
-    }
+
+    expect(strippedItems().map((item) => item.toLowerCase())).toEqual(
+      claimed.map((kind) => SANITIZED_TEXT[kind].toLowerCase()),
+    );
+    expect(Object.isFrozen(strippedItems())).toBe(true);
   });
 });
 
-describe("the band (AC-11)", () => {
-  it("names what RedactNest finds, and that nothing goes until it is ticked", () => {
-    expect(HOME_TEXT.band.title).toBe("What RedactNest finds and strips");
-    expect(HOME_TEXT.band.findsTitle).toBe("Finds");
-    expect(HOME_TEXT.band.finds).toBe(
-      "Email addresses and phone numbers. Nothing is removed until you tick it.",
+describe("the finds and strips cards (AC-11)", () => {
+  it("lists one item per detector, with the checklist's own icon and name", () => {
+    expect(findsItems().map(({ icon, label }) => [icon.displayName, label])).toEqual([
+      ["Mail", "Email addresses"],
+      ["Phone", "Phone numbers"],
+    ]);
+    expect(findsItems()).toEqual(
+      DETECTOR_KINDS.map((kind) => ({
+        icon: DETECTOR_LABELS[kind].icon,
+        label: DETECTOR_LABELS[kind].label,
+      })),
     );
+    expect(Object.isFrozen(findsItems())).toBe(true);
   });
 
-  it("names what it strips, and says plainly what is flattened", () => {
-    expect(HOME_TEXT.band.stripsTitle).toBe("Strips");
-    expect(HOME_TEXT.band.strips).toBe(
-      `${strippedList()}, whenever a file carries them. Comments and form fields are flattened into the page: what showed stays, and nothing hidden behind them does.`,
-    );
+  it("holds the words around the two lists", () => {
+    expect(HOME_TEXT.band).toEqual({
+      title: "What RedactNest finds and strips",
+      finds: { title: "Finds", line: "Nothing is removed until you tick it." },
+      strips: {
+        title: "Strips",
+        lead: "Whenever a file carries them:",
+        note: "Comments and form fields are flattened into the page: what showed stays, and nothing hidden behind them does.",
+      },
+    });
   });
 });
 
@@ -132,6 +155,31 @@ describe("the pictures' words (AC-5, AC-12)", () => {
       `RedactNest. ${HOME_TEXT.eyebrow}. ${HOME_TEXT.headline}.`,
     );
     expect(HOME_TEXT.socialAlt).not.toMatch(/email|phone/i);
+  });
+});
+
+describe("AC-30: each thing said once", () => {
+  /**
+   * The document's privacy is "in your browser" in the eyebrow alone, and the
+   * social card's alt text, which describes that eyebrow. Every other word on
+   * the page says it another way, once, or not at all.
+   */
+  it("says browser only in the eyebrow and the social card's alt text", () => {
+    const { eyebrow, socialAlt, ...rest } = HOME_TEXT;
+
+    expect(eyebrow).toMatch(/browser/);
+    expect(socialAlt).toMatch(/browser/);
+    expect(JSON.stringify(rest)).not.toMatch(/browser/i);
+    for (const item of [...strippedItems(), ...findsItems().map(({ label }) => label)]) {
+      expect(item).not.toMatch(/browser/i);
+    }
+  });
+
+  it("says never uploaded only in the first trio card", () => {
+    const [first] = HOME_TEXT.features;
+
+    expect(first?.body).toMatch(/never uploaded/i);
+    expect(JSON.stringify(HOME_TEXT).match(/uploaded/gi)).toHaveLength(1);
   });
 });
 

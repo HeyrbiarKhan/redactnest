@@ -33,7 +33,7 @@ export function ChecklistGroup({
 }: ChecklistGroupProps) {
   return (
     <details open className="group">
-      <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 rounded-lg px-3 py-2 transition-[background-color] duration-150 hover:bg-canvas motion-reduce:transition-none [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-12 list-none items-center gap-3 rounded-lg px-3 py-2 transition-[background-color] duration-150 hover:bg-canvas motion-reduce:transition-none [&::-webkit-details-marker]:hidden">
         <Icon
           aria-hidden="true"
           className="size-5 shrink-0 text-accent"

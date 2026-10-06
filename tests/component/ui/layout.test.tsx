@@ -183,19 +183,19 @@ describe("SiteHeader", () => {
       <SiteHeader
         nav={
           <nav aria-label="Site">
-            <a href="/tool">Redact</a>
+            <a href="/pricing">Pricing</a>
           </nav>
         }
         account={<a href="/account">Account</a>}
-        action={<Button href="/tool">Redact a PDF</Button>}
+        action={<Button href="/tool">Try it free</Button>}
       />,
     );
 
     expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual([
       "RedactNest",
-      "Redact",
+      "Pricing",
       "Account",
-      "Redact a PDF",
+      "Try it free",
     ]);
   });
 
@@ -220,9 +220,9 @@ describe("SiteHeader", () => {
   });
 
   it("carries the action it is given", () => {
-    render(<SiteHeader action={<Button href="/tool">Redact a PDF</Button>} />);
+    render(<SiteHeader action={<Button href="/tool">Try it free</Button>} />);
 
-    expect(screen.getByRole("link", { name: "Redact a PDF" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Try it free" })).toHaveAttribute(
       "href",
       "/tool",
     );
@@ -236,7 +236,7 @@ describe("SiteHeader", () => {
 
   it("passes axe", async () => {
     const { container } = render(
-      <SiteHeader action={<Button href="/tool">Redact a PDF</Button>} />,
+      <SiteHeader action={<Button href="/tool">Try it free</Button>} />,
     );
 
     await expectNoAxeViolations(container);

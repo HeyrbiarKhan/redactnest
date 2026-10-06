@@ -52,7 +52,11 @@ export function BrandMark({
 
 export type LockupSize = "md" | "lg";
 
-/** The header and footer use `md`; `lg` is the larger stage, such as the 404. */
+/**
+ * The header and footer use `md`. `lg` is a larger stage for a page that
+ * wants one; since the sign in panel dropped its lockup (spec 0013, AC-23),
+ * no page does.
+ */
 const LOCKUP_SIZE: Readonly<Record<LockupSize, string>> = Object.freeze({
   md: "text-heading",
   lg: "text-title",

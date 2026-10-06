@@ -54,7 +54,7 @@ export default function PricingPage() {
             <Card title={FREE_PLAN.name} headingLevel={2}>
               <PlanFeatures items={[`Up to ${config.freePageCap} pages a document`]} />
               <Button href={TOOL_PATH} reload variant="secondary" className="self-start">
-                {NAV_TEXT.redactPdf}
+                {NAV_TEXT.tryFree}
               </Button>
             </Card>
 

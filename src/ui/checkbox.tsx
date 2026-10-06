@@ -59,7 +59,7 @@ export function Checkbox({
         checked={checked}
         disabled={disabled}
         onChange={(event) => onCheckedChange(event.target.checked)}
-        className="peer size-6 cursor-pointer appearance-none rounded-md border border-border-strong bg-surface transition-[background-color,border-color] duration-150 enabled:checked:border-accent enabled:checked:bg-accent enabled:indeterminate:border-accent enabled:indeterminate:bg-accent disabled:cursor-not-allowed disabled:border-border disabled:bg-subtle motion-reduce:transition-none forced-colors:appearance-auto"
+        className="peer size-6 appearance-none rounded-md border border-border-strong bg-surface transition-[background-color,border-color] duration-150 enabled:checked:border-accent enabled:checked:bg-accent enabled:indeterminate:border-accent enabled:indeterminate:bg-accent disabled:border-border disabled:bg-subtle motion-reduce:transition-none forced-colors:appearance-auto"
       />
       <Check
         aria-hidden="true"

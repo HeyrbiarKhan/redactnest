@@ -1,9 +1,35 @@
+import { cx } from "@/lib/cx";
+
 /**
- * A short sequence, each step numbered in a small circle. Spec 0013, AC-15.
+ * The line joining one step to the next (spec 0013, AC-15), drawn on every
+ * step but the last.
+ *
+ * The circles are 1.75rem and the steps sit 0.75rem apart, so a line centred
+ * under a circle (`0.875rem`, less half its 2 pixels) that starts at `2rem` and
+ * reaches `0.5rem` past the step's foot begins 0.25rem below one circle and
+ * stops 0.25rem above the next. It runs from the step's own box, so a step
+ * whose words wrap at 200% text stretches it.
+ *
+ * A left border, never a background, so forced colours mode repaints it in
+ * the system's text colour rather than dropping it. `border-strong` clears 3:1
+ * on `canvas` and `surface`, a graphic pairing already in the contract; grey
+ * rather than teal, because the steps are instructions, not progress, and a
+ * teal line would read as steps already done.
+ */
+const LINE = cx(
+  "not-last:after:absolute not-last:after:left-[calc(0.875rem_-_1px)]",
+  "not-last:after:top-8 not-last:after:-bottom-2",
+  "not-last:after:border-l-2 not-last:after:border-border-strong",
+);
+
+/**
+ * A short sequence, each step numbered in a small circle and joined to the
+ * next by a line. Spec 0013, AC-15.
  *
  * A real `ol`, so a screen reader hears the count and each step's place from
- * the list itself. The drawn numbers repeat that, so they are hidden from
- * assistive technology rather than read twice. `accent-strong` digits on an
+ * the list itself. The drawn numbers and the line repeat that, so they are
+ * hidden from assistive technology rather than read twice (the line is a
+ * pseudo element, which has no text to read). `accent-strong` digits on an
  * `accent-soft` circle, a pairing already in the contrast contract (5.66:1);
  * in forced colours the fill drops and the digits stay, as plain text.
  */
@@ -11,7 +37,7 @@ export function StepList({ steps }: { readonly steps: readonly string[] }) {
   return (
     <ol className="flex flex-col gap-3">
       {steps.map((step, index) => (
-        <li key={step} className="flex items-start gap-3 text-ink">
+        <li key={step} className={cx("relative flex items-start gap-3 text-ink", LINE)}>
           <span
             aria-hidden="true"
             className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-small font-semibold text-accent-strong"

@@ -1,7 +1,7 @@
 /**
- * The panel beside Clerk's card on sign in and sign up. Spec 0013, AC-23 and
- * AC-26. Clerk's card itself loads from Clerk's host and never renders in a
- * test; it is checked by hand in the sandbox walk.
+ * The panel beside Clerk's card on sign in and sign up. Spec 0013, AC-23,
+ * AC-26 and AC-30. Clerk's card itself loads from Clerk's host and never
+ * renders in a test; it is checked by hand in the sandbox walk.
  */
 
 import { render, screen } from "@testing-library/react";
@@ -49,14 +49,19 @@ describe("SignInPanel", () => {
     expect(link).not.toHaveAttribute("target");
   });
 
-  it("carries the lockup, its mark hidden and its word read", () => {
+  /**
+   * AC-23, AC-30: the brand is said once. The header's lockup is the page's
+   * brand and its way home, and the footer's the only other.
+   */
+  it("shows no lockup, and no link or picture named RedactNest", () => {
     render(<SignInPanel />);
 
     const panel = screen.getByTestId("sign-in-panel");
-    expect(panel.firstElementChild).toHaveTextContent("RedactNest");
-    // Beside Clerk's card only; on a phone the header's lockup is just above.
-    expect(panel.firstElementChild).toHaveClass("hidden", "md:block");
-    expect(panel.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    expect(panel).not.toHaveTextContent("RedactNest");
+    expect(panel.querySelector("svg, img")).toBeNull();
+    expect(screen.queryByRole("link", { name: "RedactNest" })).not.toBeInTheDocument();
+    // The heading opens the panel.
+    expect(panel.firstElementChild).toBe(screen.getByRole("heading", { level: 2 }));
   });
 
   it("passes axe", async () => {

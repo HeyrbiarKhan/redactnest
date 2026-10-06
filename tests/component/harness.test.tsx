@@ -35,7 +35,9 @@ describe("the component test harness", () => {
     );
     // Scoped to `main`, because the header carries the same link (spec 0013, AC-7).
     expect(
-      within(screen.getByRole("main")).getByRole("link", { name: "Redact a PDF" }),
+      within(screen.getByRole("main")).getByRole("link", {
+        name: "Remove text from a PDF",
+      }),
     ).toHaveAttribute("href", "/tool");
   });
 

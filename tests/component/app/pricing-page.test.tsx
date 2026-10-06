@@ -163,12 +163,13 @@ describe("the two cards (spec 0013, AC-22)", () => {
     expect(card("Free")).not.toHaveClass("border-accent");
   });
 
+  /** covers: AC-22, AC-30. The header's words, from `NAV_TEXT.tryFree`. */
   it("offers the tool from Free's card as a real page load", () => {
     render(<PricingPage />);
 
-    const redact = within(card("Free")).getByRole("link", { name: "Redact a PDF" });
-    expect(redact.tagName).toBe("A");
-    expect(redact).toHaveAttribute("href", "/tool");
+    const tryFree = within(card("Free")).getByRole("link", { name: "Try it free" });
+    expect(tryFree.tagName).toBe("A");
+    expect(tryFree).toHaveAttribute("href", "/tool");
   });
 
   it("sets the cards side by side from md", () => {
@@ -238,7 +239,7 @@ describe("the header", () => {
       "href",
       ACCOUNT_PATH,
     );
-    expect(header.getByRole("link", { name: "Redact a PDF" })).toHaveAttribute(
+    expect(header.getByRole("link", { name: "Try it free" })).toHaveAttribute(
       "href",
       TOOL_PATH,
     );
