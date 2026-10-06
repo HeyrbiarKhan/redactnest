@@ -1,5 +1,7 @@
 /**
- * Delete account, the two step confirm. Spec 0012, AC-11 and INV-13.
+ * Delete account, the two step confirm. Spec 0012, AC-11 and INV-13, and
+ * spec 0013, AC-34 and AC-35: the red buttons, and the wait shown on the
+ * confirm, which keeps focus.
  *
  * The server action, Clerk and the page load are stubbed at their module
  * boundaries. Each case reads what the visitor meets: the confirm in place,
@@ -62,6 +64,15 @@ vi.mock("@/lib/legal", async (importOriginal) => {
 const DELETE = { name: "Delete account" };
 const CONFIRM = { name: "Delete my account for good" };
 const CANCEL = { name: "Cancel" };
+const DELETING = { name: "Deleting your account" };
+
+/** The confirm while it waits: still a button, busy, never `disabled`, with focus. */
+function expectBusy(button: HTMLElement) {
+  expect(button).toHaveAttribute("aria-disabled", "true");
+  expect(button).not.toHaveAttribute("disabled");
+  expect(within(button).getByTestId("spinner")).toBeInTheDocument();
+  expect(button).toHaveFocus();
+}
 
 beforeEach(() => {
   mocks.deleteAccountAction.mockReset();
@@ -78,12 +89,41 @@ async function openConfirm(endsOn: string | null = null) {
 }
 
 describe("the two steps", () => {
-  it("shows only Delete account at rest", async () => {
+  it("shows only Delete account at rest, with an empty hidden region already there", async () => {
     const { container } = render(<DeleteAccount endsOn={null} />);
     expect(screen.getByRole("button", DELETE)).toBeEnabled();
     expect(screen.queryByRole("button", CONFIRM)).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
+    const status = screen.getByRole("status");
+    expect(status).toHaveClass("sr-only");
+    expect(status).toBeEmptyDOMElement();
     await expectNoAxeViolations(container);
+  });
+
+  /** Spec 0013, AC-35 and INV-12: red for the two that destroy, teal for Cancel. */
+  it("draws Delete account as a red outline, the confirm solid red and Cancel in teal", async () => {
+    render(<DeleteAccount endsOn={null} />);
+    expect(screen.getByRole("button", DELETE)).toHaveClass(
+      "border-danger-ink",
+      "text-danger-ink",
+      "bg-surface",
+      "hover:bg-danger-bg",
+    );
+
+    await userEvent.click(screen.getByRole("button", DELETE));
+
+    expect(screen.getByRole("button", CONFIRM)).toHaveClass(
+      "bg-danger-ink",
+      "text-on-accent",
+      "border-transparent",
+      "hover:bg-danger-strong",
+    );
+    expect(screen.getByRole("button", CANCEL)).toHaveClass(
+      "border-accent",
+      "text-accent-strong",
+      "hover:bg-accent-soft",
+    );
+    expect(screen.getByRole("button", CANCEL).className).not.toMatch(/danger/);
   });
 
   it("asks in place, with focus on Cancel, and calls nothing yet", async () => {
@@ -148,52 +188,65 @@ describe("a deleted account (AC-11, INV-13)", () => {
 
     await waitFor(() => expect(mocks.loadDocument).toHaveBeenCalledWith("/sign-in"));
     expect(mocks.signOut).not.toHaveBeenCalled();
+    expectBusy(screen.getByRole("button", { name: "Taking you to sign in" }));
     expect(screen.getByRole("status")).toHaveTextContent("Taking you to sign in");
   });
 
   it("cannot be sent twice while it runs", async () => {
     mocks.deleteAccountAction.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
     await openConfirm();
 
-    await userEvent.click(screen.getByRole("button", CONFIRM));
+    await user.click(screen.getByRole("button", CONFIRM));
+    await user.click(screen.getByRole("button", DELETING));
+    await user.keyboard("{Enter}");
 
-    expect(screen.getByRole("button", CONFIRM)).toBeDisabled();
+    expectBusy(screen.getByRole("button", DELETING));
     expect(screen.getByRole("button", CANCEL)).toBeDisabled();
     expect(mocks.deleteAccountAction).toHaveBeenCalledTimes(1);
   });
 
   /**
-   * WCAG 4.1.3. The delete and the sign out after it can each take seconds,
-   * so a status line says which is under way, and holds the focus the
-   * disabled confirm would otherwise drop.
+   * Spec 0013, AC-34 and INV-13, and WCAG 4.1.3. The delete and the sign out
+   * after it can each take seconds, so the confirm shows which is under way
+   * and keeps focus, and a region that was in the page from the first render
+   * says it to a screen reader without showing it twice.
    */
-  it("says it is deleting in a status line, which takes focus", async () => {
+  it("shows the delete on the confirm it keeps focus on, and says it in the hidden region", async () => {
     mocks.deleteAccountAction.mockReturnValue(new Promise(() => {}));
     const { container } = await openConfirm();
+    const status = screen.getByRole("status");
+    expect(status).toBeEmptyDOMElement();
 
     await userEvent.click(screen.getByRole("button", CONFIRM));
 
-    const status = screen.getByRole("status");
+    expectBusy(screen.getByRole("button", DELETING));
+    expect(screen.getByRole("button", CANCEL)).toBeDisabled();
+    expect(screen.getByRole("status")).toBe(status);
     expect(status).toHaveTextContent("Deleting your account");
-    expect(status).toHaveFocus();
+    expect(status).not.toHaveAttribute("tabindex");
+    // Nothing new shows under the buttons: every `p` but the hidden region
+    // is the confirm's own warning, and there is none here.
+    expect([...container.querySelectorAll("p")]).toEqual([status]);
     await expectNoAxeViolations(container);
   });
 
-  it("says the account is deleted while it signs out, on the same line", async () => {
+  it("says the account is deleted while it signs out, in the same region", async () => {
     mocks.deleteAccountAction.mockResolvedValue("deleted");
     mocks.signOut.mockReturnValue(new Promise(() => {}));
     await openConfirm();
+    const status = screen.getByRole("status");
 
     await userEvent.click(screen.getByRole("button", CONFIRM));
-    const status = screen.getByRole("status");
 
     await waitFor(() =>
       expect(status).toHaveTextContent("Your account is deleted. Signing you out"),
     );
-    // The same element, so the change is announced in place, and focus stays.
+    // The same element, so the change is announced in place; the button
+    // names what is happening now, as Sign out's does.
     expect(screen.getByRole("status")).toBe(status);
-    expect(status).toHaveFocus();
-    expect(screen.getByRole("button", CONFIRM)).toBeDisabled();
+    expectBusy(screen.getByRole("button", { name: "Signing you out" }));
+    expect(screen.getByRole("button", CANCEL)).toBeDisabled();
   });
 });
 
@@ -222,8 +275,13 @@ describe("refusals and failures (AC-11)", () => {
 
       const alert = await screen.findByRole("alert");
       expect(alert).toHaveTextContent(words);
-      expect(screen.getByRole("button", CONFIRM)).toHaveFocus();
-      expect(screen.queryByRole("status")).toBeNull();
+      const button = screen.getByRole("button", CONFIRM);
+      expect(button).toBeEnabled();
+      expect(button).not.toHaveAttribute("aria-disabled");
+      expect(within(button).queryByTestId("spinner")).toBeNull();
+      expect(button).toHaveFocus();
+      expect(screen.getByRole("button", CANCEL)).toBeEnabled();
+      expect(screen.getByRole("status")).toBeEmptyDOMElement();
       expect(mocks.loadDocument).not.toHaveBeenCalled();
       expect(mocks.signOut).not.toHaveBeenCalled();
       await expectNoAxeViolations(container);
