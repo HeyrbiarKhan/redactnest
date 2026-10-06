@@ -717,8 +717,10 @@ test.describe("the tool page's layout (spec 0013)", () => {
   /**
    * Spec 0013, AC-15. The idle steps' line: 2 pixels of `border-strong`,
    * centred under the circles, 0.25rem clear of each, none after the last;
-   * a border, so forced colours keep it; on the step's own box, so it grows
-   * when the words wrap at 200% text.
+   * at least 16 pixels long, so it reads as a join rather than a tick (the
+   * pseudo element's computed `height`, which Chromium resolves to the drawn
+   * length); a border, so forced colours keep it; on the step's own box, so it
+   * grows when the words wrap at 200% text.
    */
   test("joins the idle steps with a line between each pair of circles", async ({
     page,
@@ -734,6 +736,7 @@ test.describe("the tool page's layout (spec 0013)", () => {
             drawn: after.content !== "none" && after.borderLeftStyle === "solid",
             width: after.borderLeftWidth,
             colour: after.borderLeftColor,
+            length: parseFloat(after.height),
             height: step.height,
             top: step.top + parseFloat(after.top),
             bottom: step.bottom - parseFloat(after.bottom),
@@ -753,6 +756,7 @@ test.describe("the tool page's layout (spec 0013)", () => {
       for (const [index, step] of steps.slice(0, -1).entries()) {
         const next = steps[index + 1];
         expect(step.width).toBe("2px");
+        expect(step.length).toBeGreaterThanOrEqual(16);
         expect(step.top - step.circle.bottom).toBeCloseTo(step.rem * 0.25, 0);
         expect((next?.circle.top ?? 0) - step.bottom).toBeCloseTo(step.rem * 0.25, 0);
         expect(Math.abs(step.centre - step.circle.centre)).toBeLessThanOrEqual(0.5);

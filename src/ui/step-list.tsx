@@ -4,11 +4,13 @@ import { cx } from "@/lib/cx";
  * The line joining one step to the next (spec 0013, AC-15), drawn on every
  * step but the last.
  *
- * The circles are 1.75rem and the steps sit 0.75rem apart, so a line centred
- * under a circle (`0.875rem`, less half its 2 pixels) that starts at `2rem` and
- * reaches `0.5rem` past the step's foot begins 0.25rem below one circle and
- * stops 0.25rem above the next. It runs from the step's own box, so a step
- * whose words wrap at 200% text stretches it.
+ * The circles are 1.75rem and the steps sit 1.5rem apart (`GAP`), so a line
+ * centred under a circle (`0.875rem`, less half its 2 pixels) that starts at
+ * `2rem` and reaches `1.25rem` past the step's foot begins 0.25rem below one
+ * circle and stops 0.25rem above the next: 1rem long between two one line
+ * steps, a join rather than a tick. The line's `bottom` is the gap less
+ * 0.25rem, so the two change together. It runs from the step's own box, so a
+ * step whose words wrap at 200% text stretches it.
  *
  * A left border, never a background, so forced colours mode repaints it in
  * the system's text colour rather than dropping it. `border-strong` clears 3:1
@@ -18,9 +20,12 @@ import { cx } from "@/lib/cx";
  */
 const LINE = cx(
   "not-last:after:absolute not-last:after:left-[calc(0.875rem_-_1px)]",
-  "not-last:after:top-8 not-last:after:-bottom-2",
+  "not-last:after:top-8 not-last:after:-bottom-5",
   "not-last:after:border-l-2 not-last:after:border-border-strong",
 );
+
+/** The space between steps, 1.5rem: the line's `bottom` above is this less 0.25rem. */
+const GAP = "gap-6";
 
 /**
  * A short sequence, each step numbered in a small circle and joined to the
@@ -35,7 +40,7 @@ const LINE = cx(
  */
 export function StepList({ steps }: { readonly steps: readonly string[] }) {
   return (
-    <ol className="flex flex-col gap-3">
+    <ol className={cx("flex flex-col", GAP)}>
       {steps.map((step, index) => (
         <li key={step} className={cx("relative flex items-start gap-3 text-ink", LINE)}>
           <span

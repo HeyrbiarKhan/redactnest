@@ -38,21 +38,24 @@ describe("StepList", () => {
 
   /**
    * AC-15: the line from one circle to the next. jsdom draws no pseudo
-   * element, so this holds the rule's shape and `tool-layout` in the browser
-   * suite measures it: on every step but the last, as a 2 pixel
+   * element, so this holds the rule's shape and `design-system.spec.ts` in the
+   * browser suite measures it: on every step but the last, as a 2 pixel
    * `border-strong` left border (never a background, so forced colours keep
-   * it), centred under the circle and 0.25rem clear of each.
+   * it), centred under the circle and 0.25rem clear of each. The steps sit
+   * 1.5rem apart and the line reaches 1.25rem past a step's foot, the gap less
+   * that clearance, so the two are held together here.
    */
   it("joins each step to the next with a border line, none after the last", () => {
     render(<StepList steps={STEPS} />);
 
+    expect(screen.getByRole("list")).toHaveClass("gap-6");
     for (const item of screen.getAllByRole("listitem")) {
       expect(item).toHaveClass(
         "relative",
         "not-last:after:absolute",
         "not-last:after:left-[calc(0.875rem_-_1px)]",
         "not-last:after:top-8",
-        "not-last:after:-bottom-2",
+        "not-last:after:-bottom-5",
         "not-last:after:border-l-2",
         "not-last:after:border-border-strong",
       );
