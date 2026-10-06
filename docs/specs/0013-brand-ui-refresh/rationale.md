@@ -96,6 +96,32 @@ An independent read of the draft (another model, read only, 2026-10-06) checked 
 - **Should fix**: `sizes`, `loading="eager"` and `fetchPriority="high"` on the shot (Next 16 deprecates `priority`, and its docs prefer these over `preload`); the footer's brand line kept out of a `p`; the manifest dropped so no policy changes; the plan card's markup and its new contrast pair; the plan card's new place recorded as a change to spec 0007 AC-5 and spec 0012 AC-5; wide containers for the two "beside" layouts; the script freed from TypeScript imports and from any stub (with nobody signed in the real entitlement route answers free, `none`, with the build's caps); the script waiting for fonts and checking the reviewing state before it captures; the grid kept stretched so the panel can stick; `logoPlacement` in place of a CSS hidden logo; the alt text as a committed, tested text file.
 - **Smaller**: the nav label stays "Site"; no current item on sign in; the phone header wraps in page order; the idle steps reworded so they repeat no button name and do not clash with "cleaned copy"; the count badge's noun and tone; `lookedFor` moved to `en-GB`; `HOME_STRIPPED` as a record over every kind; Pricing's title and lead kept; the trio's icons named; the word source claims scoped; every test that changes by design listed.
 
+### Decided after your read of the built pages (task 20)
+
+Your read of the built pages (2026-10-06) found seven things, with screenshots of `/`, `/tool`, sign in, sign up and the privacy policy:
+
+- **Repetition.** "Redact" named the nav item, the header button, the hero button, the footer link and the tool's title. The lockup sat in the header, the sign in panel and the footer. "Your file never leaves your browser" or "in your browser" sat in the eyebrow, the hero lead, the first trio card, the tool rail and the footer line.
+- **The finds and strips band** was a white strip of two paragraphs, the one part of `/` that did not look designed.
+- **The idle steps** read as three separate lines, not a sequence.
+- **Clerk's fields** had no visible edge at rest: Clerk draws them in a shade of `colorBorder`, and `border` against `surface` is about 1.3:1.
+- **No feedback after Continue.** Clerk's `setActive` first runs a server action (`invalidateCacheAction`, through `window.__internal_onBeforeSetActive` in `@clerk/nextjs`), then navigates with the Next.js router, then refreshes. `/account` asks Polar live on every render, and Subscribe creates a checkout before it redirects, so the card sat still for that whole time.
+- **The legal pages' list** scrolled away with the text, and following a link jumped.
+- **Cursors were mixed.** Tailwind v4 leaves a `button` on the browser's default arrow, so `Button` showed the arrow while links showed the hand; only the checklist rows, `Checkbox` and the group `summary` set a pointer themselves, and Clerk's controls followed Clerk's own style.
+
+You chose every word (see the table in `index.md`). These were decided while writing, then checked by an independent read on another model (2026-10-06), whose fixes you chose to apply: the tool page keeps `current="tool"` so its header still hides the button; the cursor selectors are written out and kept from overlapping; the status line has one condition and a named fallback; Clerk's field edge is a real border so forced colours keeps it; and the step line's geometry, the card lists' `role="list"`, the sign in grid and the scoped "Try it free" tests are pinned.
+
+| Decision | Pick | Why | Runner up |
+|---|---|---|---|
+| Where the status line gets its signal | a client component below Clerk's card, shown once `useAuth()` leaves "loaded and signed out", with `useSignIn()` and `useSignUp()` reaching `complete` as the named fallback if the sandbox finds `useAuth()` changes too late | covers the whole wait after Clerk's own spinner ends, whatever page comes next, with Clerk's public state only | a `loading.tsx` over the account pages (it would stream every account page from its first byte, so Subscribe's `redirect()` calls would land after the shell and become client side redirects) |
+| Field edge colour | `border-strong` on `formFieldInput` and `otpCodeFieldInput` | the only edge token above 3:1 on `surface` (WCAG 1.4.11), already a graphic pairing in the contract | darken `variables.colorBorder` (would darken every divider in Clerk's card too) |
+| Step line colour | `border-strong`, 2 pixels | visible (above 3:1) and neutral; the steps are instructions, not progress | `accent` (reads as steps already done) |
+| How the cursor rule wins | unlayered, `!important`, disjoint pointer and not-allowed sets, `cursor-` utilities banned by lint | one rule beats Clerk's unlayered style whatever its specificity, and nothing can compete with it | a layered base rule plus `CLERK_APPEARANCE.elements` cursors for Clerk (two places to keep in step, which is what you asked to avoid) |
+| Smooth scrolling | the root, only while `main[data-smooth-scroll]` is present, only under `prefers-reduced-motion: no-preference` | the legal pages get it, every other page, `/tool`'s focus moves included, scrolls as today, and it is CSS only (spec 0011, INV-7) | `scroll-behavior: smooth` on every page |
+| A tall section list | sticky with a capped height and its own scroll, padded for focus rings | the last links stay reachable on a short window | sticky only above a height media query (the list would stop sticking on many laptops) |
+| The finds and strips layout | two `Card`s on `canvas` after the trio, each an `IconCircle`, an `h3` and an icon list | the reference's card language on the page's own background, built from existing primitives, with no new colour pairing | keep the white band and put `canvas` cards in it (`Card` is `surface`, so a new card variant) |
+| The Subscribe line | "Signing you in, then on to Subscribe" (your pick after the cross check) | always true: Subscribe sends a visitor who already holds Pro, or whose payment is settling, to Account or Welcome | "then on to checkout" (untrue for those visitors) |
+| Strips card icon | `FileMinus` | taking something out of a file, and unlike the trio's `Eraser` | `EyeOff` (says hiding, the opposite of removing) |
+
 ### What each reference gave, and what stayed out
 
 | Reference | Kept | Left out, and why |
@@ -124,9 +150,11 @@ Three mark directions and three wordmark styles were drawn at 128, 64, 32 and 16
 - Next.js 16's own docs in `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/01-metadata/` (`app-icons.md`, `manifest.md`, `opengraph-image.md`: `favicon.ico` only as a file, `icon.svg` gets `sizes="any"`, the social image size limits)
 - The `frontend-design` skill (`anthropics/skills`, `.claude/skills/frontend-design/`), installed for this feature
 - The research cache `docs/.agent-cache/research/brand-ui-refresh.md` (2026-10-06)
+- `@clerk/nextjs` 7.9.10, `dist/esm/app-router/client/ClerkProvider.js` (what runs between a finished sign in and the next page: the cache invalidating server action, the router push, the refresh)
+- `src/app/(account)/sign-out.tsx` (the spinner and status line pattern the signing in line follows), `tests/unit/engine-wall.test.ts` (where every zone's class patterns are proved)
 
 **Practices and standards**:
-- WCAG 2.2: 1.3.2 meaningful sequence and 2.4.3 focus order (the rail first), 1.4.1 use of colour (nav items), 1.4.10 reflow, 2.4.11 focus not obscured (the sticky panel)
+- WCAG 2.2: 1.3.2 meaningful sequence and 2.4.3 focus order (the rail first), 1.4.1 use of colour (nav items), 1.4.10 reflow, 2.4.11 focus not obscured (the sticky panel and the sticky section list), 1.4.11 non text contrast (Clerk's field edges, the step line), 4.1.3 status messages (the signing in line)
 - The six file favicon set (`favicon.ico`, an SVG icon, a 180 pixel Apple icon, 192 and 512 manifest icons, a maskable 512 with a 409 pixel safe circle)
 - Open Graph's 1200 by 630 image, also used by X's `summary_large_image` card
 - Reserved values for fictional data: `example.com` (RFC 2606), Ofcom's drama number ranges, the US `555-01xx` range
