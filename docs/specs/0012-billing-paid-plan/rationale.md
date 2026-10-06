@@ -396,3 +396,64 @@ Recorded with `tests/e2e/paid-cap-speed.spec.ts` in the `speed` project (`pnpm e
 **The decision.** Both halves of AC-24's bar hold, so Pro ships at 50 pages. The default of `NEXT_PUBLIC_MAX_PAGES` stays 50, and the sandbox product description's "up to 50 pages" already matches `config.maxPages`. The test keeps asserting both lines on every speed run, so a regression fails `pnpm test:e2e` rather than going unnoticed.
 
 **What it does not cover.** A crafted page can still hold one detection read longer: the phone detector's budget is 2 s per 100,000 characters (spec 0005, *Consequences*). That is a worst case built on purpose, not a dense document, and it is unchanged by the cap. The scan memory limit (scope Deferred) is about memory, not time, and this measure says nothing about it.
+
+## Go live results
+
+_Recorded 7 October 2026 from your report of go live on 6 and 7 October, with the deploy facts read from the tag workflow's runs._
+
+### Step 6: the cookies on production (6 October 2026)
+
+Taken on `redactnest.com` and `clerk.redactnest.com`, from the browser's own cookie list.
+
+**Anonymous.** `/`, `/pricing`, `/privacy`, `/terms`, a page that does not exist, `/licence.txt` and a redaction on `/tool`: no cookie on either host, and no `Set-Cookie` on any response.
+
+| Cookie | Domain | Owner | Purpose | HttpOnly | Lists |
+|---|---|---|---|---|---|
+| `__client` | `.clerk.redactnest.com` | Clerk | sign in state | not recorded | 1, 2, 3 |
+| `__cf_bm` | `.clerk.redactnest.com` | Cloudflare | bot protection | not recorded | 1, 2, 3 |
+| `_cfuvid` | `.clerk.redactnest.com` | Cloudflare | rate limiting | not recorded | 1, 2, 3 |
+| `__client_uat`, `__client_uat_sO-jUikO` | `.redactnest.com` | Clerk | sign in state | not recorded | 1, 2, 3 (set to `0` at sign out) |
+| `__session`, `__session_sO-jUikO` | `redactnest.com` | Clerk | the session | not recorded | 2 |
+| `__refresh_sO-jUikO` | `redactnest.com` | Clerk | session refresh | yes | 2, 3 |
+| `clerk_active_context` | `redactnest.com` | Clerk | the active session's context | not recorded | 2 |
+
+The lists: 1 is the sign in page opened and left without signing in, 2 is signed in after Subscribe, Polar's checkout left unpaid and the portal, 3 is after sign out. A cookie reported in an earlier list and not said to be gone is counted in the later ones. Your report of list 3 names only what changed (`__client_uat` at `0`, `__refresh_sO-jUikO` still there), so whether `__session` and `clerk_active_context` were gone is not recorded. No `__clerk_db_jwt` appeared anywhere, so the instance is production.
+
+**Judged against C6.** Every cookie is Clerk's on our site or on Clerk's host, or Cloudflare's on Clerk's host, and each serves sign in or its security. The one cookie on the parent domain, `__client_uat` on `.redactnest.com`, is Clerk's, so it counts as on our site and passes. Cloudflare's two sit on `.clerk.redactnest.com`, Clerk's address, where C6 places them. List 3 holds no cookie list 2 did not. So step 6 passes, and C6 stands as written.
+
+Two things the production list shows that the development walk could not:
+- `__client` sits on Clerk's host, as expected, and `__client_uat` is written on `.redactnest.com`, the parent domain, as soon as the sign in page opens. A visitor who opens sign in and leaves then carries `__client_uat` to every page of the site, `/tool` and `/api/entitlement` included. C6 still holds, because the sign in page set it. The plan check reads it as the walk expected: `0` or missing means not signed in (`src/billing/session.ts`).
+- The suffix is `_sO-jUikO`, what `getCookieSuffix` gives for the live publishable key. The route reads the suffixed name first, as Clerk does.
+
+**`__refresh_sO-jUikO` after sign out: C6 does not change.** Step 6 asked for this to come back here. It is the cookie task 13's walk saw stay on the development instance, now confirmed on production. Judged on C6's own terms:
+- Owner, place and purpose match C6's words: Clerk's, on our site, set by the sign in and account pages because signing in needed it.
+- C6 makes no promise about sign out. The 2026-10-04 rewording dropped "to keep you signed in" precisely because the walk saw Clerk's cookies outlive sign out (*After task 13's walk*), and step 6's rule passes a third list that adds nothing.
+- Nothing of ours reads it. The plan check reads only `__session` and `__client_uat` (`src/billing/session.ts`), and `__client_uat` reads `0` after sign out, so the next answer is `none`, as the walk showed.
+
+Chosen: keep C6, and add this result to the deferred lawyer review's question on "strictly necessary" (Follow-up), which is where a cookie that outlives sign out belongs. Runner up: add a sentence to Your account that some of Clerk's sign in cookies can stay after you sign out until they expire or you clear them. It would be more open with a reader who checks their browser, at the cost of a page change and a change entry for something C6 already leaves room for. It is the first change to make if the lawyer finds the exemption does not hold after sign out.
+
+Not in the record: whether `/api/entitlement` sent `Set-Cookie` while signed in (the route never sets one, held by `tests/unit/entitlement-route.test.ts`), and step 6's Clerk Dashboard logo check.
+
+### Clerk: bot protection was on after cloning
+
+The production instance was made by cloning the development one, and came up with bot protection on. You turned it off, as step 1 requires. It matters beyond the setting: Clerk's bot protection needs Cloudflare and `*.protect.clerk.com` in the content security policy (*Research findings*), origins `OUTSIDE_SERVICES` does not name, so sign up would meet a policy block, and it would bring a challenge and cookies that C6 and the Clerk entry do not describe. Go live step 1 now says a cloned instance must be checked for it.
+
+### Vercel's first deploy went to Production from a pull request branch
+
+When the Vercel project was first set up, its first deploy went to Production from the pull request branch `feat/go-live-date-06`, commit `bf5bb0a`, not from `main`. The tag workflow tagged it `prod-2026-10-06-bf5bb0a` (run 37392709321, 00:12 UTC on 6 October) and, eight minutes later, tagged the merge of pull request 17, `a46f623`, as `prod-2026-10-06-a46f623` (run 37393430731). Every later branch push deployed to Preview and was skipped, and every merge to `main` went to Production, so the production branch is `main`.
+
+No harm followed. `bf5bb0a` is on `main` through `a46f623`, so its tag names a commit on `main`, and its source link pointed at a tree that exists. The workflow's automatic path tags whatever production served, by design: only the hand run refuses a commit off `main` (spec 0009, AC-9). For a new Vercel project, pick `main` when importing it.
+
+### Steps 7 and 8 swapped
+
+Polar's production organisation was still in test mode, and test mode blocks payments. So the real purchase (step 7 as written) could not run before the review (step 8). The review went first, and the real purchase, with its card statement check, waits until Polar lets the organisation take payments. The Go live list now numbers them in that order.
+
+**Submitted 7 October 2026.** Polar says a review takes up to 14 days and must pass before the first payout.
+
+**The review code had to be Forever.** `POLARREVIEW` is the discount code made for the review, so Polar's reviewers can subscribe to Pro. A code that applies Once needs a saved card for the renewals after it, and test mode blocks saving one, so it had to apply Forever. A Forever code keeps its discount on every renewal for as long as the subscription lasts, so it should not outlive the review (Follow-up).
+
+**support@redactnest.com.** Polar's organisation settings hold one website and one support email, and the account review shows those same fields, so EdiventStudio's support email became `support@redactnest.com`. Nothing on our pages names it: the privacy contact stays `LEGAL.contactEmail`, `privacy@redactnest.com`.
+
+### Step 9: the product image is the apple icon
+
+Polar shows a product's media as a small square thumbnail, so the 1200 by 630 `docs/design/brand/polar-product.png` (spec 0013, AC-6) would show cropped. The product's media is `src/app/apple-icon.png` instead, the square 180 by 180 mark `scripts/make-brand.mjs` already makes. The organisation avatar stays EdiventStudio's own. `polar-product.png` is now made and committed for nothing (Follow-up).
