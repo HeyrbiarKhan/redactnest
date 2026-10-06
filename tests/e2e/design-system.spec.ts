@@ -1401,13 +1401,23 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     expect((fourth?.x ?? 0) + (fourth?.width ?? 0)).toBeLessThan(fifth?.x ?? 0);
   });
 
-  /** The card's width decides the columns: still two beside Finds at 1024, with a narrower gap. */
-  test("keeps the Strips columns at 1024 pixels, and one column on a phone", async ({
+  /**
+   * The card's own width decides the columns (AC-11), so the list folds as
+   * the cards meet: two while they are stacked, one once they sit side by
+   * side, then two again. Each probe sits at least 20 pixels from a threshold
+   * with or without a classic scrollbar, because headless Chromium hides the
+   * scrollbar a person's browser draws, and a scrollbar moves every threshold
+   * by its width (spec 0013, *The Strips columns*, task 43).
+   */
+  test("sets the Strips columns by the card's own width, probing clear of every threshold", async ({
     page,
   }) => {
-    const list = page.getByTestId("home-strips").getByRole("list");
+    const finds = page.getByTestId("home-finds");
+    const strips = page.getByTestId("home-strips");
+    const list = strips.getByRole("list");
 
-    await page.setViewportSize({ width: 1024, height: 800 });
+    // Side by side, with room for two columns at the narrower gap.
+    await page.setViewportSize({ width: 1080, height: 800 });
     await page.goto("/");
     expect(await columnsOf(list)).toEqual({ count: "2", gap: "48px", rule: "solid" });
     // No item wraps in the narrower columns.
@@ -1415,6 +1425,21 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       expect((await item.boundingBox())?.height).toBe(32);
     }
 
+    // Side by side and too narrow for two: one column, with no rule.
+    await page.setViewportSize({ width: 960, height: 800 });
+    expect(await columnsOf(list)).toMatchObject({ count: "auto", rule: "none" });
+    const [left, right] = [await finds.boundingBox(), await strips.boundingBox()];
+    expect(left?.y).toBe(right?.y);
+    expect(left?.height).toBe(right?.height);
+    expect((left?.x ?? 0) + (left?.width ?? 0)).toBeLessThan(right?.x ?? 0);
+
+    // Stacked, so the card is wide again: two columns at the mockup's gap.
+    await page.setViewportSize({ width: 600, height: 900 });
+    expect(await columnsOf(list)).toEqual({ count: "2", gap: "64px", rule: "solid" });
+    const [above, below] = [await finds.boundingBox(), await strips.boundingBox()];
+    expect((above?.y ?? 0) + (above?.height ?? 0)).toBeLessThanOrEqual(below?.y ?? 0);
+
+    // A phone: one column, and nothing scrolls sideways.
     await page.setViewportSize({ width: 320, height: 640 });
     expect((await columnsOf(list)).count).toBe("auto");
     await expectNoHorizontalScroll(page);

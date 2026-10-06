@@ -139,13 +139,14 @@ export default function HomePage() {
                   One list of seven, so a screen reader hears them together,
                   set in CSS columns once the card has room for two: down the
                   first column, then the second, with a `border` rule between
-                  them. The card's own width decides, not the window's, because
-                  from `md` to about 1000 pixels the card sits beside Finds and
-                  is too narrow for two columns. The gap is the mockup's 64
-                  pixels where the card has room, and 48 just above the
-                  threshold, so two columns still fit at 1024 pixels. In rem,
-                  so at 200% text it stays one column. An item never splits
-                  across the columns.
+                  them. The card's own content width decides, never the
+                  window's, because from `md` to about 1020 pixels the card
+                  sits beside Finds and is too narrow for two columns. Two
+                  start at 26rem of content, about the narrowest that holds
+                  "Page thumbnails" beside its circle at a 48 pixel gap, and
+                  take the mockup's 64 pixel gap from 29rem. In rem, so at
+                  200% text it stays one column. An item never splits across
+                  the columns.
                 */}
                 <ul
                   role="list"
