@@ -11,6 +11,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import * as homePage from "@/app/page";
 import HomePage from "@/app/page";
 import { config } from "@/config";
 import { capLine, findsItems, HOME_TEXT, strippedItems } from "@/lib/home-text";
@@ -18,9 +19,13 @@ import { PRICING_PATH, TOOL_PATH } from "@/lib/routes";
 
 import { expectNoAxeViolations } from "../../setup/component";
 
-const mocks = vi.hoisted(() => ({ billingEnabled: true }));
+const mocks = vi.hoisted(() => ({
+  billingEnabled: true,
+  caps: null as { readonly free: number; readonly paid: number } | null,
+}));
 
-// Every other value is the real config; whether billing is on is the test's.
+// Every other value is the real config; whether billing is on is the test's,
+// and so are the caps when a test sets them.
 vi.mock("@/config", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/config")>();
   return {
@@ -29,6 +34,12 @@ vi.mock("@/config", async (importOriginal) => {
       ...actual.config,
       get billingEnabled() {
         return mocks.billingEnabled;
+      },
+      get freePageCap() {
+        return mocks.caps?.free ?? actual.config.freePageCap;
+      },
+      get maxPages() {
+        return mocks.caps?.paid ?? actual.config.maxPages;
       },
     },
   };
@@ -42,6 +53,7 @@ vi.mock("next/link", () => ({
 
 afterEach(() => {
   mocks.billingEnabled = true;
+  mocks.caps = null;
 });
 
 function main() {
@@ -89,6 +101,26 @@ describe("the hero (AC-10)", () => {
       `Up to ${config.freePageCap} pages a document.`,
     );
     expect(screen.getByTestId("home-caps")).not.toHaveTextContent(/Free|Pro/);
+  });
+
+  /** AC-13 and spec 0003's rule: the caps are read from `config`, never written here. */
+  it("takes both caps from config, so the line follows the build's values", () => {
+    mocks.caps = { free: 7, paid: 90 };
+    render(<HomePage />);
+
+    expect(screen.getByTestId("home-caps")).toHaveTextContent(
+      "Free up to 7 pages a document. Pro goes up to 90.",
+    );
+  });
+
+  it("takes the one cap from config with billing off", () => {
+    mocks.billingEnabled = false;
+    mocks.caps = { free: 7, paid: 90 };
+    render(<HomePage />);
+
+    expect(screen.getByTestId("home-caps")).toHaveTextContent(
+      "Up to 7 pages a document.",
+    );
   });
 });
 
@@ -263,9 +295,105 @@ describe("the trio and the band (AC-10, AC-11)", () => {
     }
   });
 
+  /**
+   * The header icons spec 0013 names, and each Finds row's tile holding its
+   * detector's own icon, the checklist's, so a detector added by feature 12
+   * brings its icon with it.
+   */
+  it("heads Finds with ScanSearch and Strips with FileMinus", () => {
+    render(<HomePage />);
+
+    for (const [id, icon] of [
+      ["home-finds", "lucide-scan-search"],
+      ["home-strips", "lucide-file-minus"],
+    ] as const) {
+      const heading = within(screen.getByTestId(id)).getByRole("heading", { level: 3 });
+      const tile = heading.parentElement?.previousElementSibling;
+      expect(tile?.querySelector("svg")).toHaveClass(icon);
+    }
+  });
+
+  it("draws each detector's own icon in its Finds row", () => {
+    render(<HomePage />);
+    const rows = within(within(screen.getByTestId("home-finds")).getByRole("list"))
+      .getAllByRole("listitem")
+      .map((row) => row.querySelector("svg"));
+
+    findsItems().forEach(({ icon: Icon }, index) => {
+      const { container, unmount } = render(<Icon />);
+      const own = [...(container.querySelector("svg")?.classList ?? [])].filter((name) =>
+        name.startsWith("lucide-"),
+      );
+      unmount();
+
+      expect(own).not.toEqual([]);
+      expect(rows[index]).toHaveClass(...own);
+    });
+  });
+
   it("passes axe", async () => {
     const { container } = render(<HomePage />);
 
     await expectNoAxeViolations(container);
+  });
+});
+
+/**
+ * AC-13: every word in the main content lives in `src/lib/home-text.ts`. The
+ * tests above find each word the page should say; this one proves it says
+ * nothing else, so a sentence typed into the page, which no test of
+ * `home-text.ts` would ever read, fails here.
+ */
+describe("the main content's words (AC-13)", () => {
+  /** Every word `home-text.ts` gives the page, for the build's billing state. */
+  function homeWords(billingEnabled: boolean): string[] {
+    const { features, band } = HOME_TEXT;
+    return [
+      HOME_TEXT.eyebrow,
+      HOME_TEXT.headline,
+      HOME_TEXT.lead,
+      HOME_TEXT.primary,
+      ...(billingEnabled ? [HOME_TEXT.pricing] : []),
+      capLine(billingEnabled, config.freePageCap, config.maxPages),
+      ...features.flatMap(({ title, body }) => [title, body]),
+      band.title,
+      band.finds.title,
+      band.finds.subtitle,
+      band.finds.line,
+      ...findsItems().map(({ label }) => label),
+      band.strips.title,
+      band.strips.subtitle,
+      ...strippedItems(),
+      band.strips.note,
+    ];
+  }
+
+  /** What is left of the main content once every word from home-text.ts is taken out. */
+  function leftOver(billingEnabled: boolean): string {
+    const words = homeWords(billingEnabled).toSorted((a, b) => b.length - a.length);
+    return words.reduce(
+      (text, word) => text.replaceAll(word, " "),
+      screen.getByRole("main").textContent ?? "",
+    );
+  }
+
+  it.each([true, false])(
+    "says nothing home-text.ts does not hold, billing on: %s",
+    (on) => {
+      mocks.billingEnabled = on;
+      render(<HomePage />);
+
+      expect(leftOver(on).trim()).toBe("");
+    },
+  );
+});
+
+/**
+ * AC-13: the page keeps today's title and description by exporting no
+ * metadata of its own, so it inherits the root layout's.
+ */
+describe("the home page's metadata (AC-13)", () => {
+  it("exports none of its own", () => {
+    expect(Object.keys(homePage).sort()).toEqual(["default"]);
   });
 });

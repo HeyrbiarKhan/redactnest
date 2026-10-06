@@ -865,6 +865,54 @@ test.describe("the tool page's layout (spec 0013)", () => {
 
     expect(await position(page, "result")).toBe("static");
   });
+
+  /** AC-16: from lg, with a document open, A runs across both columns. */
+  test("runs the file bar across both columns above the list and the rail", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/tool");
+    await reviewBothGroups(page);
+
+    const [document, list, rail] = [
+      await box(page, "area-document"),
+      await box(page, "area-found"),
+      await box(page, "area-rail"),
+    ];
+    expect(document.left).toBe(list.left);
+    expect(document.right).toBe(rail.right);
+    expect(document.top).toBeLessThan(Math.min(list.top, rail.top));
+  });
+
+  /**
+   * AC-14 and AC-16: below lg, and at 200% text in a wide window, one column
+   * in page order, so a phone reads the file bar, then the rail, then the list.
+   */
+  for (const [label, width, doubled] of [
+    ["at 900 pixels", 900, false],
+    ["at 200% text", 1280, true],
+  ] as const) {
+    test(`stacks the file bar, the rail and the list in one column ${label}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/tool");
+      if (doubled) {
+        await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+      }
+      await reviewBothGroups(page);
+
+      const [document, rail, list] = [
+        await box(page, "area-document"),
+        await box(page, "area-rail"),
+        await box(page, "area-found"),
+      ];
+      expect(rail.left).toBe(document.left);
+      expect(list.left).toBe(document.left);
+      expect(document.top).toBeLessThan(rail.top);
+      expect(rail.top).toBeLessThan(list.top);
+    });
+  }
 });
 
 test.describe("reflow and zoom on the tool page (AC-15)", () => {
@@ -912,10 +960,11 @@ test.describe("reflow and zoom on the tool page (AC-15)", () => {
     }
   });
 
-  // Spec 0013, AC-17 and AC-26: every step state at 200% text is one column,
-  // with nothing sticky and nothing scrolling sideways.
+  // Spec 0013, AC-17 and AC-26: every step state at 200% text has nothing
+  // sticky and nothing scrolling sideways. That the areas stack in one column
+  // is measured in "the tool page's layout" above.
   for (const [state, reach] of TOOL_STATES) {
-    test(`is one column with nothing sticky at 200% text in the ${state} state`, async ({
+    test(`has nothing sticky and no sideways scroll at 200% text in the ${state} state`, async ({
       page,
     }) => {
       await page.setViewportSize({ width: 1280, height: 800 });
@@ -1455,6 +1504,49 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
   });
 
   /**
+   * AC-11: both thresholds are in rem, so doubled text needs a card twice as
+   * wide for two columns, and the list stays one column at every width,
+   * the two that show two columns at normal size included.
+   */
+  test("keeps the Strips list one column at 200% text", async ({ page }) => {
+    const list = page.getByTestId("home-strips").getByRole("list");
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+
+    for (const width of [1280, 600]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await columnsOf(list), `${width}px`).toMatchObject({
+        count: "auto",
+        rule: "none",
+      });
+    }
+  });
+
+  /**
+   * AC-11 and AC-33: a Finds row is not a control, so it keeps the browser's
+   * default arrow and does not change under the pointer.
+   */
+  test("leaves a Finds row the default arrow, unchanged under the pointer", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+    const row = page.getByTestId("home-finds").getByRole("listitem").first();
+    const look = () =>
+      row.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { cursor: style.cursor, fill: style.backgroundColor };
+      });
+
+    const atRest = await look();
+    await row.hover();
+
+    expect(["auto", "default"]).toContain(atRest.cursor);
+    expect(await look()).toEqual(atRest);
+  });
+
+  /**
    * Spec 0013, AC-12. The real capture, through `next/image` from our own
    * origin, sized before it loads so nothing shifts, and loaded first.
    */
@@ -1692,6 +1784,55 @@ test.describe("the cursor (spec 0013, AC-33)", () => {
     const row = box.locator("xpath=ancestor::label[1]");
     expect(await cursorOf(box)).toBe("not-allowed");
     expect(await cursorOf(row)).toBe("not-allowed");
+  });
+
+  /** Spec 0007, AC-10: the rows are held while a run works, and Cancel is the way out. */
+  test("is not allowed on the held rows while a run works, and the pointer on Cancel", async ({
+    page,
+  }) => {
+    await page.goto("/tool");
+    await redactingHeld(page);
+
+    const box = page.getByRole("checkbox", { name: "contact@example.com" });
+    await expect(box).toBeDisabled();
+    expect(await cursorOf(box)).toBe("not-allowed");
+    expect(await cursorOf(box.locator("xpath=ancestor::label[1]"))).toBe("not-allowed");
+    expect(await cursorOf(page.getByTestId("cancel"))).toBe("pointer");
+  });
+
+  /**
+   * AC-33 and AC-34. The busy and disabled controls that matter live on
+   * `/account`, which no browser test signs in to reach, so the shapes they
+   * take are added to a public page and read through the real compiled rule:
+   * a busy button (`aria-disabled`, never `disabled`), a disabled one, a link
+   * marked disabled, a disabled checkbox, and a text field, which keeps the
+   * text cursor as Clerk's fields do.
+   */
+  test("is not allowed on whatever is busy or disabled, and the text cursor stays in a field", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByRole("main").evaluate((main) => {
+      main.insertAdjacentHTML(
+        "beforeend",
+        [
+          '<button type="button" data-probe="busy" aria-disabled="true">Signing you out</button>',
+          '<button type="button" data-probe="disabled" disabled>Cancel</button>',
+          '<a href="/" data-probe="link" aria-disabled="true">Home</a>',
+          '<label data-probe="row"><input type="checkbox" disabled> A blocked row</label>',
+          '<input type="text" data-probe="field" aria-label="Email address">',
+          '<button type="button" data-probe="enabled">Sign out</button>',
+        ].join(""),
+      );
+    });
+    const probe = (name: string) => page.locator(`[data-probe="${name}"]`);
+
+    for (const name of ["busy", "disabled", "link", "row"]) {
+      expect(await cursorOf(probe(name)), name).toBe("not-allowed");
+    }
+    expect(await cursorOf(probe("row").locator("input"))).toBe("not-allowed");
+    expect(await cursorOf(probe("field"))).toBe("text");
+    expect(await cursorOf(probe("enabled"))).toBe("pointer");
   });
 });
 

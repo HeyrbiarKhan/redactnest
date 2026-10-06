@@ -1,12 +1,15 @@
+import { SignIn, SignUp } from "@clerk/nextjs";
 import { isValidElement, type ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { AccountShell } from "@/app/(account)/account-shell";
 import {
   CLERK_REDIRECT_PARAMS,
   landingAfterSignIn,
   pagePath,
   type SearchParams,
 } from "@/app/(account)/landing";
+import { SignInPanel } from "@/app/(account)/sign-in-panel";
 
 /**
  * Where Clerk lands after signing in or up, and the clean redirect that sheds
@@ -228,6 +231,32 @@ describe("the pages", () => {
       new Redirected("/sign-up"),
     );
   });
+
+  /**
+   * Spec 0013, AC-7 and AC-23: the wide account shell with nothing current in
+   * the header, then our panel and Clerk's card side by side, the panel
+   * first, and nothing of ours after Clerk's card, so its own spinner is the
+   * only thing that moves after Continue.
+   */
+  it.each([
+    ["sign-in", SignIn],
+    ["sign-up", SignUp],
+  ] as const)(
+    "sets %s in the wide shell, the panel then Clerk's card and nothing after",
+    async (which, card) => {
+      const element = await open(which, undefined, {});
+
+      expect(element).not.toBeInstanceOf(Redirected);
+      const shell = element as ReactElement<Record<string, unknown>>;
+      expect(shell.type).toBe(AccountShell);
+      expect(shell.props.width).toBe("wide");
+      expect(shell.props.current).toBeUndefined();
+      const grid = shell.props.children as ReactElement<{ children: unknown }>;
+      expect(isValidElement(grid)).toBe(true);
+      const parts = [grid.props.children].flat() as ReactElement[];
+      expect(parts.map((part) => part.type)).toEqual([SignInPanel, card]);
+    },
+  );
 });
 
 /** The first element in a tree whose props pass the test, depth first. */

@@ -138,3 +138,35 @@ describe("the social card's alt text (AC-5)", () => {
     );
   });
 });
+
+/**
+ * AC-27 and AC-28: the script draws only with the site's own tokens and adds
+ * no package. Read as text, as the script reads what it draws from, so a
+ * colour typed into it or a TypeScript import fails here rather than in a
+ * rerun nobody makes until the look changes.
+ */
+describe("scripts/make-brand.mjs, read as text (AC-27, AC-28)", () => {
+  const SCRIPT = read("scripts", "make-brand.mjs").toString("utf8");
+  const code = SCRIPT.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+  it("writes no colour of its own: every colour comes from globals.css", () => {
+    expect(code).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(code).not.toMatch(/\b(rgba?|hsla?|oklch|oklab|lab|lch)\(/);
+    expect(code).toContain('readFile(at("src", "app", "globals.css")');
+  });
+
+  it("imports only Node's own modules and @playwright/test, never a TypeScript module", () => {
+    const sources = [...code.matchAll(/^import\b[^;]*?from\s+"([^"]+)"/gm)].map(
+      ([, source]) => source,
+    );
+
+    expect(sources.length).toBeGreaterThan(0);
+    for (const source of sources) {
+      expect(source).toMatch(/^(node:[a-z_/]+|@playwright\/test)$/);
+    }
+    // No dynamic import and no require: `createRequire` only resolves Next's
+    // own binary to start the build, which loads nothing into the script.
+    expect(code).not.toMatch(/\bimport\(/);
+    expect(code).not.toMatch(/\brequire\(/);
+  });
+});

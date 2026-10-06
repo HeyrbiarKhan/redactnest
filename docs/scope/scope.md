@@ -254,7 +254,7 @@ spec [0013](../specs/0013-brand-ui-refresh/index.md)
   - [ ] Your read's changes: each thing said once (Try it free, Remove text from a PDF, no Redact item, no lockup in the sign in panel), the finds and strips cards, the steps' line, Clerk's field edges (the signing in line built, then removed), the sticky legal list, one cursor rule, then proof, the brand rerun, your read again and the amends · AC-7, AC-9 to AC-11, AC-15, AC-20, AC-22, AC-23, AC-25, AC-26, AC-30, AC-31, AC-33
   - [ ] Your read of slice 6: the finds and strips cards rebuilt to your mockup, the wait shown on the pressed Sign out or delete button with the status line hidden, the red delete buttons and `danger-strong`, then the sandbox walk, `design.md` and your read · AC-11, AC-26, AC-27, AC-34, AC-35
 - [x] Verify it: `/check verify brand & UI refresh`
-- [ ] Test it: `/test brand & UI refresh`
+- [x] Test it: `/test brand & UI refresh`
 - [ ] Review it (fresh model): `/check review brand & UI refresh`
 
 ## Release 3: See it working, and widen the net

@@ -248,6 +248,42 @@ describe("a deleted account (AC-11, INV-13)", () => {
     expectBusy(screen.getByRole("button", { name: "Signing you out" }));
     expect(screen.getByRole("button", CANCEL)).toBeDisabled();
   });
+
+  /**
+   * AC-34: the button stays busy after the page load starts, until the
+   * browser leaves, so the last moment before `/` arrives shows the work
+   * still under way and no press can start it again.
+   */
+  it("stays busy, saying it signs you out, once the load of / has started", async () => {
+    mocks.deleteAccountAction.mockResolvedValue("deleted");
+    mocks.signOut.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    await openConfirm();
+
+    await user.click(screen.getByRole("button", CONFIRM));
+    await waitFor(() => expect(mocks.loadDocument).toHaveBeenCalledWith("/"));
+
+    const busy = screen.getByRole("button", { name: "Signing you out" });
+    expectBusy(busy);
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Your account is deleted. Signing you out",
+    );
+    expect(screen.getByRole("button", CANCEL)).toBeDisabled();
+    await user.click(busy);
+    await user.keyboard("{Enter}");
+    expect(mocks.deleteAccountAction).toHaveBeenCalledTimes(1);
+    expect(mocks.loadDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps Cancel disabled once the load of sign in has started", async () => {
+    mocks.deleteAccountAction.mockResolvedValue("sign-in");
+    await openConfirm();
+
+    await userEvent.click(screen.getByRole("button", CONFIRM));
+    await waitFor(() => expect(mocks.loadDocument).toHaveBeenCalledWith("/sign-in"));
+
+    expect(screen.getByRole("button", CANCEL)).toBeDisabled();
+  });
 });
 
 describe("refusals and failures (AC-11)", () => {

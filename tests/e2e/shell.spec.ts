@@ -79,6 +79,19 @@ test.describe("every way into the tool is a real page load", () => {
     });
   }
 
+  /** Spec 0013, AC-9: the 404's own Try it free, as every other way in. */
+  test("the 404's Try it free button loads /tool as a document", async ({ page }) => {
+    await page.goto("/no-such-page");
+
+    await page.getByRole("main").getByRole("link", { name: "Try it free" }).click();
+    await expect(page).toHaveURL(/\/tool$/);
+
+    const loadedAt = await page.evaluate(
+      () => performance.getEntriesByType("navigation")[0]?.name ?? "",
+    );
+    expect(new URL(loadedAt).pathname).toBe("/tool");
+  });
+
   /**
    * INV-11, in a real browser. The links above are real page loads, but a stray
    * `router.push` is not, and it lands the tool in a document loaded at `/`. The
@@ -287,6 +300,7 @@ test.describe("the header", () => {
     ["/", null],
     ["/privacy", null],
     ["/terms", null],
+    ["/no-such-page", null],
   ] as const;
 
   for (const [path, current] of CURRENT) {
@@ -377,6 +391,74 @@ test.describe("the header", () => {
       viewport: document.documentElement.clientWidth,
     }));
     expect(scroll.width).toBeLessThanOrEqual(scroll.viewport);
+  });
+
+  /** From `sm`, the lockup, the nav, Account and the button on one row, the button last. */
+  for (const width of [640, 1280]) {
+    test(`sits on one row with the button at the right at ${width} pixels`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/");
+      const header = page.getByRole("banner");
+
+      const boxes = [];
+      for (const name of ["RedactNest", "Pricing", "Account", "Try it free"]) {
+        const box = await header.getByRole("link", { name, exact: true }).boundingBox();
+        if (box === null) throw new Error(`${name} has no box`);
+        boxes.push(box);
+      }
+      const middles = boxes.map(({ y, height }) => y + height / 2);
+      for (const middle of middles) expect(Math.abs(middle - middles[0])).toBeLessThan(2);
+      const lefts = boxes.map(({ x }) => x);
+      expect(lefts).toEqual([...lefts].sort((a, b) => a - b));
+    });
+  }
+
+  /**
+   * The current item in semibold `ink` over its `accent` bar, the others in
+   * `ink-muted`, underlined under the pointer only, read as the browser paints
+   * them against the tokens in `globals.css`.
+   */
+  test("paints the current item ink over an accent bar, and underlines only the others on hover", async ({
+    page,
+  }) => {
+    await page.goto("/pricing");
+    const header = page.getByRole("banner");
+    const current = header.getByRole("link", { name: "Pricing", exact: true });
+    const other = header.getByRole("link", { name: "Account", exact: true });
+    const token = (role: string) =>
+      page.evaluate((name) => {
+        const probe = document.createElement("span");
+        probe.style.color = `var(--color-${name})`;
+        document.body.append(probe);
+        const colour = getComputedStyle(probe).color;
+        probe.remove();
+        return colour;
+      }, role);
+    const look = (link: typeof current) =>
+      link.evaluate((element) => ({
+        colour: getComputedStyle(element).color,
+        underline: getComputedStyle(element).textDecorationLine,
+        bar: getComputedStyle(element, "::after").borderBottomColor,
+      }));
+
+    const [ink, muted, accent] = [
+      await token("ink"),
+      await token("ink-muted"),
+      await token("accent"),
+    ];
+    expect(await look(current)).toMatchObject({
+      colour: ink,
+      underline: "none",
+      bar: accent,
+    });
+    expect(await look(other)).toMatchObject({ colour: muted, underline: "none" });
+
+    await other.hover();
+    expect((await look(other)).underline).toBe("underline");
+    await current.hover();
+    expect((await look(current)).underline).toBe("none");
   });
 });
 
