@@ -32,7 +32,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 19 | Sparse OCR scans | Release 1 | done |
 | 20 | Dense text layers over pictures | Release 1 | done |
 | 21 | Launch readiness | Release 2 | in-progress |
-| 22 | Brand & UI refresh | Release 2 | planned |
+| 22 | Brand & UI refresh | Release 2 | in-progress |
 
 ## Foundations
 
@@ -240,10 +240,20 @@ spec [0012](../specs/0012-billing-paid-plan/index.md) · code in `src/billing`, 
 - [x] Review it (fresh model): `/check review billing & paid plan`
 - [x] Document it: `/document billing & paid plan`
 
-### 22. Brand & UI refresh · needs a decision · Beta + review
+### 22. Brand & UI refresh · in-progress · Beta + review
 Make RedactNest look like the four reference images in `docs/design/references`, their layouts and composition as well as their colours, before Polar's account review is submitted (feature 21). That means an original logo mark and wordmark, a full favicon and app icon set, a social preview image, and a header with real navigation. The landing page follows 04 (a headline, two buttons, a picture of the real product, a benefit trio) and `/tool` follows 01 to 03 (two columns, detected items grouped with counts, clear warning and plan cards). The footer, `/pricing`, the account and sign in screens, the legal pages and the 404 are polished to match. Whatever the product does not do stays out: no Documents, History or Settings, no "For teams", no "Trusted by", no testimonials, and no detector RedactNest lacks. Whether `/tool` gains a page preview (thumbnails, zoom) is the spec's call. Spec 0003 (AC-13) and `docs/design/design.md` (the references are "visual style only") change, so this needs a spec. The search pages, sitemap and SEO work stay in feature 15.
 **Done when:** every page listed above follows the references' layout and composition under RedactNest's own brand, every word and picture on them is true of the product today, `/tool` keeps its strict policy and loads no third party script, the core path still holds WCAG 2.2 AA, and a fresh model review (`/check review`) has passed after `/test`, because the change touches `/tool`.
-- [ ] Design it (spec): `/architect brand & UI refresh`
+spec [0013](../specs/0013-brand-ui-refresh/index.md)
+- [x] Design it (spec): `/architect brand & UI refresh`
+- [ ] Build it: `/develop brand & UI refresh`
+  - [ ] The brand on every page: the Nest and bar mark and wordmark, the header and footer, the favicon and Apple icon, the social preview image and the Polar image from `scripts/make-brand.mjs`, and the 404 · AC-1 to AC-9, AC-27, AC-28
+  - [ ] The tool page in three areas: one keyed grid with the found items left and the rail right, the plan card, the steps and lock line, the sticky action panel, every step state proved · AC-14 to AC-21, AC-26, AC-29
+  - [ ] The landing page: the sample fixture, `home-text.ts`, the real product shot, the hero, trio and finds and strips band · AC-10 to AC-13, AC-28
+  - [ ] The other pages: Pricing's two cards, the sign in panel with no Clerk logo, the account pages, the legal pages' On this page list · AC-22 to AC-25
+  - [ ] Proof, words and amends: every page in a real browser, the final brand images, your read of every word, spec 0012's Go live steps, and specs 0003, 0007 and 0012 and `design.md` amended · AC-6, AC-12, AC-13, AC-23, AC-26, AC-29
+- [ ] Verify it: `/check verify brand & UI refresh`
+- [ ] Test it: `/test brand & UI refresh`
+- [ ] Review it (fresh model): `/check review brand & UI refresh`
 
 ## Release 3: See it working, and widen the net
 
