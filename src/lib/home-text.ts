@@ -134,17 +134,19 @@ export const HOME_TEXT = Object.freeze({
 
   /**
    * The two cards in place of "Trusted by" (AC-11). The lists themselves come
-   * from `findsItems()` and `strippedItems()`; these are the words around them.
+   * from `findsItems()` and `strippedItems()`; these are the words around them:
+   * each card's subtitle under its title, and the line that closes it.
    */
   band: Object.freeze({
     title: "What RedactNest finds and strips",
     finds: Object.freeze({
       title: "Finds",
+      subtitle: "Sensitive details we can detect in your files.",
       line: "Nothing is removed until you tick it.",
     }),
     strips: Object.freeze({
       title: "Strips",
-      lead: "Whenever a file carries them:",
+      subtitle: "Whenever a file carries them:",
       note: "Comments and form fields are flattened into the page: what showed stays, and nothing hidden behind them does.",
     }),
   }),

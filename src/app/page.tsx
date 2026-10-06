@@ -1,9 +1,7 @@
-import { Check, FileMinus, ScanSearch, type LucideIcon } from "lucide-react";
+import { Check, FileMinus, Info, ScanSearch, type LucideIcon } from "lucide-react";
 import Image from "next/image";
-import type { ReactNode } from "react";
 
 import { config } from "@/config";
-import { cx } from "@/lib/cx";
 import { capLine, findsItems, HOME_TEXT, strippedItems } from "@/lib/home-text";
 import { PRICING_PATH, TOOL_PATH } from "@/lib/routes";
 import { Button } from "@/ui/button";
@@ -89,46 +87,81 @@ export default function HomePage() {
           {/*
             On the page's own canvas, inside the container, rather than a full
             width white strip: the two cards are the white (AC-11). Side by side
-            and equal height from `md`, Finds first when stacked.
+            and equal height from `md`, Finds first when stacked. Their
+            proportion and spacing follow your mockup,
+            `docs/design/references/05-finds-and-strips.png`, read at its true
+            scale (it is this page at 1280 pixels, drawn at 1.5x).
           */}
           <section
             aria-labelledby="home-band"
             data-testid="home-band"
-            className="flex flex-col gap-6"
+            className="flex flex-col gap-7"
           >
             <h2 id="home-band" className="text-title text-ink">
               {HOME_TEXT.band.title}
             </h2>
             <div className="grid gap-6 md:grid-cols-2">
-              <Card data-testid="home-finds">
-                <BandCardHeading icon={ScanSearch}>
-                  {HOME_TEXT.band.finds.title}
-                </BandCardHeading>
-                <IconList>
-                  {findsItems().map(({ icon: Icon, label }) => (
-                    <IconListItem key={label} icon={Icon}>
+              <Card data-testid="home-finds" spacious>
+                <BandCardHeader
+                  icon={ScanSearch}
+                  title={HOME_TEXT.band.finds.title}
+                  subtitle={HOME_TEXT.band.finds.subtitle}
+                />
+                {/*
+                  Each detector in its own soft row. Nothing here acts: no
+                  chevron, no link, no tab stop and no hover change, so the
+                  cursor rule leaves it the arrow (AC-33). `canvas`, not
+                  `subtle`, which is the checklist's hover tint and would make
+                  a row look pressable.
+                */}
+                <ul role="list" className="flex flex-col gap-3">
+                  {findsItems().map(({ icon, label }) => (
+                    <li
+                      key={label}
+                      className="flex items-center gap-5 rounded-xl bg-canvas px-3 py-2.5 font-semibold text-ink"
+                    >
+                      <IconCircle icon={icon} tone="accent" shape="square" />
                       {label}
-                    </IconListItem>
+                    </li>
                   ))}
-                </IconList>
-                <p className="text-ink-muted">{HOME_TEXT.band.finds.line}</p>
+                </ul>
+                <BandCardClose>{HOME_TEXT.band.finds.line}</BandCardClose>
               </Card>
 
-              <Card data-testid="home-strips">
-                <BandCardHeading icon={FileMinus}>
-                  {HOME_TEXT.band.strips.title}
-                </BandCardHeading>
-                <p className="text-ink-muted">{HOME_TEXT.band.strips.lead}</p>
-                <IconList className="sm:grid-cols-2">
+              {/* The query container for the Strips columns below. */}
+              <Card data-testid="home-strips" spacious className="@container">
+                <BandCardHeader
+                  icon={FileMinus}
+                  title={HOME_TEXT.band.strips.title}
+                  subtitle={HOME_TEXT.band.strips.subtitle}
+                />
+                {/*
+                  One list of seven, so a screen reader hears them together,
+                  set in CSS columns once the card has room for two: down the
+                  first column, then the second, with a `border` rule between
+                  them. The card's own width decides, not the window's, because
+                  from `md` to about 1000 pixels the card sits beside Finds and
+                  is too narrow for two columns. The gap is the mockup's 64
+                  pixels where the card has room, and 48 just above the
+                  threshold, so two columns still fit at 1024 pixels. In rem,
+                  so at 200% text it stays one column. An item never splits
+                  across the columns.
+                */}
+                <ul
+                  role="list"
+                  className="@min-[26rem]:columns-2 @min-[26rem]:gap-x-12 @min-[26rem]:[column-rule:1px_solid_var(--color-border)] @min-[29rem]:gap-x-16"
+                >
                   {strippedItems().map((item) => (
-                    <IconListItem key={item} icon={Check}>
+                    <li
+                      key={item}
+                      className="flex break-inside-avoid items-center gap-5 text-ink not-last:mb-2"
+                    >
+                      <IconCircle icon={Check} tone="accent" size="sm" />
                       {item}
-                    </IconListItem>
+                    </li>
                   ))}
-                </IconList>
-                <p className="border-t border-border pt-4 text-small text-ink-muted">
-                  {HOME_TEXT.band.strips.note}
-                </p>
+                </ul>
+                <BandCardClose>{HOME_TEXT.band.strips.note}</BandCardClose>
               </Card>
             </div>
           </section>
@@ -139,60 +172,46 @@ export default function HomePage() {
 }
 
 /**
- * A band card's opening: the icon in its soft circle beside the card's `h3`,
- * as reference 01 sets each group's icon beside its name. The circle is
- * decoration (`IconCircle` hides it), so the heading is the words alone.
+ * A band card's opening: the icon on its soft square tile beside the card's
+ * `h3` and, under it, the subtitle. The tile is decoration (`IconCircle` hides
+ * it), so the heading is the words alone. Each card's list keeps
+ * `role="list"` on its `ul` on purpose: Safari drops a list's semantics once
+ * its bullets are removed, and the count is part of what the card says
+ * (AC-11).
  */
-function BandCardHeading({
+function BandCardHeader({
   icon,
-  children,
+  title,
+  subtitle,
 }: {
   readonly icon: LucideIcon;
-  readonly children: string;
+  readonly title: string;
+  readonly subtitle: string;
 }) {
   return (
-    <div className="flex items-center gap-4">
-      <IconCircle icon={icon} tone="accent" />
-      <h3 className="text-heading text-ink">{children}</h3>
+    <div className="flex items-center gap-5">
+      <IconCircle icon={icon} tone="accent" size="lg" shape="square" />
+      <div className="flex flex-col gap-1">
+        <h3 className="text-heading text-ink">{title}</h3>
+        <p className="text-small text-ink-muted">{subtitle}</p>
+      </div>
     </div>
   );
 }
 
 /**
- * A real list with an icon on every item. `role="list"` stays on the `ul` on
- * purpose: Safari drops a list's semantics once its bullets are removed, and
- * the count is part of what the card says (AC-11).
+ * A band card's close: a `border` rule across the card, then an `accent` info
+ * icon, hidden from assistive technology, beside the card's closing line.
  */
-function IconList({
-  className,
-  children,
-}: {
-  readonly className?: string;
-  readonly children: ReactNode;
-}) {
+function BandCardClose({ children }: { readonly children: string }) {
   return (
-    <ul role="list" className={cx("grid gap-3", className)}>
-      {children}
-    </ul>
-  );
-}
-
-/** One item: an `accent` line icon, hidden from assistive technology, then its words in `ink`. */
-function IconListItem({
-  icon: Icon,
-  children,
-}: {
-  readonly icon: LucideIcon;
-  readonly children: string;
-}) {
-  return (
-    <li className="flex items-start gap-3 text-ink">
-      <Icon
+    <div className="flex items-center gap-3 border-t border-border pt-5">
+      <Info
         aria-hidden="true"
-        className="mt-0.5 size-5 shrink-0 text-accent"
+        className="size-7 shrink-0 text-accent"
         strokeWidth={1.75}
       />
-      {children}
-    </li>
+      <p className="text-small text-ink-muted">{children}</p>
+    </div>
   );
 }

@@ -94,6 +94,25 @@ describe("Card", () => {
     ).toContainElement(heading);
   });
 
+  /** Spec 0013, AC-11: the home page's cards, after your mockup. */
+  it("sits 28 pixels in and 24 between its parts when spacious, 20 and 16 otherwise", () => {
+    render(
+      <>
+        <Card data-testid="plain">
+          <p>Body</p>
+        </Card>
+        <Card data-testid="spacious" spacious>
+          <p>Body</p>
+        </Card>
+      </>,
+    );
+
+    expect(screen.getByTestId("plain")).toHaveClass("p-5", "gap-4");
+    expect(screen.getByTestId("plain")).not.toHaveClass("p-7", "gap-6");
+    expect(screen.getByTestId("spacious")).toHaveClass("p-7", "gap-6", "rounded-xl");
+    expect(screen.getByTestId("spacious")).not.toHaveClass("p-5", "gap-4");
+  });
+
   it("passes axe", async () => {
     const { container } = render(
       <Card title="Document opened">
@@ -371,6 +390,46 @@ describe("the decorative pieces", () => {
 
     expect(container.firstElementChild).toHaveAttribute("aria-hidden", "true");
   });
+
+  /** Spec 0013, AC-11: the defaults every existing caller relies on. */
+  it("is a 48 pixel circle with a 20 pixel icon by default", () => {
+    const { container } = render(<IconCircle icon={FileText} tone="accent" />);
+
+    const circle = container.firstElementChild;
+    expect(circle).toHaveClass(
+      "size-12",
+      "rounded-full",
+      "bg-accent-soft",
+      "text-accent",
+    );
+    expect(circle?.querySelector("svg")).toHaveClass("size-5");
+  });
+
+  /** Spec 0013, AC-11: the small check circle and the square tiles of the home page's cards. */
+  it.each([
+    ["sm", "size-8", "size-5", "rounded-lg"],
+    ["md", "size-12", "size-5", "rounded-xl"],
+    ["lg", "size-16", "size-7", "rounded-xl"],
+  ] as const)(
+    "at %s is %s with a %s icon, and its square shape is %s",
+    (size, box, glyph, square) => {
+      const { container } = render(
+        <>
+          <IconCircle icon={FileText} tone="accent" size={size} />
+          <IconCircle icon={FileText} tone="accent" size={size} shape="square" />
+        </>,
+      );
+
+      const [circle, tile] = [...container.children];
+      expect(circle).toHaveClass(box, "rounded-full");
+      expect(tile).toHaveClass(box, square);
+      expect(tile).not.toHaveClass("rounded-full");
+      for (const shape of [circle, tile]) {
+        expect(shape?.querySelector("svg")).toHaveClass(glyph);
+        expect(shape).toHaveAttribute("aria-hidden", "true");
+      }
+    },
+  );
 
   it("hides the spinner, and stops it under reduced motion", () => {
     const { container } = render(<Spinner />);

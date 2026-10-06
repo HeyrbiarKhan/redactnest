@@ -19,6 +19,13 @@ interface CardProps extends Omit<ComponentPropsWithoutRef<"section">, "title"> {
    * also said in words, so nothing rests on the colour.
    */
   readonly accent?: true;
+  /**
+   * 28 pixels in from the edge and 24 between its parts, in place of 20 and
+   * 16: the home page's finds and strips cards, after your mockup (spec 0013,
+   * AC-11). A prop rather than `className`, which is never size, so the two
+   * paddings never compete.
+   */
+  readonly spacious?: true;
   /** Layout only. */
   readonly className?: string;
   readonly children: ReactNode;
@@ -34,6 +41,7 @@ export function Card({
   headingRef,
   badge,
   accent,
+  spacious,
   className,
   children,
   ...section
@@ -48,7 +56,8 @@ export function Card({
       {...section}
       aria-labelledby={titled ? headingId : undefined}
       className={cx(
-        "flex flex-col gap-4 rounded-xl bg-surface p-5 shadow-xs",
+        "flex flex-col rounded-xl bg-surface shadow-xs",
+        spacious ? "gap-6 p-7" : "gap-4 p-5",
         accent ? "border-2 border-accent" : "border border-border",
         className,
       )}

@@ -130,16 +130,22 @@ describe("the finds and strips cards (AC-11)", () => {
     expect(Object.isFrozen(findsItems())).toBe(true);
   });
 
+  /** After task 32: each card's subtitle, and "Whenever a file carries them:" is Strips' own. */
   it("holds the words around the two lists", () => {
     expect(HOME_TEXT.band).toEqual({
       title: "What RedactNest finds and strips",
-      finds: { title: "Finds", line: "Nothing is removed until you tick it." },
+      finds: {
+        title: "Finds",
+        subtitle: "Sensitive details we can detect in your files.",
+        line: "Nothing is removed until you tick it.",
+      },
       strips: {
         title: "Strips",
-        lead: "Whenever a file carries them:",
+        subtitle: "Whenever a file carries them:",
         note: "Comments and form fields are flattened into the page: what showed stays, and nothing hidden behind them does.",
       },
     });
+    expect(HOME_TEXT.band.strips).not.toHaveProperty("lead");
   });
 });
 

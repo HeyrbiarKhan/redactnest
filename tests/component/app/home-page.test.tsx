@@ -139,47 +139,114 @@ describe("the trio and the band (AC-10, AC-11)", () => {
     ).toBeTruthy();
   });
 
-  it("lists every detector in the Finds card, then says nothing goes unticked", () => {
+  /**
+   * After task 32, each card in your mockup's three parts: the header (its
+   * square tile, the `h3` and the subtitle), the list, then the close (a rule,
+   * the info icon and the closing line), in that order in the page.
+   */
+  it.each([
+    [
+      "home-finds",
+      HOME_TEXT.band.finds.title,
+      HOME_TEXT.band.finds.subtitle,
+      HOME_TEXT.band.finds.line,
+    ],
+    [
+      "home-strips",
+      HOME_TEXT.band.strips.title,
+      HOME_TEXT.band.strips.subtitle,
+      HOME_TEXT.band.strips.note,
+    ],
+  ] as const)(
+    "opens %s on its tile, title and subtitle, and closes it on a rule and its line",
+    (id, title, subtitle, line) => {
+      render(<HomePage />);
+
+      const card = screen.getByTestId(id);
+      expect(card).toHaveClass("p-7", "gap-6");
+      const heading = within(card).getByRole("heading", { level: 3, name: title });
+      const sub = within(card).getByText(subtitle);
+      const list = within(card).getByRole("list");
+      const close = within(card).getByText(line);
+      for (const [before, after] of [
+        [heading, sub],
+        [sub, list],
+        [list, close],
+      ] as const) {
+        expect(
+          before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+      }
+      expect(sub).toHaveClass("text-small", "text-ink-muted");
+
+      // The header's tile: the large square, beside the heading's column.
+      const tile = heading.parentElement?.previousElementSibling;
+      expect(tile).toHaveAttribute("aria-hidden", "true");
+      expect(tile).toHaveClass("size-16", "rounded-xl", "bg-accent-soft", "text-accent");
+
+      // The close: a `border` rule above the info icon and the line.
+      expect(close).toHaveClass("text-small", "text-ink-muted");
+      const row = close.parentElement;
+      expect(row).toHaveClass("border-t", "border-border");
+      expect(row?.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+      expect(row?.querySelector("svg")).toHaveClass("lucide-info", "text-accent");
+    },
+  );
+
+  it("lists every detector in the Finds card, each a soft row with its icon tile", () => {
     render(<HomePage />);
 
     const finds = screen.getByTestId("home-finds");
     const list = within(finds).getByRole("list");
     expect(list).toHaveAttribute("role", "list");
-    expect(
-      within(list)
-        .getAllByRole("listitem")
-        .map((item) => item.textContent),
-    ).toEqual(findsItems().map(({ label }) => label));
-    expect(
-      within(list)
-        .getAllByRole("listitem")
-        .map((item) => item.querySelector("svg")?.getAttribute("aria-hidden")),
-    ).toEqual(findsItems().map(() => "true"));
-    expect(within(finds).getByText(HOME_TEXT.band.finds.line)).toHaveClass(
-      "text-ink-muted",
+    const items = within(list).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual(
+      findsItems().map(({ label }) => label),
     );
+    for (const item of items) {
+      // `canvas`, not `subtle`, the checklist's hover tint.
+      expect(item).toHaveClass("bg-canvas", "rounded-xl", "text-ink");
+      expect(item).not.toHaveClass("bg-subtle");
+      const tile = item.firstElementChild;
+      expect(tile).toHaveAttribute("aria-hidden", "true");
+      expect(tile).toHaveClass("size-12", "rounded-xl", "bg-accent-soft");
+      // One icon, the detector's own, and no chevron after the words.
+      expect(item.querySelectorAll("svg")).toHaveLength(1);
+    }
   });
 
-  it("leads into the Strips list, ticks every claimed kind and ends with the note", () => {
+  it("ticks every claimed kind in one Strips list, set in ruled columns", () => {
     render(<HomePage />);
 
     const strips = screen.getByTestId("home-strips");
+    // One list of seven, so a screen reader hears them together.
     const list = within(strips).getByRole("list");
-    const lead = within(strips).getByText(HOME_TEXT.band.strips.lead);
-    const note = within(strips).getByText(HOME_TEXT.band.strips.note);
-    expect(
-      within(list)
-        .getAllByRole("listitem")
-        .map((item) => item.textContent),
-    ).toEqual([...strippedItems()]);
-    expect(list).toHaveClass("sm:grid-cols-2");
-    expect(
-      lead.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      list.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(note).toHaveClass("border-t", "border-border", "text-small", "text-ink-muted");
+    expect(list).toHaveAttribute("role", "list");
+    const items = within(list).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual([...strippedItems()]);
+    // Two columns once the card has room, decided by the card's own width.
+    expect(strips).toHaveClass("@container");
+    expect(list).toHaveClass("@min-[26rem]:columns-2");
+    for (const item of items) {
+      expect(item).toHaveClass("break-inside-avoid");
+      expect(item.firstElementChild).toHaveClass(
+        "size-8",
+        "rounded-full",
+        "bg-accent-soft",
+      );
+      expect(item.querySelector("svg")).toHaveClass("lucide-check");
+    }
+  });
+
+  /** Nothing in the band acts: no chevron, link, button or tab stop. */
+  it("puts nothing that acts in the band", () => {
+    render(<HomePage />);
+
+    const band = screen.getByTestId("home-band");
+    expect(within(band).queryAllByRole("link")).toEqual([]);
+    expect(within(band).queryAllByRole("button")).toEqual([]);
+    expect(band.querySelectorAll("[tabindex]")).toHaveLength(0);
+    expect(band.querySelector(".lucide-chevron-right")).toBeNull();
   });
 
   it("sets the band on the page's canvas, not a full width white strip", () => {

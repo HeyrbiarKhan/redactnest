@@ -276,6 +276,20 @@ async function expectNoHorizontalScroll(page: Page): Promise<void> {
   expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
 }
 
+/** A list's CSS columns as the browser computes them (spec 0013, AC-11). */
+async function columnsOf(
+  list: Locator,
+): Promise<{ count: string; gap: string; rule: string }> {
+  return list.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      count: style.columnCount,
+      gap: style.columnGap,
+      rule: style.columnRuleStyle,
+    };
+  });
+}
+
 /** A box whose content spills past it, which is what clipping looks like. */
 async function expectContained(box: Locator): Promise<void> {
   const size = await box.evaluate((element) => ({
@@ -1314,9 +1328,10 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
   });
 
   /**
-   * Spec 0013, AC-11. Two white cards on the page's canvas, each an icon
-   * circle, a heading and an icon list: side by side and equal height from
-   * `md`, Finds first when stacked.
+   * Spec 0013, AC-11. Two white cards on the page's canvas, after your mockup
+   * (`docs/design/references/05-finds-and-strips.png`): each a tile beside its
+   * heading and subtitle, a list, then a rule and its closing line. Side by
+   * side and equal height from `md`, Finds first when stacked.
    */
   test("shows what it finds and strips as two cards, side by side from md", async ({
     page,
@@ -1331,6 +1346,7 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       "Email addresses",
       "Phone numbers",
     ]);
+    await expect(finds).toContainText("Sensitive details we can detect in your files.");
     await expect(finds).toContainText("Nothing is removed until you tick it.");
     await expect(strips).toContainText("Whenever a file carries them:");
     await expect(strips.getByRole("listitem")).toHaveText([
@@ -1345,12 +1361,15 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     await expect(strips).toContainText(
       "Comments and form fields are flattened into the page: what showed stays, and nothing hidden behind them does.",
     );
-    // Every item carries its icon, hidden from assistive technology.
+    // Every item carries its icon on a tile hidden from assistive technology,
+    // and nothing in the band acts: no chevron, link, button or tab stop.
     for (const card of [finds, strips]) {
       for (const item of await card.getByRole("listitem").all()) {
-        await expect(item.locator('svg[aria-hidden="true"]')).toHaveCount(1);
+        await expect(item.locator('[aria-hidden="true"] svg')).toHaveCount(1);
+        await expect(item.locator("svg")).toHaveCount(1);
       }
     }
+    await expect(band.locator("a, button, [tabindex]")).toHaveCount(0);
 
     // No full width strip: the section shows the canvas, the cards are white.
     const background = (locator: typeof band) =>
@@ -1368,13 +1387,37 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     expect(findsBox?.height).toBe(stripsBox?.height);
     expect((findsBox?.x ?? 0) + (findsBox?.width ?? 0)).toBeLessThan(stripsBox?.x ?? 0);
 
-    // The stripped kinds in two columns from `sm`.
+    // One list in two ruled columns, read down the first, then the second:
+    // Document info to Bookmarks, then JavaScript to Page thumbnails.
+    const list = strips.getByRole("list");
+    expect(await columnsOf(list)).toEqual({ count: "2", gap: "64px", rule: "solid" });
     const items = strips.getByRole("listitem");
-    const [first, second] = [
+    const [first, fourth, fifth] = [
       await items.nth(0).boundingBox(),
-      await items.nth(1).boundingBox(),
+      await items.nth(3).boundingBox(),
+      await items.nth(4).boundingBox(),
     ];
-    expect(first?.y).toBe(second?.y);
+    expect(fifth?.y).toBe(first?.y);
+    expect((fourth?.x ?? 0) + (fourth?.width ?? 0)).toBeLessThan(fifth?.x ?? 0);
+  });
+
+  /** The card's width decides the columns: still two beside Finds at 1024, with a narrower gap. */
+  test("keeps the Strips columns at 1024 pixels, and one column on a phone", async ({
+    page,
+  }) => {
+    const list = page.getByTestId("home-strips").getByRole("list");
+
+    await page.setViewportSize({ width: 1024, height: 800 });
+    await page.goto("/");
+    expect(await columnsOf(list)).toEqual({ count: "2", gap: "48px", rule: "solid" });
+    // No item wraps in the narrower columns.
+    for (const item of await list.getByRole("listitem").all()) {
+      expect((await item.boundingBox())?.height).toBe(32);
+    }
+
+    await page.setViewportSize({ width: 320, height: 640 });
+    expect((await columnsOf(list)).count).toBe("auto");
+    await expectNoHorizontalScroll(page);
   });
 
   test("stacks the two cards below md, Finds first", async ({ page }) => {
