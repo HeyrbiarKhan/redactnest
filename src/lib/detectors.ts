@@ -63,10 +63,14 @@ export const BLOCKED_REASON_TEXT: Readonly<Record<BlockedReason, string>> = Obje
 /**
  * Every kind looked for, as plural nouns joined for a sentence. Also the
  * `detecting` phase line (spec 0007, *Phase copy*), so it names exactly what
- * the coverage note does.
+ * the coverage note does, and the home page's lead and band (spec 0013,
+ * AC-13), so the page names exactly the detectors that exist.
+ *
+ * British, like every list in `flow-text.ts`: no comma before the last part
+ * once feature 12 makes it three or more (spec 0007, Follow-up nit 4).
  */
 export function lookedFor(type: "conjunction" | "disjunction"): string {
-  return new Intl.ListFormat("en", { type }).format(
+  return new Intl.ListFormat("en-GB", { type }).format(
     DETECTOR_KINDS.map((kind) => DETECTOR_LABELS[kind].noun.other),
   );
 }

@@ -518,3 +518,103 @@ export function detectWraps() {
     },
   ]);
 }
+
+/**
+ * What `sample-agreement.pdf` holds, in reading order, for the tests to name.
+ * Every value is reserved: `example.com` for the addresses, Ofcom's London
+ * drama range for the UK numbers, and `555-01xx` for the US one.
+ */
+export const SAMPLE_AGREEMENT = Object.freeze({
+  emails: Object.freeze([
+    "alex.morgan@example.com",
+    "payroll@example.com",
+    "hr@example.com",
+    "legal@example.com",
+  ]),
+  phones: Object.freeze(["020 7946 0182", "020 7946 0347", "(212) 555-0147"]),
+});
+
+/**
+ * Spec 0013, AC-12. Two pages of a fictional employment agreement, for the
+ * home page's product shot (`scripts/make-brand.mjs`): four email addresses
+ * and three phone numbers, every page readable and nothing blocked, so the
+ * review opens with the all clear line and all seven ticked.
+ *
+ * The UK numbers are both London drama numbers on purpose. Ofcom's drama
+ * mobile range (`07700 900xxx`) is reserved too, but the phone metadata does
+ * not call it a valid allocation, so the detector lists such a number unticked
+ * and the review would not open with all seven ticked.
+ */
+export function sampleAgreement() {
+  const [person, payroll, hr, legal] = SAMPLE_AGREEMENT.emails;
+  const [direct, pay, us] = SAMPLE_AGREEMENT.phones;
+  return document(() => [
+    {
+      content:
+        line("F1", 20, 72, 730, "Employment Agreement") +
+        line(
+          "F1",
+          11,
+          72,
+          700,
+          "This agreement is made on 2 March 2026 between Larkfield Studio Ltd (the Company)",
+        ) +
+        line(
+          "F1",
+          11,
+          72,
+          686,
+          "and Alex Morgan (the Employee). Each keeps a signed copy.",
+        ) +
+        line("F1", 13, 72, 650, "1. Employee details") +
+        line("F1", 11, 72, 628, "Name: Alex Morgan") +
+        line("F1", 11, 72, 612, `Email: ${person}`) +
+        line("F1", 11, 72, 596, `Phone: ${direct}`) +
+        line("F1", 13, 72, 560, "2. Role") +
+        line(
+          "F1",
+          11,
+          72,
+          538,
+          "The Employee is employed as a Product Designer and reports to the Head of Design.",
+        ) +
+        line("F1", 13, 72, 502, "3. Pay") +
+        line(
+          "F1",
+          11,
+          72,
+          480,
+          `The salary is paid monthly. Questions about pay go to ${payroll}`,
+        ) +
+        line("F1", 11, 72, 464, `or ${pay}, Monday to Friday.`),
+    },
+    {
+      content:
+        line("F1", 13, 72, 730, "4. Leave") +
+        line(
+          "F1",
+          11,
+          72,
+          708,
+          `Holiday requests go to ${hr} at least two weeks ahead.`,
+        ) +
+        line("F1", 13, 72, 672, "5. Notices") +
+        line("F1", 11, 72, 650, `Notices to the Company go to ${legal}. Its US office`) +
+        line(
+          "F1",
+          11,
+          72,
+          634,
+          `can be reached on ${us} for anything sent from the United States.`,
+        ) +
+        line("F1", 13, 72, 598, "6. Signatures") +
+        line(
+          "F1",
+          11,
+          72,
+          576,
+          "Signed for Larkfield Studio Ltd and by the Employee on the date above.",
+        ),
+    },
+  ]);
+}

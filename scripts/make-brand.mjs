@@ -6,7 +6,8 @@
  *
  * Writes the favicon and the Apple icon from `src/app/icon.svg`, then builds
  * and starts the production app and captures the social card and the Polar
- * product image from the built home page. The outputs are committed, like the
+ * product image from the built home page, and the home page's product shot
+ * from the built tool page. The outputs are committed, like the
  * fixtures, and nobody edits one by hand. PNG bytes differ a little between
  * machines, so rerun this only when the look changes: the mark, the home
  * page's eyebrow or headline, or the tool's look.
@@ -36,7 +37,11 @@ const OUT = Object.freeze({
   appleIcon: at("src", "app", "apple-icon.png"),
   social: at("src", "app", "opengraph-image.png"),
   polar: at("docs", "design", "brand", "polar-product.png"),
+  shot: at("src", "app", "product-review.png"),
 });
+
+/** The fictional document the product shot reviews (AC-12). */
+const SAMPLE = at("tests", "fixtures", "sample-agreement.pdf");
 
 /** The favicon's sizes (AC-3): what a tab and a bookmark ask for. */
 const FAVICON_SIZES = Object.freeze([16, 32]);
@@ -46,6 +51,15 @@ const APPLE_ICON = Object.freeze({ size: 180, markShare: 0.62 });
 
 /** The social card and the Polar image (AC-5, AC-6). */
 const CARD = Object.freeze({ width: 1200, height: 630 });
+
+/**
+ * The product shot (AC-12): a 1280 by 800 window at device scale 2, and what
+ * the sample agreement must show before it is captured.
+ */
+const SHOT = Object.freeze({ width: 1280, height: 800, scale: 2, ticked: 7 });
+
+/** The engine's first download and compile, which a cold build pays once. */
+const ENGINE_TIMEOUT_MS = 120_000;
 
 /** How long the build and the first answer from the server may take. */
 const SERVER_TIMEOUT_MS = 120_000;
@@ -399,6 +413,48 @@ async function makeCards(browser, base, tokens) {
   await context.close();
 }
 
+/* Step 5: the product shot. */
+
+/**
+ * The real tool page from the production build, nothing stubbed and nothing
+ * retouched (AC-12). Nobody is signed in, so the real `/api/entitlement`
+ * answers free with `account: "none"` and the build's own caps. The sample
+ * agreement goes in through the file input, and the capture waits for the
+ * reviewing state: the all clear line, every row ticked, no phase line, fonts
+ * loaded and the page quiet. Focus is taken off the file bar's button, so the
+ * picture carries no focus ring.
+ */
+async function makeShot(browser, base) {
+  const context = await browser.newContext({
+    viewport: { width: SHOT.width, height: SHOT.height },
+    deviceScaleFactor: SHOT.scale,
+    colorScheme: "light",
+  });
+  const tab = await context.newPage();
+  await tab.goto(`${base}/tool`);
+  await tab.getByTestId("plan-line").getByRole("link").first().waitFor();
+
+  await tab.getByTestId("file-input").setInputFiles(SAMPLE);
+  await tab.getByTestId("all-clear").waitFor({ timeout: ENGINE_TIMEOUT_MS });
+  await tab.waitForFunction(
+    (count) =>
+      document.querySelectorAll('input[type="checkbox"][id^="match-"]:checked').length ===
+        count &&
+      document.querySelectorAll('input[type="checkbox"][id^="match-"]:not(:checked)')
+        .length === 0 &&
+      document.querySelector('[data-testid="progress"]') === null,
+    SHOT.ticked,
+  );
+  await tab.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    window.scrollTo(0, 0);
+  });
+  await settle(tab);
+
+  await tab.screenshot({ path: OUT.shot });
+  await context.close();
+}
+
 /* The run. */
 
 const written = [];
@@ -422,6 +478,8 @@ try {
 
   await makeCards(browser, base, tokens);
   written.push(OUT.social, OUT.polar);
+  await makeShot(browser, base);
+  written.push(OUT.shot);
 } finally {
   if (server !== null) await stopServer(server);
   await browser.close();

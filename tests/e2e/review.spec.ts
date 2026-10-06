@@ -199,3 +199,38 @@ test.describe("leaving after a run", () => {
     expect(asked).toEqual([]);
   });
 });
+
+/**
+ * Spec 0013, AC-12. The home page's product shot opens this fixture, so it has
+ * to open the way the shot shows it: four email addresses and three phone
+ * numbers, every one tickable and ticked, and the all clear line.
+ */
+test("the sample agreement opens with seven items ticked and the all clear line", async ({
+  page,
+}) => {
+  await page.goto("/tool");
+  await page
+    .getByTestId("file-input")
+    .setInputFiles(resolve("tests/fixtures/sample-agreement.pdf"));
+
+  await expect(page.getByTestId("all-clear")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+  await expect(page.getByTestId("page-count")).toHaveText("2 pages");
+  for (const name of [
+    "alex.morgan@example.com",
+    "payroll@example.com",
+    "hr@example.com",
+    "legal@example.com",
+    "020 7946 0182",
+    "020 7946 0347",
+    "(212) 555-0147",
+  ]) {
+    const box = page.getByRole("checkbox", { name, exact: true });
+    await expect(box).toBeEnabled();
+    await expect(box).toBeChecked();
+  }
+  await expect(page.getByRole("checkbox", { checked: true })).toHaveCount(9);
+  await expect(page.getByTestId("tick-count")).toHaveText(
+    "7 of 7 found items will be removed.",
+  );
+  await expect(page.getByTestId("page-warnings")).toHaveCount(0);
+});

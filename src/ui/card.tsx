@@ -13,6 +13,12 @@ interface CardProps extends Omit<ComponentPropsWithoutRef<"section">, "title"> {
   readonly headingRef?: Ref<HTMLHeadingElement>;
   /** Sits at the end of the heading row, usually a `CountBadge`. */
   readonly badge?: ReactNode;
+  /**
+   * A 2 pixel `accent` edge in place of the quiet one, to mark the card a
+   * page recommends (spec 0013, AC-22). Decoration only: whatever it marks is
+   * also said in words, so nothing rests on the colour.
+   */
+  readonly accent?: true;
   /** Layout only. */
   readonly className?: string;
   readonly children: ReactNode;
@@ -27,6 +33,7 @@ export function Card({
   headingLevel = 2,
   headingRef,
   badge,
+  accent,
   className,
   children,
   ...section
@@ -41,7 +48,8 @@ export function Card({
       {...section}
       aria-labelledby={titled ? headingId : undefined}
       className={cx(
-        "flex flex-col gap-4 rounded-xl border border-border bg-surface p-5 shadow-xs",
+        "flex flex-col gap-4 rounded-xl bg-surface p-5 shadow-xs",
+        accent ? "border-2 border-accent" : "border border-border",
         className,
       )}
     >

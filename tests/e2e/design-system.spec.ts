@@ -1197,7 +1197,7 @@ test.describe("the page skeleton (AC-14)", () => {
   }
 });
 
-test.describe("the home page (AC-13, AC-15, AC-17, AC-18)", () => {
+test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC-13)", () => {
   test("says what the spec says, with a button to the tool in the header and below", async ({
     page,
   }) => {
@@ -1210,15 +1210,75 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18)", () => {
     await expect(page.getByTestId("home-eyebrow")).toHaveText(
       "PDF redaction in your browser",
     );
-    await expect(page.getByRole("main")).toContainText(
-      "The text is removed from the file itself rather than covered with a black box, and your document never leaves your machine.",
+    const main = page.getByRole("main");
+    await expect(main).toContainText(
+      "RedactNest finds email addresses and phone numbers in your PDF, lets you tick what to remove, and takes that text out of the file itself. Your file never leaves your browser.",
     );
-    for (const region of [page.getByRole("banner"), page.getByRole("main")]) {
+    // The build's own caps, with billing on (`playwright.config.ts`).
+    await expect(page.getByTestId("home-caps")).toHaveText(
+      "Free up to 3 pages a document. Pro goes up to 50.",
+    );
+    for (const region of [page.getByRole("banner"), main]) {
       await expect(region.getByRole("link", { name: "Redact a PDF" })).toHaveAttribute(
         "href",
         "/tool",
       );
     }
+    await expect(main.getByRole("link", { name: "See pricing" })).toHaveAttribute(
+      "href",
+      "/pricing",
+    );
+    await expect(main.getByRole("heading", { level: 2 })).toHaveText([
+      "Stays on your device",
+      "Removed, not covered",
+      "Checked before you download",
+      "What RedactNest finds and strips",
+    ]);
+    await expect(main.getByRole("heading", { level: 3 })).toHaveText(["Finds", "Strips"]);
+  });
+
+  /**
+   * Spec 0013, AC-12. The real capture, through `next/image` from our own
+   * origin, sized before it loads so nothing shifts, and loaded first.
+   */
+  test("shows the product shot from our own origin, sized and loaded first", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+
+    const shot = page.getByRole("img", {
+      name: "RedactNest reviewing a sample employment agreement: email addresses and phone numbers found and ticked, with a Redact button beside them.",
+    });
+    await expect(shot).toHaveAttribute("width", "2560");
+    await expect(shot).toHaveAttribute("height", "1600");
+    await expect(shot).toHaveAttribute("loading", "eager");
+    await expect(shot).toHaveAttribute("fetchpriority", "high");
+    await expect(shot).toHaveAttribute(
+      "sizes",
+      "(min-width: 64rem) 40rem, calc(100vw - 2rem)",
+    );
+    const loaded = await shot.evaluate((image: HTMLImageElement) => ({
+      origin: new URL(image.currentSrc).origin,
+      complete: image.complete && image.naturalWidth > 0,
+    }));
+    expect(loaded).toEqual({ origin: new URL(page.url()).origin, complete: true });
+
+    // From `lg`, text on the left and the shot on the right.
+    const text = await page.getByRole("heading", { level: 1 }).boundingBox();
+    const picture = await shot.boundingBox();
+    expect((text?.x ?? 0) + (text?.width ?? 0)).toBeLessThanOrEqual(picture?.x ?? 0);
+  });
+
+  test("puts the text before the shot below lg", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 900 });
+    await page.goto("/");
+
+    const caps = await page.getByTestId("home-caps").boundingBox();
+    const picture = await page
+      .getByRole("img", { name: /reviewing a sample/ })
+      .boundingBox();
+    expect((caps?.y ?? 0) + (caps?.height ?? 0)).toBeLessThanOrEqual(picture?.y ?? 0);
   });
 
   test("steps the display headline up from 40px to 56px at md", async ({ page }) => {
@@ -1265,6 +1325,11 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18)", () => {
     const main = page.getByRole("main").getByRole("link", { name: "Redact a PDF" });
     await expect(main).toBeFocused();
     await expectFocusRing(main);
+    // Spec 0013, AC-10: See pricing beside it, with billing on.
+    await page.keyboard.press("Tab");
+    const pricing = page.getByRole("main").getByRole("link", { name: "See pricing" });
+    await expect(pricing).toBeFocused();
+    await expectFocusRing(pricing);
   });
 
   test("the skip link lands on main, so the next Tab is the main button", async ({
