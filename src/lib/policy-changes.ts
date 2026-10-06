@@ -8,7 +8,7 @@
  * day, never computed at build, so a rebuild cannot move it.
  *
  * Launch readiness step 7 folded every entry made before launch into one
- * `First published.` entry dated launch day, 2026-10-05.
+ * `First published.` entry dated launch day, 2026-10-06.
  */
 
 import { formatBritishDate } from "@/lib/british-date";
@@ -23,11 +23,11 @@ export interface PolicyChange {
 export type PolicyChanges = readonly [PolicyChange, ...PolicyChange[]];
 
 export const PRIVACY_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
-  Object.freeze({ date: "2026-10-05", summary: "First published." }),
+  Object.freeze({ date: "2026-10-06", summary: "First published." }),
 ]);
 
 export const TERMS_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
-  Object.freeze({ date: "2026-10-05", summary: "First published." }),
+  Object.freeze({ date: "2026-10-06", summary: "First published." }),
 ]);
 
 /** The newest entry's date, which is what "Last updated" shows (AC-2). */
