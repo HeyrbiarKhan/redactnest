@@ -150,7 +150,7 @@ export const LEGAL = Object.freeze({
    * Under Subscribe on Pricing (spec 0012, AC-13), and the first line of the
    * privacy policy's Payments. It names the receipt only: the sandbox never
    * charges a real card and Polar's docs do not say what a card statement
-   * shows, so that waits for Go live step 7's real purchase (task 18).
+   * shows, so that waits for Go live step 8's real purchase (task 18).
    */
   merchantLine: `Payments are handled by Polar, our merchant of record. Your receipt shows ${sellerName}, the studio RedactNest is sold through.`,
   /**

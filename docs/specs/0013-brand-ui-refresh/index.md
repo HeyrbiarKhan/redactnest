@@ -486,7 +486,7 @@ Added after task 39's build, and built before task 42, so your read meets checks
 - The landing page shows the real tool and says only true things, with the detector list, caps and stripped kinds read from the code, so it updates itself when feature 12 or a cap change lands, and a new stripped kind cannot slip onto it unreviewed.
 - The Redact button stays in reach beside a long list, and phones keep the drop zone first.
 - The privacy design is untouched: no page image leaves the worker, both content security policies stay byte for byte as they are, and no new origin or package appears.
-- Polar's review (spec 0012, Go live step 8) sees a finished site.
+- Polar's review (spec 0012, Go live step 8, step 7 since the 2026-10-07 swap) sees a finished site.
 - Deleting an account looks like what it is before anyone presses anything, and the wait for sign out or deletion shows where the visitor is looking, on the button they pressed, with focus kept there.
 
 **Negative and tradeoffs**:

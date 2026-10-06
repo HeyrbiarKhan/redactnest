@@ -260,7 +260,11 @@ describe("the privacy policy's facts", () => {
     ]) {
       expect(text).toContain(right);
     }
-    expect(text).toContain("one day");
+    // The one day is the logs kept for us, never all the host keeps (spec
+    // 0011, Launch readiness step 6).
+    expect(text).toContain("The logs our host keeps for us are deleted after one day");
+    expect(text).toContain("The logs it keeps for us are deleted after one day");
+    expect(text).not.toMatch(/keeps (it )?for one day/);
     expect(text).toContain("within one month");
     expect(text).toContain("no fee");
     expect(text).toContain("cannot load a page without sending its IP address");

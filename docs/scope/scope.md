@@ -155,11 +155,11 @@ Spec 0001 chose MuPDF, which is copyleft, so RedactNest's own source is licensed
 **Done when:** the repository is public under AGPL 3.0, the licence file and third party notices are in place, every production deploy is tagged, and the source offer link in the footer and on the tool page resolves to the exact deployed commit rather than the repository root.
 spec [0009](../specs/0009-agpl-compliance-source-publication/index.md)
 - [x] Design it (spec): `/architect AGPL compliance & source publication`
-- [ ] Build it: `/develop AGPL compliance & source publication`
+- [x] Build it: `/develop AGPL compliance & source publication`
   - [x] The notice and the commit link: `LICENSE`, the notices script with its licence allowlist, the derived and checked source link, the footer notice, the amends to specs 0001 and 0003, and the browser checks · AC-1 to AC-6, AC-11 to AC-14, AC-22
   - [x] What is inside MuPDF: the exact pin, `scripts/legal/mupdf.txt` from the 1.28.1 archive with Emscripten and musl, the version and wasm signature checks, and the source lines in `VERSION` · AC-15, AC-16, AC-17
   - [x] Deploy tags and the repository's documents: `tag-deploy.yml` with its text scan test, the README licence section, `CONTRIBUTING.md` and `.env.example` · AC-5, AC-6, AC-7 to AC-10, AC-18
-  - [ ] Going public (your steps): gitleaks over every ref, the noreply address, the Vercel settings, public with secret scanning, push protection and rulesets, then the first tagged deploy checked. Done inside feature 21 (Launch readiness), on go live day · AC-7, AC-19, AC-20, AC-21
+  - [x] Going public (your steps): gitleaks over every ref, the noreply address, the Vercel settings, public with secret scanning, push protection and rulesets, then the first tagged deploy checked. Done inside feature 21 (Launch readiness), on go live day · AC-7, AC-19, AC-20, AC-21
 - [ ] Verify it: `/check verify AGPL compliance & source publication`
 
 ### 19. Sparse OCR scans · done · GA · from spec 0006
@@ -218,10 +218,10 @@ spec [0011](../specs/0011-privacy-policy-terms/index.md) (its Launch readiness s
   - [x] The domain and the real contact address in `LEGAL.contactEmail`: `privacy@redactnest.com`, forwarding tested (2026-10-03) · spec 0011 step 1, AC-16
   - [x] Article 27 recorded in `LEGAL.representatives`: decided, with no EU or UK representative, not required on a lawyer's advice (2026-10-03) · spec 0011 step 2, AC-17
   - [ ] The other lawyer questions: PECA section 32, Pakistani law and courts, and a full review of both pages. Deferred until RedactNest has 100+ users, on the same lawyer's advice (2026-10-03): the pages and the app stay as they are until then · spec 0011 steps 3 and 4
-  - [ ] Vercel (your steps on go live day): Pro, the logging and challenge settings off, and the log role confirmed in writing · spec 0011 steps 5 and 6
+  - [x] Vercel (your steps on go live day): Pro, the logging and challenge settings off, and the log role confirmed in writing · spec 0011 steps 5 and 6
   - [x] The change lists folded into one launch day entry, dated 2026-10-03. Billing's policy changes join that same entry, and its date moves to go live day (spec 0012 Go live step 4) · spec 0011 step 7
-  - [ ] Billing (your steps on go live day, after feature 10): Clerk and Polar production, the billing values on Vercel, the spending cap and the deny only rate limit rule, the `First published.` date, the cookie check on the production domains, a real purchase made and refunded, then Polar's account review submitted, once feature 22 has shipped · spec 0012 Go live steps 1 to 8, INV-12
-  - [ ] Going public (your steps on go live day): feature 18's last slice, gitleaks over every ref, the noreply address, the Vercel settings, public with secret scanning, push protection and rulesets, then the first tagged deploy checked · spec 0009 AC-7, AC-19, AC-20, AC-21
+  - [ ] Billing (your steps on go live day, after feature 10): Clerk and Polar production, the billing values on Vercel, the spending cap and the deny only rate limit rule, the `First published.` date, the cookie check on the production domains, Polar's account review submitted once feature 22 had shipped (2026-10-07), then a real purchase made and refunded once Polar lets the organisation take payments, and the product image uploaded · spec 0012 Go live steps 1 to 9, INV-12
+  - [x] Going public (your steps on go live day): feature 18's last slice, gitleaks over every ref, the noreply address, the Vercel settings, public with secret scanning, push protection and rulesets, then the first tagged deploy checked · spec 0009 AC-7, AC-19, AC-20, AC-21
 
 ### 10. Billing & paid plan · done · GA
 The paywall moment: an anonymous visitor hits the page cap, signs in, subscribes, and the cap is gone. The interesting part is that entitlement has to work with no database of your own.
