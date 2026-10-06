@@ -39,3 +39,14 @@ describe.each(Object.entries(LINKS))("CLERK_APPEARANCE %s", (_, link) => {
     }
   });
 });
+
+/** Spec 0013, AC-23: Clerk draws no logo, so no logo is ever requested. */
+describe("CLERK_APPEARANCE options", () => {
+  it("places no logo in Clerk's card", () => {
+    expect(CLERK_APPEARANCE.options.logoPlacement).toBe("none");
+  });
+
+  it("hides nothing with a style, because the option is honoured", () => {
+    expect(Object.keys(CLERK_APPEARANCE.elements)).not.toContain("logoBox");
+  });
+});

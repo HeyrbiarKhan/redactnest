@@ -53,6 +53,14 @@ export const CLERK_APPEARANCE = Object.freeze({
     fontSize: "1rem",
     borderRadius: "0.5rem",
   }),
+  /*
+   * No logo in Clerk's card (spec 0013, AC-23): the panel beside it carries the
+   * brand, and the header's lockup is the way home. This Clerk (Core 3) takes
+   * `options.logoPlacement`, which earlier versions called `layout`, and it
+   * accepts "none", so no style has to hide a logo box. The Dashboard holds no
+   * logo either (spec 0012, Go live step 6), so none is ever requested.
+   */
+  options: Object.freeze({ logoPlacement: "none" as const }),
   // The footer's "Sign up" or "Sign in", and the code step's "Didn't receive a
   // code? Resend".
   elements: Object.freeze({

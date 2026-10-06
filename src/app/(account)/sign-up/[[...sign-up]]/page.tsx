@@ -9,6 +9,7 @@ import { ACCOUNT_PATH, SIGN_IN_PATH, SIGN_UP_PATH } from "@/lib/routes";
 
 import { AccountShell } from "../../account-shell";
 import { landingAfterSignIn, pagePath } from "../../landing";
+import { SignInPanel } from "../../sign-in-panel";
 
 export const metadata: Metadata = {
   title: "Create an account",
@@ -37,15 +38,19 @@ export default async function SignUpPage({
     redirect(`${pagePath(SIGN_UP_PATH, (await params)["sign-up"])}${clean}`);
   }
 
-  // Nothing is current in the header here (spec 0013, AC-7).
+  // Nothing is current in the header here (spec 0013, AC-7). Wide, with our
+  // panel beside Clerk's card from md and above it below (AC-23).
   return (
-    <AccountShell>
-      <SignUp
-        path={SIGN_UP_PATH}
-        signInUrl={SIGN_IN_PATH}
-        forceRedirectUrl={landing}
-        signInForceRedirectUrl={landing}
-      />
+    <AccountShell width="wide">
+      <div className="grid w-full items-center gap-10 md:grid-cols-[minmax(0,1fr)_auto]">
+        <SignInPanel />
+        <SignUp
+          path={SIGN_UP_PATH}
+          signInUrl={SIGN_IN_PATH}
+          forceRedirectUrl={landing}
+          signInForceRedirectUrl={landing}
+        />
+      </div>
     </AccountShell>
   );
 }

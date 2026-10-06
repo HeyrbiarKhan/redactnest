@@ -10,7 +10,7 @@ import { LEGAL } from "@/lib/legal";
 import { PRIVACY_CHANGES } from "@/lib/policy-changes";
 import { PRIVACY_SECTIONS } from "@/lib/policy-sections";
 
-import { ChangeList, ContactLink, LegalPage } from "../legal-page";
+import { ChangeList, ContactLink, LegalPage, SectionHeading } from "../legal-page";
 
 import { RepresentativesBlock } from "./representatives-block";
 import { ServicesSection } from "./services-section";
@@ -44,9 +44,13 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title={LEGAL.privacyLabel} changes={PRIVACY_CHANGES}>
+    <LegalPage
+      title={LEGAL.privacyLabel}
+      changes={PRIVACY_CHANGES}
+      sections={PRIVACY_SECTIONS}
+    >
       <section>
-        <h2>{PRIVACY_SECTIONS.whoWeAre}</h2>
+        <SectionHeading sections={PRIVACY_SECTIONS} name="whoWeAre" />
         {/* AC-6 */}
         <p>
           {LEGAL.operatorLine}, runs this website and the redaction tool on it.{" "}
@@ -63,7 +67,7 @@ export default function PrivacyPage() {
       </section>
 
       <section>
-        <h2>{PRIVACY_SECTIONS.yourDocuments}</h2>
+        <SectionHeading sections={PRIVACY_SECTIONS} name="yourDocuments" />
         {/* C1 */}
         <p>
           When you choose a PDF, it is opened and processed only in your browser, on your
@@ -103,7 +107,7 @@ export default function PrivacyPage() {
       </section>
 
       <section>
-        <h2>{PRIVACY_SECTIONS.yourAccount}</h2>
+        <SectionHeading sections={PRIVACY_SECTIONS} name="yourAccount" />
         <p>You can use the tool without an account. You need one only to buy Pro.</p>
         {/* C12 */}
         <p>
@@ -139,7 +143,7 @@ export default function PrivacyPage() {
       </section>
 
       <section>
-        <h2>{PRIVACY_SECTIONS.payments}</h2>
+        <SectionHeading sections={PRIVACY_SECTIONS} name="payments" />
         {/* C13 */}
         <p>{LEGAL.merchantLine}</p>
         <p>
@@ -167,7 +171,7 @@ export default function PrivacyPage() {
       </section>
 
       <section>
-        <h2>{PRIVACY_SECTIONS.whatWeReceive}</h2>
+        <SectionHeading sections={PRIVACY_SECTIONS} name="whatWeReceive" />
         {/* C10 */}
         <p>
           Like every website, this one reaches you through a host. Whenever your browser
@@ -187,7 +191,7 @@ export default function PrivacyPage() {
       </section>
 
       <section>
-        <h2>{PRIVACY_SECTIONS.whatWeDoNotDo}</h2>
+        <SectionHeading sections={PRIVACY_SECTIONS} name="whatWeDoNotDo" />
         <ul>
           {/* C6, word for word (spec 0012, *Policy and terms changes*) */}
           <li>
@@ -216,14 +220,14 @@ export default function PrivacyPage() {
       </section>
 
       <section>
-        <h2>{PRIVACY_SECTIONS.services}</h2>
+        <SectionHeading sections={PRIVACY_SECTIONS} name="services" />
         {/* AC-8 */}
         <p>These are the outside services involved in running RedactNest.</p>
         <ServicesSection services={OUTSIDE_SERVICES} />
       </section>
 
       <section>
-        <h2>{PRIVACY_SECTIONS.transfers}</h2>
+        <SectionHeading sections={PRIVACY_SECTIONS} name="transfers" />
         <p>
           We operate from {LEGAL.country}, and the services above process data in the
           places listed for each. When personal data leaves the UK or the EU, it is
@@ -247,7 +251,7 @@ export default function PrivacyPage() {
       </section>
 
       <section>
-        <h2>{PRIVACY_SECTIONS.yourRights}</h2>
+        <SectionHeading sections={PRIVACY_SECTIONS} name="yourRights" />
         {/* AC-9: the six rights. */}
         <p>Under the UK GDPR and the EU GDPR you have the right to:</p>
         <ul>
@@ -272,7 +276,7 @@ export default function PrivacyPage() {
       </section>
 
       <section>
-        <h2>{PRIVACY_SECTIONS.complaints}</h2>
+        <SectionHeading sections={PRIVACY_SECTIONS} name="complaints" />
         <p>
           If you are unhappy with how we handle your data, please tell us first at{" "}
           <ContactLink />. You also have the right to complain to a data protection
@@ -292,7 +296,7 @@ export default function PrivacyPage() {
       </section>
 
       <section>
-        <h2>{PRIVACY_SECTIONS.children}</h2>
+        <SectionHeading sections={PRIVACY_SECTIONS} name="children" />
         <p>
           RedactNest is not aimed at children. The tool asks no one for personal details,
           and an account asks only for an email address.
@@ -300,7 +304,7 @@ export default function PrivacyPage() {
       </section>
 
       <section>
-        <h2>{PRIVACY_SECTIONS.links}</h2>
+        <SectionHeading sections={PRIVACY_SECTIONS} name="links" />
         <p>
           This page links to other sites, such as the services’ own privacy policies and
           the data protection authorities above. Their own privacy policies apply there,
@@ -309,7 +313,7 @@ export default function PrivacyPage() {
       </section>
 
       <section>
-        <h2>{PRIVACY_SECTIONS.changes}</h2>
+        <SectionHeading sections={PRIVACY_SECTIONS} name="changes" />
         <p>
           When we change this policy, we update the date at the top and add a line below
           saying what changed.

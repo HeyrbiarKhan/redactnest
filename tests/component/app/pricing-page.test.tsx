@@ -154,6 +154,31 @@ describe("the plans (AC-13)", () => {
   });
 });
 
+/** Spec 0013, AC-22: the two cards, Pro marked, Free a way into the tool. */
+describe("the two cards (spec 0013, AC-22)", () => {
+  it("marks Pro's card with the accent edge, and not Free's", () => {
+    render(<PricingPage />);
+
+    expect(card("Pro")).toHaveClass("border-2", "border-accent");
+    expect(card("Free")).not.toHaveClass("border-accent");
+  });
+
+  it("offers the tool from Free's card as a real page load", () => {
+    render(<PricingPage />);
+
+    const redact = within(card("Free")).getByRole("link", { name: "Redact a PDF" });
+    expect(redact.tagName).toBe("A");
+    expect(redact).toHaveAttribute("href", "/tool");
+  });
+
+  it("sets the cards side by side from md", () => {
+    render(<PricingPage />);
+
+    expect(card("Free").parentElement).toHaveClass("md:grid-cols-2");
+    expect(card("Free").parentElement).toBe(card("Pro").parentElement);
+  });
+});
+
 describe("Subscribe and the lines under it (AC-13)", () => {
   it("makes Subscribe a plain link to /account/subscribe", () => {
     render(<PricingPage />);

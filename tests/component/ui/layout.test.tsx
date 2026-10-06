@@ -1,6 +1,6 @@
 /**
  * The layout pieces and the quiet ones: `Card`, `PageContainer`, `SiteHeader`,
- * `SiteFooter`, `FooterGroup`, `SkipLink`, `IconCircle`, `Spinner` and
+ * `SiteFooter`, `LinkGroup`, `SkipLink`, `IconCircle`, `Spinner` and
  * `EmptyState`. Spec 0003, AC-5, AC-14, AC-16 and AC-18, and spec 0013, AC-7
  * and AC-8.
  */
@@ -15,7 +15,7 @@ import { Button } from "@/ui/button";
 import { Card } from "@/ui/card";
 import { CountBadge } from "@/ui/count-badge";
 import { EmptyState } from "@/ui/empty-state";
-import { FooterGroup } from "@/ui/footer-group";
+import { LinkGroup } from "@/ui/link-group";
 import { IconCircle } from "@/ui/icon-circle";
 import { PageContainer } from "@/ui/page-container";
 import { SiteFooter } from "@/ui/site-footer";
@@ -250,11 +250,11 @@ describe("SiteFooter", () => {
       <SiteFooter
         brand={<div>PDF redaction in your browser.</div>}
         groups={
-          <FooterGroup label="Legal">
+          <LinkGroup label="Legal">
             <li>
               <a href="/privacy">Privacy policy</a>
             </li>
-          </FooterGroup>
+          </LinkGroup>
         }
         notice={
           <p>
@@ -295,14 +295,14 @@ describe("SiteFooter", () => {
 });
 
 /** Spec 0013, AC-8: a footer group's nav, its label and its list. */
-describe("FooterGroup", () => {
+describe("LinkGroup", () => {
   it("is a nav named by its label, shown once on screen and hidden from assistive technology", () => {
     const { container } = render(
-      <FooterGroup label="Product">
+      <LinkGroup label="Product">
         <li>
           <a href="/tool">Redact a PDF</a>
         </li>
-      </FooterGroup>,
+      </LinkGroup>,
     );
 
     const nav = screen.getByRole("navigation", { name: "Product" });
@@ -317,11 +317,11 @@ describe("FooterGroup", () => {
 
   it("passes axe", async () => {
     const { container } = render(
-      <FooterGroup label="Product">
+      <LinkGroup label="Product">
         <li>
           <a href="/tool">Redact a PDF</a>
         </li>
-      </FooterGroup>,
+      </LinkGroup>,
     );
 
     await expectNoAxeViolations(container);

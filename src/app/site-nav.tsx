@@ -3,7 +3,7 @@ import { cx } from "@/lib/cx";
 import { LEGAL } from "@/lib/legal";
 import { ACCOUNT_PATH, PRICING_PATH, TOOL_PATH } from "@/lib/routes";
 import { Button } from "@/ui/button";
-import { FooterGroup } from "@/ui/footer-group";
+import { LinkGroup } from "@/ui/link-group";
 import { SiteHeader } from "@/ui/site-header";
 
 import { FOOTER_LINK_CLASS } from "./footer-link";
@@ -126,7 +126,7 @@ export function PageHeader({ current }: { readonly current?: NavItem }) {
  */
 export function ProductNav() {
   return (
-    <FooterGroup label={LEGAL.productNavLabel}>
+    <LinkGroup label={LEGAL.productNavLabel}>
       <li>
         <a href={TOOL_PATH} className={FOOTER_LINK_CLASS}>
           {NAV_TEXT.redactPdf}
@@ -139,6 +139,6 @@ export function ProductNav() {
           </a>
         </li>
       )}
-    </FooterGroup>
+    </LinkGroup>
   );
 }

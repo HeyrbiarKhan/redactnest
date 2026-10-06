@@ -29,6 +29,7 @@ const PAGE_FILES = [
   ...filesUnder("src/app/terms"),
   "src/app/legal-page.tsx",
   "src/ui/prose.tsx",
+  "src/ui/link-group.tsx",
 ];
 
 /** A directive is the first statement, after any comments. */
@@ -67,6 +68,7 @@ const PRICING_FILES = [
   "src/app/site-nav.tsx",
   "src/ui/site-header.tsx",
   "src/ui/brand-mark.tsx",
+  "src/ui/link-group.tsx",
   "src/ui/page-container.tsx",
   "src/ui/card.tsx",
   "src/ui/button.tsx",
@@ -96,6 +98,7 @@ const HOME_FILES = [
   "src/app/site-nav.tsx",
   "src/ui/site-header.tsx",
   "src/ui/brand-mark.tsx",
+  "src/ui/link-group.tsx",
   "src/ui/feature-list.tsx",
   "src/ui/icon-circle.tsx",
   "src/ui/page-container.tsx",

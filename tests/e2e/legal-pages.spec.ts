@@ -109,6 +109,54 @@ for (const { path, title, sections } of PAGES) {
     });
 
     /** covers: AC-3. Its own description, and nothing asking to stay unindexed. */
+    /**
+     * Spec 0013, AC-25. The On this page list: the sections in order, each
+     * link landing on its heading, beside a text column no wider than 44rem
+     * from lg, and above it below.
+     */
+    test("lists its sections under On this page, beside the text from lg", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(path);
+
+      const nav = page.getByRole("navigation", { name: "On this page" });
+      const links = nav.getByRole("link");
+      await expect(links).toHaveText([...sections]);
+      for (const link of await links.all()) {
+        const href = (await link.getAttribute("href")) ?? "";
+        await expect(page.locator(`main h2${href}`)).toHaveText(
+          (await link.textContent()) ?? "",
+        );
+      }
+
+      const text = page
+        .locator("main h2")
+        .first()
+        .locator("xpath=ancestor::div[contains(@class, 'max-w-narrow')][1]");
+      const column = await text.boundingBox();
+      expect(column?.width ?? Infinity).toBeLessThanOrEqual(44 * 16);
+      const list = await nav.boundingBox();
+      expect((list?.x ?? 0) + (list?.width ?? 0)).toBeLessThanOrEqual(column?.x ?? 0);
+
+      await links.last().click();
+      await expect(page).toHaveURL(
+        new RegExp(`${(await links.last().getAttribute("href")) ?? ""}$`),
+      );
+      await expect(page.locator("main h2").last()).toBeInViewport();
+    });
+
+    test("puts On this page above the text below lg", async ({ page }) => {
+      await page.setViewportSize({ width: 768, height: 900 });
+      await page.goto(path);
+
+      const list = await page
+        .getByRole("navigation", { name: "On this page" })
+        .boundingBox();
+      const first = await page.locator("main h2").first().boundingBox();
+      expect((list?.y ?? 0) + (list?.height ?? 0)).toBeLessThanOrEqual(first?.y ?? 0);
+    });
+
     test("is indexable, with its own description", async ({ page }) => {
       await page.goto(path);
 

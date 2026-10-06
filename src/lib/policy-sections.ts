@@ -44,3 +44,16 @@ export const TERMS_SECTIONS = Object.freeze({
   lawAndCourts: "Law and courts",
   changes: "Changes",
 });
+
+/** A page's section record: each key names an h2, in the page's order. */
+export type PolicySections = Readonly<Record<string, string>>;
+
+/**
+ * The stable `id` of a section's h2, made from its key: `yourDocuments` becomes
+ * `your-documents` (spec 0013, AC-25). From the key rather than the words, so
+ * a heading reworded keeps its address, and the On this page list and the
+ * heading cannot disagree.
+ */
+export function sectionId(key: string): string {
+  return key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+}

@@ -20,7 +20,7 @@ export function SiteFooter({
   notice,
 }: {
   readonly brand: ReactNode;
-  /** The footer's `FooterGroup`s, side by side. */
+  /** The footer's `LinkGroup`s, side by side. */
   readonly groups: ReactNode;
   readonly notice: ReactNode;
 }) {

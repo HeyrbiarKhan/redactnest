@@ -1,6 +1,6 @@
 import { LEGAL } from "@/lib/legal";
 import { PRIVACY_PATH, TERMS_PATH } from "@/lib/routes";
-import { FooterGroup } from "@/ui/footer-group";
+import { LinkGroup } from "@/ui/link-group";
 
 import { FOOTER_LINK_CLASS } from "./footer-link";
 
@@ -18,7 +18,7 @@ import { FOOTER_LINK_CLASS } from "./footer-link";
  */
 export function LegalNav() {
   return (
-    <FooterGroup label={LEGAL.legalNavLabel}>
+    <LinkGroup label={LEGAL.legalNavLabel}>
       <li>
         <a href={PRIVACY_PATH} className={FOOTER_LINK_CLASS}>
           {LEGAL.privacyLabel}
@@ -29,6 +29,6 @@ export function LegalNav() {
           {LEGAL.termsLabel}
         </a>
       </li>
-    </FooterGroup>
+    </LinkGroup>
   );
 }

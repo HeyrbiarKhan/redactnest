@@ -116,6 +116,13 @@ describe("the raster files (AC-3, AC-5, AC-6, AC-28)", () => {
     expect(card.length).toBeLessThan(1024 * 1024);
   });
 
+  it("captures the product shot at 1280 by 800 at device scale 2 (AC-12)", () => {
+    expect(pngSize(read("src", "app", "product-review.png"))).toEqual({
+      width: 2560,
+      height: 1600,
+    });
+  });
+
   it("makes the Polar product image 1200 by 630, the social card's composition", () => {
     expect(pngSize(read("docs", "design", "brand", "polar-product.png"))).toEqual({
       width: 1200,

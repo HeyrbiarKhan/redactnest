@@ -122,6 +122,8 @@ export const LEGAL = Object.freeze({
    */
   brandLine: "PDF redaction in your browser.",
   productNavLabel: "Product",
+  /** The legal pages' list of their own sections (spec 0013, AC-25). */
+  onThisPageLabel: "On this page",
   /**
    * The line under the drop zone, around its two links (spec 0011, AC-5): "By
    * choosing a PDF you agree to the Terms of service. The Privacy policy

@@ -502,3 +502,59 @@ test.describe("the 404 page", () => {
     await expect(page.getByRole("contentinfo")).toHaveCount(1);
   });
 });
+
+/** Spec 0013, AC-22. Pricing's two cards, under today's title and lead. */
+test.describe("the pricing page", () => {
+  test("keeps its title and lead, then sets Free and Pro side by side from md", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/pricing");
+
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Pricing");
+    await expect(page.getByRole("main")).toContainText(
+      "Every plan redacts in your own browser, and your document never leaves your machine.",
+    );
+    const free = page.getByRole("region", { name: "Free" });
+    const pro = page.getByRole("region", { name: "Pro" });
+    await expect(free).toContainText("Up to 3 pages a document");
+    await expect(pro).toContainText("$19 a month");
+    await expect(pro).toContainText("Up to 50 pages a document");
+    await expect(pro).toContainText("Everything in Free");
+    const [freeBox, proBox] = [await free.boundingBox(), await pro.boundingBox()];
+    expect(freeBox?.y).toBe(proBox?.y);
+    expect((freeBox?.x ?? 0) + (freeBox?.width ?? 0)).toBeLessThan(proBox?.x ?? 0);
+    expect(await pro.evaluate((card) => getComputedStyle(card).borderTopWidth)).toBe(
+      "2px",
+    );
+
+    await expect(pro.getByRole("link", { name: "Subscribe" })).toHaveAttribute(
+      "href",
+      "/account/subscribe",
+    );
+  });
+
+  test("stacks the cards below md", async ({ page }) => {
+    await page.setViewportSize({ width: 600, height: 900 });
+    await page.goto("/pricing");
+
+    const free = await page.getByRole("region", { name: "Free" }).boundingBox();
+    const pro = await page.getByRole("region", { name: "Pro" }).boundingBox();
+    expect((free?.y ?? 0) + (free?.height ?? 0)).toBeLessThanOrEqual(pro?.y ?? 0);
+  });
+
+  /** INV-4: Free's way into the tool is a real page load. */
+  test("loads /tool as a document from Free's card", async ({ page }) => {
+    await page.goto("/pricing");
+
+    await page
+      .getByRole("region", { name: "Free" })
+      .getByRole("link", { name: "Redact a PDF" })
+      .click();
+    await expect(page).toHaveURL(/\/tool$/);
+    const loadedAt = await page.evaluate(
+      () => performance.getEntriesByType("navigation")[0]?.name ?? "",
+    );
+    expect(new URL(loadedAt).pathname).toBe("/tool");
+  });
+});

@@ -27,7 +27,7 @@ import {
   TERMS_CHANGES,
   type PolicyChanges,
 } from "@/lib/policy-changes";
-import { PRIVACY_SECTIONS, TERMS_SECTIONS } from "@/lib/policy-sections";
+import { PRIVACY_SECTIONS, sectionId, TERMS_SECTIONS } from "@/lib/policy-sections";
 import { TOOL_PATH } from "@/lib/routes";
 
 import { expectNoAxeViolations } from "../../setup/component";
@@ -141,6 +141,34 @@ describe.each(PAGES)("$name", ({ Page, title, sections, changes, metadata }) => 
     expect(text).not.toMatch(/repositor|github|commit/i);
     expect(text).not.toMatch(/\d[\d,.]*\s*(pages?|MB|megabytes?)\b/i);
     expect(text).not.toMatch(/\b(pages?|MB)\s*\d/i);
+  });
+
+  /**
+   * Spec 0013, AC-25. An On this page list of plain links, in the section
+   * record's order, each to the h2 its key names, after the title and before
+   * the text.
+   */
+  it("lists every section under On this page, each linking its own h2", () => {
+    const { container } = render(<Page />);
+
+    const nav = screen.getByRole("navigation", { name: "On this page" });
+    const links = within(nav).getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual(Object.values(sections));
+    for (const [index, key] of Object.keys(sections).entries()) {
+      const href = links[index]?.getAttribute("href");
+      expect(href).toBe(`#${sectionId(key)}`);
+      const heading = container.querySelector(`h2${href}`);
+      expect(heading).toHaveTextContent(sections[key as keyof typeof sections]);
+    }
+    for (const link of links) expect(link).toHaveClass("underline");
+    const h1 = screen.getByRole("heading", { level: 1 });
+    const firstH2 = screen.getAllByRole("heading", { level: 2 })[0] as HTMLElement;
+    expect(
+      h1.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      nav.compareDocumentPosition(firstH2) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   /** covers: AC-18. Headings run h1, h2, h3 with no level skipped. */
