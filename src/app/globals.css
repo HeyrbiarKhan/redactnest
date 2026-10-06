@@ -43,6 +43,7 @@
   --color-danger-border: #f0c3bd;
   --color-danger-icon: #b3261e;
   --color-danger-ink: #a8231c;
+  --color-danger-strong: #8c1d18;
 
   /*
    * Nothing renders below 14px (INV-6), so the one size under it goes. Sizes

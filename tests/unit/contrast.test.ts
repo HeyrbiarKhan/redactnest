@@ -44,6 +44,7 @@ const TOKENS = Object.freeze([
   "danger-border",
   "danger-icon",
   "danger-ink",
+  "danger-strong",
 ]);
 
 /** 4.5:1 for text, 3:1 for icons, control edges and the focus ring (WCAG 1.4.3, 1.4.11). */
@@ -83,6 +84,12 @@ const CONTRACT: readonly Pairing[] = Object.freeze([
   // them, on the card's `info-bg` fill (spec 0013, AC-18 and AC-27).
   { foreground: "accent-strong", background: "info-bg", minimum: TEXT },
   { foreground: "focus", background: "info-bg", minimum: GRAPHIC },
+  // The danger buttons on `/account` (spec 0013, AC-35): the `danger` button's
+  // words and busy spinner on its fill, at rest and under the pointer, and the
+  // ring around either danger button, which its offset puts on the card's
+  // `surface`, held at 4.5 there rather than 3 by your call.
+  ...pairings(["on-accent"], ["danger-ink", "danger-strong"], TEXT),
+  { foreground: "focus", background: "surface", minimum: TEXT },
   { foreground: "warning-icon", background: "warning-bg", minimum: GRAPHIC },
   { foreground: "info-icon", background: "info-bg", minimum: GRAPHIC },
   { foreground: "danger-icon", background: "danger-bg", minimum: GRAPHIC },
