@@ -7,7 +7,7 @@ tokens: "real values live in src/app/globals.css (@theme); read them there, neve
 contrast: "checked by tests/unit/contrast.test.ts on every run: body ink 14.97:1 on canvas, muted ink 5.91:1, white on accent 5.09:1, focus ring 7.96:1 on canvas. Light only."
 ---
 
-**Updated**: 2026-10-06, from spec [0013](../0013-brand-ui-refresh/index.md): the references give layout and composition as well as visual style; the composition patterns describe the shell, the three area tool grid with its rail, and the landing hero; header nav items are the one link not underlined at rest; and the `frontend-design` skill yields to spec 0013 and spec 0003 wherever they pin a choice.
+**Updated**: 2026-10-06, from spec [0013](../0013-brand-ui-refresh/index.md): the references give layout and composition as well as visual style; the composition patterns describe the shell, the three area tool grid with its rail, and the landing hero; header nav items are the one link not underlined at rest; and the `frontend-design` skill yields to spec 0013 and spec 0003 wherever they pin a choice. Then, after your read of the built pages (spec 0013's task 20): the finds and strips band became two cards on the page's `canvas`, and one rule in `globals.css` sets every cursor.
 
 ## Build mandate
 
@@ -24,7 +24,7 @@ You are a senior product designer shipping a real product surface, at the bar in
 
 - **Shell.** Every page: skip link, a static white header (the lockup home on the left, then the Site nav, Account and one action at the right, wrapping below the lockup on a phone), `<main id="main">`, then the footer: a brand column and the Product and Legal groups, ending with the AGPL notice. The header never sticks. Spec 0013, AC-7 and AC-8.
 - **Tool page.** `PageContainer wide`, the title, then one grid of three areas that keep their order in every step: A, the document (the full drop zone and terms line, or the file bar); B, the rail (the polite region, the plan card, the refusal or lost callout, then the action panel with the lock line, sticky from `lg`; or at idle the steps and the lock line); C, the found items in one card. From `lg` A sits beside B while nothing is open, then across the top with C left of B; on a phone it reads A, B, C. Spec 0013, AC-14 to AC-19.
-- **Home page.** `PageContainer wide`, reference 04's hero: the eyebrow, the display headline, the lead, two large buttons and the cap line on the left, the real product shot (the one larger shadow on the site) on the right from `lg`; the feature trio; then one quiet band on `surface` saying what RedactNest finds and strips. Spec 0013, AC-10 to AC-13. Feature 15's search pages reuse the shell and `FeatureList`.
+- **Home page.** `PageContainer wide`, reference 04's hero: the eyebrow, the display headline, the lead, two large buttons and the cap line on the left, the real product shot (the one larger shadow on the site) on the right from `lg`; the feature trio; then what RedactNest finds and strips, as two white cards on the page's `canvas` (no full width strip), side by side and equal height from `md`: each an `accent` icon circle beside its heading, then a real list with an `accent` line icon on every item (the detectors' own icons in Finds, a check on each stripped kind in Strips). Spec 0013, AC-10 to AC-13. Feature 15's search pages reuse the shell and `FeatureList`.
 - **Other pages.** Pricing's two plan cards with Pro's accent edge; sign in's panel beside Clerk's card; the legal pages' On this page list beside a 44rem text column from `lg`. Spec 0013, AC-22 to AC-25.
 - **Review (feature 8).** A card of `ChecklistGroup`s, each a `details` with rows of `ChecklistItem`. A "select all" for a group goes in the card header or as its first row, never in the summary.
 
@@ -36,6 +36,7 @@ You are a senior product designer shipping a real product surface, at the bar in
 - Don't use `next/link` to enter or leave `/tool`. Leaving has to be a real page load so `pagehide` ends the session (spec 0002, INV-6), and entering should be one so the tool runs under its own strict content security policy.
 - Radius: `rounded-lg` on controls, `rounded-xl` on cards, callouts and the drop zone, `rounded-full` on badges and icon circles, `rounded-md` on the checkbox. Card padding `p-5`, column gaps `gap-6`.
 - Icons come from `lucide-react`, imported by name, 20px with a 1.75 stroke, and hidden from assistive technology unless they are the only label.
+- Don't set a cursor in a component. One rule in `src/app/globals.css` gives whatever can be clicked the pointer and whatever is disabled `not-allowed`, Clerk's card included, and lint rejects a `cursor-` utility (spec 0013, AC-33).
 - Document derived text reaches a primitive only as a prop and renders only as React text. Never `dangerouslySetInnerHTML`, never `document.title`, never the URL.
 - The `frontend-design` skill guides any axis these rules and the specs leave free. Where spec 0013 or spec 0003 pins a choice (Inter alone, the warm `canvas`, the one teal, rounded cards, the eyebrow), the spec wins.
 

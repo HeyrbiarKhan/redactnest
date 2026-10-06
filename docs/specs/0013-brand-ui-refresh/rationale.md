@@ -122,6 +122,30 @@ You chose every word (see the table in `index.md`). These were decided while wri
 | The Subscribe line | "Signing you in, then on to Subscribe" (your pick after the cross check) | always true: Subscribe sends a visitor who already holds Pro, or whose payment is settling, to Account or Welcome | "then on to checkout" (untrue for those visitors) |
 | Strips card icon | `FileMinus` | taking something out of a file, and unlike the trio's `Eraser` | `EyeOff` (says hiding, the opposite of removing) |
 
+### Recorded during the build (tasks 26 and 27)
+
+Checked in the Clerk development instance and the Polar sandbox on 2026-10-06, under `pnpm dev` (Clerk 7.9.10 for Next.js, whose interface loads from Clerk's servers), signing in as `walk-one` and signing up as a new throwaway, `walk-0013`, both `+clerk_test` addresses with code 424242.
+
+**Task 26, Clerk's fields (AC-31).**
+
+- Both element names exist, as AC-31 wrote them: `cl-formFieldInput` on the email field (sign in and sign up), and `cl-otpCodeFieldInput` on each code box. Both are also in this Clerk's `ElementsConfig` type.
+- Clerk draws its own rest edge as a **box shadow over a 0 pixel border**, so the reset of the shadow AC-31 allowed for is needed, and it is in place.
+- Clerk marks an invalid field with **`aria-invalid="true"`** on both elements ("false" otherwise), so the scope stands as written.
+- The code boxes are **not inputs**: each `cl-otpCodeFieldInput` is a `div` drawn over one hidden `input`, so `:focus` never matches a box. Clerk marks the box being filled with `data-focus-within="true"` and rings it by that. Scoped to `:not(:focus)`, our edge sat on the focused box and hid Clerk's focus ring there (seen, then fixed), so the code boxes take their own scope, `&:not([data-focus-within="true"]):not([aria-invalid="true"])` (`CODE_BOX_AT_REST` in `clerk-appearance.ts`). The email field keeps `:not(:focus)`.
+- Result: at rest and on hover each field and box shows a 1 pixel `border-strong` border and no shadow; focused, Clerk's own 4 pixel ring in `focus`; after a wrong code, Clerk's `danger-ink` edge on every box and "Incorrect code", with our status line still empty.
+- The cursor rule (AC-33) reaches Clerk's card: Continue, the edit button and the footer's "Sign up" link show the pointer, Resend shows `not-allowed` while it counts down, and the email field and the code input keep the text cursor.
+
+**Task 27, the signing in line (AC-32).** The signal is `useAuth()`, as AC-32 chose: in both walks it left "loaded and signed out" before the page changed, so the named fallback (`useSignIn()` and `useSignUp()`) was not needed. Times from the last digit of the code (Clerk submits on the sixth digit, so this is the press of Continue), in development mode, which is slower than a production build:
+
+| Walk | Clerk's loading state shows | Clerk's loading state ends | Our line shows | The next page |
+|---|---|---|---|---|
+| Sign in, to Account | 21 ms | 1,570 ms | 1,924 ms (354 ms after) | `/account` at 3,111 ms |
+| Sign up from Subscribe | 19 ms | 606 ms | 1,828 ms (1,222 ms after) | `/account/subscribe` at 4,606 ms, then Polar's sandbox checkout at 5,458 ms |
+
+The sign up from Subscribe ended where Subscribe sends a new free account, Polar's checkout, never on Account by way of the sign up page's own signed in redirect. Each line showed once and stayed until the next page.
+
+Open for your read: between the end of Clerk's loading state and our line there is a gap with no feedback, about 0.35 s on sign in and 1.2 s on sign up, in development mode. AC-32 names the fallback only for the case where `useAuth()` changes after the page does, which it did not, so the build keeps `useAuth()`. Closing the gap would mean showing the line from the sign in's or sign up's own `status` reaching `"complete"`, which likely comes at the end of Clerk's loading state; that is a change to AC-32 for `/architect`.
+
 ### What each reference gave, and what stayed out
 
 | Reference | Kept | Left out, and why |

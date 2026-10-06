@@ -250,7 +250,7 @@ spec [0013](../specs/0013-brand-ui-refresh/index.md)
   - [x] The tool page in three areas: one keyed grid with the found items left and the rail right, the plan card, the steps and lock line, the sticky action panel, every step state proved · AC-14 to AC-21, AC-26, AC-29
   - [x] The landing page: the sample fixture, `home-text.ts`, the real product shot, the hero, trio and finds and strips band · AC-10 to AC-13, AC-28
   - [x] The other pages: Pricing's two cards, the sign in panel with no Clerk logo, the account pages, the legal pages' On this page list · AC-22 to AC-25
-  - [ ] Proof, words and amends: every page in a real browser, the final brand images, your read of every word, spec 0012's Go live steps, and specs 0003, 0007 and 0012 and `design.md` amended · AC-6, AC-12, AC-13, AC-23, AC-26, AC-29
+  - [x] Proof, words and amends: every page in a real browser, the final brand images, your read of every word, spec 0012's Go live steps, and specs 0003, 0007 and 0012 and `design.md` amended · AC-6, AC-12, AC-13, AC-23, AC-26, AC-29
   - [ ] Your read's changes: each thing said once (Try it free, Remove text from a PDF, no Redact item, no lockup in the sign in panel), the finds and strips cards, the steps' line, Clerk's field edges and signing in line, the sticky legal list, one cursor rule, then proof, the brand rerun, your read again and the amends · AC-7, AC-9 to AC-11, AC-15, AC-20, AC-22, AC-23, AC-25, AC-26, AC-30 to AC-33
 - [ ] Verify it: `/check verify brand & UI refresh`
 - [ ] Test it: `/test brand & UI refresh`
