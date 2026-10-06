@@ -34,13 +34,16 @@ const GAP = "gap-6";
  * A real `ol`, so a screen reader hears the count and each step's place from
  * the list itself. The drawn numbers and the line repeat that, so they are
  * hidden from assistive technology rather than read twice (the line is a
- * pseudo element, which has no text to read). `accent-strong` digits on an
- * `accent-soft` circle, a pairing already in the contrast contract (5.66:1);
- * in forced colours the fill drops and the digits stay, as plain text.
+ * pseudo element, which has no text to read). The `ol` keeps `role="list"`
+ * because Safari drops a list's semantics once its markers are removed, and
+ * with the numbers hidden the list is the order's only spoken form.
+ * `accent-strong` digits on an `accent-soft` circle, a pairing already in the
+ * contrast contract (5.66:1); in forced colours the fill drops and the digits
+ * stay, as plain text.
  */
 export function StepList({ steps }: { readonly steps: readonly string[] }) {
   return (
-    <ol className={cx("flex flex-col", GAP)}>
+    <ol role="list" className={cx("flex flex-col", GAP)}>
       {steps.map((step, index) => (
         <li key={step} className={cx("relative flex items-start gap-3 text-ink", LINE)}>
           <span

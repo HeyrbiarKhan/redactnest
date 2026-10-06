@@ -11,7 +11,9 @@ import { cx } from "@/lib/cx";
  * navigation" once rather than the label twice. The label is a `div`, never a
  * heading or a `p`: a heading would join the page's heading walk, and the
  * footer's one paragraph is spec 0009's licence notice, which its test reads
- * as `footer p`.
+ * as `footer p`. The `ul` keeps `role="list"` because Safari drops a list's
+ * semantics once its bullets are removed, and the count tells how many links
+ * the group holds.
  */
 export function LinkGroup({
   label,
@@ -29,7 +31,9 @@ export function LinkGroup({
       <div aria-hidden="true" className="font-semibold text-ink">
         {label}
       </div>
-      <ul className="flex flex-col gap-1">{children}</ul>
+      <ul role="list" className="flex flex-col gap-1">
+        {children}
+      </ul>
     </nav>
   );
 }

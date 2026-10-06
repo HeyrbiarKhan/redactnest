@@ -334,6 +334,19 @@ describe("LinkGroup", () => {
     expect(within(nav).getByRole("list")).toHaveTextContent("Redact a PDF");
   });
 
+  it("keeps the list role explicit, which Safari drops once the bullets go", () => {
+    render(
+      <LinkGroup label="Product">
+        <li>
+          <a href="/tool">Redact a PDF</a>
+        </li>
+      </LinkGroup>,
+    );
+
+    const nav = screen.getByRole("navigation", { name: "Product" });
+    expect(within(nav).getByRole("list")).toHaveAttribute("role", "list");
+  });
+
   it("passes axe", async () => {
     const { container } = render(
       <LinkGroup label="Product">

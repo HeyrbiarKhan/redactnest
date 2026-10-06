@@ -24,6 +24,17 @@ describe("StepList", () => {
     });
   });
 
+  /**
+   * Safari drops a list's semantics once Preflight removes its markers, and
+   * the drawn numbers are hidden, so without the explicit role the order and
+   * the count would have no spoken form at all.
+   */
+  it("keeps the list role explicit, so Safari still reads the order", () => {
+    render(<StepList steps={STEPS} />);
+
+    expect(screen.getByRole("list")).toHaveAttribute("role", "list");
+  });
+
   it("hides the drawn numbers, so the list's own count is not read twice", () => {
     render(<StepList steps={STEPS} />);
 

@@ -28,6 +28,12 @@ describe("FeatureList", () => {
     expect(items[0]).toHaveTextContent("Never uploaded.");
   });
 
+  it("keeps the list role explicit, which Safari drops once the bullets go", () => {
+    render(<FeatureList items={ITEMS} />);
+
+    expect(screen.getByRole("list")).toHaveAttribute("role", "list");
+  });
+
   it("uses the heading level asked for", () => {
     render(<FeatureList items={ITEMS} headingLevel={3} />);
 

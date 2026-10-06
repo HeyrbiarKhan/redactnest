@@ -13,11 +13,12 @@ export interface FeatureItem {
  * title and one line. Spec 0013, AC-10: the home page's trio, and feature 15's
  * search pages after it.
  *
- * A real `ul`, three columns from `md` and one below. The icon sits above the
- * words while the columns are narrow and beside them from `lg`. The icon is
- * decoration, so it is hidden from assistive technology; the title is a
- * heading at the level the caller's outline needs, so a screen reader can
- * jump between them.
+ * A real `ul`, three columns from `md` and one below, with `role="list"` kept
+ * on it because Safari drops a list's semantics once its bullets are removed.
+ * The icon sits above the words while the columns are narrow and beside them
+ * from `lg`. The icon is decoration, so it is hidden from assistive
+ * technology; the title is a heading at the level the caller's outline needs,
+ * so a screen reader can jump between them.
  */
 export function FeatureList({
   items,
@@ -29,7 +30,7 @@ export function FeatureList({
   const Heading = headingLevel === 2 ? "h2" : "h3";
 
   return (
-    <ul className="grid gap-8 md:grid-cols-3">
+    <ul role="list" className="grid gap-8 md:grid-cols-3">
       {items.map(({ icon, title, body }) => (
         <li key={title} className="flex flex-col gap-3 lg:flex-row lg:gap-4">
           <IconCircle icon={icon} tone="accent" />
