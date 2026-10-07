@@ -254,6 +254,8 @@ A web pass on 2026-10-03 (full notes in `docs/.agent-cache/research/billing-cler
 - Polar checkout features, the `{CHECKOUT_ID}` placeholder (read 2026-10-04): https://polar.sh/docs/features/checkout
 - Polar customer sessions, "short-lived" (read 2026-10-04): https://polar.sh/docs/features/customer-portal/navigate-customers
 - Polar embedded checkout, the token by `postMessage` (read 2026-10-04): https://polar.sh/docs/features/checkout/embed
+- Polar refunds, a refund does not end a subscription (read 2026-10-07): https://polar.sh/docs/features/refunds.md
+- Polar failed payments, the retry schedule and the grace period (read 2026-10-07): https://polar.sh/docs/features/subscriptions/failed-payments.md
 - Cloudflare cookies, `__cf_bm` and `_cfuvid` "strictly necessary" (read 2026-10-04): https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/
 
 ## Spike and measure results
@@ -399,7 +401,43 @@ Recorded with `tests/e2e/paid-cap-speed.spec.ts` in the `speed` project (`pnpm e
 
 ## Go live results
 
-_Recorded 7 October 2026 from your report of go live on 6 and 7 October, with the deploy facts read from the tag workflow's runs._
+_Recorded 7 October 2026 from your reports of go live on 6 and 7 October, with the deploy facts read from the tag workflow's runs._
+
+### Steps 1 to 4: the setup (by 6 October 2026)
+
+Everything here was set on or before go live day. The checks marked as seen were seen on 7 October 2026 unless dated.
+
+**Step 1, Clerk production.**
+- `clerk.redactnest.com` and Clerk's email sending: 5 CNAME records in Cloudflare, DNS only (not proxied), all verified.
+- Emailed code only, sessions of 7 days, and the sign in and sign up paths set by hand.
+- Clerk's own delete is off, so an account is deleted only through Delete account, which also removes the Polar customer (AC-11).
+- Bot protection came up on after cloning and was turned off (*Clerk: bot protection was on after cloning*, below).
+- Seen: signing up on the production site asked only for an email address and the emailed code, with no name fields.
+
+Not in the record: the Dashboard's allowed redirects (redactnest.com only) were not checked again. AC-8's code still refuses Clerk's other redirect parameters, whatever the Dashboard holds.
+
+**Step 2, Polar production, EdiventStudio.**
+- The "RedactNest Pro" feature flag benefit, and the "RedactNest Pro" product at $19 monthly with that benefit attached.
+- The required custom field `terms`, shown as the tick box "I agree to RedactNest's Terms of service", linking to `/terms`.
+- Multiple subscriptions per customer off, so one subscription per customer.
+- A benefit revocation grace period of 21 days.
+- The organisation token `redactnest-production`, with 4 scopes, valid for 365 days, so it expires about 6 October 2027.
+
+Seen at checkout: EdiventStudio and "RedactNest Pro"; `$19 / mo`, which matches `PRO_PLAN.priceLine`, "$19 a month"; Taxes shown as a dash for Pakistan, which fits `LEGAL.taxLine`, "Tax may be added at checkout, depending on where you live."; and a description saying "up to 50 pages", equal to `config.maxPages` (50).
+
+**The grace period covers the retries.** Polar's failed payments docs (read 7 October 2026) retry a failed payment 2, 7, 14 and 21 days after the first failure, 21 days in all, and the "After 21 days" setting keeps benefits for the full retry schedule. So our 21 days covers it, as step 2 asks.
+
+Not in the record: the token's scope names. Four is what *Configuration required* asks for (read and write customers, write checkouts, write customer sessions), but the names were not read again. Left there on purpose, since it fails safe: a missing scope fails loudly, and steps 6 and 8 used every call the token makes (the plan check, Subscribe's tie or create, the checkout and the portal) with none failing. The token expires about 6 October 2027 (Follow-up).
+
+**Step 3, Vercel.**
+- Pro, team EdiventStudio, with spec 0011's settings: Observability Plus, log drains, Web Analytics, Speed Insights and the firewall's challenge modes off.
+- The seven billing values set for Production only and none in Preview, so previews run with billing off (AC-23). `NEXT_PUBLIC_SITE_URL` is set for Production and Preview; it is not one of the seven.
+- Spend management: a $20 on demand budget, with production paused when it is reached.
+- Firewall: two rate limit rules, one on `/api/entitlement` and one on `/account/subscribe`, each per IP, 60 requests per 60 seconds, action deny with a 429.
+
+**INV-12's check (7 October 2026).** From one address, in Git Bash, 70 requests to `https://redactnest.com/api/entitlement`: 60 answered 200, then 10 answered 429. The next answer was `HTTP/1.1 429 Too Many Requests`, with `X-Vercel-Mitigated: deny`, `Content-Type: text/plain` and the body "Too Many Requests", no `Set-Cookie` header and no challenge page. INV-12 holds, and the rule exists, so the `ENTITLEMENT_MEMO_MS` memo is not built. The check covers `/api/entitlement`, as step 3 asks; the `/account/subscribe` rule has the same settings and was not hit.
+
+**Step 4.** Both pages' `First published.` entries in `src/lib/policy-changes.ts` are dated 2026-10-06, go live day.
 
 ### Step 6: the cookies on production (6 October 2026)
 
@@ -432,7 +470,9 @@ Two things the production list shows that the development walk could not:
 
 Chosen: keep C6, and add this result to the deferred lawyer review's question on "strictly necessary" (Follow-up), which is where a cookie that outlives sign out belongs. Runner up: add a sentence to Your account that some of Clerk's sign in cookies can stay after you sign out until they expire or you clear them. It would be more open with a reader who checks their browser, at the cost of a page change and a change entry for something C6 already leaves room for. It is the first change to make if the lawyer finds the exemption does not hold after sign out.
 
-Not in the record: whether `/api/entitlement` sent `Set-Cookie` while signed in (the route never sets one, held by `tests/unit/entitlement-route.test.ts`), and step 6's Clerk Dashboard logo check.
+**The Clerk Dashboard logo check (7 October 2026).** Application, Settings, Branding shows no Logo and no Favicon uploaded, only the "Upload image" buttons. Branding is set for the application, not for each instance, so this covers both the production and the development instance. Account Portal, Customization holds only colours, colour mode and elevation, with no logo. So there is nothing for a later Clerk to fetch from `img.clerk.com`, and the check passes.
+
+Not in the record: whether `/api/entitlement` sent `Set-Cookie` while signed in (the route never sets one, held by `tests/unit/entitlement-route.test.ts`).
 
 ### Clerk: bot protection was on after cloning
 
@@ -453,6 +493,33 @@ Polar's production organisation was still in test mode, and test mode blocks pay
 **The review code had to be Forever.** `POLARREVIEW` is the discount code made for the review, so Polar's reviewers can subscribe to Pro. A code that applies Once needs a saved card for the renewals after it, and test mode blocks saving one, so it had to apply Forever. A Forever code keeps its discount on every renewal for as long as the subscription lasts, so it should not outlive the review (Follow-up).
 
 **support@redactnest.com.** Polar's organisation settings hold one website and one support email, and the account review shows those same fields, so EdiventStudio's support email became `support@redactnest.com`. Nothing on our pages names it: the privacy contact stays `LEGAL.contactEmail`, `privacy@redactnest.com`.
+
+### Step 7: the review approved (7 October 2026)
+
+Polar approved the account review the day it was submitted. Finance, Account shows "Account approved", and the "Payments are currently unavailable" notice is gone, so the organisation takes payments.
+
+**The review code is gone.** No reviewer took a subscription with `POLARREVIEW`. The only subscription it started was your own test, already revoked. The code is deleted, so no Forever discount is left to renew (Follow-up ticked).
+
+### Step 8: the real purchase (7 October 2026)
+
+**Run with one change: $1, not $19.** A one time discount code, `LIVETEST` ($18 off as a fixed amount, applied Once, for RedactNest Pro only, at most one redemption), made the first invoice $1.00. A $19 refund to a Pakistani bank card takes days to come back, and you needed the money in the meantime. The run still tested what step 8 is for: a real card charged, the name on the statement, the refund flow and the receipt. `LIVETEST` is deleted. A code that applies Once worked here, where `POLARREVIEW` could not use one, because the organisation now takes payments and the card was saved for the renewal.
+
+**The run.**
+1. Checkout charged $1 and landed on `/account/welcome`: "You're on Pro".
+2. `/tool` showed "Signed in with Pro" and "Up to 50 pages on Pro".
+3. Manage billing opened Polar's portal: the subscription Active, $1 this month, the next charge $19 on 7 November 2026. So the code applied to the first invoice only, as Once should.
+4. You revoked the subscription in Polar, and `/tool` went back to Free, 3 pages.
+5. You refunded the order in full in Polar, and the refund shows Succeeded.
+
+**A refund does not end a subscription.** Polar's refund docs (`polar.sh/docs/features/refunds.md`) say refunding a subscription's order does not end the subscription: it has to be revoked or cancelled separately. A refund alone would leave the person on Pro, with the next month due. Step 8 now says to revoke as well, and so does any later refund of Pro: revoke or cancel the subscription, and refund the order. This run revoked first, so it did not see what a refund alone does. The rule rests on Polar's docs. AC-18, the subscription states and the first positive Consequence named a refund as a way Pro ends, so they now name the revoke instead, with no change to any visitor word: the terms say only that part months are not refunded.
+
+**The card statement.** Polar's invoice says the charge appears as `POLAR*edivent`. Your bank's app (Meezan Bank, Pakistan) showed `POLAR EDIVENT SAN FRANCISCO US`. Neither names EdiventStudio in full.
+
+**The receipt.** The invoice reads "From EdiventStudio via Polar Software, Inc.". The refund email comes from "Polar Software Inc" and carries the line `EdiventStudio — RedactNest Pro`. So `LEGAL.merchantLine`, "Your receipt shows EdiventStudio, the studio RedactNest is sold through.", is true, and stays as it is.
+
+**No change under spec 0011, INV-3.** Step 8 left room to name the statement if it showed EdiventStudio. It shows `POLAR*edivent` instead, so the line keeps naming the receipt only, and Pricing and the privacy policy's Payments section are unchanged.
+
+Not in the record, by choice: card digits and invoice numbers.
 
 ### Step 9: the product image is the apple icon
 
