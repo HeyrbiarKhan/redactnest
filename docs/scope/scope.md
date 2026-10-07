@@ -28,11 +28,12 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 15 | Marketing site | Release 6 | planned |
 | 16 | Security & how it works page | Release 6 | planned |
 | 17 | Data processing agreement | Release 6 | planned |
-| 18 | AGPL compliance & source publication | Release 1 | in-progress |
+| 18 | AGPL compliance & source publication | Release 1 | done |
 | 19 | Sparse OCR scans | Release 1 | done |
 | 20 | Dense text layers over pictures | Release 1 | done |
-| 21 | Launch readiness | Release 2 | in-progress |
+| 21 | Launch readiness | Release 2 | done |
 | 22 | Brand & UI refresh | Release 2 | done |
+| 23 | Legal review | Release 6 | planned |
 
 ## Foundations
 
@@ -150,17 +151,17 @@ spec [0007](../specs/0007-redact-flow/index.md) · code in `src/app/tool` (`tool
 - [x] Test it: `/test redact flow`
 - [x] Review it (fresh model): `/check review redact flow`
 
-### 18. AGPL compliance & source publication · in-progress · Alpha · from spec 0001
+### 18. AGPL compliance & source publication · done · Alpha · from spec 0001
 Spec 0001 chose MuPDF, which is copyleft, so RedactNest's own source is licensed AGPL 3.0 and published. The obligation attaches the moment the tool is publicly available and shipping the engine to visitors' browsers, which is this release rather than a later one. Artifex enforce their licence, so this is a real deliverable and not a formality.
 **Done when:** the repository is public under AGPL 3.0, the licence file and third party notices are in place, every production deploy is tagged, and the source offer link in the footer and on the tool page resolves to the exact deployed commit rather than the repository root.
-spec [0009](../specs/0009-agpl-compliance-source-publication/index.md)
+spec [0009](../specs/0009-agpl-compliance-source-publication/index.md) · code in `LICENSE`, `CONTRIBUTING.md`, `scripts` (`sync-legal.mjs`, `lib/notices.mjs`, `legal/mupdf.txt`), `src/lib/legal.ts`, `src/config/index.ts`, `.github/workflows/tag-deploy.yml`
 - [x] Design it (spec): `/architect AGPL compliance & source publication`
 - [x] Build it: `/develop AGPL compliance & source publication`
   - [x] The notice and the commit link: `LICENSE`, the notices script with its licence allowlist, the derived and checked source link, the footer notice, the amends to specs 0001 and 0003, and the browser checks · AC-1 to AC-6, AC-11 to AC-14, AC-22
   - [x] What is inside MuPDF: the exact pin, `scripts/legal/mupdf.txt` from the 1.28.1 archive with Emscripten and musl, the version and wasm signature checks, and the source lines in `VERSION` · AC-15, AC-16, AC-17
   - [x] Deploy tags and the repository's documents: `tag-deploy.yml` with its text scan test, the README licence section, `CONTRIBUTING.md` and `.env.example` · AC-5, AC-6, AC-7 to AC-10, AC-18
   - [x] Going public (your steps): gitleaks over every ref, the noreply address, the Vercel settings, public with secret scanning, push protection and rulesets, then the first tagged deploy checked. Done inside feature 21 (Launch readiness), on go live day · AC-7, AC-19, AC-20, AC-21
-- [ ] Verify it: `/check verify AGPL compliance & source publication`
+- [x] Verify it: `/check verify AGPL compliance & source publication`. Every row passes except AC-9's untagged commit case, which is left on purpose: it runs the first time a real production deploy misses its tag, never on a tag made just to test it (your call, 2026-10-07)
 
 ### 19. Sparse OCR scans · done · GA · from spec 0006
 A scan that has been through text recognition (OCR) but holds only a few lines is named as a picture with no text over it, and a very short one is refused, so following RedactNest's own advice to run OCR never clears the warning. Found by the 2026-09-29 review of feature 7.
@@ -209,18 +210,18 @@ spec [0011](../specs/0011-privacy-policy-terms/index.md) · code in `src/app/pri
   - [x] The amends and your review: specs 0001, 0003, 0007 and 0009 amended, and every word of both pages read by you before merge · AC-4 to AC-7, AC-9, AC-10, AC-13
 - [x] Verify it: `/check verify privacy policy & terms`
 
-### 21. Launch readiness · in-progress · Prototype · from spec 0011
+### 21. Launch readiness · done · Prototype · from spec 0011
 Everything that must be true before RedactNest launches publicly, in one place. Launch also means going public: spec 0001 records the decision to stay on the AGPL 3.0 and publish the source (2026-10-02, after an Artifex commercial licence quote came in over budget), so feature 18's last slice, going public, is done here on go live day. Spec 0011's two production gates hold the first two steps; the rest are lawyer questions, host settings and the going public steps, which no test can check.
-**Done when:** the real contact address and the Article 27 decision are recorded, so a Vercel production deploy builds; Vercel runs on Pro with Observability Plus, log drains, Web Analytics, Speed Insights and the firewall's challenge modes off, a spending cap set, and a rate limit rule that denies rather than challenges; Vercel has confirmed in writing how it treats deployment request logs; billing's go live steps are done (Clerk and Polar in production, a real purchase made and refunded, Polar's account review submitted); and each page's change list is one `First published.` entry dated go live day. The remaining lawyer questions (PECA section 32, Pakistani law and courts, a full review of both pages) wait until RedactNest has 100+ users, on a tech lawyer's advice (2026-10-03), so feature 10 may take money before them.
+**Done when:** the real contact address and the Article 27 decision are recorded, so a Vercel production deploy builds; Vercel runs on Pro with Observability Plus, log drains, Web Analytics, Speed Insights and the firewall's challenge modes off, a spending cap set, and a rate limit rule that denies rather than challenges; Vercel has confirmed in writing how it treats deployment request logs; billing's go live steps are done (Clerk and Polar in production, a real purchase made and refunded, Polar's account review submitted); and each page's change list is one `First published.` entry dated go live day. The remaining lawyer questions (PECA section 32, Pakistani law and courts, a full review of both pages) wait until RedactNest has 100+ users, on a tech lawyer's advice (2026-10-03), so feature 10 may take money before them. They are now feature 23.
 spec [0011](../specs/0011-privacy-policy-terms/index.md) (its Launch readiness steps) · spec [0012](../specs/0012-billing-paid-plan/index.md) (its Go live steps) · code in `src/lib` (`legal.ts`, `policy-changes.ts`)
 - [x] Steps decided (spec): `/architect privacy policy & terms`
-- [ ] Do the steps (your steps): spec 0011's Launch readiness list, steps 1 to 7, spec 0012's Go live steps, plus feature 18's going public steps
+- [x] Do the steps (your steps): spec 0011's Launch readiness list, steps 1 to 7, spec 0012's Go live steps, plus feature 18's going public steps
   - [x] The domain and the real contact address in `LEGAL.contactEmail`: `privacy@redactnest.com`, forwarding tested (2026-10-03) · spec 0011 step 1, AC-16
   - [x] Article 27 recorded in `LEGAL.representatives`: decided, with no EU or UK representative, not required on a lawyer's advice (2026-10-03) · spec 0011 step 2, AC-17
-  - [ ] The other lawyer questions: PECA section 32, Pakistani law and courts, and a full review of both pages. Deferred until RedactNest has 100+ users, on the same lawyer's advice (2026-10-03): the pages and the app stay as they are until then · spec 0011 steps 3 and 4
+  - [x] The other lawyer questions: moved to feature 23 (Legal review), which waits until RedactNest has 100+ users, on the same lawyer's advice (2026-10-03). The pages and the app stay as they are until then · spec 0011 steps 3 and 4
   - [x] Vercel (your steps on go live day): Pro, the logging and challenge settings off, and the log role confirmed in writing · spec 0011 steps 5 and 6
   - [x] The change lists folded into one launch day entry, dated 2026-10-03. Billing's policy changes join that same entry, and its date moves to go live day (spec 0012 Go live step 4) · spec 0011 step 7
-  - [ ] Billing (your steps on go live day, after feature 10): Clerk and Polar production, the billing values on Vercel, the spending cap and the deny only rate limit rule, the `First published.` date, the cookie check on the production domains, Polar's account review submitted once feature 22 had shipped (2026-10-07), then a real purchase made and refunded once Polar lets the organisation take payments, and the product image uploaded · spec 0012 Go live steps 1 to 9, INV-12
+  - [x] Billing (your steps on go live day, after feature 10): Clerk and Polar production, the billing values on Vercel, the spending cap and the deny only rate limit rule, the `First published.` date, the cookie check on the production domains, Polar's account review submitted once feature 22 had shipped (2026-10-07), then a real purchase made and refunded once Polar lets the organisation take payments, and the product image uploaded · spec 0012 Go live steps 1 to 9, INV-12
   - [x] Going public (your steps on go live day): feature 18's last slice, gitleaks over every ref, the noreply address, the Vercel settings, public with secret scanning, push protection and rulesets, then the first tagged deploy checked · spec 0009 AC-7, AC-19, AC-20, AC-21
 
 ### 10. Billing & paid plan · done · GA
@@ -243,7 +244,7 @@ spec [0012](../specs/0012-billing-paid-plan/index.md) · code in `src/billing`, 
 ### 22. Brand & UI refresh · done · Beta + review
 Make RedactNest look like the four reference images in `docs/design/references`, their layouts and composition as well as their colours, before Polar's account review is submitted (feature 21). That means an original logo mark and wordmark, a full favicon and app icon set, a social preview image, and a header with real navigation. The landing page follows 04 (a headline, two buttons, a picture of the real product, a benefit trio) and `/tool` follows 01 to 03 (two columns, detected items grouped with counts, clear warning and plan cards). The footer, `/pricing`, the account and sign in screens, the legal pages and the 404 are polished to match. Whatever the product does not do stays out: no Documents, History or Settings, no "For teams", no "Trusted by", no testimonials, and no detector RedactNest lacks. Whether `/tool` gains a page preview (thumbnails, zoom) is the spec's call. Spec 0003 (AC-13) and `docs/design/design.md` (the references are "visual style only") change, so this needs a spec. The search pages, sitemap and SEO work stay in feature 15.
 **Done when:** every page listed above follows the references' layout and composition under RedactNest's own brand, every word and picture on them is true of the product today, `/tool` keeps its strict policy and loads no third party script, the core path still holds WCAG 2.2 AA, and a fresh model review (`/check review`) has passed after `/test`, because the change touches `/tool`.
-spec [0013](../specs/0013-brand-ui-refresh/index.md)
+spec [0013](../specs/0013-brand-ui-refresh/index.md) · code in `src/ui/brand-mark.tsx`, `src/app` (`icon.svg`, `site-nav.tsx`, `page.tsx`, `not-found.tsx`, `tool`, `pricing`, `(account)`, `globals.css`), `src/lib/home-text.ts`, `scripts/make-brand.mjs`
 - [x] Design it (spec): `/architect brand & UI refresh`
 - [x] Build it: `/develop brand & UI refresh`
   - [x] The brand on every page: the Nest and bar mark and wordmark, the header and footer, the favicon and Apple icon, the social preview image and the Polar image from `scripts/make-brand.mjs`, and the 404 · AC-1 to AC-9, AC-27, AC-28
@@ -257,17 +258,21 @@ spec [0013](../specs/0013-brand-ui-refresh/index.md)
 - [x] Test it: `/test brand & UI refresh`
 - [x] Review it (fresh model): `/check review brand & UI refresh`
 
-## Release 3: See it working, and widen the net
+## Release 3: Widen the net, and see it working
 
-### 11. Telemetry & error monitoring · needs a decision
-Enough numbers to know whether the funnel works and whether anything is failing silently, without ever touching document content.
-**Done when:** events carry counts only (page count, items redacted by type, completion, upgrade), analytics sets no cookies so no consent banner is needed, error reports are scrubbed of file names and content, and the only cookies in the product are the strictly necessary auth ones.
-- [ ] Design it (spec): `/architect telemetry & error monitoring`
+Detectors first (your call, 2026-10-07): spec 0005 already covers them, so they go straight to `/develop` and give visitors more to find right away. Telemetry follows.
 
 ### 12. Remaining detectors
 Dates, credit cards with Luhn validation, IBAN with checksum validation, US Social Security numbers, and UK National Insurance numbers, built against the detection spec already written in release 1.
 **Done when:** all five appear in the confirm checklist with their validators applied, and dates in particular do not flood the checklist with noise.
+**Also owed here:** the home page follows the detectors (spec 0013). Rerun `scripts/make-brand.mjs`, read the lead and the band again (they will name seven kinds), check the sample fixture still opens with the all clear line, and check the Finds card still sits well beside the Strips card with seven items, each with its `DETECTOR_LABELS` icon.
 - [ ] Build it: `/develop remaining detectors`
+
+### 11. Telemetry & error monitoring · needs a decision
+Enough numbers to know whether the funnel works and whether anything is failing silently, without ever touching document content.
+**Done when:** events carry counts only (page count, items redacted by type, completion, upgrade), analytics sets no cookies so no consent banner is needed, error reports are scrubbed of file names and content, and the only cookies in the product are the strictly necessary auth ones.
+**Also owed here:** the policy work from specs 0011 and 0012. Its counts only telemetry becomes new privacy policy claims, its service goes into `OUTSIDE_SERVICES`, and the console ban lifts narrowly for its one reporter, in the same change as the policy update. An upgrade event is a count, never an email or an id. Error reporting stays off `/tool` and never captures the billing seams' arguments.
+- [ ] Design it (spec): `/architect telemetry & error monitoring`
 
 ## Release 4: First paid capability
 
@@ -281,6 +286,7 @@ Type the names, reference numbers or phrases to remove and they go everywhere th
 ### 14. Manual rectangle redaction · needs a decision · GA
 Draw a box, and everything under it goes. The only way to remove signatures, logos, handwriting, table cells and images, and the only useful answer for a scanned page.
 **Done when:** a paid user can draw boxes on rendered pages, everything under a box is genuinely removed from the output including image data, screen coordinates map correctly to page coordinates at every zoom level, and there is a keyboard path to place and adjust a box.
+**Also owed here:** the page preview (spec 0013 left it with this feature): whether review shows rendered pages, the amendment to spec 0002 INV-1 and INV-2 that page images on the main thread need, and where rendered pages sit in `/tool`'s three area grid.
 - [ ] Design it (spec): `/architect manual rectangle redaction`
 
 ## Release 6: Get found and get trusted
@@ -288,6 +294,7 @@ Draw a box, and everything under it goes. The only way to remove signatures, log
 ### 15. Marketing site · needs a decision
 A small set of pages on what this audience actually searches for, since search is the acquisition channel for a self serve tool at this price. The landing page itself, the brand and the site wide social preview image are built in feature 22.
 **Done when:** the search pages are server rendered with metadata, a sitemap and their own social cards, they lead into the tool, and Core Web Vitals pass on mobile.
+**Also owed here:** the search pages reuse the shell, `FeatureList` and the social card's composition (spec 0013). Per page social cards, and whether a manifest is worth a policy change, are this feature's calls.
 - [ ] Design it (spec): `/architect marketing site`
 
 ### 16. Security & how it works page · Alpha
@@ -295,11 +302,18 @@ The page that closes the sale for HR, legal and healthcare buyers: what in memor
 **Done when:** the page describes the real implementation accurately, with no claim the code does not support.
 **Also owed here:** a sticky note or a file attachment that shows in the source is flattened into the page like any other visible annotation (spec 0004, AC-22), so its icon stays as a mark on the page even though the note's text and the attached file are gone. Say so plainly, so the page does not suggest every trace of them was removed.
 **Also owed here:** the honest limits from spec 0006. A picture reaching past the crop keeps its hidden pixels, and text a clip hides wholly stays in the file. Both are warned about and the file is named partly redacted, but neither is removed. The page warnings lean toward saying too much, so a brochure photo or a thin legal line can raise one.
+**Also owed here:** the plan check (claim C5) and why the page cap is honesty based (spec 0012), linking the privacy policy's claims rather than restating them (spec 0011).
 - [ ] Build it: `/develop security & how it works page`
+
+### 23. Legal review · needs a decision · Alpha · from spec 0011
+The lawyer questions launch left open, asked once RedactNest has 100+ users, on a tech lawyer's advice (2026-10-03). PECA section 32, Pakistani law and courts, and a full review of both pages (spec 0011 steps 3 and 4), plus two from spec 0012: does Polar's own use of billing details as merchant of record (fraud, security, tax records) make it a controller for that part, and does every cookie claim C6 calls strictly necessary meet that exemption, given Clerk's `__refresh_<suffix>` stays after sign out on production. It sits before feature 17 because the Polar answer can change what the DPA says.
+**Done when:** the lawyer has answered every question, and each answer that changes a claim has changed the privacy policy or the terms (with an entry in `src/lib/policy-changes.ts`) and the processor list feature 17 will use, all under spec 0011's claims register.
+- [ ] Design it (spec): `/architect legal review`, once the lawyer has answered
 
 ### 17. Data processing agreement · Prototype
 Something a business buyer can sign, ready before somebody asks for it under time pressure.
 **Done when:** a DPA is available, reflects the no storage reality, and lists any subprocessors.
+**Also owed here:** it lists every entry in `OUTSIDE_SERVICES` (spec 0011), with Clerk and Polar as processors, as Polar's own DPA says (spec 0012). Feature 23's answer on Polar may change Polar's role.
 - [ ] Build it: `/develop data processing agreement`
 
 ## Deferred
@@ -311,14 +325,17 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **API access**: programmatic redaction · needs a decision
 - **Downloadable receipt file**: an audit record alongside the redacted PDF, once the on screen summary has proved its shape · needs a decision
 - **Dark mode**: light only for now (spec 0003). Needs its own decision: the colour roles redefined for dark, a second contrast contract, and axe runs in both schemes. It would follow the system setting, since a toggle cannot remember a choice without storage · needs a decision · from spec 0003
-- **A memory limit for blanking scan pixels**: spec 0004's padded pass rewrites every scan page it touches as Flate. One ticked match on each page of a 50 page 300 dpi grey scan measured 917 MB and a file 4.9 times larger. Settle a limit before the paid page cap applies to scans · needs a decision · from spec 0006
+- **A memory limit for blanking scan pixels**: spec 0004's padded pass rewrites every scan page it touches as Flate. One ticked match on each page of a 50 page 300 dpi grey scan measured 917 MB and a file 4.9 times larger. Pro now opens 50 page scans with no such limit, so this is more urgent: settle it before the paid cap rises above 50 (spec 0012) · needs a decision · from spec 0006
 - **Name the item behind a refused run**: carry the `MatchId` with a run refusal where the engine can trace one, so the checklist can point at it. Waits for feature 11's refusal counts, alongside spec 0005's Follow-up on `replacement-text` · needs a decision · from spec 0007
-- **Page preview in review**: page images on the main thread are a new kind of document data (spec 0002, INV-1). Decide with feature 14, which renders pages for rectangles, unless feature 22's spec decides it first · needs a decision · from spec 0007
+- **Page preview in review**: page images on the main thread are a new kind of document data (spec 0002, INV-1). Spec 0013 left it with feature 14, which renders pages for rectangles, and feature 14 now carries it · needs a decision · from spec 0007
 - **The crooked scan line on a straight scan**: spec 0006's line (AC-25) shows whenever a match is blocked `slanted-text` on a machine read page, and says the scan is slightly crooked. On a straight scan with a picture pasted before OCR, OCR's lines beside the picture can come out slanted, so the line shows and its advice to straighten the scan may not help (4 matches on the local `scan-dense-photo-before.pdf`). It fails safe: the matches stay blocked and shown. Decide what the line says, or when it shows, measured first · needs a decision · from spec 0010
 - **Host MuPDF's source ourselves**: attach each shipped version's source archive as a release asset on our own repository, if Artifex ever stop serving one we still ship. AGPL section 6(d) keeps its availability our duty (spec 0009, Option 4) · from spec 0009
 - **Open outside contributions**: choose a CLA or DCO, and look again at who can get a commit deployed before approving any fork deployment, since the tag workflow's copy that runs may be the contributor's (spec 0009, INV-3) · needs a decision · from spec 0009
 - **Customer identity across EdiventStudio products**: Polar keeps one customer per email per organisation, with one external id, and RedactNest's account deletion removes the whole Polar customer. Subscribe now ties an existing customer by verified email (spec 0012, AC-25), and one subscription per customer covers every product, so someone who already subscribes to another EdiventStudio product cannot buy Pro today. Decide before EdiventStudio sells a second product with accounts · needs a decision · from spec 0012
 - **Clerk testing tokens in CI**: run the sign in path in CI against a Clerk development instance, if the hand walk in spec 0012's task 13 proves fragile · from spec 0012
+- **Renew the Polar production token**: replace `redactnest-production` a few weeks before it expires (about 6 October 2027) with the same 4 scopes, then update `POLAR_ACCESS_TOKEN` on Vercel for Production and redeploy, since Vercel applies a changed value only to new deployments. An expired token fails every signed in plan check, and Subscribe and Manage billing with it. A dated chore, not a decision, so a calendar reminder is the real safety net · from spec 0012
+- **`polar-product.png`'s future**: nothing uploads `docs/design/brand/polar-product.png` any more, since Polar's product image is `src/app/apple-icon.png` (Go live step 9). Decide under spec 0013, AC-6, whether `scripts/make-brand.mjs` keeps writing it; if not, drop it with its check in `tests/unit/brand-files.test.ts` and its mention in root `AGENTS.md` · needs a decision · from spec 0012
+- **Polar checkout's blocked background fetch**: after sign up, Next.js tries to fetch Polar's checkout in the background. The standard policy blocks it and a full page load follows, so checkout opens as it should, with a policy error in the console. If that error matters, make the landing a full page load from the start, and never add a Polar origin to the policy (spec 0012, AC-21 and claim C13) · optional · from spec 0012
 - **Cookie consent banner**: deliberately not built. The only cookies are the strictly necessary auth ones and analytics is cookieless, so no consent is required. Kept here so it does not get added later out of habit.
 
 ## Legend
