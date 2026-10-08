@@ -32,8 +32,62 @@ describe("every kind is complete (INV-9, AC-24)", () => {
     expect(new Set(PRECEDENCE).size).toBe(PRECEDENCE.length);
   });
 
-  it("puts email above phone", () => {
-    expect(PRECEDENCE.indexOf("email")).toBeLessThan(PRECEDENCE.indexOf("phone"));
+  it("orders the seven kinds as the spec does", () => {
+    expect(PRECEDENCE).toEqual([
+      "email",
+      "iban",
+      "card",
+      "us-ssn",
+      "uk-nino",
+      "phone",
+      "date",
+    ]);
+  });
+});
+
+/**
+ * Where two kinds both claim a place, the one with a checksum or a unique
+ * marker keeps it (spec 0005, *Decided within it*). Each case is a value the
+ * lower kind also reads on its own, so the higher kind's place is what decides
+ * it. A numeric date is no such case: the phone detector never reads one
+ * (INV-14, `detect-dates.test.ts`).
+ */
+describe("precedence across the seven kinds (AC-3, AC-24)", () => {
+  it.each<[string, string, [DetectorKind, string][]]>([
+    [
+      "an IBAN over the possible phone number inside its digits",
+      "Pay GB82 WEST 1234 5698 7654 32 today",
+      [["iban", "GB82 WEST 1234 5698 7654 32"]],
+    ],
+    [
+      "a Social Security number over the possible UK number its digits make",
+      "SSN 441234567 on file",
+      [["us-ssn", "441234567"]],
+    ],
+    [
+      "an email over a card number in its local part",
+      "Write to 4111111111111111@example.com today",
+      [["email", "4111111111111111@example.com"]],
+    ],
+  ])("keeps %s", (_what, text, expected) => {
+    expect(found(text)).toEqual(expected);
+  });
+
+  it("finds every kind side by side, in order of start", () => {
+    expect(
+      found(
+        "jane@example.com, 020 7946 0958, 05.12.1980, 4111 1111 1111 1111, " +
+          "GB82 WEST 1234 5698 7654 32, 123-45-6789 and AB 12 34 56 C.",
+      ),
+    ).toEqual([
+      ["email", "jane@example.com"],
+      ["phone", "020 7946 0958"],
+      ["date", "05.12.1980"],
+      ["card", "4111 1111 1111 1111"],
+      ["iban", "GB82 WEST 1234 5698 7654 32"],
+      ["us-ssn", "123-45-6789"],
+      ["uk-nino", "AB 12 34 56 C"],
+    ]);
   });
 });
 
@@ -71,6 +125,8 @@ describe("resolving overlaps (AC-3)", () => {
 describe("line joins", () => {
   it("reads a join inside an email as nothing, and inside anything else as a space", () => {
     expect(readsJoinAsNothing("email")).toBe(true);
-    expect(readsJoinAsNothing("phone")).toBe(false);
+    for (const kind of DETECTOR_KINDS.filter((other) => other !== "email")) {
+      expect(readsJoinAsNothing(kind)).toBe(false);
+    }
   });
 });

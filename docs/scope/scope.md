@@ -22,7 +22,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 9 | Privacy policy & terms | Release 2 | done |
 | 10 | Billing & paid plan | Release 2 | done |
 | 11 | Telemetry & error monitoring | Release 3 | planned |
-| 12 | Remaining detectors | Release 3 | planned |
+| 12 | Remaining detectors | Release 3 | in-progress |
 | 13 | Custom terms | Release 4 | planned |
 | 14 | Manual rectangle redaction | Release 5 | planned |
 | 15 | Marketing site | Release 6 | planned |
@@ -262,11 +262,15 @@ spec [0013](../specs/0013-brand-ui-refresh/index.md) · code in `src/ui/brand-ma
 
 Detectors first (your call, 2026-10-07): spec 0005 already covers them, so they go straight to `/develop` and give visitors more to find right away. Telemetry follows.
 
-### 12. Remaining detectors
+### 12. Remaining detectors · in-progress
 Dates, credit cards with Luhn validation, IBAN with checksum validation, US Social Security numbers, and UK National Insurance numbers, built against the detection spec already written in release 1.
 **Done when:** all five appear in the confirm checklist with their validators applied, and dates in particular do not flood the checklist with noise.
 **Also owed here:** the home page follows the detectors (spec 0013). Rerun `scripts/make-brand.mjs`, read the lead and the band again (they will name seven kinds), check the sample fixture still opens with the all clear line, and check the Finds card still sits well beside the Strips card with seven items, each with its `DETECTOR_LABELS` icon.
-- [ ] Build it: `/develop remaining detectors`
+spec [0005](../specs/0005-pattern-detection/index.md) · code in `src/detect` (new `date.ts`, `card.ts`, `iban.ts`, `us-ssn.ts`, `uk-nino.ts`; `index.ts`, `text.ts`, `dates.ts`), `src/worker/protocol.ts`, `src/lib/detectors.ts`, `scripts/lib/detection-fixtures.mjs`, `scripts/make-fixture.mjs`
+- [x] Build it: `/develop remaining detectors`
+  - [x] The five detectors: `date` (numeric forms through `isNumericDate`, written forms, the birth word tick), `card` (Luhn and `CARD_BRANDS`), `iban` (`IBAN_LENGTHS` and mod 97), `us-ssn` (the SSA's rules and the SSN words) and `uk-nino` (HMRC's prefix rules), each in `DETECTOR_KINDS`, `DETECTORS`, `PRECEDENCE` and `DETECTOR_LABELS` · AC-10, AC-19 to AC-24
+  - [x] Proof: unit tests for each detector and for precedence across all seven, the adversarial shapes and 1 s budgets, and a fixture per kind through the real MuPDF with every unblocked match redacting alone and together · AC-4, AC-6, AC-7, AC-16, INV-14
+  - [x] The home page follows: seven kinds in the lead, the coverage note, the phase line and the Finds card; the sample agreement without its date, so it still opens with seven ticked and the all clear line; `scripts/make-brand.mjs` rerun (only the product shot changed); the Finds rows in two columns at the Strips list's 26rem, your call during the build, so the two cards stay one height (spec 0013's AC-11 owes a line for it) · spec 0013, AC-11, AC-12
 
 ### 11. Telemetry & error monitoring · needs a decision
 Enough numbers to know whether the funnel works and whether anything is failing silently, without ever touching document content.

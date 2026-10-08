@@ -218,7 +218,7 @@ describe("the coverage note and the empty state", () => {
     const note = screen.getByTestId("coverage");
     expect(note).toHaveTextContent(COVERAGE_NOTE);
     expect(COVERAGE_NOTE).toBe(
-      "RedactNest looked for email addresses and phone numbers. Anything else, such as names and addresses, stays in the file.",
+      "RedactNest looked for email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers. Anything else, such as names and addresses, stays in the file.",
     );
     const card = screen.getByTestId("checklist");
     expect(card).toContainElement(note);
@@ -245,7 +245,7 @@ describe("the coverage note and the empty state", () => {
     expect(screen.getByText(NOTHING_FOUND.title)).toBeVisible();
     expect(screen.getByText(NOTHING_FOUND.helper)).toBeVisible();
     expect(NOTHING_FOUND.helper).toBe(
-      "RedactNest found no email addresses or phone numbers. Make a cleaned copy to remove metadata and hidden content.",
+      "RedactNest found no email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers or National Insurance numbers. Make a cleaned copy to remove metadata and hidden content.",
     );
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
@@ -259,7 +259,7 @@ describe("the coverage note and the empty state", () => {
 
     expect(screen.getByTestId("coverage")).toHaveTextContent(COVERAGE_NOTE_PARTLY);
     expect(COVERAGE_NOTE_PARTLY).toBe(
-      "RedactNest looked for email addresses and phone numbers on the pages it could read. Anything else, such as names and addresses, stays in the file.",
+      "RedactNest looked for email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers on the pages it could read. Anything else, such as names and addresses, stays in the file.",
     );
   });
 
@@ -269,7 +269,7 @@ describe("the coverage note and the empty state", () => {
     expect(screen.getByText(NOTHING_FOUND_PARTLY.title)).toBeVisible();
     expect(screen.getByText(NOTHING_FOUND_PARTLY.helper)).toBeVisible();
     expect(NOTHING_FOUND_PARTLY.helper).toBe(
-      "RedactNest found no email addresses or phone numbers on the pages it could read. Make a cleaned copy to remove metadata and hidden content.",
+      "RedactNest found no email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers or National Insurance numbers on the pages it could read. Make a cleaned copy to remove metadata and hidden content.",
     );
     expect(screen.queryByText(NOTHING_FOUND.helper)).not.toBeInTheDocument();
   });

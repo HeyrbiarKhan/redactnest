@@ -20,18 +20,26 @@ import {
   type RedactionTarget,
 } from "@/engine";
 
+import type { DetectorKind } from "@/worker/protocol";
+
 import {
   DETECT_BLOCKED,
+  DETECT_CARD,
+  DETECT_DATE,
   DETECT_DENSE_PAGES,
   DETECT_DENSE_PER_PAGE,
+  DETECT_IBAN,
   DETECT_STAMPED,
   DETECT_EMAIL,
   DETECT_MANY_COUNT,
   DETECT_PHONE,
   DETECT_PHONE_COLUMN,
+  DETECT_PHONE_DATES,
   DETECT_PHONE_LISTED,
   DETECT_PHONE_SPACED,
+  DETECT_UK_NINO,
   DETECT_UNICODE_EMAIL,
+  DETECT_US_SSN,
   DETECT_WRAPS,
   denseRow,
   manyAddress,
@@ -89,6 +97,25 @@ function onePage(show: string): ArrayBuffer {
     pdf.destroy();
   }
 }
+
+/**
+ * Feature 12's fixtures, one per release 3 kind, with what each holds as
+ * found, in reading order, and its tick. The last value in each is wrapped
+ * across two lines of one block.
+ */
+const RELEASE_3: readonly (readonly [
+  DetectorKind,
+  string,
+  readonly (readonly (string | boolean)[])[],
+])[] = [
+  ["date", "detect-date.pdf", DETECT_DATE],
+  ["card", "detect-card.pdf", DETECT_CARD],
+  ["iban", "detect-iban.pdf", DETECT_IBAN],
+  ["us-ssn", "detect-us-ssn.pdf", DETECT_US_SSN],
+  ["uk-nino", "detect-uk-nino.pdf", DETECT_UK_NINO],
+];
+
+const RELEASE_3_FIXTURES = RELEASE_3.map(([, name]) => name);
 
 function targetsOf(matches: readonly FoundMatch[]): RedactionTarget[] {
   return matches.flatMap((match) => (match.target ? [match.target] : []));
@@ -438,6 +465,7 @@ describe("every unblocked match redacts", () => {
     "detect-phone.pdf",
     "detect-unicode.pdf",
     "detect-blocked.pdf",
+    ...RELEASE_3_FIXTURES,
   ])(
     "in %s, each alone, but for the recorded limit",
     async (name) => {
@@ -455,6 +483,7 @@ describe("every unblocked match redacts", () => {
     "detect-phone.pdf",
     "detect-unicode.pdf",
     "detect-blocked.pdf",
+    ...RELEASE_3_FIXTURES,
   ])(
     "in %s, all together, but for the recorded limit",
     async (name) => {
@@ -614,13 +643,26 @@ describe("code points above U+FFFF", () => {
 
 describe("phone numbers (AC-2, AC-10)", () => {
   it("finds every number with the tick its rule gives, and no look alike", async () => {
-    const found = await find("detect-phone.pdf");
+    const found = (await find("detect-phone.pdf")).filter(
+      (match) => match.kind !== "date",
+    );
 
     expect(found.map((match) => [match.text, match.tickedByDefault])).toEqual(
       DETECT_PHONE.map(([text, ticked]) => [text, ticked]),
     );
     expect(found.every((match) => match.kind === "phone" && match.blocked === null)).toBe(
       true,
+    );
+  });
+
+  /** INV-14: the look alike dates are left for `date`, never read as phone numbers. */
+  it("lists the fixture's numeric dates as dates", async () => {
+    const dates = (await find("detect-phone.pdf")).filter(
+      (match) => match.kind === "date",
+    );
+
+    expect(dates.map((match) => [match.text, match.tickedByDefault])).toEqual(
+      DETECT_PHONE_DATES.map(([text, ticked]) => [text, ticked]),
     );
   });
 
@@ -652,6 +694,44 @@ describe("phone numbers (AC-2, AC-10)", () => {
         expect(quad[0]).toBeGreaterThan(quads[index][2]);
       });
     }
+  });
+});
+
+/**
+ * Feature 12: the release 3 kinds (AC-19 to AC-23, AC-10), through the real
+ * MuPDF. Each fixture lists exactly its values with their ticks, none of its
+ * near misses, and nothing of any other kind. The every unblocked match
+ * redacts runs above take each fixture too (AC-6).
+ */
+describe.each(RELEASE_3)("the %s detector on %s", (kind, name, expected) => {
+  it("finds every value with its tick, and no near miss", async () => {
+    const found = await find(name);
+
+    expect(found.map((match) => [match.text, match.tickedByDefault])).toEqual(
+      expected.map(([text, ticked]) => [text, ticked]),
+    );
+    expect(found.every((match) => match.kind === kind && match.blocked === null)).toBe(
+      true,
+    );
+  });
+
+  it("gives the value wrapped across two lines one quad per line (AC-4)", async () => {
+    const text = String(expected[expected.length - 1][0]);
+    const wrapped = (await find(name)).at(-1);
+
+    expect(wrapped?.text).toBe(text);
+    expect(wrapped?.target?.text).toBe(text);
+    const quads = wrapped?.target?.quads ?? [];
+    expect(quads).toHaveLength(2);
+    expect(quads[1][1]).not.toBeCloseTo(quads[0][1], 0);
+  });
+
+  it("gives the first value search()'s quads (AC-7)", async () => {
+    const needle = String(expected[0][0]);
+    const [match] = await find(name);
+    const [hit] = searched(name, 0, needle);
+
+    expectSameQuads(match.target?.quads ?? [], hit);
   });
 });
 

@@ -171,6 +171,31 @@ describe("the words for each kind and reason", () => {
     });
   });
 
+  /** Spec 0005, *Value sourcing*: each release 3 kind's icon, label and nouns. */
+  it.each([
+    ["date", "Calendar", "Dates", "date", "dates"],
+    ["card", "CreditCard", "Card numbers", "card number", "card numbers"],
+    ["iban", "Landmark", "Bank account numbers (IBAN)", "IBAN", "IBANs"],
+    [
+      "us-ssn",
+      "IdCard",
+      "US Social Security numbers",
+      "Social Security number",
+      "Social Security numbers",
+    ],
+    [
+      "uk-nino",
+      "IdCard",
+      "UK National Insurance numbers",
+      "National Insurance number",
+      "National Insurance numbers",
+    ],
+  ] as const)("labels %s", (kind, icon, label, one, other) => {
+    const words = DETECTOR_LABELS[kind];
+    expect(words.icon.displayName).toBe(icon);
+    expect(words).toMatchObject({ label, noun: { one, other } });
+  });
+
   it("says, for every blocked reason, that the value stays in the file", () => {
     expect(Object.keys(BLOCKED_REASON_TEXT).sort()).toEqual([...BLOCKED_REASONS].sort());
     for (const text of Object.values(BLOCKED_REASON_TEXT)) {

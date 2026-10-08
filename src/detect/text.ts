@@ -21,6 +21,31 @@ export function codePoints(text: string): readonly string[] {
   return Array.from(text);
 }
 
+// Each pattern below matches exactly one code point, anchored at both ends
+// with no quantifier, so none can backtrack (INV-7).
+
+/**
+ * A letter or a digit in any script: what a value may not be cut out of. A
+ * value with one touching either end is part of a longer code or word.
+ */
+export const ALPHANUMERIC = /^[\p{L}\p{N}]$/u;
+
+/** A hyphen: `-`, U+2010 to U+2015, or U+2212 minus, as PDFs set them. */
+export const HYPHEN = /^[-‐-―−]$/u;
+
+/**
+ * An ASCII digit. Every number the release 3 detectors read is written in
+ * these: NFKC has already turned fullwidth digits into them, and the checksums
+ * and calendar rules are arithmetic on them.
+ */
+export const ASCII_DIGIT = /^[0-9]$/u;
+
+/** Does the code point at `at` match `pattern`? Past either end, it does not. */
+export function holds(points: readonly string[], at: number, pattern: RegExp): boolean {
+  const point = points[at];
+  return point !== undefined && pattern.test(point);
+}
+
 /** A list of keywords, matched in any case as whole words. */
 export interface WordList {
   readonly pattern: RegExp;

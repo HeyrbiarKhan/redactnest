@@ -167,8 +167,16 @@ describe("OperationCancelled", () => {
  * when something was never stripped from it.
  */
 describe("the kinds a detector can find", () => {
-  it("is exactly the two release 1 builds", () => {
-    expect([...DETECTOR_KINDS]).toEqual(["email", "phone"]);
+  it("is exactly the seven spec 0005 decided, in the checklist's order", () => {
+    expect([...DETECTOR_KINDS]).toEqual([
+      "email",
+      "phone",
+      "date",
+      "card",
+      "iban",
+      "us-ssn",
+      "uk-nino",
+    ]);
   });
 
   it("names each kind once", () => {

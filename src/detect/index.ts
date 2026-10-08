@@ -16,12 +16,22 @@
  * Every detector is linear in its input (INV-7): each file says why.
  */
 
+import { detectCard } from "./card";
+import { detectDate } from "./date";
 import { detectEmail } from "./email";
+import { detectIban } from "./iban";
 import { detectPhone } from "./phone";
 import type { Detector, DetectInput, Span } from "./types";
+import { detectUkNino } from "./uk-nino";
+import { detectUsSsn } from "./us-ssn";
 import type { DetectorKind } from "@/worker/protocol";
 
+export { CARD_BRANDS, type CardBrand } from "./card";
+export { BIRTH_WORDS, MONTHS } from "./date";
+export { IBAN_LENGTHS } from "./iban";
 export { KEYWORD_REACH } from "./text";
+export { NI_PREFIX_RULES } from "./uk-nino";
+export { SSN_WORDS } from "./us-ssn";
 export {
   EXTENSION_MARKERS,
   MAX_PARSES_PER_GROUP,
@@ -40,17 +50,31 @@ export type { Detector, DetectInput, Span } from "./types";
 export const DETECTORS: Readonly<Record<DetectorKind, Detector>> = Object.freeze({
   email: detectEmail,
   phone: detectPhone,
+  date: detectDate,
+  card: detectCard,
+  iban: detectIban,
+  "us-ssn": detectUsSsn,
+  "uk-nino": detectUkNino,
 });
 
 /**
  * Which kind keeps a place two kinds both claim, highest first. Spec 0005,
  * *Decided within it*: a kind with a checksum or a unique marker outranks a
- * looser digit shape. The full order is `email`, `iban`, `card`, `us-ssn`,
- * `uk-nino`, `phone`, `date`; release 1 holds the two it builds. A rule about
- * patterns, not a cap on the visitor. `tests/unit/detect.test.ts` fails
- * `pnpm typecheck` when a kind has no place here (AC-24).
+ * looser digit shape, so an IBAN's digits never list as a phone number. A
+ * rule about patterns, not a cap on the visitor. `date` comes last, but no
+ * numeric date is ever lost to `phone` for it: the phone detector never reads
+ * one (INV-14). `tests/unit/detect.test.ts` fails `pnpm typecheck` when a kind
+ * has no place here (AC-24).
  */
-export const PRECEDENCE = Object.freeze(["email", "phone"] as const);
+export const PRECEDENCE = Object.freeze([
+  "email",
+  "iban",
+  "card",
+  "us-ssn",
+  "uk-nino",
+  "phone",
+  "date",
+] as const);
 
 /**
  * Every span in one block, in order of `start`, with no position claimed by

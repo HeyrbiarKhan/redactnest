@@ -392,6 +392,171 @@ export function detectPhone() {
   ]);
 }
 
+/**
+ * The dates `detect-phone.pdf` holds. Spec 0005, INV-14: a numeric date is
+ * never read as a phone number, so each is left for `date`, and each sits
+ * within reach of "Born", so each is ticked.
+ */
+export const DETECT_PHONE_DATES = Object.freeze([
+  ["12/05/1980", true],
+  ["2026-09-27", true],
+  ["05.12.1980", true],
+]);
+
+/**
+ * The values each release 3 fixture holds, as found, in reading order, with
+ * their tick. Spec 0005, AC-19 to AC-23 and AC-10. The last of each is the one
+ * wrapped across two lines of one block, which the line join finds whole.
+ */
+export const DETECT_DATE = Object.freeze([
+  ["27 September 2026", false],
+  ["05.12.1980", true],
+  ["12th of Sept. 1985", true],
+  ["March 3, 2027", false],
+  ["2026-09-27", false],
+  ["09/30/2026", false],
+  ["1 May 1990", true],
+  ["27 September 2026", false],
+]);
+
+export const DETECT_CARD = Object.freeze([
+  ["4111 1111 1111 1111", true],
+  ["5555-5555-5555-4444", true],
+  ["378282246310005", true],
+  ["6011 1111 1111 1117", true],
+  ["4012 8888 8888 1881", true],
+]);
+
+export const DETECT_IBAN = Object.freeze([
+  ["GB82 WEST 1234 5698 7654 32", true],
+  ["DE89370400440532013000", true],
+  ["FR14 2004 1010 0505 0001 3M02 606", true],
+  ["NL91 ABNA 0417 1643 00", true],
+]);
+
+export const DETECT_US_SSN = Object.freeze([
+  ["123-45-6789", true],
+  ["234 56 7890", true],
+  ["345678901", true],
+  ["567 89 0123", true],
+]);
+
+export const DETECT_UK_NINO = Object.freeze([
+  ["AB 12 34 56 C", true],
+  ["ce123456d", true],
+  ["PX123456", true],
+  ["JK 65 43 21 B", true],
+]);
+
+/**
+ * Spec 0005, AC-19 and AC-10. Dates, written and numeric, each ticked only
+ * after a birth word; the near misses a document is full of (a year alone, a
+ * month and year, a day and month, a time, a date cut from a code, impossible
+ * dates); and a written date wrapped across two lines of one block.
+ */
+export function detectDate() {
+  return document(() => [
+    {
+      content:
+        line("F1", 12, 72, 740, "Signed 27 September 2026 by both parties") +
+        line("F1", 12, 72, 720, "Date of birth: 05.12.1980") +
+        line("F1", 12, 72, 700, "DOB 12th of Sept. 1985 (verified)") +
+        line("F1", 12, 72, 680, "Renewal due on March 3, 2027 at noon") +
+        line("F1", 12, 72, 660, "Invoice dated 2026-09-27, paid 09/30/2026") +
+        line("F1", 12, 72, 640, "Born on 1 May 1990 in Leeds") +
+        line("F1", 12, 72, 620, "Since 2019, in September 2026, on 27 September") +
+        line("F1", 12, 72, 600, "Meeting at 12:30 on Tuesday, ref INV-05.12.1980") +
+        line("F1", 12, 72, 580, "Impossible 31.02.1980 and 31 April 2026") +
+        line("F1", 12, 72, 560, "The lease began on 27 September") +
+        line("F1", 12, 72, 546, "2026 and runs for one year"),
+    },
+  ]);
+}
+
+/**
+ * Spec 0005, AC-20. Test card numbers spaced, hyphenated and unbroken, from
+ * four brands; a Luhn failure, a number no brand issues and one cut from a
+ * longer number; and a card wrapped across two lines of one block.
+ */
+export function detectCard() {
+  return document(() => [
+    {
+      content:
+        line("F1", 12, 72, 740, "Visa 4111 1111 1111 1111 on file") +
+        line("F1", 12, 72, 720, "Mastercard 5555-5555-5555-4444 expires soon") +
+        line("F1", 12, 72, 700, "Amex 378282246310005 for travel") +
+        line("F1", 12, 72, 680, "Discover 6011 1111 1111 1117.") +
+        line("F1", 12, 72, 660, "Order 4111 1111 1111 1112 failed") +
+        line("F1", 12, 72, 640, "Account 1234 5678 9012 3456 has no brand") +
+        line("F1", 12, 72, 620, "Reference 4111 1111 1111 1111 12 is too long") +
+        line("F1", 12, 72, 600, "Backup card 4012 8888") +
+        line("F1", 12, 72, 586, "8888 1881 kept on file"),
+    },
+  ]);
+}
+
+/**
+ * Spec 0005, AC-21. The published example IBANs for four countries, grouped,
+ * unbroken and with letters inside; a wrong check, an unknown country and
+ * lower case; and a grouped IBAN wrapped across two lines of one block.
+ */
+export function detectIban() {
+  return document(() => [
+    {
+      content:
+        line("F1", 12, 72, 740, "IBAN GB82 WEST 1234 5698 7654 32 for salary") +
+        line("F1", 12, 72, 720, "Pay DE89370400440532013000 by Friday") +
+        line("F1", 12, 72, 700, "Account FR14 2004 1010 0505 0001 3M02 606.") +
+        line("F1", 12, 72, 680, "Typo GB82WEST12345698765433 rejected") +
+        line("F1", 12, 72, 660, "Unknown XX82WEST12345698765432 country") +
+        line("F1", 12, 72, 640, "Lower gb82west12345698765432 case") +
+        line("F1", 12, 72, 620, "Transfer to NL91 ABNA") +
+        line("F1", 12, 72, 606, "0417 1643 00 today"),
+    },
+  ]);
+}
+
+/**
+ * Spec 0005, AC-22. Social Security numbers hyphenated and spaced, a bare one
+ * after an SSN phrase; a bare run with no SSN word and numbers the SSA never
+ * issues; and a spaced number wrapped across two lines of one block.
+ */
+export function detectUsSsn() {
+  return document(() => [
+    {
+      content:
+        line("F1", 12, 72, 740, "SSN 123-45-6789 on file") +
+        line("F1", 12, 72, 720, "Spouse 234 56 7890 listed") +
+        line("F1", 12, 72, 700, "Social Security number: 345678901") +
+        line("F1", 12, 72, 680, "Order 456789012 shipped") +
+        line("F1", 12, 72, 660, "Never issued 666-12-3456, 900-12-3456 and 123-45-0000") +
+        line("F1", 12, 72, 640, "Applicant number 567 89") +
+        line("F1", 12, 72, 626, "0123 confirmed"),
+    },
+  ]);
+}
+
+/**
+ * Spec 0005, AC-23. National Insurance numbers spaced, in lower case and with
+ * no suffix; HMRC's own example and prefixes it never issues; and a number
+ * wrapped across two lines of one block.
+ */
+export function detectUkNino() {
+  return document(() => [
+    {
+      content:
+        line("F1", 12, 72, 740, "NI number AB 12 34 56 C on payslip") +
+        line("F1", 12, 72, 720, "Employee ce123456d joined") +
+        line("F1", 12, 72, 700, "Ref PX123456 without suffix") +
+        line("F1", 12, 72, 680, "Example QQ 12 34 56 C is never issued") +
+        line("F1", 12, 72, 660, "Prefixes GB 12 34 56 A and TN123456B are never used") +
+        line("F1", 12, 72, 640, "Codes DA123456A and AB1234567") +
+        line("F1", 12, 72, 620, "His number is JK 65 43") +
+        line("F1", 12, 72, 606, "21 B as printed"),
+    },
+  ]);
+}
+
 /** The addresses `detect-blocked.pdf` holds, by the reason each is blocked. */
 export const DETECT_BLOCKED = Object.freeze({
   slanted: "slanted@example.com",
@@ -540,6 +705,10 @@ export const SAMPLE_AGREEMENT = Object.freeze({
  * and three phone numbers, every page readable and nothing blocked, so the
  * review opens with the all clear line and all seven ticked.
  *
+ * It holds no date, card, IBAN or national number on purpose, so the shot shows
+ * exactly the seven items spec 0013 describes, every one ticked: a contract's
+ * own date is listed unticked by the `date` detector (spec 0005, AC-10).
+ *
  * The UK numbers are both London drama numbers on purpose. Ofcom's drama
  * mobile range (`07700 900xxx`) is reserved too, but the phone metadata does
  * not call it a valid allocation, so the detector lists such a number unticked
@@ -557,7 +726,7 @@ export function sampleAgreement() {
           11,
           72,
           700,
-          "This agreement is made on 2 March 2026 between Larkfield Studio Ltd (the Company)",
+          "This agreement is made between Larkfield Studio Ltd (the Company)",
         ) +
         line(
           "F1",
@@ -608,13 +777,7 @@ export function sampleAgreement() {
           `can be reached on ${us} for anything sent from the United States.`,
         ) +
         line("F1", 13, 72, 598, "6. Signatures") +
-        line(
-          "F1",
-          11,
-          72,
-          576,
-          "Signed for Larkfield Studio Ltd and by the Employee on the date above.",
-        ),
+        line("F1", 11, 72, 576, "Signed for Larkfield Studio Ltd and by the Employee."),
     },
   ]);
 }

@@ -1,0 +1,44 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<<  /Length 523 >>
+stream
+BT /F1 12 Tf 72 740 Td (IBAN GB82 WEST 1234 5698 7654 32 for salary) Tj ET
+BT /F1 12 Tf 72 720 Td (Pay DE89370400440532013000 by Friday) Tj ET
+BT /F1 12 Tf 72 700 Td (Account FR14 2004 1010 0505 0001 3M02 606.) Tj ET
+BT /F1 12 Tf 72 680 Td (Typo GB82WEST12345698765433 rejected) Tj ET
+BT /F1 12 Tf 72 660 Td (Unknown XX82WEST12345698765432 country) Tj ET
+BT /F1 12 Tf 72 640 Td (Lower gb82west12345698765432 case) Tj ET
+BT /F1 12 Tf 72 620 Td (Transfer to NL91 ABNA) Tj ET
+BT /F1 12 Tf 72 606 Td (0417 1643 00 today) Tj ET
+
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R >>  >> /Contents 5 0 R >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000212 00000 n 
+0000000307 00000 n 
+0000000882 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1020
+%%EOF

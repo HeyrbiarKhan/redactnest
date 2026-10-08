@@ -15,9 +15,14 @@ import type { DetectorKind } from "@/worker/protocol";
  * `011`, `(0)` and `+` prefixes; real numbers side by side; and repeated
  * partial dates.
  *
+ * Release 3 adds each new kind's own shapes: its values side by side, and cut
+ * short just before they would hold. Every detector reads every shape, so
+ * each is also tried on the others' worst cases.
+ *
  * Three proofs. Each detector finishes a 100,000 character block of every
- * shape within its budget: a second for email, two for phone, whose every
- * candidate costs one parse by libphonenumber-js. Each grows linearly. And
+ * shape within its budget: a second for email and for each release 3
+ * detector, two for phone, whose every candidate costs one parse by
+ * libphonenumber-js. Each grows linearly. And
  * the phone detector never asks libphonenumber-js for more than
  * `MAX_PARSES_PER_GROUP` parses per digit group, counted as real calls to the
  * parser rather than timed, so that bound holds on any machine.
@@ -45,6 +50,11 @@ const LENGTH = 100_000;
 const BUDGET_MS: Readonly<Record<DetectorKind, number>> = Object.freeze({
   email: 1_000,
   phone: 2_000,
+  date: 1_000,
+  card: 1_000,
+  iban: 1_000,
+  "us-ssn": 1_000,
+  "uk-nino": 1_000,
 });
 
 const KINDS = Object.keys(DETECTORS) as DetectorKind[];
@@ -144,6 +154,21 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["US numbers side by side", "(212) 555-0123 "],
   ["phone numbers with extensions", "020 7946 0958 ext. 1 "],
   ["repeated partial dates", "12/05/19 27.09.20 2026-09-"],
+  // Release 3's shapes: each kind's own value side by side, and each cut
+  // short just before it would hold, so every start reads as far as it can.
+  ["written dates side by side", "27th of Sept. 2026 "],
+  ["written dates cut short", "27th of Sept. "],
+  ["month names and days with no year", "September 27, "],
+  ["card numbers side by side", "4111 1111 1111 1111 "],
+  ["unbroken card numbers", "4111111111111111 "],
+  ["IBANs side by side", "GB82 WEST 1234 5698 7654 32 "],
+  ["IBANs cut short", "GB82 WEST 1234 5698 "],
+  ["country codes and check digits", "DE89 "],
+  ["capital letters in groups of four", "ABCD EFGH "],
+  ["Social Security numbers side by side", "123-45-6789 "],
+  ["bare nine digit runs after an SSN word", "SSN 123456789 "],
+  ["National Insurance numbers side by side", "AB 12 34 56 C "],
+  ["National Insurance prefixes cut short", "AB 12 34 "],
 ];
 
 /**

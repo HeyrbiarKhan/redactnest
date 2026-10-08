@@ -101,7 +101,8 @@ export default function HomePage() {
               {HOME_TEXT.band.title}
             </h2>
             <div className="grid gap-6 md:grid-cols-2">
-              <Card data-testid="home-finds" spacious>
+              {/* The query container for the Finds columns below. */}
+              <Card data-testid="home-finds" spacious className="@container">
                 <BandCardHeader
                   icon={ScanSearch}
                   title={HOME_TEXT.band.finds.title}
@@ -113,12 +114,24 @@ export default function HomePage() {
                   cursor rule leaves it the arrow (AC-33). `canvas`, not
                   `subtle`, which is the checklist's hover tint and would make
                   a row look pressable.
+
+                  With seven detectors (feature 12) one column of rows stood
+                  twice as tall as Strips, so the rows take two columns at the
+                  same 26rem of card content as the Strips list, 12 pixels
+                  apart like the rows. The two cards are always the same width,
+                  so both fold together and stay close in height. Still one
+                  list, read down the first column, then the second; a row
+                  never splits across the columns, and at 200% text the list
+                  stays one column.
                 */}
-                <ul role="list" className="flex flex-col gap-3">
+                <ul
+                  role="list"
+                  className="flex flex-col gap-3 @min-[26rem]:block @min-[26rem]:columns-2 @min-[26rem]:gap-x-3"
+                >
                   {findsItems().map(({ icon, label }) => (
                     <li
                       key={label}
-                      className="flex items-center gap-5 rounded-xl bg-canvas px-3 py-2.5 font-semibold text-ink"
+                      className="flex break-inside-avoid items-center gap-5 rounded-xl bg-canvas px-3 py-2.5 font-semibold text-ink @min-[26rem]:not-last:mb-3"
                     >
                       <IconCircle icon={icon} tone="accent" shape="square" />
                       {label}

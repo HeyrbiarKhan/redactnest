@@ -30,7 +30,9 @@ describe("the hero (AC-10)", () => {
     expect(HOME_TEXT.lead).toBe(
       `RedactNest finds ${lookedFor("conjunction")} in your PDF, lets you tick what to remove, and takes that text out of the file itself.`,
     );
-    expect(HOME_TEXT.lead).toContain("email addresses and phone numbers");
+    expect(HOME_TEXT.lead).toContain(
+      "email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers",
+    );
   });
 
   it("gives the trio its three icons, titles and lines, in order", () => {
@@ -120,6 +122,11 @@ describe("the finds and strips cards (AC-11)", () => {
     expect(findsItems().map(({ icon, label }) => [icon.displayName, label])).toEqual([
       ["Mail", "Email addresses"],
       ["Phone", "Phone numbers"],
+      ["Calendar", "Dates"],
+      ["CreditCard", "Card numbers"],
+      ["Landmark", "Bank account numbers (IBAN)"],
+      ["IdCard", "US Social Security numbers"],
+      ["IdCard", "UK National Insurance numbers"],
     ]);
     expect(findsItems()).toEqual(
       DETECTOR_KINDS.map((kind) => ({
