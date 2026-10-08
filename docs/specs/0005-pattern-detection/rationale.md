@@ -83,6 +83,17 @@ A small named entity recognition model (a model that tags words as names, places
 | A slash between digit groups (update of 2026-09-27) | separates numbers | glues groups, as first built |
 | Phone extensions (update of 2026-09-27) | a fixed marker list, never a comma | the library's own markers |
 | Proof of the phone detector's cost (update of 2026-09-27) | a parse count as well as a time budget | a time budget only |
+| Where the card neighbour rule is recorded (update of 2026-10-08) | this spec, updated in place | a new spec amending it |
+| What counts as one number beside a card (update of 2026-10-08) | whole units: unbroken and hyphen glued digits never cut, space parted groups separate | also unticked rows cut from unbroken runs; or hyphens parting groups like spaces |
+| Group sizes in a spaced card (update of 2026-10-08) | first 4 to 6 digits, the rest 3 to 6 | any sizes, as first built |
+| Which passing window is the card (update of 2026-10-08) | the longest whose end is clear, else the shortest | the longest; or every passing window merged |
+| Tick for a card read from a longer run (update of 2026-10-08) | ticked, like every card | unticked |
+| IBAN, SSN and NI beside other digits (update of 2026-10-08) | no rule change, the layouts pinned in tests | the finding recorded only |
+| The last group of a spaced card, after the cross check (update of 2026-10-08) | 1 to 6 digits, so payment form layouts are found | 3 to 6, as first approved |
+| A number of 4 to 6 digits just before a card (update of 2026-10-08) | a recorded limit | a start side rule, which moves the risk after the card |
+| A hyphen or dash before an expiry (update of 2026-10-08) | parts when its far side touches a slash shape | glues, recorded as a limit |
+| A short group glued to a slash, `12` of `12/28` (update of 2026-10-08) | ends the run, so long cards before an expiry stay whole | read as a unit, as first written |
+| A higher match cutting into a lower one (update of 2026-10-08) | the lower keeps each free stretch as its own row | merged into the higher; or dropped whole, as first built |
 
 ## Rationale
 
@@ -198,6 +209,154 @@ A prototype of this design (outside the repository) was measured the same day on
 
 libphonenumber-js's `Metadata` gives the national lengths the readings table is written from (`possibleLengths()`: GB 7, 9 and 10; US 10) and the international prefixes (`IDDPrefix()`: GB `00`, US `011`). `isPossible()` alone also accepts a UK number of a `0` and 6 or 8 digits, which are local only lengths (dialled without an area code); the table leaves them out on purpose.
 
+## Update of 2026-10-08: a card beside other digits
+
+`/develop` built feature 12 and reported a silent miss: `4111111111111111 12/28`, a card then its expiry, gave no row and no warning. It asked for a decision for cards, and a check of whether IBAN, Social Security and National Insurance numbers miss the same way.
+
+### Context
+
+The card detector read a run of digit groups joined by single spaces or single hyphens as one candidate, and judged the run whole: 13 to 19 digits, Luhn, a brand prefix, and no digit, or separator then digit, touching either end. The rule existed so a longer number is never cut into a card. But the run had no idea where a card ends, so any digits after a single space joined it, and the whole failed. A card's expiry, a CVV, a date, a second card or a row number one space away made the card vanish.
+
+The line join makes this worse than it looks (AC-4). Lines in one text block join with one space, so a card at the end of a line and an expiry, a phone number or another card on the next line form one run. A probe page drew `4111111111111111` and `12/28` ten ways: separate text objects 0, 1, 2, 3, 6 and 12 points apart, and one `TJ` with kerns of 0, 100, 250 and 500 thousandths of an em. Today's find step listed no card on any of the ten lines. MuPDF's ordinary read gave a space for every gap of 2 points or more, and at 12 points split the two onto separate lines of one block, which the join puts back together with a space. Only gaps of 1 point or less read as touching digits.
+
+Two layouts were worse than a miss. `3782 822463 10005 12/28` (American Express, grouped 4, 6, 5) and `3056 930902 5904 12/28` (Diners Club, 4, 6, 4) were each listed as a phone number cut from the card's first ten digits, the Diners one ticked, so the visitor saw a row and the rest of the card stayed. `4 4111 1111 1111 1111` gave the phone row `4 4111 1111`.
+
+The tension the decision has to hold: favour finding (an extra row costs the visitor a glance, a missed value stays in the file) against never cutting a real longer number into a false card that starts ticked.
+
+### Options considered
+
+For what counts as one number:
+
+**Whole units (chosen).** A unit is an unbroken digit group, or groups glued by single hyphens, and is never cut; units parted by one space are separate, and a card is any window of whole units that passes.
+- Pros: fixes every measured layout; an unbroken or hyphenated longer number is never cut, which is where "one number" is certain.
+- Cons: a spaced number of 18 to 24 digits that is not a card now lists a false card 2.8% to 8.2% of the time.
+
+**Whole units, plus unticked rows cut from unbroken runs.**
+- Pros: would also catch a card drawn touching other digits.
+- Cons: long references and barcodes then list unticked card rows; the probe shows a touching layout needs a gap of 1 point or less, which no layout seen uses.
+
+**Hyphens part groups like spaces.**
+- Pros: finds `4111-1111-1111-1111-12`.
+- Cons: cuts hyphenated codes such as licence keys into false cards, for a layout nobody writes.
+
+For which passing window is the card, measured below:
+
+**The longest whose end is clear, else the shortest (chosen).**
+- Pros: never takes a neighbour's digits; a 19 digit card alone is still whole.
+- Cons: a 19 digit card with more digits after it on its line keeps its last three digits when its first 16 also pass (10.3% of those). The cross check below narrowed this: before an expiry or a slashed date such a card is now whole.
+
+**The longest that passes**, the phone detector's rule.
+- Pros: simplest to state; never leaves a card digit.
+- Cons: takes the first group of a spaced phone number or SSN on the next line 3.8% to 5.8% of the time, and AC-3 then drops that number's row whole, so the rest of it stays with no row.
+
+**Every passing window, merged into one row.**
+- Pros: leaves no card digit in any layout measured.
+- Cons: takes a neighbour's first group 6.1% to 7.4% of the time, so AC-3 would have to change for every kind to keep the cut neighbour's rest as its own row.
+
+### Rationale
+
+Whole units, because "a longer number" is only certain when nothing parts it: an unbroken run, or groups glued by hyphens, is one token on the page and must never be cut. A single space is exactly how cards themselves are grouped, and exactly what the line join leaves, so it cannot mean "one number". Cutting there is the favour finding call, and its cost is visible: a false card shows as a row with its context. The group size rule is a fact about how issuers print cards (4 4 4 4, 4 6 5, 4 6 4, 4 4 4 4 3) and how payment forms group them (fours, with a short last group), and it removes the stray digit cases at no measured cost beyond groupings nobody prints.
+
+The clear end rule picks the residue that does the least harm. Each rule leaves something in a rare layout; the chosen one only ever leaves the last group of an uncommon 17 to 19 digit card with more digits after it, with its first 16 removed and the rest in the row's context, while the longest window rule can leave most of someone's Social Security or phone number with no row at all. On its own it needs no change to AC-3; the overlap fix of the cross check below changes AC-3 for a separate reason. Cards stay ticked: the usual layout is a card then its expiry, and unticking those would leave the card in the file by default, which is the miss being fixed.
+
+IBAN, Social Security and National Insurance numbers already pass, because their own boundary checks reject only a letter or digit glued to the value. They get tests rather than a rule change, so a later edit cannot quietly tighten them the way the card rule was.
+
+### Evidence: the four kinds beside other digits
+
+Measured on 2026-10-08 through the real `detect` (all seven kinds, with precedence), in the scratch tooling the engineer uses for detection (a `jiti` script outside the repository):
+
+| Text | Before this update |
+|---|---|
+| `4111111111111111 12/28`, `4111 1111 1111 1111 12/28`, `4111-1111-1111-1111 12/28` | nothing |
+| `4111111111111111 123`, `4111 1111 1111 1111 123` (CVV) | nothing |
+| `4111111111111111 05/12/2026`, `4111111111111111 05.12.2026` | the date only |
+| `1 4111 1111 1111 1111`, `03 4111111111111111 12/28` | nothing |
+| `4111111111111111 5555555555554444`, the same spaced | nothing |
+| `3782 822463 10005 12/28` | phone `3782 822463`, unticked |
+| `3056 930902 5904 12/28` | phone `3056 930902`, ticked |
+| `5555 5555 5555 4444 03 28` | phone `5555 4444 03`, unticked |
+| `4111111111111111\t12/28`, `4111111111111111  12/28` | the card (a tab or two spaces end the run) |
+| `GB82 WEST 1234 5698 7654 32 15/03/2026`, `GB82WEST12345698765432 1234`, `BE68 5390 0754 7034 2026`, `12 GB82 WEST 1234 5698 7654 32` | the IBAN, whole |
+| `123-45-6789 15/03/2026`, `123 45 6789 1234`, `12 123-45-6789`, `1234 123 45 6789`, `SSN 123456789 1234` | the SSN, whole |
+| `AB 12 34 56 C 15/03/2026`, `AB123456C 1234`, `AB123456 1234`, `AB 12 34 56 1234`, `12 AB123456C` | the NI number, whole |
+
+### Evidence: the window rules on random cards
+
+A prototype of each rule, measured on 1,000 random valid cards per layout across six brands (Visa 16, Mastercard, American Express, Discover 16, Diners Club 14, UnionPay 19), each spaced as printed and unbroken, with the group size rule on. *Left* is the share where some card digit had no card row; *taken* the share where a neighbour's digit went into a card row.
+
+| Layout | Before | Longest | Longest clear, else shortest (chosen) | Every window merged |
+|---|---|---|---|---|
+| card `12/28`, card `03 28`, card date, two cards | left 100% | left 0%, taken 0% | left 1.8% to 2.1%, taken 0% | left 0%, taken 0% |
+| card then CVV | left 94% to 95% | left 0%, taken 5.4% | left 1.3%, taken 5.4% | left 0%, taken 6.2% |
+| spaced card, UK phone on the next line | left 100% | taken 3.8% | left 1.2%, taken 0% | taken 7.4% |
+| spaced card, spaced SSN on the next line | left 100% | taken 5.8% | left 1.7%, taken 0% | taken 6.1% |
+| row number or a lone `4`, then the card | left 100% | left 0% | left 0% | left 0% |
+| 19 digit UnionPay then `12/28` | left 100% | left 0% | left 10.3% | left 0% |
+
+Every *left* under the chosen rule is a 19 digit UnionPay card (one sample in six) whose first 16 digits also passed; every *taken* of a CVV is harmless. Without the group size rule, a row number joined a card 1.0% of the time and a lone `4` 6.3%, and an unbroken card took a neighbour's first group 4.7% to 6.4%; with it, all three were 0%.
+
+False cards on 10,000 random spaced numbers per shape, any window rule: 2.8% of 16 digit numbers in fours (unchanged, Luhn and a brand by chance), 2.8% at 18 digits (0.8% before), 5.6% at 20 and 22, 8.2% at 24 (0% before).
+
+### Cross check of the amendment
+
+A read only pass on a second model (Sonnet 5.5) checked every example against a literal prototype of the rule and found them right, and the linear time claim sound. It raised seven points; the engineer took the recommended fix for five and asked for a real fix, not a limits line, for two (the hyphen before an expiry, and a false card cutting a real row). Its points, and what became of each:
+
+1. A spaced card ending in a short group, as payment forms print a 13, 17 or 18 digit card, was never found under "the rest 3 to 6": measured 0% of 1,000 each. The last group may now hold 1 to 6 digits; found 100% alone.
+2. A 4 to 6 digit number just before a card can take the card's first groups. Recorded as a limit with its measurement; every start side rule tried moves the same risk to after the card.
+3. A hyphen or dash glued to an expiry left the card unfound. Fixed by parting such hyphens (below).
+4. AC-28 said "only its own characters" while a CVV ending the run may join the card. AC-28 and the decision now say when a group after a card joins it.
+5. Step 5's clear end restated as "reaches the run's last unit, with no dot or slash and a digit after it", which is what the longer wording came to; nothing is checked before a window's start, as before.
+6. Builder details written down: the span's extent, the 19 digit limit test's layout and how to build its number, the per kind tests against `detect`, the shared `SHAPES`, the fixture order and the `verify.md` rewrite.
+7. A false card overlapping a real phone, SSN or NI row dropped that row whole. Fixed by keeping the free part as its own row (below).
+
+### Evidence: parting a hyphen next to an expiry or a date
+
+The same prototype, with a hyphen that parts when the group on its far side touches a slash and a digit, against one that always glues. 1,000 random valid cards per layout, six brands:
+
+| Layout | Found whole, gluing | Found whole, parting |
+|---|---|---|
+| spaced card `-12/28`, spaced card `–12/28`, unbroken card `-12/28`, unbroken card `–05/12/2026`, hyphenated card `-12/28`, `12/28-` unbroken card | 0% | 100% |
+| spaced card `-1228` (no slash) | 0% | 0% |
+
+False cards on 10,000 random hyphenated codes per shape: licence keys `dddd-dddd-dddd-dddd-dddd` and `ddddd-ddddd-ddddd-ddddd`, and `2026-09-27-` then 12 digits, 0% either way (no slash, so every hyphen still glues). Only 16 random digits followed by `-NN/NN` gain false cards (0.8% to 2.8%), which is the shape of a card and its expiry. No detection test string or fixture line changes.
+
+### Evidence: a short group glued to a slash ends the run
+
+With the `12` of `12/28` and the `05` of `05/12/2026` ending the run, a 17 to 19 digit card before an expiry or a slashed date reaches the run's end, so its whole window is taken. 2,000 random cards each: UnionPay 19 spaced 4 4 4 4 3 found whole before ` 12/28` 89.0% before the change and 100% after, before ` 05/12/2026` 89.2% and 100%; Discover 17 (4 4 4 4 1) 85.4% and 100%; Discover 18 (4 4 4 4 2) 86.5% and 100%; a spaced expiry ` 12 28` is unchanged (85% to 89%, the recorded limit); 16 digit cards 100% either way. No detection test string or fixture line changes.
+
+### Evidence: what an overlap leaves
+
+A real value after or before random digit groups, through all seven detectors with the amended card rule; the share of 10,000 cases where some digit of the real value has no row, under each overlap rule:
+
+| Real value and layout | Drop whole | Keep pieces | Merge |
+|---|---|---|---|
+| spaced SSN after three random groups of four | 2.66% | 0% | 0% |
+| spaced SSN before three random groups of four | 3.64% | 0% | 0% |
+| spaced SSN after two random groups of five | 1.74% | 0% | 0% |
+| dotted date after three random groups of four | 0.29% | 0% | 0% |
+| UK number after three random groups of four | 12.21% | 9.81% | 9.81% |
+| US number `212 555 0123` after three random groups of four | 40.53% | 39.69% | 39.69% |
+
+Pieces and merging cover the same digits. What both leave on the phone rows is the phone detector's own choice (a valid window starting in the random groups and ending inside the number), present in today's code without any card: one random 4 digit group before `212 555 0123` leaves digits 36.2% of the time. That is a Follow-up in `index.md`, not part of this decision.
+
+On every detection test string and fixture line (566 holding a digit), keeping pieces changes one result: `Call 020 7946 0958@example.com`, which now lists the phone piece `020 7946` beside the email. Merging changes no extent beyond that one, but rewrites the higher row there into the email `020 7946 0958@example.com`. Pieces won because the higher row is never touched: each piece has its own kind and tick, so unticking a false card cannot untick the rest of a real number, and no kind's own reading (the email's line join rule above all) is applied to another kind's characters. The cost is fragment rows, including a piece of a chance reading (`123 45 6789 1234` lists an unticked phone piece `1234`).
+
+### Evidence: the final rule
+
+The complete amended rule (group sizes with a free last group, parting hyphens, the short slash group ending the run, the clear end, pieces on overlap), 1,000 random valid cards per layout, six brands, spaced (unbroken were 0% everywhere):
+
+| Layout | Card digits left | Neighbour digits taken into the card |
+|---|---|---|
+| card `12/28`, card `05/12/2026`, card `-12/28`, row number or lone `4` then card, card alone | 0% | 0% |
+| card `03 28` / `1228` / `05.12.2026` / another card | 1.0% to 1.6% (17 to 19 digit cards only) | 0% |
+| card then CVV | 2.6% | 6.1% (the CVV, when the two pass together) |
+| card, next line spaced SSN | 1.1% | 0%, and 0% of the SSN's digits left |
+| card, next line UK number | 2.0% | 0% (the phone's own choice leaves 11% to 13% of its digits; see the Follow-up) |
+| 4 digit number then card | 2.5% | 3.0% |
+| 6 digit number then card | 2.0% | 2.0% |
+
+False cards on 10,000 random spaced numbers: 16 digits in fours 2.8%, 18 grouped 4 4 4 4 2 3.6%, 20 in fours 5.4%, 22 grouped 4 4 4 4 4 2 6.3%, 24 in fours 8.1%.
+
 ## References
 
 **Project sources** (verifiable, in this repo):
@@ -212,6 +371,9 @@ libphonenumber-js's `Metadata` gives the national lengths the readings table is 
 - `node_modules/libphonenumber-js/max/index.d.ts`: `parsePhoneNumberFromString` with its declared `extract` option, and `Metadata` with `numberingPlan.possibleLengths()` and `IDDPrefix()`.
 - `tests/unit/detect-adversarial.test.ts` and `verify.md`: where `/develop` recorded the three owed decisions.
 - `docs/.agent-cache/research/pattern-detection.md`: the research check of 2026-09-27 behind the links below.
+- The update's measurements of 2026-10-08: the four kinds beside other digits through `detect` in `src/detect`, a prototype of each card window rule on random valid cards and random spaced numbers, a probe page read through `openDocumentWith` and `findMatches` in `src/engine` on the MuPDF.js 1.28.1 in `node_modules`, and, after the cross check, the parting hyphen, the short slash group and the three overlap rules on random layouts and on every detection test string and fixture line, all outside the repository.
+- `tests/unit/detect.test.ts`'s "drops a lower kind's span whole … never trims it", the test that pinned the overlap rule this update replaces.
+- `src/detect/card.ts`, `iban.ts`, `us-ssn.ts` and `uk-nino.ts` as built by feature 12 (commit `686df40`), and `tests/unit/detect-card.test.ts`'s "never cut from a longer number" block.
 
 **Practices & standards**:
 - ISO 13616 IBAN, checked by ISO 7064 MOD 97-10.
