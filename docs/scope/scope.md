@@ -274,7 +274,7 @@ spec [0005](../specs/0005-pattern-detection/index.md) · code in `src/detect` (n
   - [x] A card beside other digits (spec 0005, update of 2026-10-08, tasks 29, 30, 32, 33): `card` rebuilt on whole units of a run (gluing and parting hyphens, the short slash group, `CARD_GROUP_DIGITS`, the clear end), its tests flipped and extended, the new adversarial shapes, and `detect-card.pdf` with fourteen cards and its `verify.md` step · AC-16, AC-20, AC-28, INV-15
   - [x] Nothing found left without a row (spec 0005, update of 2026-10-08, tasks 31 and 34): the overlap step in `detect` keeps a cut span's free stretches as pieces, and the IBAN, Social Security and National Insurance neighbour layouts pinned through their detectors and through `detect` · AC-3, AC-28, INV-16
 - [x] Verify it: `/check verify remaining detectors`
-- [ ] Test it: `/test remaining detectors`
+- [x] Test it: `/test remaining detectors`
 
 ### 11. Telemetry & error monitoring · needs a decision
 Enough numbers to know whether the funnel works and whether anything is failing silently, without ever touching document content.

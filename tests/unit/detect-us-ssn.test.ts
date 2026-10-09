@@ -26,6 +26,7 @@ describe("Social Security numbers found and ticked (AC-22, AC-10)", () => {
     ["with non breaking hyphens", "123‑45‑6789"],
     ["the highest area the SSA issues", "899-45-6789"],
     ["an area of 665 and 667", "665-01-0001"],
+    ["an area of 667", "667-01-0001"],
   ])("finds one %s", (_what, ssn) => {
     expect(found(`Number ${ssn} on file`)).toEqual([[ssn, true]]);
   });
@@ -74,6 +75,20 @@ describe("what the SSN detector does not read as one (AC-22)", () => {
     ["a digit after", "123-45-67890"],
   ])("finds nothing with %s", (_what, text) => {
     expect(found(text)).toEqual([]);
+  });
+
+  /**
+   * *Detectors* (`us-ssn`): a bare run counts only "under the same rules", so
+   * the SSN word lets in the shape, never a number the SSA would not issue.
+   */
+  it.each([
+    ["an area of 000", "000123456"],
+    ["an area of 666", "666123456"],
+    ["an area of 900", "900123456"],
+    ["a group of 00", "123004567"],
+    ["a serial of 0000", "123450000"],
+  ])("finds nothing in a bare run after an SSN word with %s", (_what, digits) => {
+    expect(found(`SSN: ${digits}`)).toEqual([]);
   });
 });
 

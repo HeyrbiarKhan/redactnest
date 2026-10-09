@@ -162,6 +162,9 @@ describe("a card number is never cut from a unit, but is read out of a run", () 
     ["a digit before", "04111111111111111"],
     ["a digit after", "41111111111111110"],
     ["a hyphenated group after", "4111-1111-1111-1111-12"],
+    // INV-15 from the other side: the hyphen glues `12` to the card's first
+    // digit, so the unit is 18 digits starting `1`, which no brand issues.
+    ["a hyphenated group before", "12-4111111111111111"],
   ])("finds nothing with %s", (_what, text) => {
     expect(found(text)).toEqual([]);
   });
@@ -285,9 +288,39 @@ describe("the groups of a spaced card (AC-28)", () => {
 
   it.each([
     ["two spaces between groups", "4111  1111  1111  1111"],
+    // *Detectors* (`card`) step 2: only one space joins a run.
+    ["tabs between groups", "4111\t1111\t1111\t1111"],
     ["pairs", "41 11 11 11 11 11 11 11"],
   ])("finds no card in %s", (_what, text) => {
     expect(found(text)).toEqual([]);
+  });
+
+  /**
+   * Each edge of `CARD_GROUP_DIGITS`, one group just inside and one just
+   * outside. The pin below holds the numbers; these hold that each bound is
+   * applied to its own place in the card. Every number is the Visa
+   * `4000000000000002` regrouped, so any window that does not start at the
+   * `4` starts at a `0`, which no brand issues, and only the whole card can
+   * pass.
+   */
+  const VISA = cardFrom("4", 16);
+
+  it.each([
+    ["a first group of 6", [6, 4, 6]],
+    ["a middle group of 3", [4, 3, 4, 5]],
+    ["a last group of 6", [4, 6, 6]],
+  ] as const)("finds the card with %s", (_what, sizes) => {
+    const card = spaced(VISA, sizes);
+    expect(found(`Card ${card} on file`)).toEqual([[card, true]]);
+  });
+
+  it.each([
+    ["a first group of 3", [3, 4, 4, 5]],
+    ["a first group of 7", [7, 4, 5]],
+    ["a middle group of 2", [4, 2, 5, 5]],
+    ["a last group of 7", [4, 5, 7]],
+  ] as const)("finds no card with %s", (_what, sizes) => {
+    expect(found(`Card ${spaced(VISA, sizes)} on file`)).toEqual([]);
   });
 
   it.each([
@@ -334,6 +367,23 @@ describe("choosing where a card ends (AC-28)", () => {
   it("takes a 19 digit card whole when it is unbroken, whatever follows", () => {
     expect(texts(`${NINETEEN} 12 28`)).toEqual([NINETEEN]);
   });
+
+  /**
+   * The end is not clear when a dot or a slash with a digit after it follows
+   * the run's last group: that group is glued to more digits and may belong
+   * to them, so the shortest window that passes is taken instead. Unbroken,
+   * the card is one unit, never cut, so it stays whole.
+   */
+  it.each([
+    ["a dot", "."],
+    ["a slash", "/"],
+  ])(
+    "takes the shortest window when %s and a digit follow the last group",
+    (_what, glue) => {
+      expect(texts(`${NINETEEN_SPACED}${glue}5`)).toEqual([SIXTEEN_SPACED]);
+      expect(texts(`${NINETEEN}${glue}5`)).toEqual([NINETEEN]);
+    },
+  );
 
   it("takes a CVV that ends the run when the two pass together", () => {
     expect(texts(`4111 1111 1111 1111 ${CVV}`)).toEqual([`4111 1111 1111 1111 ${CVV}`]);

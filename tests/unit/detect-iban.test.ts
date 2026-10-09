@@ -89,6 +89,9 @@ describe("what the IBAN detector does not read as an IBAN (AC-21)", () => {
     ["groups of three", "GB8 2WE ST1 234 569 876 543 2"],
     ["a space inside a group", "GB82 WE ST 1234 5698 7654 32"],
     ["two spaces between groups", "GB82  WEST  1234  5698  7654  32"],
+    // Unbroken or grouped throughout, never half of each.
+    ["a space after the first four only", "GB82 WEST12345698765432"],
+    ["spaces after the first eight only", "GB82WEST 1234 5698 7654 32"],
   ])("finds nothing in %s", (_what, text) => {
     expect(found(`IBAN ${text} here`)).toEqual([]);
   });
