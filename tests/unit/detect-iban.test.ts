@@ -105,3 +105,23 @@ describe("what the IBAN detector does not read as an IBAN (AC-21)", () => {
     expect(texts("(GB82WEST12345698765432)")).toEqual(["GB82WEST12345698765432"]);
   });
 });
+
+/**
+ * Spec 0005, AC-28: an IBAN with a date, a year or a reference after it, or
+ * digits before it, is found whole. Pinned so a later edit to the boundary
+ * rules cannot bring in the miss a card had. The same layouts through
+ * `detect` are in `detect.test.ts`.
+ */
+describe("an IBAN beside other digits (AC-28)", () => {
+  it.each([
+    [
+      "a date after it",
+      "GB82 WEST 1234 5698 7654 32 15/03/2026",
+      "GB82 WEST 1234 5698 7654 32",
+    ],
+    ["a reference after it", "GB82WEST12345698765432 1234", "GB82WEST12345698765432"],
+    ["digits before it", "12 GB82 WEST 1234 5698 7654 32", "GB82 WEST 1234 5698 7654 32"],
+  ])("finds one whole with %s", (_what, text, iban) => {
+    expect(found(text)).toEqual([[iban, true]]);
+  });
+});

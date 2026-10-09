@@ -76,3 +76,19 @@ describe("what the SSN detector does not read as one (AC-22)", () => {
     expect(found(text)).toEqual([]);
   });
 });
+
+/**
+ * Spec 0005, AC-28: a Social Security number with a date or a reference
+ * after it, or digits before it, is found whole. Pinned so a later edit to
+ * the boundary rules cannot bring in the miss a card had. The same layouts
+ * through `detect` are in `detect.test.ts`.
+ */
+describe("a Social Security number beside other digits (AC-28)", () => {
+  it.each([
+    ["a date after it", "123-45-6789 15/03/2026", "123-45-6789"],
+    ["a reference after it, spaced", "123 45 6789 1234", "123 45 6789"],
+    ["digits before it", "12 123-45-6789", "123-45-6789"],
+  ])("finds one whole with %s", (_what, text, ssn) => {
+    expect(found(text)).toEqual([[ssn, true]]);
+  });
+});

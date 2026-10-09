@@ -16,8 +16,10 @@ import type { DetectorKind } from "@/worker/protocol";
  * partial dates.
  *
  * Release 3 adds each new kind's own shapes: its values side by side, and cut
- * short just before they would hold. Every detector reads every shape, so
- * each is also tried on the others' worst cases.
+ * short just before they would hold; and, since a card is read out of a run
+ * of digit groups, a card beside its expiry and long runs of four and of six
+ * digit groups. Every detector reads every shape, so each is also tried on
+ * the others' worst cases.
  *
  * Three proofs. Each detector finishes a 100,000 character block of every
  * shape within its budget: a second for email and for each release 3
@@ -169,6 +171,12 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["bare nine digit runs after an SSN word", "SSN 123456789 "],
   ["National Insurance numbers side by side", "AB 12 34 56 C "],
   ["National Insurance prefixes cut short", "AB 12 34 "],
+  // A card is read out of a run of digit groups (AC-28): each beside its
+  // expiry, and one run of groups the size a spaced card opens with, where
+  // every unit starts as many windows as it can.
+  ["cards beside their expiry", "4111 1111 1111 1111 12/28 "],
+  ["one long run of four digit groups", "1234 "],
+  ["one long run of six digit groups", "123456 "],
 ];
 
 /**

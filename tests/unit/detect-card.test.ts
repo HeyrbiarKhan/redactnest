@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { CARD_BRANDS, DETECTORS } from "@/detect";
+import { CARD_BRANDS, CARD_GROUP_DIGITS, detect, DETECTORS } from "@/detect";
+import type { DetectorKind } from "@/worker/protocol";
 
 /**
- * The card detector, on plain strings. Spec 0005, AC-20 and AC-10.
+ * The card detector, on plain strings. Spec 0005, AC-20, AC-28, AC-10 and
+ * INV-15.
  *
  * Every number here is a published test card number or is built below from a
  * brand's prefix with its own Luhn check digit, so none is anyone's card.
@@ -124,20 +126,220 @@ describe("what the card detector does not read as a card (AC-20)", () => {
   });
 });
 
-describe("a card number is never cut from a longer number", () => {
+/** `digits` cut into groups of `sizes` digits, in order, parted by single spaces. */
+function spaced(digits: string, sizes: readonly number[]): string {
+  let at = 0;
+  return sizes
+    .map((size) => {
+      const group = digits.slice(at, at + size);
+      at += size;
+      return group;
+    })
+    .join(" ");
+}
+
+/**
+ * A 19 digit Visa whose first 16 digits also pass: 15 digits from the
+ * brand's prefix, the check digit that makes 16 pass, two more digits, then
+ * the check digit that makes 19 pass. Spaced 4 4 4 4 3, its first 16 are a
+ * window of their own, so this is what tells the clear end rule apart from
+ * the shortest window.
+ */
+const NINETEEN = withCheckDigit(`${withCheckDigit("453921803765777")}35`);
+const NINETEEN_SPACED = spaced(NINETEEN, [4, 4, 4, 4, 3]);
+const SIXTEEN_SPACED = spaced(NINETEEN.slice(0, 16), [4, 4, 4, 4]);
+
+/** A CVV that, after `4111111111111111`, makes 19 digits that pass together. */
+const CVV = "003";
+
+/**
+ * Unbroken digits and digits glued by hyphens are one unit, never cut
+ * (INV-15). Units parted by one space are separate, so a card is read out of
+ * the run they make.
+ */
+describe("a card number is never cut from a unit, but is read out of a run", () => {
   it.each([
     ["a digit before", "04111111111111111"],
     ["a digit after", "41111111111111110"],
-    ["a spaced group before", "12 4111 1111 1111 1111"],
-    ["a spaced group after", "4111 1111 1111 1111 12"],
     ["a hyphenated group after", "4111-1111-1111-1111-12"],
-    ["a group of the other separator after", "4111-1111-1111-1111 12"],
-    ["a group of the other separator before", "1234-5678 4111 1111 1111 1111"],
   ])("finds nothing with %s", (_what, text) => {
     expect(found(text)).toEqual([]);
   });
 
+  it.each([
+    ["a spaced group before", "12 4111 1111 1111 1111", "4111 1111 1111 1111"],
+    ["a spaced group after", "4111 1111 1111 1111 12", "4111 1111 1111 1111"],
+    [
+      "a group of the other separator after",
+      "4111-1111-1111-1111 12",
+      "4111-1111-1111-1111",
+    ],
+    [
+      "a group of the other separator before",
+      "1234-5678 4111 1111 1111 1111",
+      "4111 1111 1111 1111",
+    ],
+  ])("finds the card alone with %s", (_what, text, card) => {
+    expect(found(text)).toEqual([[card, true]]);
+  });
+
   it("finds a number with a letter or punctuation beside it", () => {
     expect(texts("Card:4111111111111111, thanks")).toEqual(["4111111111111111"]);
+  });
+});
+
+/**
+ * Spec 0005, AC-28: a card with other digits beside it, parted by one space,
+ * a line join, or a hyphen or dash next to an expiry or a date, is found
+ * whole, ticked, and alone.
+ */
+describe("a card beside other digits (AC-28)", () => {
+  it.each([
+    ["before its expiry", "4111111111111111 12/28", "4111111111111111"],
+    ["hyphenated, before its expiry", "4111-1111-1111-1111 12/28", "4111-1111-1111-1111"],
+    [
+      "an American Express, before its expiry",
+      "3782 822463 10005 12/28",
+      "3782 822463 10005",
+    ],
+    ["a Diners Club, before its expiry", "3056 930902 5904 12/28", "3056 930902 5904"],
+    ["after a row number", "1 4111 1111 1111 1111", "4111 1111 1111 1111"],
+    ["typed against its expiry", "4111111111111111-12/28", "4111111111111111"],
+    [
+      "spaced, against its expiry by an en dash",
+      "4111 1111 1111 1111–12/28",
+      "4111 1111 1111 1111",
+    ],
+    ["after an expiry and a hyphen", "12/28-4111111111111111", "4111111111111111"],
+    ["after a slashed group", "12/4111111111111111", "4111111111111111"],
+    ["before a slashed group", "4111111111111111/12", "4111111111111111"],
+    ["after a dotted digit", "1.4111111111111111", "4111111111111111"],
+  ])("finds a card %s", (_what, text, card) => {
+    expect(found(text)).toEqual([[card, true]]);
+  });
+
+  it("finds two unbroken cards side by side", () => {
+    expect(found("4111111111111111 5555555555554444")).toEqual([
+      ["4111111111111111", true],
+      ["5555555555554444", true],
+    ]);
+  });
+
+  it("finds a spaced card before a spaced phone number, and takes none of it", () => {
+    expect(texts("4111 1111 1111 1111 020 7946 0958")).toEqual(["4111 1111 1111 1111"]);
+  });
+
+  /**
+   * Through `detect`, with every other kind: no phone row holds a digit of
+   * the card. Before, the American Express and Diners Club cards were listed
+   * as phone numbers cut from their first ten digits. The lone `4` before the
+   * last card reads with the card's first group as a possible UK number
+   * (`4 4111 1111`), so it stays as an unticked phone piece of its own (AC-3,
+   * INV-16), holding no digit of the card.
+   */
+  it.each<[string, [DetectorKind, string][]]>([
+    ["3782 822463 10005 12/28", [["card", "3782 822463 10005"]]],
+    ["3056 930902 5904 12/28", [["card", "3056 930902 5904"]]],
+    [
+      "4 4111 1111 1111 1111",
+      [
+        ["phone", "4"],
+        ["card", "4111 1111 1111 1111"],
+      ],
+    ],
+  ])("leaves no card digit to a phone row through detect: %s", (text, expected) => {
+    const points = Array.from(text);
+    expect(
+      detect({ text, joins: [] }).map((span) => [
+        span.kind,
+        points.slice(span.start, span.end).join(""),
+      ]),
+    ).toEqual(expected);
+  });
+});
+
+describe("a hyphen glues digits, unless it sits next to an expiry or a date (AC-28)", () => {
+  it.each([
+    ["eighteen unbroken digits", "411111111111111112"],
+    ["a hyphenated group after, with no slash", "4111-1111-1111-1111-12"],
+    ["a hyphen before an expiry with no slash", "4111111111111111-1228"],
+    ["a licence key", "1234-5678-9012-3456-7890"],
+  ])("finds no card in %s", (_what, text) => {
+    expect(found(text)).toEqual([]);
+  });
+});
+
+/**
+ * A spaced card is grouped as cards are printed and as payment forms group
+ * them (`CARD_GROUP_DIGITS`): a first group of 4 to 6 digits, a last of 1 to
+ * 6, every other 3 to 6.
+ */
+describe("the groups of a spaced card (AC-28)", () => {
+  it.each([
+    ["a payment form's short last group", "4222 2222 2222 2"],
+    ["a 17 digit card spaced 4 4 4 4 1", spaced(cardFrom("6011", 17), [4, 4, 4, 4, 1])],
+    ["an 18 digit card spaced 4 4 4 4 2", spaced(cardFrom("6011", 18), [4, 4, 4, 4, 2])],
+  ])("finds %s whole", (_what, card) => {
+    expect(found(`Card ${card} on file`)).toEqual([[card, true]]);
+  });
+
+  it.each([
+    ["two spaces between groups", "4111  1111  1111  1111"],
+    ["pairs", "41 11 11 11 11 11 11 11"],
+  ])("finds no card in %s", (_what, text) => {
+    expect(found(text)).toEqual([]);
+  });
+
+  it.each([
+    ["unbroken", "4111111111111111"],
+    ["hyphenated", "41-11-11-11-11-11-11-11"],
+  ])("finds the same pairs %s", (_what, card) => {
+    expect(found(card)).toEqual([[card, true]]);
+  });
+
+  it("pins the group sizes the spec gives", () => {
+    expect(CARD_GROUP_DIGITS).toEqual({ first: [4, 6], middle: [3, 6], last: [1, 6] });
+  });
+});
+
+/**
+ * From each start, the window that reaches the run's end when it passes and
+ * its end is clear, else the shortest that passes. Spec 0005, *Detectors*
+ * (`card`) step 5.
+ */
+describe("choosing where a card ends (AC-28)", () => {
+  it("is tried on a 19 digit card whose first 16 also pass", () => {
+    expect(texts(NINETEEN)).toEqual([NINETEEN]);
+    expect(texts(NINETEEN.slice(0, 16))).toEqual([NINETEEN.slice(0, 16)]);
+  });
+
+  it.each([
+    ["alone", NINETEEN_SPACED],
+    ["before an expiry", `${NINETEEN_SPACED} 12/28`],
+    ["before a hyphen and an expiry", `${NINETEEN_SPACED}-12/28`],
+    ["before a date", `${NINETEEN_SPACED} 05/12/2026`],
+  ])("takes a 19 digit card whole %s", (_what, text) => {
+    expect(texts(text)).toEqual([NINETEEN_SPACED]);
+  });
+
+  /**
+   * The recorded limit: a spaced expiry joins the run, so the 19 digit
+   * window no longer reaches its end, and the shortest that passes is the
+   * first 16. The last group stays in the file, beside a removed card.
+   */
+  it("takes only the first 16 of a 19 digit card before a spaced expiry", () => {
+    expect(texts(`${NINETEEN_SPACED} 12 28`)).toEqual([SIXTEEN_SPACED]);
+  });
+
+  it("takes a 19 digit card whole when it is unbroken, whatever follows", () => {
+    expect(texts(`${NINETEEN} 12 28`)).toEqual([NINETEEN]);
+  });
+
+  it("takes a CVV that ends the run when the two pass together", () => {
+    expect(texts(`4111 1111 1111 1111 ${CVV}`)).toEqual([`4111 1111 1111 1111 ${CVV}`]);
+  });
+
+  it("leaves the CVV when more digits follow it", () => {
+    expect(texts(`4111 1111 1111 1111 ${CVV} 1234`)).toEqual(["4111 1111 1111 1111"]);
   });
 });

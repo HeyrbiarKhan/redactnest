@@ -12,7 +12,7 @@ endobj
 << /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
 endobj
 5 0 obj
-<<  /Length 582 >>
+<<  /Length 1219 >>
 stream
 BT /F1 12 Tf 72 740 Td (Visa 4111 1111 1111 1111 on file) Tj ET
 BT /F1 12 Tf 72 720 Td (Mastercard 5555-5555-5555-4444 expires soon) Tj ET
@@ -20,9 +20,18 @@ BT /F1 12 Tf 72 700 Td (Amex 378282246310005 for travel) Tj ET
 BT /F1 12 Tf 72 680 Td (Discover 6011 1111 1111 1117.) Tj ET
 BT /F1 12 Tf 72 660 Td (Order 4111 1111 1111 1112 failed) Tj ET
 BT /F1 12 Tf 72 640 Td (Account 1234 5678 9012 3456 has no brand) Tj ET
-BT /F1 12 Tf 72 620 Td (Reference 4111 1111 1111 1111 12 is too long) Tj ET
-BT /F1 12 Tf 72 600 Td (Backup card 4012 8888) Tj ET
-BT /F1 12 Tf 72 586 Td (8888 1881 kept on file) Tj ET
+BT /F1 12 Tf 72 620 Td (Reference 411111111111111112 is too long) Tj ET
+BT /F1 12 Tf 72 600 Td (Reference 4111-1111-1111-1111-12 is too long) Tj ET
+BT /F1 12 Tf 72 580 Td (Mastercard 5105105105105100 12/28 on file) Tj ET
+BT /F1 12 Tf 72 560 Td (Amex 3714 496353 98431 12/28 on file) Tj ET
+BT /F1 12 Tf 72 540 Td (Diners 3056 930902 5904 12/28 on file) Tj ET
+BT /F1 12 Tf 72 520 Td (1 3530 1113 3330 0000 JCB on file) Tj ET
+BT /F1 12 Tf 72 500 Td (Cards 6011000990139424 3566002020360505 on file) Tj ET
+BT /F1 12 Tf 72 480 Td (UnionPay 6200-0000-0000-0005 12/28 on file) Tj ET
+BT /F1 12 Tf 72 460 Td (Visa 4222 2222 2222 2–12/28 on file) Tj ET
+BT /F1 12 Tf 72 440 Td (Ref 3400 0000 0005 123 45 6789 on file) Tj ET
+BT /F1 12 Tf 72 420 Td (Backup card 4012 8888) Tj ET
+BT /F1 12 Tf 72 406 Td (8888 1881 kept on file) Tj ET
 
 endstream
 endobj
@@ -37,9 +46,9 @@ xref
 0000000115 00000 n 
 0000000212 00000 n 
 0000000307 00000 n 
-0000000941 00000 n 
+0000001579 00000 n 
 trailer
 << /Size 7 /Root 1 0 R >>
 startxref
-1079
+1717
 %%EOF

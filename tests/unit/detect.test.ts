@@ -16,6 +16,15 @@ function found(text: string): [DetectorKind, string][] {
   ]);
 }
 
+function withTicks(text: string): [DetectorKind, string, boolean][] {
+  const points = Array.from(text);
+  return detect({ text, joins: [] }).map((span) => [
+    span.kind,
+    points.slice(span.start, span.end).join(""),
+    span.tickedByDefault,
+  ]);
+}
+
 describe("every kind is complete (INV-9, AC-24)", () => {
   /**
    * `DETECTORS` is a record over `DetectorKind`, so a kind missing from it
@@ -100,13 +109,35 @@ describe("resolving overlaps (AC-3)", () => {
   });
 
   /**
-   * The phone number shares only `0958` with the address, and is still dropped
-   * whole rather than trimmed to `020 7946`: a trimmed span would be a new
-   * match no detector judged.
+   * The phone number shares only `0958` with the address. The address keeps
+   * its span whole, and the rest of the number is a row of its own, ticked as
+   * the whole number was, so no digit the phone detector found is left
+   * without a row (INV-16).
    */
-  it("drops a lower kind's span whole where it meets a higher kind's, never trims it", () => {
-    expect(found("Call 020 7946 0958@example.com")).toEqual([
-      ["email", "0958@example.com"],
+  it("keeps the rest of a lower kind's span as a piece where a higher kind's cuts into it", () => {
+    expect(withTicks("Call 020 7946 0958@example.com")).toEqual([
+      ["phone", "020 7946", true],
+      ["email", "0958@example.com", true],
+    ]);
+  });
+
+  /** The address holds every digit, so the phone number's free stretch is `+ `. */
+  it("leaves no piece where the free stretch holds no letter or digit", () => {
+    expect(withTicks("Call + 442079460958@example.com")).toEqual([
+      ["email", "442079460958@example.com", true],
+    ]);
+  });
+
+  /**
+   * A card window that passes by chance takes the first group of a spaced
+   * Social Security number. The rest of that number is its own ticked row,
+   * so unticking the false card can never untick it. Before, the number was
+   * dropped whole, and `45 6789` had no row.
+   */
+  it("keeps the rest of a Social Security number a false card cuts into", () => {
+    expect(withTicks("Ref 3400 0000 0005 123 45 6789 on file")).toEqual([
+      ["card", "3400 0000 0005 123", true],
+      ["us-ssn", "45 6789", true],
     ]);
   });
 
@@ -119,6 +150,69 @@ describe("resolving overlaps (AC-3)", () => {
 
   it("finds nothing in nothing", () => {
     expect(detect({ text: "", joins: [] })).toEqual([]);
+  });
+});
+
+/**
+ * Spec 0005, AC-28, through `detect`: an IBAN, a Social Security number and
+ * a National Insurance number beside other digits are each found whole, with
+ * whatever their neighbours are, and no card. Each kind's own detector finds
+ * the same layouts alone (`detect-iban.test.ts`, `detect-us-ssn.test.ts`,
+ * `detect-uk-nino.test.ts`).
+ */
+describe("other kinds beside other digits (AC-28)", () => {
+  it.each<[string, [DetectorKind, string, boolean][]]>([
+    [
+      "GB82 WEST 1234 5698 7654 32 15/03/2026",
+      [
+        ["iban", "GB82 WEST 1234 5698 7654 32", true],
+        ["date", "15/03/2026", false],
+      ],
+    ],
+    ["GB82WEST12345698765432 1234", [["iban", "GB82WEST12345698765432", true]]],
+    ["12 GB82 WEST 1234 5698 7654 32", [["iban", "GB82 WEST 1234 5698 7654 32", true]]],
+    [
+      "AB 12 34 56 C 15/03/2026",
+      [
+        ["uk-nino", "AB 12 34 56 C", true],
+        ["date", "15/03/2026", false],
+      ],
+    ],
+    ["AB123456C 1234", [["uk-nino", "AB123456C", true]]],
+    ["12 AB123456C", [["uk-nino", "AB123456C", true]]],
+    // The phone detector reads `45 6789 1234` as a possible US number, so
+    // the reference is left as an unticked phone piece.
+    [
+      "123 45 6789 1234",
+      [
+        ["us-ssn", "123 45 6789", true],
+        ["phone", "1234", false],
+      ],
+    ],
+    // `12 123-45-6789` is a valid US number written with a trunk `1`, so the
+    // row number is left as a ticked phone piece: two digits more removed by
+    // default, never fewer.
+    [
+      "12 123-45-6789",
+      [
+        ["phone", "12", true],
+        ["us-ssn", "123-45-6789", true],
+      ],
+    ],
+    // `123-45-6789 15` is a valid US number too, and the phone detector stops
+    // at the slash, so its piece `15` cuts the date: the date keeps
+    // `/03/2026`, unticked as it was, and every digit still has a row. The
+    // same cause as spec 0005's Follow-up on digits before a phone number.
+    [
+      "123-45-6789 15/03/2026",
+      [
+        ["us-ssn", "123-45-6789", true],
+        ["phone", "15", true],
+        ["date", "/03/2026", false],
+      ],
+    ],
+  ])("finds the value whole in %s", (text, expected) => {
+    expect(withTicks(text)).toEqual(expected);
   });
 });
 

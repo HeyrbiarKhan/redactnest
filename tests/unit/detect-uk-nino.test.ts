@@ -101,3 +101,19 @@ describe("what the NI detector does not read as one (AC-23)", () => {
     expect(found(text)).toEqual([]);
   });
 });
+
+/**
+ * Spec 0005, AC-28: a National Insurance number with a date or a reference
+ * after it, or digits before it, is found whole. Pinned so a later edit to
+ * the boundary rules cannot bring in the miss a card had. The same layouts
+ * through `detect` are in `detect.test.ts`.
+ */
+describe("a National Insurance number beside other digits (AC-28)", () => {
+  it.each([
+    ["a date after it", "AB 12 34 56 C 15/03/2026", "AB 12 34 56 C"],
+    ["a reference after it", "AB123456C 1234", "AB123456C"],
+    ["digits before it", "12 AB123456C", "AB123456C"],
+  ])("finds one whole with %s", (_what, text, nino) => {
+    expect(found(text)).toEqual([[nino, true]]);
+  });
+});

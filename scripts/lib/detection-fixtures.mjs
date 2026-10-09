@@ -424,8 +424,27 @@ export const DETECT_CARD = Object.freeze([
   ["5555-5555-5555-4444", true],
   ["378282246310005", true],
   ["6011 1111 1111 1117", true],
+  // Spec 0005, AC-28: a card beside other digits.
+  ["5105105105105100", true],
+  ["3714 496353 98431", true],
+  ["3056 930902 5904", true],
+  ["3530 1113 3330 0000", true],
+  ["6011000990139424", true],
+  ["3566002020360505", true],
+  ["6200-0000-0000-0005", true],
+  ["4222 2222 2222 2", true],
+  // A window that passes by chance, which takes the first group of the
+  // spaced Social Security number after it.
+  ["3400 0000 0005 123", true],
   ["4012 8888 8888 1881", true],
 ]);
+
+/**
+ * The rows of other kinds `detect-card.pdf` holds, in reading order. Spec
+ * 0005, AC-3 and INV-16: the rest of the Social Security number the chance
+ * card cuts into is its own row, ticked as the whole number was.
+ */
+export const DETECT_CARD_PIECES = Object.freeze([["us-ssn", "45 6789", true]]);
 
 export const DETECT_IBAN = Object.freeze([
   ["GB82 WEST 1234 5698 7654 32", true],
@@ -474,9 +493,21 @@ export function detectDate() {
 }
 
 /**
- * Spec 0005, AC-20. Test card numbers spaced, hyphenated and unbroken, from
- * four brands; a Luhn failure, a number no brand issues and one cut from a
- * longer number; and a card wrapped across two lines of one block.
+ * WinAnsiEncoding's en dash, byte 0x96. The fixture writer turns each
+ * character into one byte, so the dash is written as the byte the font's
+ * encoding gives it, and MuPDF reads it back as U+2013.
+ */
+const EN_DASH = "\x96";
+
+/**
+ * Spec 0005, AC-20 and AC-28. Test card numbers spaced, hyphenated and
+ * unbroken, from every brand; a Luhn failure, a number no brand issues, and
+ * two references a card is never cut from (eighteen unbroken digits, and
+ * digits glued by hyphens); cards beside an expiry, a row number and another
+ * card, typed against an expiry with a hyphen and with an en dash, and
+ * spaced as a payment form prints one; a card that passes by chance and
+ * cuts into a Social Security number; and a card wrapped across two lines of
+ * one block.
  */
 export function detectCard() {
   return document(() => [
@@ -488,9 +519,18 @@ export function detectCard() {
         line("F1", 12, 72, 680, "Discover 6011 1111 1111 1117.") +
         line("F1", 12, 72, 660, "Order 4111 1111 1111 1112 failed") +
         line("F1", 12, 72, 640, "Account 1234 5678 9012 3456 has no brand") +
-        line("F1", 12, 72, 620, "Reference 4111 1111 1111 1111 12 is too long") +
-        line("F1", 12, 72, 600, "Backup card 4012 8888") +
-        line("F1", 12, 72, 586, "8888 1881 kept on file"),
+        line("F1", 12, 72, 620, "Reference 411111111111111112 is too long") +
+        line("F1", 12, 72, 600, "Reference 4111-1111-1111-1111-12 is too long") +
+        line("F1", 12, 72, 580, "Mastercard 5105105105105100 12/28 on file") +
+        line("F1", 12, 72, 560, "Amex 3714 496353 98431 12/28 on file") +
+        line("F1", 12, 72, 540, "Diners 3056 930902 5904 12/28 on file") +
+        line("F1", 12, 72, 520, "1 3530 1113 3330 0000 JCB on file") +
+        line("F1", 12, 72, 500, "Cards 6011000990139424 3566002020360505 on file") +
+        line("F1", 12, 72, 480, "UnionPay 6200-0000-0000-0005 12/28 on file") +
+        line("F1", 12, 72, 460, `Visa 4222 2222 2222 2${EN_DASH}12/28 on file`) +
+        line("F1", 12, 72, 440, "Ref 3400 0000 0005 123 45 6789 on file") +
+        line("F1", 12, 72, 420, "Backup card 4012 8888") +
+        line("F1", 12, 72, 406, "8888 1881 kept on file"),
     },
   ]);
 }

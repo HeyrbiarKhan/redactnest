@@ -454,7 +454,11 @@ const FIXTURES = [
     detectDate(),
     "dates written and numeric, birth words, near misses",
   ],
-  ["detect-card.pdf", detectCard(), "test card numbers, Luhn failures, longer numbers"],
+  [
+    "detect-card.pdf",
+    detectCard(),
+    "test card numbers, beside other digits, Luhn failures, longer numbers",
+  ],
   ["detect-iban.pdf", detectIban(), "example IBANs, a wrong check, an unknown country"],
   ["detect-us-ssn.pdf", detectUsSsn(), "Social Security numbers, bare and never issued"],
   [

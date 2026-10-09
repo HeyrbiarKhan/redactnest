@@ -25,6 +25,7 @@ import type { DetectorKind } from "@/worker/protocol";
 import {
   DETECT_BLOCKED,
   DETECT_CARD,
+  DETECT_CARD_PIECES,
   DETECT_DATE,
   DETECT_DENSE_PAGES,
   DETECT_DENSE_PER_PAGE,
@@ -100,19 +101,21 @@ function onePage(show: string): ArrayBuffer {
 
 /**
  * Feature 12's fixtures, one per release 3 kind, with what each holds as
- * found, in reading order, and its tick. The last value in each is wrapped
+ * found, in reading order, and its tick, then the rows of any other kind it
+ * holds (AC-3's pieces, with their kind). The last value in each is wrapped
  * across two lines of one block.
  */
 const RELEASE_3: readonly (readonly [
   DetectorKind,
   string,
   readonly (readonly (string | boolean)[])[],
+  readonly (readonly (string | boolean)[])[],
 ])[] = [
-  ["date", "detect-date.pdf", DETECT_DATE],
-  ["card", "detect-card.pdf", DETECT_CARD],
-  ["iban", "detect-iban.pdf", DETECT_IBAN],
-  ["us-ssn", "detect-us-ssn.pdf", DETECT_US_SSN],
-  ["uk-nino", "detect-uk-nino.pdf", DETECT_UK_NINO],
+  ["date", "detect-date.pdf", DETECT_DATE, []],
+  ["card", "detect-card.pdf", DETECT_CARD, DETECT_CARD_PIECES],
+  ["iban", "detect-iban.pdf", DETECT_IBAN, []],
+  ["us-ssn", "detect-us-ssn.pdf", DETECT_US_SSN, []],
+  ["uk-nino", "detect-uk-nino.pdf", DETECT_UK_NINO, []],
 ];
 
 const RELEASE_3_FIXTURES = RELEASE_3.map(([, name]) => name);
@@ -700,19 +703,25 @@ describe("phone numbers (AC-2, AC-10)", () => {
 /**
  * Feature 12: the release 3 kinds (AC-19 to AC-23, AC-10), through the real
  * MuPDF. Each fixture lists exactly its values with their ticks, none of its
- * near misses, and nothing of any other kind. The every unblocked match
- * redacts runs above take each fixture too (AC-6).
+ * near misses, and nothing of any other kind but the pieces AC-3 keeps. The
+ * every unblocked match redacts runs above take each fixture too, its pieces
+ * included (AC-6).
  */
-describe.each(RELEASE_3)("the %s detector on %s", (kind, name, expected) => {
-  it("finds every value with its tick, and no near miss", async () => {
+describe.each(RELEASE_3)("the %s detector on %s", (kind, name, expected, others) => {
+  it("finds every value with its tick, no near miss, and no other row but its pieces", async () => {
     const found = await find(name);
 
-    expect(found.map((match) => [match.text, match.tickedByDefault])).toEqual(
-      expected.map(([text, ticked]) => [text, ticked]),
-    );
-    expect(found.every((match) => match.kind === kind && match.blocked === null)).toBe(
-      true,
-    );
+    expect(
+      found
+        .filter((match) => match.kind === kind)
+        .map((match) => [match.text, match.tickedByDefault]),
+    ).toEqual(expected.map(([text, ticked]) => [text, ticked]));
+    expect(
+      found
+        .filter((match) => match.kind !== kind)
+        .map((match) => [match.kind, match.text, match.tickedByDefault]),
+    ).toEqual(others);
+    expect(found.every((match) => match.blocked === null)).toBe(true);
   });
 
   it("gives the value wrapped across two lines one quad per line (AC-4)", async () => {
@@ -732,6 +741,37 @@ describe.each(RELEASE_3)("the %s detector on %s", (kind, name, expected) => {
     const [hit] = searched(name, 0, needle);
 
     expectSameQuads(match.target?.quads ?? [], hit);
+  });
+});
+
+/**
+ * Spec 0005, AC-28 and AC-3: cards beside other digits in `detect-card.pdf`.
+ * Each card on one line, and the Social Security piece a chance card leaves,
+ * has its own quads, and a run that removes every row leaves each expiry and
+ * both references a card is never cut from.
+ */
+describe("cards beside other digits (AC-28)", () => {
+  it.each([
+    ...DETECT_CARD.slice(0, -1).map(([text]) => String(text)),
+    ...DETECT_CARD_PIECES.map(([, text]) => String(text)),
+  ])("give %s search()'s quads (AC-7)", async (needle) => {
+    const [match] = (await find("detect-card.pdf")).filter(
+      (each) => each.text === needle,
+    );
+    const [hit] = searched("detect-card.pdf", 0, needle);
+
+    expectSameQuads(match.target?.quads ?? [], hit);
+  });
+
+  it("leave each expiry and both references in the redacted page", async () => {
+    const found = await find("detect-card.pdf");
+    const output = await expectRemoved("detect-card.pdf", removable(found));
+    const text = inspect(output, (doc) => pageText(doc, 0));
+
+    // Mastercard, Amex, Diners, UnionPay and the Visa typed against its expiry.
+    expect(occurrences(text, "12/28")).toBe(5);
+    expect(text).toContain("411111111111111112");
+    expect(text).toContain("4111-1111-1111-1111-12");
   });
 });
 
