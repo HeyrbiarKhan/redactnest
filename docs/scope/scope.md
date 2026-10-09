@@ -262,7 +262,7 @@ spec [0013](../specs/0013-brand-ui-refresh/index.md) · code in `src/ui/brand-ma
 
 Detectors first (your call, 2026-10-07): spec 0005 already covers them, so they go straight to `/develop` and give visitors more to find right away. Telemetry follows.
 
-### 12. Remaining detectors · in-progress
+### 12. Remaining detectors · in-progress · Beta + review
 Dates, credit cards with Luhn validation, IBAN with checksum validation, US Social Security numbers, and UK National Insurance numbers, built against the detection spec already written in release 1.
 **Done when:** all five appear in the confirm checklist with their validators applied, and dates in particular do not flood the checklist with noise.
 **Also owed here:** the home page follows the detectors (spec 0013). Rerun `scripts/make-brand.mjs`, read the lead and the band again (they will name seven kinds), check the sample fixture still opens with the all clear line, and check the Finds card still sits well beside the Strips card with seven items, each with its `DETECTOR_LABELS` icon.
@@ -275,6 +275,7 @@ spec [0005](../specs/0005-pattern-detection/index.md) · code in `src/detect` (n
   - [x] Nothing found left without a row (spec 0005, update of 2026-10-08, tasks 31 and 34): the overlap step in `detect` keeps a cut span's free stretches as pieces, and the IBAN, Social Security and National Insurance neighbour layouts pinned through their detectors and through `detect` · AC-3, AC-28, INV-16
 - [x] Verify it: `/check verify remaining detectors`
 - [x] Test it: `/test remaining detectors`
+- [x] Review it (fresh model): `/check review remaining detectors`
 
 ### 11. Telemetry & error monitoring · needs a decision
 Enough numbers to know whether the funnel works and whether anything is failing silently, without ever touching document content.
