@@ -262,6 +262,26 @@ Walked on 2026-10-07 under `pnpm dev` (the Clerk development instance, the Polar
 - **Built with**, from AC-34's "with focus still on it": after a failure, both controls still move focus to the button that was pressed. Where the press left focus there (every browser but Safari, whose click focuses no button) it does nothing; in Safari it puts focus where AC-34 says it is. Only the moves to the old status lines went.
 - The only console errors on `/account` were Clerk's blocked `blob:` worker, already on record in spec 0012's verify (AC-21).
 
+### Recorded after feature 12's build
+
+Feature 12 took the detectors from two to seven (commit `686df40`), and the Finds rows went to two columns in that build, your call. No new design: the rows, tiles and words are AC-11's, and only the list's layout changed, so AC-11 now says so. Measured on 2026-10-11 on a production build (`next start`) in headless Chromium, which draws no scrollbar:
+
+| Window | Both lists | Finds rows | The cards |
+|---|---|---|---|
+| 1280 | two columns; Finds 12 pixels apart, no rule | 68 pixels, but "UK National Insurance numbers" wraps to three lines, 92 | side by side, both 527 tall |
+| 1080 | two columns | 68, but "US Social Security numbers" and "UK National Insurance numbers" are 92 | side by side, both 527 |
+| 960 | one column | all 68 | side by side, both 767 |
+| 600 | two columns | all 68 | stacked: Finds 527, Strips 383 |
+| 320 | one column | 68, but "UK National Insurance numbers" is 92 | stacked: Finds 831, Strips 571 |
+
+So at 1280 one Finds column would hold the pair at 767 pixels, the height both cards show at 960, about twice the 383 the Strips card takes on its own at 600, where its list is the same two columns 64 apart.
+
+- **One column, as AC-11 said before** (runner up): with seven rows the Finds card stands about twice as tall as the Strips card needs, so beside it Strips is mostly empty space.
+- **Two columns by the window, from `md` or `lg`** (runner up): a window breakpoint cannot see the card, which from `md` to about 1020 pixels is too narrow for two columns, the same reason the Strips list follows the card (*Recorded during the build (task 39)*).
+- **A two column grid** (runner up): it reads across, Email addresses then Phone numbers beside it, where CSS columns read down the first column, then the second, as the Strips list does.
+- **A row grows rather than cutting its label short**, so every label reads whole. AC-11's 68 pixels was your mockup's row with its label on one line; two lines fit the same height beside the 48 pixel tile, and a third takes the row to 92.
+- **Not pinned by a test yet**: the e2e check reads only the Finds list's column count. Its 12 pixel gap, no rule, the rows' `break-inside-avoid` and the card's `@container` are held by no test, where the Strips list's are (a Follow-up in `index.md`).
+
 ### What each reference gave, and what stayed out
 
 | Reference | Kept | Left out, and why |
