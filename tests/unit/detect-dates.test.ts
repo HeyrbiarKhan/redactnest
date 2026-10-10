@@ -635,6 +635,202 @@ describe("the general date boundary rule (AC-19, INV-17)", () => {
   });
 });
 
+/**
+ * The edges of the general date boundary rule (spec 0005, second update of
+ * 2026-10-10): each bound the rule names, held at its exact value, and the
+ * parts of the rule the scenario's cases reach only once. A change to any of
+ * these changes the rows a visitor sees, so it should be a decision, never a
+ * side effect.
+ */
+describe("the general date boundary rule's edges (AC-19, AC-10, INV-7, INV-17)", () => {
+  /**
+   * Spec 0005, *Detectors* (`date`): the longest stretch a joiner sees across.
+   * The source keeps it private; the spec fixes it at 40.
+   */
+  const TIME_LONGEST = 40;
+
+  /** A time of exactly `length` code points: `T10:00:00.`, zeros, then `Z`. */
+  function timeOf(length: number): string {
+    return `T10:00:00.${"0".repeat(length - 11)}Z`;
+  }
+
+  /**
+   * The stretch is counted from the last listed date's end up to the joiner.
+   * The cap is there for INV-7, so it is held both ways: a time of exactly
+   * `TIME_LONGEST` still parts the dates, one code point more does not.
+   */
+  it("parts two dates across a time of exactly TIME_LONGEST code points", () => {
+    expect(texts(`Booked 2026-09-27${timeOf(TIME_LONGEST)}/2026-09-28 here`)).toEqual([
+      "2026-09-27",
+      "2026-09-28",
+    ]);
+  });
+
+  it("does not part them across one code point more", () => {
+    expect(texts(`Booked 2026-09-27${timeOf(TIME_LONGEST + 1)}/2026-09-28 here`)).toEqual(
+      ["2026-09-27"],
+    );
+  });
+
+  /**
+   * A time holds runs of at most five letters (`TIME_LETTERS_MOST`), each run
+   * counted on its own: five in a row still part the dates, six do not, and
+   * two runs of three are two short runs, not one of six.
+   */
+  it.each([
+    ["five letters in a row", "10:00 ABCDE", ["2026-09-27", "2026-09-28"]],
+    ["six letters in a row", "10:00 ABCDEF", ["2026-09-27"]],
+    ["two runs of three letters", "10:00 ABC DEF", ["2026-09-27", "2026-09-28"]],
+  ])("reads a time holding %s", (_what, time, dates) => {
+    expect(texts(`Booked 2026-09-27 ${time}-2026-09-28 here`)).toEqual(dates);
+  });
+
+  /**
+   * A time is judged by its characters: at least one ASCII digit, and nothing
+   * but digits, whitespace, `: . , + @`, hyphens and letters. A stretch whose
+   * only digits are in another script, or one holding any other mark, is no
+   * time, so the reference after it stays cut.
+   */
+  it.each([
+    ["a time in Arabic Indic digits only", "2026-09-27 ١٠:٠٠-2026-09-28"],
+    ["a number sign", "2026-09-27 #4 INV-2026-09-28"],
+    ["a semicolon", "2026-09-27 10:00; 11-2026-09-28"],
+  ])("finds the first date only after %s", (_what, text) => {
+    expect(texts(`Invoice ${text} here`)).toEqual(["2026-09-27"]);
+  });
+
+  /**
+   * Every joiner lifts a rejection after a time: each hyphen `HYPHEN` reads,
+   * and the slash. Here the letter before it (`EST`) is what would cut.
+   */
+  it.each([
+    ["a hyphen", "-"],
+    ["the hyphen U+2010", "‐"],
+    ["an en dash", "–"],
+    ["an em dash", "—"],
+    ["a minus sign", "−"],
+    ["a slash", "/"],
+  ])("finds both dates joined by %s after a zone name", (_what, joiner) => {
+    expect(texts(`Booked 2026-09-27 10:00 EST${joiner}2026-09-28 here`)).toEqual([
+      "2026-09-27",
+      "2026-09-28",
+    ]);
+  });
+
+  /**
+   * Here the date's own separator after a digit is what would cut, and a
+   * joiner of the same class lifts it, an en dash for a hyphen dated pair
+   * included. A dot never joins, so after a time it still cuts.
+   */
+  it.each([
+    ["27/09/2026 10:00/28/09/2026", ["27/09/2026", "28/09/2026"]],
+    ["2026/09/27 10:00/2026/09/28", ["2026/09/27", "2026/09/28"]],
+    ["27-09-2026 10:00–28-09-2026", ["27-09-2026", "28-09-2026"]],
+    ["27.09.2026 10:00.28.09.2026", ["27.09.2026"]],
+    ["2026-09-27 10:00 EST.2026-09-28", ["2026-09-27"]],
+  ])("reads the joiner after a time in %s", (text, dates) => {
+    expect(texts(`Booked ${text} here`)).toEqual(dates);
+  });
+
+  /**
+   * The stretch is read back to the end of the last date listed, never to a
+   * date the rule dropped, and with none listed nothing is lifted, so a time
+   * alone before a joiner is no interval (`00-2026-09-28` under *Detectors*).
+   * A separator of another class still never cuts. Each listed date moves the
+   * mark on, so a chain of intervals lists every date.
+   */
+  it.each([
+    ["a time with no date before it", "10:00-28-09-2026", []],
+    ["a time with no date before an ISO date", "10:00-2026-09-28", []],
+    ["a time before a slashed date", "10:00-28/09/2026", ["28/09/2026"]],
+    ["a dropped date before the time", "REF-27-09-2026 10:00-28-09-2026", []],
+    [
+      "three intervals in a row",
+      "2026-09-01 10:00-2026-09-02 11:00-2026-09-03 12:00",
+      ["2026-09-01", "2026-09-02", "2026-09-03"],
+    ],
+  ])("reads the joiner rule from the last date listed: %s", (_what, text, dates) => {
+    expect(texts(`Open ${text} here`)).toEqual(dates);
+  });
+
+  /**
+   * A glued birth word is looked for in a window of the longest birth word and
+   * one code point more, so even `date of birth` sees what touches its front:
+   * a letter or digit there makes it part of another word, and the date stays
+   * cut.
+   */
+  it.each(["xdate of birth27/09/1980", "xdate of birth-12/05/1980", "1DOB27/09/1980"])(
+    "reads no glued birth word in %s",
+    (text) => {
+      expect(found(`Patient ${text} here`)).toEqual([]);
+    },
+  );
+
+  /**
+   * A numeric date's own separator is compared by class, so after an en dashed
+   * date a plain hyphen and digits run on as its own separator would, while
+   * after a dotted date they are a different separator, which never cuts.
+   */
+  it.each([
+    ["05–12–1980-17", []],
+    ["05.12.1980-17", ["05.12.1980"]],
+  ])("compares the own separator by class in %s", (text, dates) => {
+    expect(texts(`Ref ${text} here`)).toEqual(dates);
+  });
+
+  /**
+   * At a date's end, a joiner lifts the own separator rule when any full date
+   * this detector reads starts beyond it, a written one included, read with no
+   * edge check of its own: the first date is listed whatever becomes of the
+   * second. An impossible date beyond it is no date, so the rule still cuts.
+   */
+  it.each([
+    ["05-12-1980-3 June 2026", ["05-12-1980", "3 June 2026"]],
+    ["2026-09-01-30 September 2026", ["2026-09-01", "30 September 2026"]],
+    ["05-12-1980-3 June 20261", ["05-12-1980"]],
+    ["2026-09-01-2026-02-30", []],
+  ])("reads the date beyond the joiner at the end of %s", (text, dates) => {
+    expect(texts(`Leave ${text} approved`)).toEqual(dates);
+  });
+
+  /** A digit in any script glued to either end makes a longer number, never a date. */
+  it.each(["05.12.1980١", "27 September 2026١", "١05.12.1980"])(
+    "finds nothing with a digit in another script glued: %s",
+    (text) => {
+      expect(found(`Ref ${text} here`)).toEqual([]);
+    },
+  );
+
+  /**
+   * Month first, the range's dash takes 0 to 3 (`MAX_GAP`) whitespace on each
+   * side, counted apart, so four on either side is no range, and a month and
+   * its first day alone are no date. Day first, a space on either side of the
+   * dash ends the range, leaving the second day's date.
+   */
+  it.each([
+    ["June 5th - 7th, 2026", ["June 5th - 7th, 2026"]],
+    ["June 5    - 7, 2026", []],
+    ["June 5 -    7, 2026", []],
+    ["3 -5 June 2026", ["5 June 2026"]],
+    ["3- 5 June 2026", ["5 June 2026"]],
+  ])("reads the spaces round a day range's dash in %s", (text, dates) => {
+    expect(texts(`Course ${text} in York`)).toEqual(dates);
+  });
+
+  /**
+   * Each written form is tried on a window of `WRITTEN_LONGEST` code points,
+   * so the longest real date each form allows, every gap at its widest, is
+   * still read whole.
+   */
+  it.each([
+    "September 12th   –   15th,   2026",
+    "12th-15th   of   September,   2026",
+    "12th-15th   September,   2026",
+  ])("reads the longest form %s whole", (date) => {
+    expect(texts(`Course ${date} in York`)).toEqual([date]);
+  });
+});
+
 describe("dates and phone numbers (INV-14)", () => {
   /**
    * The trunk rule alone would read `05.12.1980` as a `0` then seven digits, a
