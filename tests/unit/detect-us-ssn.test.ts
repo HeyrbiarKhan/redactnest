@@ -70,11 +70,17 @@ describe("what the SSN detector does not read as one (AC-22)", () => {
     expect(found(`Ref ${text} here`)).toEqual([]);
   });
 
-  it.each([
-    ["a digit before", "0123-45-6789"],
-    ["a digit after", "123-45-67890"],
-  ])("finds nothing with %s", (_what, text) => {
-    expect(found(text)).toEqual([]);
+  it("finds nothing with a digit before", () => {
+    expect(found("0123-45-6789")).toEqual([]);
+  });
+
+  /**
+   * One digit after a separated number is a footnote marker (third update of
+   * 2026-10-11): the number is listed without it, unticked. The marker cases
+   * are below.
+   */
+  it("finds the number alone, unticked, with a digit after", () => {
+    expect(found("123-45-67890")).toEqual([["123-45-6789", false]]);
   });
 
   /**
@@ -105,5 +111,39 @@ describe("a Social Security number beside other digits (AC-28)", () => {
     ["digits before it", "12 123-45-6789", "123-45-6789"],
   ])("finds one whole with %s", (_what, text, ssn) => {
     expect(found(text)).toEqual([[ssn, true]]);
+  });
+});
+
+/**
+ * Each code point NFKC normalised on its own, as the find step does before
+ * any detector runs (`src/engine/find.ts`). The detectors never normalise, so
+ * to them a raw `¹` is a digit of another script.
+ */
+function nfkc(text: string): string {
+  return Array.from(text, (point) => point.normalize("NFKC")).join("");
+}
+
+/**
+ * Spec 0005, AC-22, third update of 2026-10-11: a footnote marker stuck after
+ * a separated number does not hide it. Exactly one ASCII digit with no digit
+ * after it is the marker, outside the row, and the number starts unticked.
+ */
+describe("a footnote marker after a Social Security number (AC-22, AC-10)", () => {
+  it.each([
+    ["SSN 123-45-6789¹", "123-45-6789"],
+    ["SSN 123 45 6789¹", "123 45 6789"],
+    ["Number 123-45-6789³ on file", "123-45-6789"],
+  ])("lists the number in %s, unticked, the marker outside", (text, ssn) => {
+    expect(found(nfkc(text))).toEqual([[ssn, false]]);
+  });
+
+  it.each([
+    ["two marker digits", "SSN 123-45-6789¹²"],
+    ["a marker then a digit in another script", "SSN 123-45-67891١"],
+    ["a bare run with a marker", "SSN 123456789¹"],
+    ["a bare run with a digit after", "SSN 1234567891"],
+    ["a marker after a number the SSA never issues", "SSN 666-45-6789¹"],
+  ])("finds nothing with %s", (_what, text) => {
+    expect(found(nfkc(text))).toEqual([]);
   });
 });

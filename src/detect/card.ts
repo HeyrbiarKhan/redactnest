@@ -11,41 +11,59 @@ import type { DetectInput, Span } from "./types";
  * number of the right length out of the list.
  *
  * A card is whole units, chosen from inside its run (INV-15). Unbroken digits,
- * and digits glued by hyphens, form one unit that is never cut, so
- * `411111111111111112` and the licence key `1234-5678-9012-3456-7890` give no
- * card. Units parted by one space are separate, and a card is any window of
- * whole units that passes. So a card is found with its expiry, a CVV, a date,
- * another card or a row number beside it (`4111111111111111 12/28`,
- * `1 4111 1111 1111 1111`), where reading the whole run as one number found
- * none. A hyphen or dash next to an expiry or a date parts rather than glues,
- * so a card typed against its expiry (`4111111111111111-12/28`) is found too.
+ * and digits glued by hyphens, form one unit that is never cut but for a
+ * footnote marker (below), so `411111111111111112` and the licence key
+ * `1234-5678-9012-3456-7890` give no card. Units parted by one space are
+ * separate, and a card is any window of whole units that passes. So a card is
+ * found with its expiry, a CVV, a date, another card or a row number beside
+ * it (`4111111111111111 12/28`, `1 4111 1111 1111 1111`), where reading the
+ * whole run as one number found none. A hyphen or dash next to an expiry or a
+ * date parts rather than glues, so a card typed against its expiry
+ * (`4111111111111111-12/28`) is found too.
+ *
+ * A footnote marker stuck after a card does not hide it (spec 0005, third
+ * update of 2026-10-11): NFKC reads `¹` as `1`, and MuPDF reads a mark set
+ * flush after a value as glued to it. A *tolerated* window is one whose last
+ * unit ends in a group of two or more digits and whose digits pass once that
+ * unit's last digit is left out (`4111 1111 1111 11111`). It is the row where
+ * nothing passes, and carries a row the way a passing window does, the row
+ * then ending one digit before its last unit's end. Two glued digits still
+ * give no card, and nor does a last group of one digit, which is a hyphenated
+ * neighbour rather than a mark (`4111-1111-1111-1111-1`).
  *
  * A window of several units, which only a spaced card makes, is grouped as
  * cards are printed (`CARD_GROUP_DIGITS`), so a row number, a lone digit or
  * an unbroken card's neighbour never joins a card.
  *
- * Every window that passes and overlaps a card joins that card's row (INV-15,
- * as amended on 2026-10-10). From each start the card is the longest window
- * that passes, and a later start inside its row whose longest passing window
- * reaches further carries the row to that window's end. Two readings of one
- * run can disagree about where a card starts or ends: in
- * `2226 4111 1111 1111 1111`, `2226 4111 1111 1111` passes by chance and the
- * real card starts one group later. Taking either reading alone leaves a real
- * card's first or last group with no row; covering both removes every digit
- * of the card, at the cost of a neighbour's digits inside the row now and
- * then, the rest of that neighbour keeping its own row (AC-3, INV-16).
+ * Every window that passes or is tolerated and overlaps a card joins that
+ * card's row (INV-15, as amended on 2026-10-10 and 2026-10-11). From each
+ * start the card is the window that reaches furthest, and a later start
+ * inside its row whose window reaches further carries the row to that
+ * window's end. Two readings of one run can disagree about where a card
+ * starts or ends: in `2226 4111 1111 1111 1111`, `2226 4111 1111 1111` passes
+ * by chance and the real card starts one group later. Taking either reading
+ * alone leaves a real card's first or last group with no row; covering both
+ * removes every digit of the card, at the cost of a neighbour's digits inside
+ * the row now and then, the rest of that neighbour keeping its own row (AC-3,
+ * INV-16). A window reaching a later unit reaches further, and at the same
+ * last unit a passing window beats a tolerated one, whichever start it is
+ * read from, so the row then ends at that unit's end.
  *
- * Every card starts ticked (AC-10), whether it is a whole run or part of one.
+ * A card starts ticked (AC-10) when any window inside its row passes whole,
+ * from its start or a later unit, whether it is a whole run or part of one. A
+ * row in which only tolerated windows were found starts unticked, since its
+ * last digit may be a marker or may be the card's own.
  *
  * Why it is linear (INV-7): one pass builds the units and runs, reading each
  * code point a bounded number of times (the group after a hyphen is read
- * once more, to see whether a slash follows it). From each unit at most six
+ * once more, to see whether a slash follows it). From each unit at most seven
  * windows are read, since a window of several units opens with 4 or more
  * digits, every later unit adds at least 1 and all but the last at least 3,
- * and growth stops past 19 digits. Each window is judged at most once per
- * start, a constant per unit, and each unit is a start at most once, either
- * where scanning stands or while a row is carried, because scanning resumes
- * after the row.
+ * and growth stops past 20 digits, a card and its marker. Each window is
+ * judged at most twice per start (as read, and without its last digit), a
+ * constant per unit, and each unit is a start at most once, either where
+ * scanning stands or while a row is carried, because scanning resumes after
+ * the row.
  */
 
 /** One issuer: the prefixes it numbers from, and the lengths it issues. */
@@ -140,16 +158,22 @@ export const CARD_GROUP_DIGITS = Object.freeze({
 const SHORTEST = 13;
 const LONGEST = 19;
 
+/** The most digits a window holds: the longest card and its footnote marker. */
+const LONGEST_TOLERATED = LONGEST + 1;
+
 /**
  * Digits glued by gluing hyphens, never cut (step 1). `digits` holds them
  * without the hyphens, kept only while there are at most `LONGEST`: a longer
- * unit is never judged.
+ * unit is never judged whole, and one of `LONGEST_TOLERATED` is judged on
+ * those it keeps.
  */
 interface Unit {
   readonly start: number;
   readonly end: number;
   readonly count: number;
   readonly digits: string;
+  /** The digits in its last group: a footnote marker ends a group of two or more. */
+  readonly lastGroup: number;
   /** Holds no hyphen. Only bare units are spaced into a card. */
   readonly bare: boolean;
 }
@@ -159,6 +183,19 @@ interface Window {
   readonly last: number;
   readonly count: number;
   readonly digits: string;
+}
+
+/**
+ * How far the windows from one start reach (step 5): the end of the row they
+ * would make, and the last unit it ends in. `end` is that unit's end, or one
+ * before it when a tolerated window leaves its marker out, so comparing ends
+ * compares (last unit, dropped digit) with a passing window winning at the
+ * same unit. `passing` says whether a window from this start passes whole.
+ */
+interface Reach {
+  readonly last: number;
+  readonly end: number;
+  readonly passing: boolean;
 }
 
 export function detectCard(input: DetectInput): readonly Span[] {
@@ -224,7 +261,7 @@ function unitAt(points: readonly string[], at: number): Unit {
     end += 1;
     groupStart = end;
   }
-  return { start: at, end, count, digits, bare };
+  return { start: at, end, count, digits, lastGroup: end - groupStart, bare };
 }
 
 /**
@@ -252,52 +289,70 @@ function slashBeside(points: readonly string[], at: number, away: -1 | 1): boole
 
 /**
  * The cards in one run (steps 5 to 7). At each unit not yet taken, the
- * longest window that passes; then each later unit up to the row's last
- * carries the row to the end of its own longest passing window, when that
- * reaches further, and the units it adds are read the same way in turn.
- * Scanning resumes after the row. A unit where no window passes is passed
- * over.
+ * window that reaches furthest, passing or tolerated; then each later unit up
+ * to the row's last carries the row to the end of its own furthest window,
+ * when that reaches further, and the units it adds are read the same way in
+ * turn. Scanning resumes after the row. A unit where no window passes or is
+ * tolerated is passed over.
  */
 function cardsIn(run: readonly Unit[]): readonly Span[] {
   const spans: Span[] = [];
 
   for (let at = 0; at < run.length;) {
-    const chosen = longestPassing(run, at);
+    const chosen = reachFrom(run, at);
     if (chosen === undefined) {
       at += 1;
       continue;
     }
 
-    let last = chosen.last;
-    for (let later = at + 1; later <= last; later += 1) {
-      const reach = longestPassing(run, later);
-      if (reach !== undefined && reach.last > last) last = reach.last;
+    let row = chosen;
+    let ticked = chosen.passing;
+    for (let later = at + 1; later <= row.last; later += 1) {
+      const reach = reachFrom(run, later);
+      if (reach === undefined) continue;
+      ticked ||= reach.passing;
+      if (reach.end > row.end) row = reach;
     }
     spans.push({
       kind: "card",
       start: run[at].start,
-      end: run[last].end,
-      tickedByDefault: true,
+      end: row.end,
+      tickedByDefault: ticked,
     });
-    at = last + 1;
+    at = row.last + 1;
   }
   return spans;
 }
 
 /**
- * The longest window from the unit at `first` that passes, if any. Windows
- * from one start are nested, so the last that passes holds the most digits
- * and the most units alike.
+ * How far the windows from the unit at `first` reach: the further of the
+ * longest that passes and the longest that is tolerated, or `undefined` when
+ * neither is found. Windows from one start are nested, so the last that
+ * passes holds the most digits and the most units alike, and so does the last
+ * that is tolerated.
  */
-function longestPassing(run: readonly Unit[], first: number): Window | undefined {
-  return windowsFrom(run, first).findLast(passes);
+function reachFrom(run: readonly Unit[], first: number): Reach | undefined {
+  const windows = windowsFrom(run, first);
+  const passing = windows.findLast(passes);
+  const tolerated = windows.findLast((window) => isTolerated(run, window));
+
+  const whole =
+    passing === undefined
+      ? undefined
+      : { last: passing.last, end: run[passing.last].end, passing: true };
+  const marked =
+    tolerated === undefined
+      ? undefined
+      : { last: tolerated.last, end: run[tolerated.last].end - 1, passing: false };
+  if (whole === undefined || marked === undefined) return whole ?? marked;
+  return marked.end > whole.end ? { ...marked, passing: true } : whole;
 }
 
 /**
  * Every window from the unit at `first`, shortest first (step 3): the unit
  * alone, then, when it is bare and opens a spaced card, each longer stretch
  * of bare units grouped by `CARD_GROUP_DIGITS`, until the sizes break or the
- * digits pass `LONGEST`.
+ * digits pass `LONGEST_TOLERATED`.
  */
 function windowsFrom(run: readonly Unit[], first: number): readonly Window[] {
   const opening = run[first];
@@ -316,7 +371,7 @@ function windowsFrom(run: readonly Unit[], first: number): readonly Window[] {
     if (between !== null && !within(between.count, CARD_GROUP_DIGITS.middle)) break;
 
     count += unit.count;
-    if (count > LONGEST) break;
+    if (count > LONGEST_TOLERATED) break;
     digits += unit.digits;
     windows.push({ last, count, digits });
   }
@@ -329,12 +384,27 @@ function within(count: number, [least, most]: readonly [number, number]): boolea
 
 /** Step 4: 13 to 19 digits that pass Luhn, at a prefix and length a brand issues. */
 function passes(window: Window): boolean {
+  return window.count >= SHORTEST && window.count <= LONGEST && isCard(window.digits);
+}
+
+/**
+ * Step 3's tolerated window: its last unit ends in a group of two or more
+ * digits, and its digits pass once that unit's last digit, as counted, is
+ * left out. A unit of `LONGEST_TOLERATED` keeps only `LONGEST` digits, so it
+ * is judged on those it keeps, and the digit left out is never one of them.
+ */
+function isTolerated(run: readonly Unit[], window: Window): boolean {
+  const count = window.count - 1;
   return (
-    window.count >= SHORTEST &&
-    window.count <= LONGEST &&
-    passesLuhn(window.digits) &&
-    isIssued(window.digits)
+    run[window.last].lastGroup >= 2 &&
+    count >= SHORTEST &&
+    count <= LONGEST &&
+    isCard(window.digits.slice(0, count))
   );
+}
+
+function isCard(digits: string): boolean {
+  return passesLuhn(digits) && isIssued(digits);
 }
 
 /**

@@ -12,15 +12,16 @@ endobj
 << /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
 endobj
 5 0 obj
-<<  /Length 418 >>
+<<  /Length 478 >>
 stream
 BT /F1 12 Tf 72 740 Td (SSN 123-45-6789 on file) Tj ET
 BT /F1 12 Tf 72 720 Td (Spouse 234 56 7890 listed) Tj ET
 BT /F1 12 Tf 72 700 Td (Social Security number: 345678901) Tj ET
 BT /F1 12 Tf 72 680 Td (Order 456789012 shipped) Tj ET
 BT /F1 12 Tf 72 660 Td (Never issued 666-12-3456, 900-12-3456 and 123-45-0000) Tj ET
-BT /F1 12 Tf 72 640 Td (Applicant number 567 89) Tj ET
-BT /F1 12 Tf 72 626 Td (0123 confirmed) Tj ET
+BT /F1 12 Tf 72 640 Td (SSN 178-05-11231 on the form) Tj ET
+BT /F1 12 Tf 72 620 Td (Applicant number 567 89) Tj ET
+BT /F1 12 Tf 72 606 Td (0123 confirmed) Tj ET
 
 endstream
 endobj
@@ -35,9 +36,9 @@ xref
 0000000115 00000 n 
 0000000212 00000 n 
 0000000307 00000 n 
-0000000777 00000 n 
+0000000837 00000 n 
 trailer
 << /Size 7 /Root 1 0 R >>
 startxref
-915
+975
 %%EOF

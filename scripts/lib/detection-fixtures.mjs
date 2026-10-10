@@ -440,6 +440,13 @@ export const DETECT_DATE = Object.freeze([
   ["2026-10-05", false],
   ["2026-10-06", false],
   ["03.11.2026", false],
+  // Spec 0005, AC-19, AC-10 and INV-17 (third update of 2026-10-11): a date
+  // of birth with a footnote marker glued after it, a date label glued to a
+  // date by a dot and directly, and an ISO date with a marker.
+  ["12/05/1981", true],
+  ["31.12.2027", false],
+  ["27/09/2027", false],
+  ["2027-09-28", false],
   ["27 September 2026", false],
 ]);
 
@@ -464,6 +471,9 @@ export const DETECT_CARD = Object.freeze([
   // by chance, and the Visa test card after its first group is the real one,
   // so the row covers both.
   ["2223 4000 0566 5566 5556", true],
+  // Spec 0005, AC-20 and INV-15 (third update of 2026-10-11): a card with a
+  // footnote marker glued after it, listed unticked.
+  ["5425 2334 3010 9903", false],
   ["4012 8888 8888 1881", true],
 ]);
 
@@ -489,6 +499,9 @@ export const DETECT_US_SSN = Object.freeze([
   ["123-45-6789", true],
   ["234 56 7890", true],
   ["345678901", true],
+  // Spec 0005, AC-22 (third update of 2026-10-11): a number with a footnote
+  // marker glued after it, listed unticked.
+  ["178-05-1123", false],
   ["567 89 0123", true],
 ]);
 
@@ -511,8 +524,11 @@ export const DETECT_UK_NINO = Object.freeze([
  * 2026-10-10); an interval with clock times, a name after a date, a birth
  * word glued to a date, a spaced month first range, a day range before a
  * numeric date, an interval with an offset and a zone name, and a letter
- * after a date (INV-17, second update of 2026-10-10); and a written date
- * wrapped across two lines of one block.
+ * after a date (INV-17, second update of 2026-10-10); a footnote marker after
+ * a date of birth and after an ISO date, and a date label glued to a date by
+ * a dot and directly (INV-17, third update of 2026-10-11), each marker drawn
+ * as a plain glued `1`, as the IBAN fixture draws its footnote style digit;
+ * and a written date wrapped across two lines of one block.
  */
 export function detectDate() {
   return document(() => [
@@ -551,8 +567,11 @@ export function detectDate() {
           "Logged 2026-10-05T10:00:00+0100-2026-10-06T09:00:00EST",
         ) +
         line("F1", 12, 72, 340, "Noted 03.11.2026a in the margin") +
-        line("F1", 12, 72, 320, "The lease began on 27 September") +
-        line("F1", 12, 72, 306, "2026 and runs for one year"),
+        line("F1", 12, 72, 320, "Born 12/05/19811 per the register") +
+        line("F1", 12, 72, 300, "Exp.31.12.2027 printed on the card") +
+        line("F1", 12, 72, 280, "Issued27/09/2027 and logged 2027-09-281 later") +
+        line("F1", 12, 72, 260, "The lease began on 27 September") +
+        line("F1", 12, 72, 246, "2026 and runs for one year"),
     },
   ]);
 }
@@ -573,7 +592,9 @@ const EN_DASH = "\x96";
  * spaced as a payment form prints one; a card that passes by chance and
  * cuts into a Social Security number; a number before a card that makes a
  * window pass by chance, which the card's row covers (INV-15, update of
- * 2026-10-10); and a card wrapped across two lines of one block.
+ * 2026-10-10); a card with a footnote marker glued after it, drawn as a plain
+ * `1` (INV-15, third update of 2026-10-11); and a card wrapped across two
+ * lines of one block.
  */
 export function detectCard() {
   return document(() => [
@@ -596,8 +617,9 @@ export function detectCard() {
         line("F1", 12, 72, 460, `Visa 4222 2222 2222 2${EN_DASH}12/28 on file`) +
         line("F1", 12, 72, 440, "Ref 3400 0000 0005 123 45 6789 on file") +
         line("F1", 12, 72, 420, "Ref 2223 4000 0566 5566 5556 on file") +
-        line("F1", 12, 72, 400, "Backup card 4012 8888") +
-        line("F1", 12, 72, 386, "8888 1881 kept on file"),
+        line("F1", 12, 72, 400, "Mastercard 5425 2334 3010 99031 in the notes") +
+        line("F1", 12, 72, 380, "Backup card 4012 8888") +
+        line("F1", 12, 72, 366, "8888 1881 kept on file"),
     },
   ]);
 }
@@ -630,7 +652,9 @@ export function detectIban() {
 /**
  * Spec 0005, AC-22. Social Security numbers hyphenated and spaced, a bare one
  * after an SSN phrase; a bare run with no SSN word and numbers the SSA never
- * issues; and a spaced number wrapped across two lines of one block.
+ * issues; a number with a footnote marker glued after it, drawn as a plain
+ * `1` (third update of 2026-10-11); and a spaced number wrapped across two
+ * lines of one block.
  */
 export function detectUsSsn() {
   return document(() => [
@@ -641,8 +665,9 @@ export function detectUsSsn() {
         line("F1", 12, 72, 700, "Social Security number: 345678901") +
         line("F1", 12, 72, 680, "Order 456789012 shipped") +
         line("F1", 12, 72, 660, "Never issued 666-12-3456, 900-12-3456 and 123-45-0000") +
-        line("F1", 12, 72, 640, "Applicant number 567 89") +
-        line("F1", 12, 72, 626, "0123 confirmed"),
+        line("F1", 12, 72, 640, "SSN 178-05-11231 on the form") +
+        line("F1", 12, 72, 620, "Applicant number 567 89") +
+        line("F1", 12, 72, 606, "0123 confirmed"),
     },
   ]);
 }

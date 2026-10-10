@@ -117,7 +117,9 @@ describe("what the card detector does not read as a card (AC-20)", () => {
     ["a length its brand does not issue", cardFrom("4", 15)],
     ["an American Express at 16 digits", cardFrom("34", 16)],
     ["12 digits", cardFrom("4", 12)],
-    ["20 digits", cardFrom("62", 20)],
+    // Its first 19 digits fail Luhn, so it is no card with a footnote marker
+    // either; `cardFrom("62", 20)`, whose first 19 pass, is pinned below.
+    ["20 digits", cardFrom("621", 20)],
     ["mixed separators", "4111 1111-1111 1111"],
     ["two separators in a row", "4111  1111  1111  1111"],
     ["a dot as separator", "4111.1111.1111.1111"],
@@ -159,13 +161,21 @@ const CVV = "003";
 describe("a card number is never cut from a unit, but is read out of a run", () => {
   it.each([
     ["a digit before", "04111111111111111"],
-    ["a digit after", "41111111111111110"],
     ["a hyphenated group after", "4111-1111-1111-1111-12"],
     // INV-15 from the other side: the hyphen glues `12` to the card's first
     // digit, so the unit is 18 digits starting `1`, which no brand issues.
     ["a hyphenated group before", "12-4111111111111111"],
   ])("finds nothing with %s", (_what, text) => {
     expect(found(text)).toEqual([]);
+  });
+
+  /**
+   * One digit after a card is read as a footnote marker (third update of
+   * 2026-10-11): the card is listed without it, unticked. The marker cases
+   * are below.
+   */
+  it("finds the card alone, unticked, with a digit after", () => {
+    expect(found("41111111111111110")).toEqual([["4111111111111111", false]]);
   });
 
   it.each([
@@ -496,8 +506,10 @@ describe("overlapping card windows share one row (AC-28, INV-15)", () => {
    * The case the update closes, built from random cards rather than chosen:
    * whatever stands before or after a card, every digit of it lies inside a
    * card row. The generator is seeded, so a failure names a fixed layout.
+   * With `marker`, a footnote digit is glued after the card (third update of
+   * 2026-10-11), and every card digit still lies inside a card row.
    */
-  it("leaves no digit of a real card without a card row, whatever its neighbours", () => {
+  function expectEveryCardDigitInARow(marker: boolean): void {
     let seed = 20261010;
     const random = (below: number): number => {
       seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -510,8 +522,9 @@ describe("overlapping card windows share one row (AC-28, INV-15)", () => {
     for (let trial = 0; trial < 400; trial += 1) {
       const card = cardFrom(prefixes[trial % prefixes.length] + digits(6), 16);
       const before = random(2) === 0 ? `${digits(4 + random(3))} ` : "";
+      const glued = marker ? digits(1) : "";
       const after = random(2) === 0 ? ` ${digits(1 + random(6))}` : "";
-      const text = `Ref ${before}${spaced(card, [4, 4, 4, 4])}${after} on file`;
+      const text = `Ref ${before}${spaced(card, [4, 4, 4, 4])}${glued}${after} on file`;
       // Every character before the card is ASCII, so offsets and code points agree.
       const from = "Ref ".length + before.length;
       const to = from + "4111 1111 1111 1111".length;
@@ -522,16 +535,27 @@ describe("overlapping card windows share one row (AC-28, INV-15)", () => {
         text,
       ).toBe(true);
     }
+  }
+
+  it("leaves no digit of a real card without a card row, whatever its neighbours", () => {
+    expectEveryCardDigitInARow(false);
+  });
+
+  it("leaves no digit of a real card without a card row with a marker after it", () => {
+    expectEveryCardDigitInARow(true);
   });
 
   /**
    * INV-15 as amended, checked against every window rather than one card:
    * in runs of spaced groups built at random around real cards, every window
    * that passes lies inside one card row, no two rows share a digit, and each
-   * row starts and ends on a group's edge (step 6). Which windows pass is
-   * worked out here from steps 3 and 4 as the spec writes them, with this
-   * file's own Luhn digit, not asked of the detector. Seeded, so a failure
-   * names a fixed run.
+   * row starts on a group's edge and ends on one (step 6), or one digit before
+   * the end of a group of two or more, where that digit is a footnote marker
+   * (third update of 2026-10-11). Every tolerated window lies inside one card
+   * row too, all but its marker. Which windows pass or are tolerated is worked
+   * out here from steps 3 and 4 as the spec writes them, with this file's own
+   * Luhn digit, not asked of the detector. Seeded, so a failure names a fixed
+   * run.
    */
   it("puts every window that passes inside one card row, and no digit in two (INV-15)", () => {
     let state = 20261010;
@@ -554,6 +578,7 @@ describe("overlapping card windows share one row (AC-28, INV-15)", () => {
     ];
 
     let windowsPassed = 0;
+    let windowsTolerated = 0;
     let rowsCarried = 0;
     for (let trial = 0; trial < 500; trial += 1) {
       const groups = Array.from({ length: 2 + random(6) }, () =>
@@ -568,27 +593,32 @@ describe("overlapping card windows share one row (AC-28, INV-15)", () => {
           "Ref ".length + groups.slice(0, index).join(" ").length + (index > 0 ? 1 : 0),
       );
       const ends = groups.map((group, index) => starts[index] + group.length);
+      const markedEnds = groups.flatMap((group, index) =>
+        group.length >= 2 ? [ends[index] - 1] : [],
+      );
       const rows = DETECTORS.card({ text, joins: [] });
 
       for (const [index, row] of rows.entries()) {
         expect(starts, text).toContain(row.start);
-        expect(ends, text).toContain(row.end);
+        expect([...ends, ...markedEnds], text).toContain(row.end);
         if (index > 0) expect(row.start, text).toBeGreaterThan(rows[index - 1].end);
       }
 
       for (let first = 0; first < groups.length; first += 1) {
         for (let last = first; last < groups.length; last += 1) {
-          if (!isWindow(groups.slice(first, last + 1))) continue;
-          if (!passesStep4(groups.slice(first, last + 1).join(""))) continue;
-          windowsPassed += 1;
+          const window = groups.slice(first, last + 1);
+          const passing = isWindow(window, 19) && passesStep4(window.join(""));
+          const tolerated = isWindow(window, 20) && isTolerated(window);
+          if (!passing && !tolerated) continue;
+          // A tolerated window's marker may lie outside the row.
+          const end = passing ? ends[last] : ends[last] - 1;
+          if (passing) windowsPassed += 1;
+          else windowsTolerated += 1;
           const holding = rows.filter(
-            (row) => row.start <= starts[first] && row.end >= ends[last],
+            (row) => row.start <= starts[first] && row.end >= end,
           );
-          expect(
-            holding,
-            `${text}: ${groups.slice(first, last + 1).join(" ")}`,
-          ).toHaveLength(1);
-          if (holding[0].start !== starts[first] || holding[0].end !== ends[last]) {
+          expect(holding, `${text}: ${window.join(" ")}`).toHaveLength(1);
+          if (holding[0].start !== starts[first] || holding[0].end !== end) {
             rowsCarried += 1;
           }
         }
@@ -596,27 +626,142 @@ describe("overlapping card windows share one row (AC-28, INV-15)", () => {
     }
 
     // The runs must hold overlapping windows, or the check above proves little.
-    // This seed gives 1,167 windows that pass and 74 rows carried past one.
+    // This seed gives 1,167 windows that pass, 30 more only tolerated, and 129
+    // windows inside a row carried past them.
     expect(windowsPassed).toBeGreaterThan(500);
+    expect(windowsTolerated).toBeGreaterThan(20);
     expect(rowsCarried).toBeGreaterThan(40);
+  });
+});
+
+/**
+ * Each code point NFKC normalised on its own, as the find step does before
+ * any detector runs (`src/engine/find.ts`). The detectors never normalise, so
+ * to them a raw `¹` is a digit of another script.
+ */
+function nfkc(text: string): string {
+  return Array.from(text, (point) => point.normalize("NFKC")).join("");
+}
+
+/**
+ * Spec 0005, AC-20 and INV-15, third update of 2026-10-11: a footnote marker
+ * stuck after a card does not hide it. A window whose last unit ends in a
+ * group of two or more digits, and passes without that unit's last digit, is
+ * tolerated: the card is listed with the marker outside its row, unticked,
+ * unless a window inside the row passes whole.
+ */
+describe("a footnote marker after a card (AC-20, AC-10, INV-15)", () => {
+  it.each([
+    ["Card 4111 1111 1111 1111¹", "4111 1111 1111 1111"],
+    ["Card 4111-1111-1111-1111¹", "4111-1111-1111-1111"],
+    ["Card 4111111111111111¹", "4111111111111111"],
+    ["41111111111111110", "4111111111111111"],
+    ["Amex 378282246310005¹", "378282246310005"],
+    ["Visa 4222222222222¹", "4222222222222"],
+    ["Card 4111 1111 1111 1111² on file", "4111 1111 1111 1111"],
+  ])("lists the card in %s alone, unticked", (text, card) => {
+    expect(found(nfkc(text))).toEqual([[card, false]]);
+  });
+
+  it("lists a card with a marker and the card after it, each its own row", () => {
+    expect(found("4111 1111 1111 11111 5555 5555 5555 4444")).toEqual([
+      ["4111 1111 1111 1111", false],
+      ["5555 5555 5555 4444", true],
+    ]);
+  });
+
+  /**
+   * The marker must be the last digit of a group of two or more, and only
+   * one: two glued digits, or a hyphenated group of one, give no card.
+   */
+  it.each([
+    ["two glued digits", "411111111111111112"],
+    ["a hyphenated group of one after", "4111-1111-1111-1111-1"],
+    ["a hyphenated group of two after", "4111-1111-1111-1111-12"],
+    ["a licence key", "1234-5678-9012-3456-7890"],
+    ["a 20 digit number whose first 19 fail", cardFrom("621", 20)],
+  ])("finds no card with %s", (_what, text) => {
+    expect(found(text)).toEqual([]);
+  });
+
+  /**
+   * A number that passes whole with its last digit is listed whole and
+   * ticked, as before: the passing window beats the tolerated one at the same
+   * unit. `6212345678901232` passes as 16 digits too, and `62123456789012321`
+   * as a 17 digit UnionPay number by chance.
+   */
+  it("lists a number that passes whole with its marker whole, ticked", () => {
+    expect(found(nfkc("6212345678901232¹"))).toEqual([["62123456789012321", true]]);
+  });
+
+  /**
+   * Step 5: a tolerated window carries a row as a passing one does, so a card
+   * a chance window overlaps is still whole, the marker outside. The row is
+   * ticked, because `2226 4111 1111 1111` passes whole inside it.
+   */
+  it("carries a row to the card before a marker, ticked", () => {
+    expect(found("Ref 2226 4111 1111 1111 11111 on file")).toEqual([
+      ["2226 4111 1111 1111 1111", true],
+    ]);
+  });
+
+  /**
+   * And from the row's own start: `4111 1111 1111 1111 003` passes once the
+   * last digit of `0031` is left out, so it reaches further than the card
+   * alone. The card passes whole, so the row is ticked.
+   */
+  it("takes a CVV that passes with the card once a marker is left out, ticked", () => {
+    expect(found(`4111 1111 1111 1111 ${CVV}1`)).toEqual([
+      [`4111 1111 1111 1111 ${CVV}`, true],
+    ]);
+  });
+
+  /**
+   * The cross check's case: a row is ticked when any window inside it passes
+   * whole, never by its start's window alone. Here no window from `4521`
+   * passes or is tolerated, so the card is listed alone, ticked.
+   */
+  it("lists the card in 4521 4111 1111 1111 1111 alone, ticked", () => {
+    expect(found("Ref 4521 4111 1111 1111 1111 on file")).toEqual([
+      ["4111 1111 1111 1111", true],
+    ]);
+  });
+
+  /**
+   * The cost the spec records: a 20 digit number whose first 19 digits pass
+   * lists them as a card with a marker, unticked. A unit of 20 digits keeps
+   * 19, and the digit left out is the 20th.
+   */
+  it("lists the first 19 digits of a 20 digit number that pass, unticked", () => {
+    const twenty = cardFrom("62", 20);
+    expect(found(`Number ${twenty} here`)).toEqual([[twenty.slice(0, 19), false]]);
   });
 });
 
 /**
  * Step 3, as the spec writes it: one unit alone, or two or more bare units
  * whose first holds 4 to 6 digits, whose last holds 1 to 6, and every other 3
- * to 6, with 19 digits at most.
+ * to 6, with `most` digits at most: 19 for a window that passes, 20 for one
+ * tolerated with its marker.
  */
-function isWindow(units: readonly string[]): boolean {
+function isWindow(units: readonly string[], most: number): boolean {
   if (units.length === 1) return true;
-  const within = (unit: string, [least, most]: readonly [number, number]) =>
-    unit.length >= least && unit.length <= most;
+  const within = (unit: string, [least, top]: readonly [number, number]) =>
+    unit.length >= least && unit.length <= top;
   return (
     within(units[0], CARD_GROUP_DIGITS.first) &&
     within(units[units.length - 1], CARD_GROUP_DIGITS.last) &&
     units.slice(1, -1).every((unit) => within(unit, CARD_GROUP_DIGITS.middle)) &&
-    units.join("").length <= 19
+    units.join("").length <= most
   );
+}
+
+/**
+ * Step 3's tolerated window, on bare units: its last unit holds two or more
+ * digits, and its digits pass step 4 once that unit's last digit is left out.
+ */
+function isTolerated(units: readonly string[]): boolean {
+  return units[units.length - 1].length >= 2 && passesStep4(units.join("").slice(0, -1));
 }
 
 /** Step 4: 13 to 19 digits that pass Luhn, at a prefix and length a brand issues. */

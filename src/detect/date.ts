@@ -7,6 +7,7 @@ import {
   HYPHEN,
   wordBefore,
   wordList,
+  type WordList,
 } from "./text";
 import type { DetectInput, Span } from "./types";
 
@@ -30,48 +31,63 @@ import type { DetectInput, Span } from "./types";
  *
  * Documents are full of dates, and most are no secret: a letter's date, a
  * contract's start. So a date starts unticked unless a birth word ends within
- * `KEYWORD_REACH` before it, or is glued to its start (AC-10), and the
+ * `KEYWORD_REACH` before it, glued to its start included (AC-10), and the
  * checklist lists the rest for the visitor to judge, never removing one by
  * default.
  *
  * A full, real date is never dropped for what follows it or what it is joined
  * to (INV-17): a letter glued to it (`05.12.1980a`, `27 September 2026AD`), a
  * separator and a word (`12/05/1980-Smith`), a different separator and digits
- * (`05.12.1980-17`), a time (`2026-09-27T10:00:00Z`). The row is the date
- * alone, and at worst it is listed unticked. Two rejections are kept, each
- * because measurement shows that without it a longer code lists a date:
+ * (`05.12.1980-17`), a time (`2026-09-27T10:00:00Z`), a footnote marker. The
+ * row is the date alone, and at worst it is listed unticked. Two rejections
+ * are kept, each because measurement shows that without it a longer code
+ * lists a date:
  *
- *  - a letter glued to a date's start, or right before the separator right
- *    before a numeric date, whichever separator it is: how a reference reads
- *    (`x27 September 2026`, `REF-05.12.1980`, `report-27-09-2026-v2.pdf`);
+ *  - a letter glued to a date's start, or right before a hyphen or a slash
+ *    right before a numeric date: how a reference or a path reads
+ *    (`x27 September 2026`, `REF-05.12.1980`, `report-27-09-2026-v2.pdf`). A
+ *    letter before a dot never cuts, since a full stop after a letter ends an
+ *    abbreviation or a sentence (`Exp.31.12.2026`, `w.e.f.27.09.2026`) and
+ *    never glues a code;
  *  - a numeric date's own separator (the one its groups share, by class: `/`,
  *    `.` or any hyphen) running on with a digit on either side: how a longer
  *    number of the same shape reads (`1/05/12/1980`, `2026-09-27-01`,
  *    `05.12.1980.17`).
  *
- * A digit glued to either end is never a date at all: a five digit group is
- * no year (`27 September 20261`).
+ * A footnote marker stuck after a date does not hide it (spec 0005, third
+ * update of 2026-10-11). NFKC reads a superscript `¹` as `1`, and MuPDF reads
+ * a mark set flush after a value as glued to it, so exactly one ASCII digit
+ * right after a date whose year has four digits, with no digit after it, is a
+ * marker and lies outside the row (`Born 12/05/1980¹`, `27 September 2026¹`).
+ * A dotted date's own full stop followed by one is a sentence's end and its
+ * mark (`geboren am 12.05.1980.¹`). Two or more digits, a digit in another
+ * script, or one digit after a two digit year are a longer number, never a
+ * date (`27 September 202612`, `05.12.80¹`), and so is a hyphen or a slash and
+ * one digit, the shape of a build number (`2026-09-27-1`).
  *
- * Each rejection before a date has two exemptions. A joiner (one hyphen or one
+ * Each rejection before a date has exemptions. A joiner (one hyphen or one
  * slash, never a dot) parts two full dates when only a time stands between it
  * and the end of the last date listed, so both dates of
  * `27/09/2026 10:00-28/09/2026 11:00` and of
  * `2026-09-27T10:00:00EST-2026-09-28` are found, each its own row. The time is
  * judged by its characters, never parsed, so no way of writing one is left
- * out and nothing can read into the next date. And a birth word glued to the
- * date, directly or through one separator (`DOB27/09/1980`, `DOB-12/05/1980`,
- * `D.O.B.12.05.1980`), lists it, ticked: text extraction runs a label into
- * its value, and a date of birth is the date this detector exists for. After a
- * date, the own separator rule is lifted by a joiner with a full date beyond
- * it (`2026-09-01-2026-09-30`).
+ * out and nothing can read into the next date. And a birth word or a date
+ * label glued to the date, directly or through one separator
+ * (`DOB27/09/1980`, `D.O.B.12.05.1980`, `Date27/09/2026`, `Date-27/09/2026`),
+ * lists it: text extraction runs a label into its value. A birth word ticks
+ * it, as one before any date does, since a date of birth is the date this
+ * detector exists for; a label leaves it unticked, since it says the value is
+ * a date, not whose. After a date, the own separator rule is lifted by a
+ * joiner with a full date beyond it (`2026-09-01-2026-09-30`).
  *
  * Why it is linear (INV-7): each start reads a bounded stretch, at most three
- * groups of at most four digits for the numeric forms and `WRITTEN_LONGEST`
- * code points for the written ones, and a glued birth word is looked for in a
- * window of constant length. A date's end reads at most one more bounded
- * stretch, the date beyond a joiner, read with no edge check of its own. A
- * start whose rejection would fire reads at most `TIME_LONGEST` more, back to
- * the last date listed. A found date is stepped over whole.
+ * groups of at most four digits for the numeric forms (the last read one digit
+ * further, for a marker) and `WRITTEN_LONGEST` code points for the written
+ * ones, and a glued birth word or date label is looked for in a window of
+ * constant length. A date's end reads at most one more bounded stretch, the
+ * date beyond a joiner, read with no edge check of its own. A start whose
+ * rejection would fire reads at most `TIME_LONGEST` more, back to the last
+ * date listed. A found date is stepped over whole.
  */
 
 /**
@@ -87,15 +103,54 @@ export const BIRTH_WORDS: readonly string[] = Object.freeze([
   "born",
 ]);
 
+/**
+ * The words that label a value as a date, matched in any case as whole
+ * words. One glued to a date, directly or through one separator
+ * (`Exp.31.12.2026`, `Date-27/09/2026`), is a label run into its value by
+ * text extraction, so it lifts the start rejections as a glued birth word
+ * does, and the date stays unticked (AC-19, INV-17). A rule about how a value
+ * is labelled, not a cap on the visitor.
+ */
+export const DATE_LABELS: readonly string[] = Object.freeze([
+  "date",
+  "dated",
+  "dt",
+  "exp",
+  "expiry",
+  "expires",
+  "expired",
+  "issued",
+  "valid",
+  "from",
+  "to",
+  "until",
+  "on",
+  "effective",
+  "signed",
+]);
+
 const BIRTH_WORD_LIST = wordList(BIRTH_WORDS);
 
 /**
- * A birth word that ends exactly where the text it is tried on ends: the
- * whole word pattern `wordList` builds, anchored at that end. Tried on a
- * window of the longest birth word and the one code point before it, so the
- * test costs a constant.
+ * A word list matched only where a word ends exactly where the text it is
+ * tried on ends: the whole word pattern `wordList` builds, anchored at that
+ * end. Tried on a window of the list's longest word and the one code point
+ * before it, so the test costs a constant.
  */
-const BIRTH_WORD_AT_END = new RegExp(`${BIRTH_WORD_LIST.pattern.source}$`, "iu");
+interface WordsAtEnd {
+  readonly pattern: RegExp;
+  readonly longest: number;
+}
+
+function atEnd(list: WordList): WordsAtEnd {
+  return Object.freeze({
+    pattern: new RegExp(`${list.pattern.source}$`, "iu"),
+    longest: list.longest,
+  });
+}
+
+const BIRTH_WORD_AT_END = atEnd(BIRTH_WORD_LIST);
+const DATE_LABEL_AT_END = atEnd(wordList(DATE_LABELS));
 
 /** The English month names, in the calendar's order. */
 const MONTH_NAMES = Object.freeze([
@@ -270,10 +325,9 @@ export function detectDate(input: DetectInput): readonly Span[] {
       kind: "date",
       start: at,
       end: date.end,
-      // `wordBefore`'s whole word test refuses a word with a digit after it,
-      // so a birth word glued to the date is asked for on its own (AC-10).
-      tickedByDefault:
-        wordBefore(points, at, BIRTH_WORD_LIST) || birthGluedTo(points, at),
+      // `wordBefore`'s window ends at the date's start, so it sees a birth
+      // word glued there as whole (`DOB27/09/1980`) and needs no help (AC-10).
+      tickedByDefault: wordBefore(points, at, BIRTH_WORD_LIST),
     });
     lastEnd = date.end;
     at = date.end;
@@ -297,11 +351,16 @@ function isJoiner(point: string | undefined): boolean {
 
 /**
  * Is a letter or digit glued to a date starting at `at`, with no birth word
- * as the thing glued? Either form of date may not start inside a word or a
- * number (INV-17), but `DOB27/09/1980` is a label run into its value.
+ * or date label as the thing glued? Either form of date may not start inside
+ * a word or a number (INV-17), but `DOB27/09/1980` and `Date27/09/2026` are
+ * labels run into their values.
  */
 function gluedAt(points: readonly string[], at: number): boolean {
-  return holds(points, at - 1, ALPHANUMERIC) && !birthGluedTo(points, at);
+  return (
+    holds(points, at - 1, ALPHANUMERIC) &&
+    !birthGluedTo(points, at) &&
+    !labelGluedTo(points, at)
+  );
 }
 
 /**
@@ -311,26 +370,40 @@ function gluedAt(points: readonly string[], at: number): boolean {
  * `Reborn27/09/1980` has none (AC-10, INV-17).
  */
 function birthGluedTo(points: readonly string[], at: number): boolean {
+  return wordGluedTo(points, at, BIRTH_WORD_AT_END);
+}
+
+/**
+ * Does a date label glued to `at` the same way? So `Date27/09/2026`,
+ * `Exp.31.12.2026` and `Date-27/09/2026` each have one, and
+ * `Updated27/09/2026` and `Toronto27/09/2026` have none (AC-19, INV-17).
+ */
+function labelGluedTo(points: readonly string[], at: number): boolean {
+  return wordGluedTo(points, at, DATE_LABEL_AT_END);
+}
+
+function wordGluedTo(points: readonly string[], at: number, words: WordsAtEnd): boolean {
   return (
-    birthWordEndsAt(points, at) ||
-    (separatorClass(points[at - 1]) !== null && birthWordEndsAt(points, at - 1))
+    wordEndsAt(points, at, words) ||
+    (separatorClass(points[at - 1]) !== null && wordEndsAt(points, at - 1, words))
   );
 }
 
-function birthWordEndsAt(points: readonly string[], end: number): boolean {
-  const from = Math.max(0, end - BIRTH_WORD_LIST.longest - 1);
-  return BIRTH_WORD_AT_END.test(points.slice(from, end).join(""));
+function wordEndsAt(points: readonly string[], end: number, words: WordsAtEnd): boolean {
+  const from = Math.max(0, end - words.longest - 1);
+  return words.pattern.test(points.slice(from, end).join(""));
 }
 
 /**
  * Would a numeric date starting at `at`, its groups parted by `own`, be read
- * out of a longer code? Yes after a letter and a separator (`REF-05.12.1980`),
- * or after its own separator and a digit (`1/05/12/1980`), unless the
- * separator is a joiner with only a time between it and the last date listed
- * (`27-09-2026 10:00-12-10-2026`), or a birth word is what is glued
- * (`DOB-12/05/1980`). A letter or digit glued right to its start is
- * `gluedAt`'s, asked before the date is read. A different separator after a
- * digit never cuts: `5-7/6/2026` lists `7/6/2026`.
+ * out of a longer code? Yes after a letter and a hyphen or a slash
+ * (`REF-05.12.1980`), never a dot (`Exp.31.12.2026`), or after its own
+ * separator and a digit (`1/05/12/1980`), unless the separator is a joiner
+ * with only a time between it and the last date listed
+ * (`27-09-2026 10:00-12-10-2026`), or a birth word or a date label is what is
+ * glued (`DOB-12/05/1980`, `Date-27/09/2026`). A letter or digit glued right
+ * to its start is `gluedAt`'s, asked before the date is read. A different
+ * separator after a digit never cuts: `5-7/6/2026` lists `7/6/2026`.
  */
 function cutAtStart(
   points: readonly string[],
@@ -338,35 +411,61 @@ function cutAtStart(
   own: SeparatorClass,
   lastEnd: number,
 ): boolean {
-  const before = separatorClass(points[at - 1]);
+  const joiner = isJoiner(points[at - 1]);
   const cut =
-    (before !== null && holds(points, at - 2, LETTER)) ||
-    (before === own && holds(points, at - 2, DIGIT));
+    (joiner && holds(points, at - 2, LETTER)) ||
+    (separatorClass(points[at - 1]) === own && holds(points, at - 2, DIGIT));
   if (!cut) return false;
-  if (isJoiner(points[at - 1]) && onlyTimeBetween(points, lastEnd, at - 1)) return false;
-  return !birthGluedTo(points, at);
+  if (joiner && onlyTimeBetween(points, lastEnd, at - 1)) return false;
+  return !birthGluedTo(points, at) && !labelGluedTo(points, at);
 }
 
 /**
- * Would a date ending at `end` be read out of a longer number? Yes with a
- * digit glued to it, or, for a numeric date, its `own` separator and a digit
- * after it (`2026-09-27-01`, `05.12.1980.17`), unless that separator is a
- * joiner with a full date beyond it (`2026-09-01-2026-09-30`). Anything else
- * after a date leaves it listed: a letter, a word, a different separator, a
- * sentence's full stop.
+ * Would a date ending at `end`, whose year has `yearDigits` digits, be read
+ * out of a longer number? Yes with a digit glued to it, unless that digit is
+ * a footnote marker (`27 September 20261`). For a numeric date, yes too with
+ * its `own` separator and a digit after it (`2026-09-27-01`, `05.12.1980.17`),
+ * unless that separator is a joiner with a full date beyond it
+ * (`2026-09-01-2026-09-30`), or a dot followed by a marker, a sentence's full
+ * stop and its mark (`12.05.1980.1`); a hyphen or a slash and one digit stays
+ * the shape of a build number (`2026-09-27-1`). Anything else after a date
+ * leaves it listed: a letter, a word, a different separator, a sentence's
+ * full stop.
  */
 function cutAtEnd(
   points: readonly string[],
   end: number,
   own: SeparatorClass | null,
+  yearDigits: number,
 ): boolean {
-  if (holds(points, end, DIGIT)) return true;
+  if (holds(points, end, DIGIT)) return !markerAt(points, end, yearDigits);
   return (
     own !== null &&
     separatorClass(points[end]) === own &&
     holds(points, end + 1, DIGIT) &&
-    !joinsDate(points, end)
+    !joinsDate(points, end) &&
+    !(own === "." && markerAt(points, end + 1, yearDigits))
   );
+}
+
+/**
+ * Is the code point at `at` a footnote marker after a date whose year has
+ * `yearDigits` digits? Exactly one ASCII digit with no digit of any script
+ * after it, after a four digit year: NFKC reads `¹` as `1`. After a two digit
+ * year a digit is as likely a longer number's (`05.12.801`), so it is none.
+ */
+function markerAt(points: readonly string[], at: number, yearDigits: number): boolean {
+  return (
+    yearDigits === 4 && holds(points, at, ASCII_DIGIT) && !holds(points, at + 1, DIGIT)
+  );
+}
+
+/** A numeric date's year of four digits: before its first separator, or after its last. */
+const FOUR_DIGIT_YEAR = /^[0-9]{4}[^0-9]|[^0-9][0-9]{4}$/u;
+
+/** How many digits the year of a numeric date `isNumericDate` accepts has: 4 or 2. */
+function yearDigitsOf(text: string): number {
+  return FOUR_DIGIT_YEAR.test(text) ? 4 : 2;
 }
 
 /**
@@ -393,9 +492,13 @@ function onlyTimeBetween(points: readonly string[], from: number, to: number): b
  * A numeric date starting at `at`, or `null`: three groups of 1 to 4 ASCII
  * digits parted by single separators, which `isNumericDate` then judges,
  * separators and calendar together, so both separators fall in the class of
- * the first. With `lastEnd`, where the last date listed ended, both edges are
- * checked. With `null`, as the far side of a joiner is read, neither is, so
- * each joiner costs one bounded read.
+ * the first. The last group is read one digit further, and when the whole is
+ * no date, the text without that group's last digit is tried, for a footnote
+ * marker stuck after a four digit year (`27/09/20261` reads `27/09/2026`,
+ * `2026-09-271` reads `2026-09-27`); the row ends before the marker. With
+ * `lastEnd`, where the last date listed ended, both edges are checked. With
+ * `null`, as the far side of a joiner is read, neither is, so each joiner
+ * costs one bounded read; the marker is read on either side.
  */
 function numericAt(
   points: readonly string[],
@@ -404,6 +507,7 @@ function numericAt(
 ): Found | null {
   let end = at;
   let own: SeparatorClass | null = null;
+  let lastGroup = 0;
   for (let group = 0; group < 3; group += 1) {
     if (group > 0) {
       const separator = separatorClass(points[end]);
@@ -412,12 +516,25 @@ function numericAt(
       end += 1;
     }
     const from = end;
-    while (end - from <= MAX_GROUP_DIGITS && holds(points, end, ASCII_DIGIT)) end += 1;
-    if (end === from || end - from > MAX_GROUP_DIGITS) return null;
+    const most = group === 2 ? MAX_GROUP_DIGITS + 1 : MAX_GROUP_DIGITS;
+    while (end - from <= most && holds(points, end, ASCII_DIGIT)) end += 1;
+    if (end === from || end - from > most) return null;
+    lastGroup = end - from;
   }
-  if (own === null || !isNumericDate(points.slice(at, end).join(""))) return null;
+  if (own === null) return null;
+
+  let text = points.slice(at, end).join("");
+  if (!isNumericDate(text)) {
+    // Only a group of three or more less its last digit can leave a year of
+    // four, or an ISO day of two.
+    if (lastGroup < 3) return null;
+    end -= 1;
+    text = points.slice(at, end).join("");
+    if (!isNumericDate(text) || !markerAt(points, end, yearDigitsOf(text))) return null;
+  }
   if (lastEnd === null) return { end };
-  if (cutAtStart(points, at, own, lastEnd) || cutAtEnd(points, end, own)) return null;
+  if (cutAtStart(points, at, own, lastEnd)) return null;
+  if (cutAtEnd(points, end, own, yearDigitsOf(text))) return null;
   return { end };
 }
 
@@ -438,9 +555,9 @@ function joinsDate(points: readonly string[], at: number): boolean {
  * A written date starting at `at`, or `null`: day first from a digit, month
  * first from a letter, with a month `MONTHS` knows, a full stop only after an
  * abbreviation, and a real day of that month in 1900 to 2099, both days real
- * when it names a range. With `checkEnd`, no digit may touch its year; a
- * letter or a separator may, whatever is beyond it, since a month name is
- * never part of a code.
+ * when it names a range. With `checkEnd`, no digit may touch its year but a
+ * footnote marker (`27 September 20261`); a letter or a separator may,
+ * whatever is beyond it, since a month name is never part of a code.
  */
 function writtenAt(
   points: readonly string[],
@@ -466,6 +583,6 @@ function writtenAt(
   if (range !== null && !isRealDate(year, month, Number(range[1]))) return null;
 
   const end = at + codePoints(whole).length;
-  if (checkEnd && cutAtEnd(points, end, null)) return null;
+  if (checkEnd && cutAtEnd(points, end, null, 4)) return null;
   return { end };
 }

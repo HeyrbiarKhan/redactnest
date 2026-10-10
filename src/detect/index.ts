@@ -28,7 +28,7 @@ import { detectUsSsn } from "./us-ssn";
 import type { DetectorKind } from "@/worker/protocol";
 
 export { CARD_BRANDS, CARD_GROUP_DIGITS, type CardBrand } from "./card";
-export { BIRTH_WORDS, MONTHS } from "./date";
+export { BIRTH_WORDS, DATE_LABELS, MONTHS } from "./date";
 export { IBAN_LENGTHS } from "./iban";
 export { KEYWORD_REACH } from "./text";
 export { NI_PREFIX_RULES } from "./uk-nino";

@@ -850,6 +850,49 @@ describe("the review's silent misses (AC-19, AC-21, AC-23, AC-28)", () => {
   );
 });
 
+/**
+ * Spec 0005, AC-19, AC-20, AC-22, AC-10 and INV-17 (third update of
+ * 2026-10-11): a footnote marker glued after a date of birth, an ISO date, a
+ * card and a Social Security number, each drawn as a plain `1`, and a date
+ * label glued to a date, through the real MuPDF. Each new row has search()'s
+ * quads, and a run removing every row leaves each marker and each glued label
+ * in the file. The fixtures' own tests above hold each row's tick and that no
+ * new line gives a phone row, and the runs that redact every unblocked match
+ * take each new row alone and together.
+ */
+describe("the third review's footnote markers and glued labels (AC-19, AC-20, AC-22)", () => {
+  it.each([
+    ["detect-date.pdf", "12/05/1981"],
+    ["detect-date.pdf", "31.12.2027"],
+    ["detect-date.pdf", "27/09/2027"],
+    ["detect-date.pdf", "2027-09-28"],
+    ["detect-card.pdf", "5425 2334 3010 9903"],
+    ["detect-us-ssn.pdf", "178-05-1123"],
+  ])("give %s's %s search()'s quads (AC-7)", async (name, needle) => {
+    const found = (await find(name)).filter((each) => each.text === needle);
+    const hits = searched(name, 0, needle);
+
+    expect(found).toHaveLength(1);
+    expect(hits).toHaveLength(1);
+    expectSameQuads(found[0].target?.quads ?? [], hits[0]);
+  });
+
+  it.each<[string, readonly string[]]>([
+    ["detect-date.pdf", ["1 per", "Exp.", "Issued", "1 later"]],
+    ["detect-card.pdf", ["1 in the notes"]],
+    ["detect-us-ssn.pdf", ["1 on the form"]],
+  ])(
+    "leave in %s each marker and glued label",
+    async (name, kept) => {
+      const output = await expectRemoved(name, removable(await find(name)));
+      const text = inspect(output, (doc) => pageText(doc, 0));
+
+      for (const fragment of kept) expect(text).toContain(fragment);
+    },
+    60_000,
+  );
+});
+
 /** AC-11 and AC-12: one page at a time, and a page that cannot be read fails. */
 describe("reading pages", () => {
   it("asks whether to stop after every read of every page, and stops when told", async () => {

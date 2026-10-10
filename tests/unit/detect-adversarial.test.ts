@@ -27,8 +27,15 @@ import type { DetectorKind } from "@/worker/protocol";
  * `TIME_LONGEST`), and the window before a date for a glued birth word, so
  * it adds dates with times of every kind joined end to end, times too long
  * or too wordy to count, dates glued to letters, words and birth words,
- * spaced and numeric day ranges, and dates glued by commas. Every detector
- * reads every shape, so each is also tried on the others' worst cases.
+ * spaced and numeric day ranges, and dates glued by commas. The third update
+ * reads one digit past a value as a footnote marker: a numeric date's last
+ * group reads one digit more and is tried again without it, a card's windows
+ * grow to 20 digits and are judged twice, a Social Security number reads one
+ * code point past its marker, and a date start may look for a glued date
+ * label as for a birth word, so it adds each value with one digit glued on,
+ * labels glued to dates, dotted file names, and runs of five digit groups.
+ * Every detector reads every shape, so each is also tried on the others'
+ * worst cases.
  *
  * Three proofs. Each detector finishes a 100,000 character block of every
  * shape within its budget: a second for email and for each release 3
@@ -223,6 +230,20 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ],
   ["dates glued by commas", "1.1.00,"],
   ["dates with a time and a comma", "27/09/2026, 10:00,"],
+  // The third update of 2026-10-11 (AC-19, AC-20, AC-22, INV-15, INV-17): a
+  // numeric date's last group reads one digit more and may be tried again
+  // without it, a card's windows grow to 20 digits and are judged twice, and
+  // every date start may look for a glued date label.
+  ["dates with a footnote digit", "27/09/20261 "],
+  ["ISO dates with a footnote digit", "2026-09-271-"],
+  ["dotted dates with a stop and a digit", "12.05.1980.1 "],
+  ["written dates with a footnote digit", "27 September 20261 "],
+  ["labels glued to dates", "Exp.31.12.2026 Date-27/09/2026 "],
+  ["dotted file names", "report.27.09.2026.pdf "],
+  ["Social Security numbers with a footnote digit", "123-45-67891 "],
+  ["unbroken cards with a footnote digit", "41111111111111111 "],
+  ["spaced cards with a footnote digit", "4111 1111 1111 11111 "],
+  ["five digit groups", "12345/12345/12345 "],
 ];
 
 /**

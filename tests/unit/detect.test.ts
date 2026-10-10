@@ -216,6 +216,43 @@ describe("other kinds beside other digits (AC-28)", () => {
   });
 });
 
+/**
+ * Each code point NFKC normalised on its own, as the find step does before
+ * any detector runs (`src/engine/find.ts`), so a superscript `¹` reads as `1`.
+ */
+function nfkc(text: string): string {
+  return Array.from(text, (point) => point.normalize("NFKC")).join("");
+}
+
+/**
+ * Spec 0005, AC-19, AC-20 and AC-22, third update of 2026-10-11, through
+ * `detect`: a footnote marker after a date, a Social Security number or a
+ * card leaves one row, the marker outside it, and no phone row.
+ */
+describe("footnote markers through detect (AC-19, AC-20, AC-22)", () => {
+  it.each<[string, [DetectorKind, string, boolean][]]>([
+    ["Born 12/05/1980¹", [["date", "12/05/1980", true]]],
+    ["SSN 123-45-6789¹", [["us-ssn", "123-45-6789", false]]],
+    ["Card 4111 1111 1111 1111¹", [["card", "4111 1111 1111 1111", false]]],
+  ])("lists %s as one row", (text, expected) => {
+    expect(withTicks(nfkc(text))).toEqual(expected);
+  });
+
+  /**
+   * Pinned as a known behaviour (spec 0005, *Consequences*): the phone
+   * detector reads `223-45-67891` as a possible US number, the Social Security
+   * row wins by `PRECEDENCE`, and the marker is left as a phone piece with the
+   * phone row's tick (AC-3, INV-16). One character too many removed by
+   * default, never one too few.
+   */
+  it("leaves the marker after SSN 223-45-6789¹ as a ticked phone piece", () => {
+    expect(withTicks(nfkc("SSN 223-45-6789¹"))).toEqual([
+      ["us-ssn", "223-45-6789", false],
+      ["phone", "1", true],
+    ]);
+  });
+});
+
 describe("line joins", () => {
   it("reads a join inside an email as nothing, and inside anything else as a space", () => {
     expect(readsJoinAsNothing("email")).toBe(true);
