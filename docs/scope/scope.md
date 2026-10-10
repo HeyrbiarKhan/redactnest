@@ -22,7 +22,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 9 | Privacy policy & terms | Release 2 | done |
 | 10 | Billing & paid plan | Release 2 | done |
 | 11 | Telemetry & error monitoring | Release 3 | planned |
-| 12 | Remaining detectors | Release 3 | in-progress |
+| 12 | Remaining detectors | Release 3 | done |
 | 13 | Custom terms | Release 4 | planned |
 | 14 | Manual rectangle redaction | Release 5 | planned |
 | 15 | Marketing site | Release 6 | planned |
@@ -262,7 +262,7 @@ spec [0013](../specs/0013-brand-ui-refresh/index.md) · code in `src/ui/brand-ma
 
 Detectors first (your call, 2026-10-07): spec 0005 already covers them, so they go straight to `/develop` and give visitors more to find right away. Telemetry follows.
 
-### 12. Remaining detectors · in-progress · Beta + review
+### 12. Remaining detectors · done · Beta + review
 Dates, credit cards with Luhn validation, IBAN with checksum validation, US Social Security numbers, and UK National Insurance numbers, built against the detection spec already written in release 1.
 **Done when:** all five appear in the confirm checklist with their validators applied, and dates in particular do not flood the checklist with noise.
 **Also owed here:** the home page follows the detectors (spec 0013). Rerun `scripts/make-brand.mjs`, read the lead and the band again (they will name seven kinds), check the sample fixture still opens with the all clear line, and check the Finds card still sits well beside the Strips card with seven items, each with its `DETECTOR_LABELS` icon.
