@@ -21,8 +21,14 @@ import type { DetectorKind } from "@/worker/protocol";
  * digit groups. The update of 2026-10-10 adds the reads its boundary rules
  * make: dates chained by joiners, day ranges, dates against a `T` and times
  * that never end, written dates beside separators, and IBANs and National
- * Insurance numbers glued end to end. Every detector reads every shape, so
- * each is also tried on the others' worst cases.
+ * Insurance numbers glued end to end. Its second update replaces the date's
+ * boundary rules with one general rule, whose reads are the date beyond a
+ * joiner, the stretch back from a joiner to the last date listed (at most
+ * `TIME_LONGEST`), and the window before a date for a glued birth word, so
+ * it adds dates with times of every kind joined end to end, times too long
+ * or too wordy to count, dates glued to letters, words and birth words,
+ * spaced and numeric day ranges, and dates glued by commas. Every detector
+ * reads every shape, so each is also tried on the others' worst cases.
  *
  * Three proofs. Each detector finishes a 100,000 character block of every
  * shape within its budget: a second for email and for each release 3
@@ -196,6 +202,27 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["written dates after a code", "REF-27 September 2026 "],
   ["unbroken IBANs glued end to end", "GB82WEST12345698765432"],
   ["National Insurance numbers glued to letters", "AB123456CD "],
+  // The second update of 2026-10-10 (AC-19, AC-10, INV-17): every start whose
+  // rejection would fire may read back to the last date listed, at most
+  // `TIME_LONGEST`, and every date start may look for a glued birth word.
+  ["dates with clock times joined by hyphens", "27/09/2026 10:00-"],
+  ["ISO dates with clock times joined by hyphens", "2026-09-27 10:00-"],
+  ["hyphen dated times joined", "27-09-2026 10:00-"],
+  ["ISO timestamps with basic offsets joined", "2026-09-27T10:00:00+0100-"],
+  ["ISO timestamps with zone names joined", "2026-09-27T10:00:00EST-"],
+  ["dates glued to letters", "05.12.1980a"],
+  ["dates joined to words", "12/05/1980-Smith-"],
+  ["birth words glued to dates", "DOB-12/05/1980 "],
+  ["spaced month first ranges", "June 5 - 7, 2026 "],
+  ["day ranges before numeric dates", "5-7/6/2026-"],
+  ["times longer than TIME_LONGEST", `2026-09-27T${"1:".repeat(25)}-`],
+  ["times then five letters joined", "2026-09-27 10:00 ABCDE-"],
+  [
+    "a stretch of short words and digits before a joiner",
+    "2026-09-27 ABCDE 1 ABCDE 1 ABCDE 1-",
+  ],
+  ["dates glued by commas", "1.1.00,"],
+  ["dates with a time and a comma", "27/09/2026, 10:00,"],
 ];
 
 /**

@@ -25,6 +25,16 @@ function texts(text: string): string[] {
   return found(text).map(([date]) => date);
 }
 
+/** Every row `detect` gives, as its kind, its text and its tick. */
+function detected(text: string): [string, string, boolean][] {
+  const points = Array.from(text);
+  return detect({ text, joins: [] }).map((span) => [
+    span.kind,
+    points.slice(span.start, span.end).join(""),
+    span.tickedByDefault,
+  ]);
+}
+
 describe("isNumericDate", () => {
   it.each([
     ["day first with dots", "27.09.2026"],
@@ -171,14 +181,23 @@ describe("a date is never cut from a longer code", () => {
     ["a hyphen and a letter before", "REF-05.12.1980"],
     ["a slash and a digit before", "1/05/12/1980"],
     ["a fourth group after", "05.12.1980.17"],
-    ["a letter after", "05.12.1980a"],
     ["a hyphen and a digit after", "2026-09-27-01"],
     ["a letter before a written date", "x27 September 2026"],
     ["a letter before a month", "xSeptember 27, 2026"],
     ["a digit after the year", "27 September 20261"],
-    ["a letter after the year", "27 September 2026AD"],
   ])("finds nothing with %s", (_what, text) => {
     expect(found(text)).toEqual([]);
+  });
+
+  /**
+   * A letter after a date is no longer code (INV-17, second update of
+   * 2026-10-10): the date is listed alone, unticked, for the visitor to judge.
+   */
+  it.each([
+    ["a letter after", "05.12.1980a", "05.12.1980"],
+    ["a letter after the year", "27 September 2026AD", "27 September 2026"],
+  ])("finds the date alone with %s", (_what, text, date) => {
+    expect(found(text)).toEqual([[date, false]]);
   });
 
   it("finds an ISO date joined to a time, without the time", () => {
@@ -260,21 +279,31 @@ describe("date ranges and times (AC-19, INV-17)", () => {
     expect(texts(`Leave ${text} approved`)).toEqual(dates);
   });
 
-  /** A joiner is one hyphen or one `/`, never `.` (*Detectors*, `date`). */
-  it.each(["05.12.1980.10.12.1980", "2026-09-01.2026-09-30"])(
-    "finds neither date where a dot stands between them: %s",
-    (text) => {
-      expect(found(`Leave ${text} approved`)).toEqual([]);
+  /**
+   * A joiner is one hyphen or one `/`, never `.` (*Detectors*, `date`). So a
+   * dot between two dotted dates is their own separator running on, and
+   * neither is found; between two ISO dates it is not their own separator,
+   * which never cuts, so both are.
+   */
+  it.each([
+    ["05.12.1980.10.12.1980", []],
+    ["2026-09-01.2026-09-30", ["2026-09-01", "2026-09-30"]],
+  ])(
+    "never joins at a dot, which cuts only dates it is the own separator of: %s",
+    (text, dates) => {
+      expect(texts(`Leave ${text} approved`)).toEqual(dates);
     },
   );
 
   /**
-   * A joiner parts only where a full date starts right after it. With no 31
-   * February beyond the hyphen, the first date runs on into a longer code and
-   * is cut, and the second is no date.
+   * With no 31 February beyond the hyphen, the second is no date. The first is
+   * not cut, since a hyphen is not its own separator (`/`), so it is listed
+   * whatever follows it (INV-17, second update of 2026-10-10).
    */
-  it("finds no date where a joiner leads to an impossible one", () => {
-    expect(found("Leave 01/05/1980-31/02/1980 approved")).toEqual([]);
+  it("finds the first date where a joiner leads to an impossible one", () => {
+    expect(found("Leave 01/05/1980-31/02/1980 approved")).toEqual([
+      ["01/05/1980", false],
+    ]);
   });
 
   it.each([
@@ -341,11 +370,12 @@ describe("date ranges and times (AC-19, INV-17)", () => {
   });
 
   /**
-   * `TIME_LONGEST` bounds only how far the joiner rule reads for the time's
-   * end. The date itself is found whatever the time holds.
+   * `TIME_LONGEST` bounds only how far back the joiner rule reads from a
+   * joiner for the last date's end. The date itself is found whatever the
+   * time after it holds.
    */
   it("finds the date before a time longer than the joiner rule reads", () => {
-    expect(texts(`Logged 2026-09-27T10:00:00.${"0".repeat(30)}Z here`)).toEqual([
+    expect(texts(`Logged 2026-09-27T10:00:00.${"0".repeat(50)}Z here`)).toEqual([
       "2026-09-27",
     ]);
   });
@@ -360,27 +390,33 @@ describe("date ranges and times (AC-19, INV-17)", () => {
     expect(texts(`Window ${text} logged`)).toEqual(["2026-09-01", "2026-09-30"]);
   });
 
+  /**
+   * A code lists only the dates the boundary rule leaves it (INV-17, second
+   * update of 2026-10-10): none where one would be read out of it, and the
+   * date alone, unticked, where only a letter, a time or a different
+   * separator stands beside it.
+   */
   it.each([
-    ["REF-05.12.1980-06.12.1980"],
-    ["2026-09-27-01"],
-    ["1/05/12/1980"],
-    ["05.12.1980.17"],
-    ["05.12.1980a"],
-    ["05.12.1980T10:00"],
-    ["2026-09-27Tuesday"],
-    ["x27 September 2026"],
-    ["27 September 2026AD"],
-  ])("still finds no date read out of the code %s", (text) => {
-    expect(found(`Ref ${text} here`)).toEqual([]);
+    ["REF-05.12.1980-06.12.1980", ["06.12.1980"]],
+    ["2026-09-27-01", []],
+    ["1/05/12/1980", []],
+    ["05.12.1980.17", []],
+    ["05.12.1980a", ["05.12.1980"]],
+    ["05.12.1980T10:00", ["05.12.1980"]],
+    ["2026-09-27Tuesday", ["2026-09-27"]],
+    ["x27 September 2026", []],
+    ["27 September 2026AD", ["27 September 2026"]],
+  ])("lists only the dates beside or inside the code %s", (text, dates) => {
+    expect(found(`Ref ${text} here`)).toEqual(dates.map((date) => [date, false]));
   });
 
   /**
-   * The joiner parts only where a full date lies beyond it, read with no end
-   * check of its own: here the second date runs on into a letter, so it is
-   * cut, while the first still sees a full date beyond its hyphen.
+   * A letter glued after a date no longer cuts it (INV-17, second update of
+   * 2026-10-10), so the far date is listed too, as is the first, which sees a
+   * full date beyond its hyphen.
    */
-  it("parts at a joiner whose far date is then cut on its own", () => {
-    expect(texts("01/05/1980-31/05/1980x")).toEqual(["01/05/1980"]);
+  it("finds both dates where the far one has a letter glued to it", () => {
+    expect(texts("01/05/1980-31/05/1980x")).toEqual(["01/05/1980", "31/05/1980"]);
   });
 
   it("ticks each date of a range on its own (AC-10)", () => {
@@ -420,6 +456,182 @@ describe("the date tick (AC-10)", () => {
   it("does not read a birth word inside another word", () => {
     expect(found("Reborn 05.12.1980")).toEqual([["05.12.1980", false]]);
     expect(found("Stubborn 05.12.1980")).toEqual([["05.12.1980", false]]);
+  });
+
+  /**
+   * The whole word test refuses a word with a digit right after it, so a
+   * birth word glued to a date is asked for on its own (second update of
+   * 2026-10-10).
+   */
+  it.each(BIRTH_WORDS)(
+    "ticks a date glued to %s, directly or through one separator",
+    (word) => {
+      expect(found(`${word}27/09/1980`)).toEqual([["27/09/1980", true]]);
+      expect(found(`${word}-12/05/1980`)).toEqual([["12/05/1980", true]]);
+      expect(found(`${word}.12.05.1980`)).toEqual([["12.05.1980", true]]);
+      expect(found(`${word.toUpperCase()}27 September 1980`)).toEqual([
+        ["27 September 1980", true],
+      ]);
+    },
+  );
+});
+
+/**
+ * Spec 0005, AC-19, AC-10 and INV-17, as the second update of 2026-10-10
+ * rewrote them: a full, real date is never dropped for what follows it or
+ * what it is joined to. Only two rejections are kept, a letter before a date
+ * or before its separator, and its own separator running on with a digit,
+ * each lifted by a joiner with only a time since the last date listed, and by
+ * a birth word glued to the date.
+ */
+describe("the general date boundary rule (AC-19, INV-17)", () => {
+  /** A joiner parts two dates whatever time stands before it. */
+  it.each([
+    ["27/09/2026 10:00-28/09/2026 11:00", "27/09/2026", "28/09/2026"],
+    ["27.09.2026 10:00-28.09.2026 11:00", "27.09.2026", "28.09.2026"],
+    ["27-09-2026 10:00-12-10-2026 11:00", "27-09-2026", "12-10-2026"],
+    ["27/09/2026, 10:00-28/09/2026", "27/09/2026", "28/09/2026"],
+    ["27/09/2026 10-28/09/2026", "27/09/2026", "28/09/2026"],
+    ["27/09/2026 at 10-28/09/2026", "27/09/2026", "28/09/2026"],
+    ["2026-09-27 10:00-2026-09-28 11:00", "2026-09-27", "2026-09-28"],
+    ["2026-09-27 10-2026-09-28", "2026-09-27", "2026-09-28"],
+    ["2026-09-27 at 10-2026-09-28", "2026-09-27", "2026-09-28"],
+    ["2026-09-27 @ 10:00-2026-09-28", "2026-09-27", "2026-09-28"],
+    ["2026-09-27 10h00-2026-09-28", "2026-09-27", "2026-09-28"],
+    ["2026-09-27 10:00-11:00-2026-09-28", "2026-09-27", "2026-09-28"],
+    ["2026-09-27 10:00 pm-2026-09-28", "2026-09-27", "2026-09-28"],
+    ["2026-09-27 10:00 PM EST-2026-09-28", "2026-09-27", "2026-09-28"],
+    ["2026-09-27 10:00 UTC+1-2026-09-28", "2026-09-27", "2026-09-28"],
+    ["2026-09-27 10:00 GMT+01:00-2026-09-28", "2026-09-27", "2026-09-28"],
+    ["27 September 2026 10:00-2026-09-28", "27 September 2026", "2026-09-28"],
+    ["2026-09-01T00:00:00Z/2026-09-30T23:59:59Z", "2026-09-01", "2026-09-30"],
+    ["2026-09-27T10:00:00+0100-2026-09-28", "2026-09-27", "2026-09-28"],
+    ["2026-09-27T10:00:00+01-2026-09-28", "2026-09-27", "2026-09-28"],
+    ["2026-09-27T10:00:00 Z-2026-09-28", "2026-09-27", "2026-09-28"],
+    ["2026-09-27T10:00:00EST-2026-09-28", "2026-09-27", "2026-09-28"],
+    ["2026-09-27T10:00:00,123456789012Z-2026-09-28", "2026-09-27", "2026-09-28"],
+    ["2026-09-27T10:00:00.12345678901234567890Z/2026-09-28", "2026-09-27", "2026-09-28"],
+  ])("finds both dates of the interval %s, each alone", (text, first, second) => {
+    expect(found(`Booked ${text} here`)).toEqual([
+      [first, false],
+      [second, false],
+    ]);
+  });
+
+  /** A date is listed whatever follows it; a birth word before it still ticks it. */
+  it.each([
+    ["DOB 12/05/1980-Smith", [["12/05/1980", true]]],
+    ["DOB 12/05/1980Smith", [["12/05/1980", true]]],
+    ["born 05.12.1980-London", [["05.12.1980", true]]],
+    [
+      "Mon 27/09/2026-Tue 28/09/2026",
+      [
+        ["27/09/2026", false],
+        ["28/09/2026", false],
+      ],
+    ],
+    ["05.12.1980a", [["05.12.1980", false]]],
+    ["05.12.1980T10:00", [["05.12.1980", false]]],
+    ["2026-09-27Tuesday", [["2026-09-27", false]]],
+    ["27 September 2026AD", [["27 September 2026", false]]],
+    ["05.12.1980-17", [["05.12.1980", false]]],
+    ["2026-09-27/01", [["2026-09-27", false]]],
+    ["2026-09-27-A1", [["2026-09-27", false]]],
+    ["Fig 3/4/05a", [["3/4/05", false]]],
+  ])("lists the date in %s, whatever follows it", (text, dates) => {
+    expect(found(`Seen ${text} here`)).toEqual(dates);
+  });
+
+  /** A birth word glued to a date lifts every start rejection, and ticks it. */
+  it.each([
+    ["DOB27/09/1980", "27/09/1980"],
+    ["DOB-12/05/1980", "12/05/1980"],
+    ["D.O.B.12.05.1980", "12.05.1980"],
+    ["Born-05.12.1980", "05.12.1980"],
+    ["DOB27 September 1980", "27 September 1980"],
+  ])("lists the date glued to a birth word in %s, ticked", (text, date) => {
+    expect(found(`Patient ${text} here`)).toEqual([[date, true]]);
+  });
+
+  it.each(["Reborn27/09/1980", "Stubborn-05.12.1980"])(
+    "reads no birth word inside another word: %s",
+    (text) => {
+      expect(found(`Patient ${text} here`)).toEqual([]);
+    },
+  );
+
+  /**
+   * Month first, the range's dash may be spaced; day first it may not, so a
+   * heading's number is never read as a first day. A day range before a
+   * numeric date leaves the numeric date alone.
+   */
+  it.each([
+    ["June 5 - 7, 2026", [["June 5 - 7, 2026", false]]],
+    ["June 5 -7, 2026", [["June 5 -7, 2026", false]]],
+    ["June 5- 7, 2026", [["June 5- 7, 2026", false]]],
+    ["June 5   -   7, 2026", [["June 5   -   7, 2026", false]]],
+    ["June 5 – 7 2026", [["June 5 – 7 2026", false]]],
+    ["3 - 5 June 2026", [["5 June 2026", false]]],
+    ["Table 2 - 14 March 2026", [["14 March 2026", false]]],
+    ["Item 12 - 5 June 2026", [["5 June 2026", false]]],
+    ["5-7/6/2026", [["7/6/2026", false]]],
+    ["DOB: 5-7/6/2026", [["7/6/2026", true]]],
+  ])("reads the range in %s", (text, dates) => {
+    expect(found(`Course ${text} here`)).toEqual(dates);
+  });
+
+  /** The second day is checked as the first is, spaces or not. */
+  it("finds no spaced month first range whose second day is not real", () => {
+    expect(found("Course June 5 - 31, 2026 here")).toEqual([]);
+  });
+
+  /** Each kept rejection, pinned by name, so widening one is noticed. */
+  it.each([
+    ["a letter glued before", "REF05.12.1980"],
+    ["a letter before a hyphen", "REF-05.12.1980"],
+    ["a letter before a hyphen, again", "INV-05.12.1980"],
+    ["a letter before a slash", "INV/12/05/2026"],
+    ["a name before a hyphen", "Smith-12/05/1980"],
+    ["a file name", "report-27-09-2026-v2.pdf"],
+    ["a URL path", "example.com/2026/09/27/slug"],
+    ["its own slash and a digit before", "1/05/12/1980"],
+    ["its own hyphen and a digit after", "2026-09-27-01"],
+    ["its own dot and a digit after", "05.12.1980.17"],
+    ["a letter glued before a written date", "x27 September 2026"],
+    ["a digit glued after a written date", "27 September 20261"],
+  ])("finds no date with %s: %s", (_what, text) => {
+    expect(found(`Ref ${text} here`)).toEqual([]);
+  });
+
+  /**
+   * Only a time lifts a rejection before a joiner: a word of six letters, a
+   * stretch with no digit, and a time longer than `TIME_LONGEST` are not one,
+   * so the second date stays cut while the first is listed.
+   */
+  it.each([
+    ["01/05/1980 Smith-12/05/1980", "01/05/1980"],
+    ["2026-09-27 10:00 Monday-2026-09-28", "2026-09-27"],
+    ["2026-09-27 ref INV-2026-09-28", "2026-09-27"],
+    [`2026-09-27T10:00:00.${"0".repeat(50)}Z/2026-09-28`, "2026-09-27"],
+  ])("finds the first date only in %s", (text, date) => {
+    expect(found(`Ref ${text} here`)).toEqual([[date, false]]);
+  });
+
+  /**
+   * Through `detect`, `phone` stands above `date`. A slashed interval leaves
+   * no phone row, while in an ISO one with plain times the phone detector
+   * reads `00-2026-09-28 11` and covers the second date: the phone
+   * Follow-up's case, pinned so a change there is noticed.
+   */
+  it("gives the rows PRECEDENCE leaves through detect", () => {
+    expect(detected("Shift 27/09/2026 10:00-28/09/2026 11:00 booked")).toEqual([
+      ["date", "27/09/2026", false],
+      ["date", "28/09/2026", false],
+    ]);
+    expect(detected("Shift 2026-09-27 10:00-2026-09-28 11:00 booked")).toEqual([
+      ["date", "2026-09-27", false],
+      ["phone", "00-2026-09-28 11", false],
+    ]);
   });
 });
 

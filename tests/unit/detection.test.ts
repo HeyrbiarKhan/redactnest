@@ -776,12 +776,15 @@ describe("cards beside other digits (AC-28)", () => {
 });
 
 /**
- * Spec 0005, AC-19, AC-21, AC-23, AC-28 and INV-17 (update of 2026-10-10):
- * the rows the review found missing, through the real MuPDF. Each new row has
- * search()'s quads, the card's included above, and a run removing every row
- * removes the whole card a chance window overlaps, while each time, the
- * glued footnote marker, currency code and word, and the first half of a
- * range across months stay in the file.
+ * Spec 0005, AC-19, AC-21, AC-23, AC-28 and INV-17 (update of 2026-10-10,
+ * and the second update the same day, which made the date's boundary rule
+ * general): the rows the reviews found missing, through the real MuPDF. Each
+ * new row has search()'s quads, the card's included above, and a run removing
+ * every row removes the whole card a chance window overlaps, while each time,
+ * offset and zone name, the word or label beside a date, the first day of a
+ * range before a numeric date, the glued footnote marker, currency code and
+ * words, and the first half of a range across months stay in the file. The
+ * fixtures' own tests above hold that no new line gives a phone row.
  */
 describe("the review's silent misses (AC-19, AC-21, AC-23, AC-28)", () => {
   it.each([
@@ -792,6 +795,15 @@ describe("the review's silent misses (AC-19, AC-21, AC-23, AC-28)", () => {
     ["detect-date.pdf", "2026-09-01"],
     ["detect-date.pdf", "2026-09-30"],
     ["detect-date.pdf", "1980-05-12"],
+    ["detect-date.pdf", "27/09/2026"],
+    ["detect-date.pdf", "28/09/2026"],
+    ["detect-date.pdf", "12/05/1980"],
+    ["detect-date.pdf", "14.02.1991"],
+    ["detect-date.pdf", "June 5 - 7, 2026"],
+    ["detect-date.pdf", "7/6/2026"],
+    ["detect-date.pdf", "2026-10-05"],
+    ["detect-date.pdf", "2026-10-06"],
+    ["detect-date.pdf", "03.11.2026"],
     ["detect-iban.pdf", "IE29 AIBK 9311 5212 3456 78"],
     ["detect-iban.pdf", "ES9121000418450200051332"],
     ["detect-uk-nino.pdf", "KL123456B"],
@@ -806,7 +818,23 @@ describe("the review's silent misses (AC-19, AC-21, AC-23, AC-28)", () => {
 
   it.each<[string, readonly string[], readonly string[]]>([
     ["detect-card.pdf", [], ["2223"]],
-    ["detect-date.pdf", ["28 May", "T23:59:59Z", "T00:00:00Z"], []],
+    [
+      "detect-date.pdf",
+      [
+        "28 May",
+        "T23:59:59Z",
+        "T00:00:00Z",
+        "10:00",
+        "11:00",
+        "Smith",
+        "D.O.B.",
+        "5-",
+        "T10:00:00+0100",
+        "T09:00:00EST",
+        "a in the margin",
+      ],
+      [],
+    ],
     ["detect-iban.pdf", ["1 above", "EUR"], []],
     ["detect-uk-nino.pdf", ["signed"], []],
   ])(

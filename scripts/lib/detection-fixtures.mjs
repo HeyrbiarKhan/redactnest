@@ -426,6 +426,20 @@ export const DETECT_DATE = Object.freeze([
   ["2026-09-01", false],
   ["2026-09-30", false],
   ["1980-05-12", true],
+  // Spec 0005, AC-19, AC-10 and INV-17 (second update of 2026-10-10): an
+  // interval with clock times, a date of birth with a name after it and one
+  // glued to its label, a spaced month first range, a day range before a
+  // numeric date, an interval with an offset and a zone name, and a date
+  // glued to a letter.
+  ["27/09/2026", false],
+  ["28/09/2026", false],
+  ["12/05/1980", true],
+  ["14.02.1991", true],
+  ["June 5 - 7, 2026", false],
+  ["7/6/2026", false],
+  ["2026-10-05", false],
+  ["2026-10-06", false],
+  ["03.11.2026", false],
   ["27 September 2026", false],
 ]);
 
@@ -494,7 +508,11 @@ export const DETECT_UK_NINO = Object.freeze([
  * month and year, a day and month, a time, a date cut from a code, impossible
  * dates); two dates joined by a hyphen, a day range, a range across months, an
  * ISO interval with times and an ISO date with its time (INV-17, update of
- * 2026-10-10); and a written date wrapped across two lines of one block.
+ * 2026-10-10); an interval with clock times, a name after a date, a birth
+ * word glued to a date, a spaced month first range, a day range before a
+ * numeric date, an interval with an offset and a zone name, and a letter
+ * after a date (INV-17, second update of 2026-10-10); and a written date
+ * wrapped across two lines of one block.
  */
 export function detectDate() {
   return document(() => [
@@ -520,8 +538,21 @@ export function detectDate() {
           "Window 2026-09-01T00:00:00Z/2026-09-30T23:59:59Z logged",
         ) +
         line("F1", 12, 72, 480, "DOB 1980-05-12T00:00:00Z exported") +
-        line("F1", 12, 72, 460, "The lease began on 27 September") +
-        line("F1", 12, 72, 446, "2026 and runs for one year"),
+        line("F1", 12, 72, 460, "Shift 27/09/2026 10:00-28/09/2026 11:00 booked") +
+        line("F1", 12, 72, 440, "DOB 12/05/1980-Smith on file") +
+        line("F1", 12, 72, 420, "D.O.B.14.02.1991 on file") +
+        line("F1", 12, 72, 400, "Course June 5 - 7, 2026 in York") +
+        line("F1", 12, 72, 380, "Exam 5-7/6/2026 sat") +
+        line(
+          "F1",
+          12,
+          72,
+          360,
+          "Logged 2026-10-05T10:00:00+0100-2026-10-06T09:00:00EST",
+        ) +
+        line("F1", 12, 72, 340, "Noted 03.11.2026a in the margin") +
+        line("F1", 12, 72, 320, "The lease began on 27 September") +
+        line("F1", 12, 72, 306, "2026 and runs for one year"),
     },
   ]);
 }
