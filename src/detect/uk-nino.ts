@@ -9,9 +9,18 @@ import type { DetectInput, Span } from "./types";
  * the digit pairs and before the suffix (`AB 12 34 56 C`, `ab123456c`,
  * `AB123456`). The prefix follows HMRC's rules (`NI_PREFIX_RULES`), which is
  * what tells a National Insurance number from any two letters and six digits.
- * No letter or digit touches either end.
+ * No letter or digit comes right before it, so it is never read out of a
+ * longer code.
  *
- * A National Insurance number starts ticked (AC-10).
+ * A National Insurance number starts ticked (AC-10), except one with a letter
+ * glued to its six digits (INV-17, as amended on 2026-10-10). With no
+ * checksum, two letters, six digits and more letters is as often a product
+ * code as a number glued to the next word, so it is listed unticked for the
+ * visitor to judge, rather than dropped with a real number inside it. That
+ * letter joins the row when it is a suffix letter, whatever follows it
+ * (`AB123456CD` lists `AB123456C`). A digit glued to the six digits still
+ * drops it, as part of a longer number: allowing one would list a spaced date
+ * after two letters and every tracking number shaped `AB123456789GB`.
  *
  * Why it is linear (INV-7): a number may start only at a letter with nothing
  * alphanumeric before it, and each start reads at most fourteen code points.
@@ -33,6 +42,9 @@ export const NI_PREFIX_RULES: Readonly<
 const LETTER = /^[A-Z]$/iu;
 const SUFFIX = /^[A-D]$/iu;
 
+/** A letter in any script, as `ALPHANUMERIC` reads one. */
+const LETTER_ANY_SCRIPT = /^\p{L}$/u;
+
 /** The digit pairs after the prefix. */
 const PAIRS = 3;
 
@@ -41,19 +53,25 @@ export function detectUkNino(input: DetectInput): readonly Span[] {
   const spans: Span[] = [];
 
   for (let at = 0; at < points.length;) {
-    const end = holds(points, at - 1, ALPHANUMERIC) ? null : ninoAt(points, at);
-    if (end === null) {
+    const found = holds(points, at - 1, ALPHANUMERIC) ? null : ninoAt(points, at);
+    if (found === null) {
       at += 1;
       continue;
     }
-    spans.push({ kind: "uk-nino", start: at, end, tickedByDefault: true });
-    at = end;
+    spans.push({ kind: "uk-nino", start: at, ...found });
+    at = found.end;
   }
   return spans;
 }
 
-/** Where a National Insurance number starting at `at` ends, or `null`. */
-function ninoAt(points: readonly string[], at: number): number | null {
+/** Where a National Insurance number starting at `at` ends, and its tick. */
+interface Found {
+  readonly end: number;
+  readonly tickedByDefault: boolean;
+}
+
+/** The National Insurance number starting at `at`, or `null`. */
+function ninoAt(points: readonly string[], at: number): Found | null {
   if (!holds(points, at, LETTER) || !holds(points, at + 1, LETTER)) return null;
   const first = points[at].toUpperCase();
   const second = points[at + 1].toUpperCase();
@@ -78,9 +96,14 @@ function ninoAt(points: readonly string[], at: number): number | null {
   // `AB 12 34 56 apply` is never read as one.
   const suffix = spaceThen(points, end, SUFFIX);
   if (holds(points, suffix, SUFFIX) && !holds(points, suffix + 1, ALPHANUMERIC)) {
-    return suffix + 1;
+    return { end: suffix + 1, tickedByDefault: true };
   }
-  return holds(points, end, ALPHANUMERIC) ? null : end;
+  if (!holds(points, end, ALPHANUMERIC)) return { end, tickedByDefault: true };
+
+  // A letter glued to the six digits: listed, unticked, taking the letter when
+  // it is a suffix letter, whatever follows it. A digit drops the number.
+  if (!holds(points, end, LETTER_ANY_SCRIPT)) return null;
+  return { end: holds(points, end, SUFFIX) ? end + 1 : end, tickedByDefault: false };
 }
 
 /** Past one optional space at `at`, when what follows it matches `next`. */

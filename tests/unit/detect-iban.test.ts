@@ -83,7 +83,6 @@ describe("what the IBAN detector does not read as an IBAN (AC-21)", () => {
     ["two characters swapped", "GB82 WEST 1234 5698 7645 32"],
     ["a country not in the registry", "XX82 WEST 1234 5698 7654 32"],
     ["one character too few", "GB82 WEST 1234 5698 7654 3"],
-    ["one character too many, unbroken", "GB82WEST123456987654321"],
     ["lower case", "gb82 west 1234 5698 7654 32"],
     ["letters for check digits", "GBAB WEST 1234 5698 7654 32"],
     ["groups of three", "GB8 2WE ST1 234 569 876 543 2"],
@@ -99,7 +98,6 @@ describe("what the IBAN detector does not read as an IBAN (AC-21)", () => {
   it.each([
     ["a letter before", "XGB82WEST12345698765432"],
     ["a digit before", "1GB82WEST12345698765432"],
-    ["a letter after", "GB82WEST12345698765432X"],
   ])("finds nothing with %s", (_what, text) => {
     expect(found(text)).toEqual([]);
   });
@@ -126,5 +124,49 @@ describe("an IBAN beside other digits (AC-28)", () => {
     ["digits before it", "12 GB82 WEST 1234 5698 7654 32", "GB82 WEST 1234 5698 7654 32"],
   ])("finds one whole with %s", (_what, text, iban) => {
     expect(found(text)).toEqual([[iban, true]]);
+  });
+});
+
+/**
+ * Spec 0005, AC-21 and INV-17, as amended on 2026-10-10: the country's length
+ * and the check say where an IBAN ends, so a letter or digit right after it
+ * no longer hides it. One right before it still does.
+ */
+describe("an IBAN glued to what follows it (AC-21, INV-17)", () => {
+  it.each([
+    [
+      "a letter after the last group",
+      "GB82 WEST 1234 5698 7654 32A",
+      "GB82 WEST 1234 5698 7654 32",
+    ],
+    ["the next word, unbroken", "GB82WEST12345698765432Bank", "GB82WEST12345698765432"],
+    // How a footnote marker `¹` after it reads once NFKC has made it `1`.
+    [
+      "one character too many, unbroken",
+      "GB82WEST123456987654321",
+      "GB82WEST12345698765432",
+    ],
+    ["a letter after, unbroken", "GB82WEST12345698765432X", "GB82WEST12345698765432"],
+    ["more digits, unbroken", "GB82WEST123456987654321234", "GB82WEST12345698765432"],
+    // The grouped form ends at the country's length, inside a group if it must.
+    [
+      "a footnote marker after a short last group",
+      "IE29 AIBK 9311 5212 3456 781",
+      "IE29 AIBK 9311 5212 3456 78",
+    ],
+    [
+      "a currency code after it",
+      "ES9121000418450200051332EUR",
+      "ES9121000418450200051332",
+    ],
+  ])("finds the IBAN, ticked, with %s", (_what, text, iban) => {
+    expect(found(`See ${text} today`)).toEqual([[iban, true]]);
+  });
+
+  it.each([
+    ["a letter before", "XGB82WEST12345698765432"],
+    ["a word before", "IBANGB82WEST12345698765432"],
+  ])("still finds nothing with %s", (_what, text) => {
+    expect(found(text)).toEqual([]);
   });
 });

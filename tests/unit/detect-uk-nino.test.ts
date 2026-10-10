@@ -83,7 +83,6 @@ describe("what the NI detector does not read as one (AC-23)", () => {
   it.each([
     ["five digits", "AB12345C"],
     ["seven digits", "AB1234567"],
-    ["a suffix past D", "AB123456E"],
     ["two spaces", "AB  12 34 56 C"],
     ["a space inside a pair", "AB 1 234 56 C"],
     ["one letter", "A123456C"],
@@ -96,7 +95,6 @@ describe("what the NI detector does not read as one (AC-23)", () => {
   it.each([
     ["a letter before", "XAB123456C"],
     ["a digit before", "1AB123456C"],
-    ["a letter after", "AB123456CX"],
   ])("finds nothing with %s", (_what, text) => {
     expect(found(text)).toEqual([]);
   });
@@ -115,5 +113,52 @@ describe("a National Insurance number beside other digits (AC-28)", () => {
     ["digits before it", "12 AB123456C", "AB123456C"],
   ])("finds one whole with %s", (_what, text, nino) => {
     expect(found(text)).toEqual([[nino, true]]);
+  });
+});
+
+/**
+ * Spec 0005, AC-23, AC-10 and INV-17, as amended on 2026-10-10: a letter glued
+ * to the six digits no longer hides the number. It is listed unticked, taking
+ * that letter when it is a suffix letter, whatever follows it. A digit glued to
+ * the six digits still drops it, as part of a longer number.
+ */
+describe("a National Insurance number glued to what follows it (AC-23, INV-17)", () => {
+  it.each([
+    ["a second suffix letter", "AB123456CD", "AB123456C"],
+    ["two suffix letters, lower case", "AB123456cd", "AB123456c"],
+    ["a letter after its suffix", "AB123456CX", "AB123456C"],
+    ["a word after its suffix", "AB123456Cname", "AB123456C"],
+    ["a digit after its suffix", "AB123456C7", "AB123456C"],
+    // How a footnote marker `¹` after a suffix reads once NFKC has made it `1`.
+    ["a footnote marker after its suffix", "AB123456C1", "AB123456C"],
+    ["a word starting with a suffix letter", "AB123456Date", "AB123456D"],
+    ["a suffix past D", "AB123456E", "AB123456"],
+    ["a word starting past D", "AB123456Ename", "AB123456"],
+    ["a word glued to a spaced number's suffix", "AB 12 34 56Cname", "AB 12 34 56C"],
+    ["a letter in another script", "AB123456é", "AB123456"],
+  ])("lists it unticked with %s", (_what, text, nino) => {
+    expect(found(`Ref ${text} here`)).toEqual([[nino, false]]);
+  });
+
+  it.each([
+    ["a word after a spaced suffix", "AB 12 34 56 Cname", "AB 12 34 56"],
+    ["a digit after a spaced suffix", "AB 12 34 56 C7", "AB 12 34 56"],
+    [
+      "a word starting with a suffix letter after a spaced suffix",
+      "AB 12 34 56 CDate",
+      "AB 12 34 56",
+    ],
+    ["a reference after it", "AB123456 1234", "AB123456"],
+    ["its suffix and nothing glued", "AB 12 34 56 C", "AB 12 34 56 C"],
+  ])("still lists it ticked with %s", (_what, text, nino) => {
+    expect(found(`Ref ${text} here`)).toEqual([[nino, true]]);
+  });
+
+  it.each([
+    ["a digit after the six digits", "AB1234567"],
+    ["a footnote marker after a number with no suffix", "AB1234561"],
+    ["a tracking number", "AB123456789GB"],
+  ])("still finds nothing with %s", (_what, text) => {
+    expect(found(`Ref ${text} here`)).toEqual([]);
   });
 });

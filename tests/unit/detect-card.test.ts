@@ -142,12 +142,11 @@ function spaced(digits: string, sizes: readonly number[]): string {
  * A 19 digit Visa whose first 16 digits also pass: 15 digits from the
  * brand's prefix, the check digit that makes 16 pass, two more digits, then
  * the check digit that makes 19 pass. Spaced 4 4 4 4 3, its first 16 are a
- * window of their own, so this is what tells the clear end rule apart from
- * the shortest window.
+ * window of their own, so this is what tells the longest window from a start
+ * apart from the shortest.
  */
 const NINETEEN = withCheckDigit(`${withCheckDigit("453921803765777")}35`);
 const NINETEEN_SPACED = spaced(NINETEEN, [4, 4, 4, 4, 3]);
-const SIXTEEN_SPACED = spaced(NINETEEN.slice(0, 16), [4, 4, 4, 4]);
 
 /** A CVV that, after `4111111111111111`, makes 19 digits that pass together. */
 const CVV = "003";
@@ -336,9 +335,9 @@ describe("the groups of a spaced card (AC-28)", () => {
 });
 
 /**
- * From each start, the window that reaches the run's end when it passes and
- * its end is clear, else the shortest that passes. Spec 0005, *Detectors*
- * (`card`) step 5.
+ * From each start, the longest window that passes, and the row carried on
+ * while a later start inside it has a passing window that reaches further.
+ * Spec 0005, *Detectors* (`card`) step 5, as rewritten on 2026-10-10.
  */
 describe("choosing where a card ends (AC-28)", () => {
   it("is tried on a 19 digit card whose first 16 also pass", () => {
@@ -355,13 +354,8 @@ describe("choosing where a card ends (AC-28)", () => {
     expect(texts(text)).toEqual([NINETEEN_SPACED]);
   });
 
-  /**
-   * The recorded limit: a spaced expiry joins the run, so the 19 digit
-   * window no longer reaches its end, and the shortest that passes is the
-   * first 16. The last group stays in the file, beside a removed card.
-   */
-  it("takes only the first 16 of a 19 digit card before a spaced expiry", () => {
-    expect(texts(`${NINETEEN_SPACED} 12 28`)).toEqual([SIXTEEN_SPACED]);
+  it("takes a 19 digit card whole before a spaced expiry", () => {
+    expect(texts(`${NINETEEN_SPACED} 12 28`)).toEqual([NINETEEN_SPACED]);
   });
 
   it("takes a 19 digit card whole when it is unbroken, whatever follows", () => {
@@ -369,27 +363,124 @@ describe("choosing where a card ends (AC-28)", () => {
   });
 
   /**
-   * The end is not clear when a dot or a slash with a digit after it follows
-   * the run's last group: that group is glued to more digits and may belong
-   * to them, so the shortest window that passes is taken instead. Unbroken,
-   * the card is one unit, never cut, so it stays whole.
+   * A dot or a slash ends the run, so the 19 digit window is the longest
+   * from the card's start whatever is glued on beyond it. Unbroken, the card
+   * is one unit, never cut, so it stays whole too.
    */
   it.each([
     ["a dot", "."],
     ["a slash", "/"],
-  ])(
-    "takes the shortest window when %s and a digit follow the last group",
-    (_what, glue) => {
-      expect(texts(`${NINETEEN_SPACED}${glue}5`)).toEqual([SIXTEEN_SPACED]);
-      expect(texts(`${NINETEEN}${glue}5`)).toEqual([NINETEEN]);
-    },
-  );
+  ])("takes a 19 digit card whole when %s and a digit follow it", (_what, glue) => {
+    expect(texts(`${NINETEEN_SPACED}${glue}5`)).toEqual([NINETEEN_SPACED]);
+    expect(texts(`${NINETEEN}${glue}5`)).toEqual([NINETEEN]);
+  });
 
   it("takes a CVV that ends the run when the two pass together", () => {
     expect(texts(`4111 1111 1111 1111 ${CVV}`)).toEqual([`4111 1111 1111 1111 ${CVV}`]);
   });
 
-  it("leaves the CVV when more digits follow it", () => {
-    expect(texts(`4111 1111 1111 1111 ${CVV} 1234`)).toEqual(["4111 1111 1111 1111"]);
+  it("takes a CVV when the two pass together and more digits follow it", () => {
+    expect(texts(`4111 1111 1111 1111 ${CVV} 1234`)).toEqual([
+      `4111 1111 1111 1111 ${CVV}`,
+    ]);
+  });
+});
+
+/**
+ * Where two windows that pass overlap, the card's row covers both, so no
+ * digit of a real card is left without a row whatever stands beside it.
+ * Spec 0005, AC-28 and INV-15, as amended on 2026-10-10. Each number before
+ * the Visa test card makes a 16 digit Mastercard or Diners Club window that
+ * passes by chance; before, that false window was the only row, and the
+ * card's last group was left in the file.
+ */
+describe("overlapping card windows share one row (AC-28, INV-15)", () => {
+  it.each([
+    "2226 4111 1111 1111 1111",
+    "2234 4111 1111 1111 1111",
+    "2259 4111 1111 1111 1111",
+    "2309 4111 1111 1111 1111",
+    "30003 4111 1111 1111 1111",
+    "300000 4111 1111 1111 1111",
+  ])("lists every digit of %s as one card", (text) => {
+    expect(found(`Ref ${text} on file`)).toEqual([[text, true]]);
+  });
+
+  it("starts the row at the first window that passes", () => {
+    expect(found("Ref 1000 4016 4111 1111 1111 1111 on file")).toEqual([
+      ["4016 4111 1111 1111 1111", true],
+    ]);
+  });
+
+  /**
+   * Through `detect`: carrying a row never reaches a neighbour no passing
+   * window holds, so a Social Security number cut by a false card keeps the
+   * rest as its own piece (`detect.test.ts`), and a phone number after a card
+   * keeps all of its digits.
+   */
+  it.each<[string, [DetectorKind, string][]]>([
+    [
+      "Ref 3400 0000 0005 123 45 6789 on file",
+      [
+        ["card", "3400 0000 0005 123"],
+        ["us-ssn", "45 6789"],
+      ],
+    ],
+    [
+      "4111 1111 1111 1111 020 7946 0958",
+      [
+        ["card", "4111 1111 1111 1111"],
+        ["phone", "020 7946 0958"],
+      ],
+    ],
+  ])("leaves a neighbour no passing window holds its own row: %s", (text, expected) => {
+    const points = Array.from(text);
+    expect(
+      detect({ text, joins: [] }).map((span) => [
+        span.kind,
+        points.slice(span.start, span.end).join(""),
+      ]),
+    ).toEqual(expected);
+  });
+
+  /**
+   * Pinned, so the merge is a known behaviour: every start's window passes,
+   * so the row is carried to the run's end.
+   */
+  it("lists a run where every start passes as one row", () => {
+    const text = "4242 4242 4242 4242 4242 4242 4242 4242";
+    expect(found(text)).toEqual([[text, true]]);
+  });
+
+  /**
+   * The case the update closes, built from random cards rather than chosen:
+   * whatever stands before or after a card, every digit of it lies inside a
+   * card row. The generator is seeded, so a failure names a fixed layout.
+   */
+  it("leaves no digit of a real card without a card row, whatever its neighbours", () => {
+    let seed = 20261010;
+    const random = (below: number): number => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed % below;
+    };
+    const digits = (count: number): string =>
+      Array.from({ length: count }, () => String(random(10))).join("");
+    const prefixes = ["4", "51", "2221", "6011", "3528", "62"];
+
+    for (let trial = 0; trial < 400; trial += 1) {
+      const card = cardFrom(prefixes[trial % prefixes.length] + digits(6), 16);
+      const before = random(2) === 0 ? `${digits(4 + random(3))} ` : "";
+      const after = random(2) === 0 ? ` ${digits(1 + random(6))}` : "";
+      const text = `Ref ${before}${spaced(card, [4, 4, 4, 4])}${after} on file`;
+      // Every character before the card is ASCII, so offsets and code points agree.
+      const from = "Ref ".length + before.length;
+      const to = from + "4111 1111 1111 1111".length;
+
+      const rows = DETECTORS.card({ text, joins: [] });
+      expect(
+        rows.some((row) => row.start <= from && row.end >= to),
+        text,
+      ).toBe(true);
+    }
   });
 });

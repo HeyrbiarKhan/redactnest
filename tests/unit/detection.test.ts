@@ -775,6 +775,53 @@ describe("cards beside other digits (AC-28)", () => {
   });
 });
 
+/**
+ * Spec 0005, AC-19, AC-21, AC-23, AC-28 and INV-17 (update of 2026-10-10):
+ * the rows the review found missing, through the real MuPDF. Each new row has
+ * search()'s quads, the card's included above, and a run removing every row
+ * removes the whole card a chance window overlaps, while each time, the
+ * glued footnote marker, currency code and word, and the first half of a
+ * range across months stay in the file.
+ */
+describe("the review's silent misses (AC-19, AC-21, AC-23, AC-28)", () => {
+  it.each([
+    ["detect-date.pdf", "01/05/2026"],
+    ["detect-date.pdf", "31/05/2026"],
+    ["detect-date.pdf", "3-5 June 2026"],
+    ["detect-date.pdf", "3 June 2026"],
+    ["detect-date.pdf", "2026-09-01"],
+    ["detect-date.pdf", "2026-09-30"],
+    ["detect-date.pdf", "1980-05-12"],
+    ["detect-iban.pdf", "IE29 AIBK 9311 5212 3456 78"],
+    ["detect-iban.pdf", "ES9121000418450200051332"],
+    ["detect-uk-nino.pdf", "KL123456B"],
+  ])("give %s's %s search()'s quads (AC-7)", async (name, needle) => {
+    const found = (await find(name)).filter((each) => each.text === needle);
+    const hits = searched(name, 0, needle);
+
+    expect(found).toHaveLength(1);
+    expect(hits).toHaveLength(1);
+    expectSameQuads(found[0].target?.quads ?? [], hits[0]);
+  });
+
+  it.each<[string, readonly string[], readonly string[]]>([
+    ["detect-card.pdf", [], ["2223"]],
+    ["detect-date.pdf", ["28 May", "T23:59:59Z", "T00:00:00Z"], []],
+    ["detect-iban.pdf", ["1 above", "EUR"], []],
+    ["detect-uk-nino.pdf", ["signed"], []],
+  ])(
+    "leave in %s what no row holds",
+    async (name, kept, gone) => {
+      const output = await expectRemoved(name, removable(await find(name)));
+      const text = inspect(output, (doc) => pageText(doc, 0));
+
+      for (const fragment of kept) expect(text).toContain(fragment);
+      for (const fragment of gone) expect(text).not.toContain(fragment);
+    },
+    60_000,
+  );
+});
+
 /** AC-11 and AC-12: one page at a time, and a page that cannot be read fails. */
 describe("reading pages", () => {
   it("asks whether to stop after every read of every page, and stops when told", async () => {

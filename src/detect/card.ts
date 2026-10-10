@@ -22,10 +22,18 @@ import type { DetectInput, Span } from "./types";
  *
  * A window of several units, which only a spaced card makes, is grouped as
  * cards are printed (`CARD_GROUP_DIGITS`), so a row number, a lone digit or
- * an unbroken card's neighbour never joins a card. From each start the card
- * is the window that reaches the run's end, when that passes and nothing glued
- * by a dot or slash follows; else the shortest that passes. So a card never
- * takes the first group of a number that goes on after it.
+ * an unbroken card's neighbour never joins a card.
+ *
+ * Every window that passes and overlaps a card joins that card's row (INV-15,
+ * as amended on 2026-10-10). From each start the card is the longest window
+ * that passes, and a later start inside its row whose longest passing window
+ * reaches further carries the row to that window's end. Two readings of one
+ * run can disagree about where a card starts or ends: in
+ * `2226 4111 1111 1111 1111`, `2226 4111 1111 1111` passes by chance and the
+ * real card starts one group later. Taking either reading alone leaves a real
+ * card's first or last group with no row; covering both removes every digit
+ * of the card, at the cost of a neighbour's digits inside the row now and
+ * then, the rest of that neighbour keeping its own row (AC-3, INV-16).
  *
  * Every card starts ticked (AC-10), whether it is a whole run or part of one.
  *
@@ -35,7 +43,9 @@ import type { DetectInput, Span } from "./types";
  * windows are read, since a window of several units opens with 4 or more
  * digits, every later unit adds at least 1 and all but the last at least 3,
  * and growth stops past 19 digits. Each window is judged at most once per
- * start, a constant per unit.
+ * start, a constant per unit, and each unit is a start at most once, either
+ * where scanning stands or while a row is carried, because scanning resumes
+ * after the row.
  */
 
 /** One issuer: the prefixes it numbers from, and the lengths it issues. */
@@ -152,8 +162,7 @@ interface Window {
 }
 
 export function detectCard(input: DetectInput): readonly Span[] {
-  const points = codePoints(input.text);
-  return runsIn(points).flatMap((run) => cardsIn(points, run));
+  return runsIn(codePoints(input.text)).flatMap((run) => cardsIn(run));
 }
 
 /**
@@ -242,45 +251,53 @@ function slashBeside(points: readonly string[], at: number, away: -1 | 1): boole
 }
 
 /**
- * The cards in one run (steps 5 to 7). At each unit not yet taken, the window
- * to the run's last unit when it passes and its end is clear, else the
- * shortest window that passes; scanning resumes after the window taken. A
- * unit where no window passes is passed over.
+ * The cards in one run (steps 5 to 7). At each unit not yet taken, the
+ * longest window that passes; then each later unit up to the row's last
+ * carries the row to the end of its own longest passing window, when that
+ * reaches further, and the units it adds are read the same way in turn.
+ * Scanning resumes after the row. A unit where no window passes is passed
+ * over.
  */
-function cardsIn(points: readonly string[], run: readonly Unit[]): readonly Span[] {
+function cardsIn(run: readonly Unit[]): readonly Span[] {
   const spans: Span[] = [];
 
   for (let at = 0; at < run.length;) {
-    const windows = windowsFrom(run, at);
-    const whole = windows[windows.length - 1];
-    const chosen =
-      whole.last === run.length - 1 &&
-      passes(whole) &&
-      clearAfter(points, run[whole.last].end)
-        ? whole
-        : windows.find(passes);
-
+    const chosen = longestPassing(run, at);
     if (chosen === undefined) {
       at += 1;
       continue;
     }
+
+    let last = chosen.last;
+    for (let later = at + 1; later <= last; later += 1) {
+      const reach = longestPassing(run, later);
+      if (reach !== undefined && reach.last > last) last = reach.last;
+    }
     spans.push({
       kind: "card",
       start: run[at].start,
-      end: run[chosen.last].end,
+      end: run[last].end,
       tickedByDefault: true,
     });
-    at = chosen.last + 1;
+    at = last + 1;
   }
   return spans;
+}
+
+/**
+ * The longest window from the unit at `first` that passes, if any. Windows
+ * from one start are nested, so the last that passes holds the most digits
+ * and the most units alike.
+ */
+function longestPassing(run: readonly Unit[], first: number): Window | undefined {
+  return windowsFrom(run, first).findLast(passes);
 }
 
 /**
  * Every window from the unit at `first`, shortest first (step 3): the unit
  * alone, then, when it is bare and opens a spaced card, each longer stretch
  * of bare units grouped by `CARD_GROUP_DIGITS`, until the sizes break or the
- * digits pass `LONGEST`. Windows from one start are nested, so the first that
- * passes is the shortest.
+ * digits pass `LONGEST`.
  */
 function windowsFrom(run: readonly Unit[], first: number): readonly Window[] {
   const opening = run[first];
@@ -308,18 +325,6 @@ function windowsFrom(run: readonly Unit[], first: number): readonly Window[] {
 
 function within(count: number, [least, most]: readonly [number, number]): boolean {
   return count >= least && count <= most;
-}
-
-/**
- * Is a window's end clear (step 5)? Not when a dot or slash with a digit
- * right after it follows its last unit: the run's last group is then glued to
- * more digits, as in a dotted date, and may belong to them.
- */
-function clearAfter(points: readonly string[], end: number): boolean {
-  return !(
-    (points[end] === "." || points[end] === "/") &&
-    holds(points, end + 1, ASCII_DIGIT)
-  );
 }
 
 /** Step 4: 13 to 19 digits that pass Luhn, at a prefix and length a brand issues. */

@@ -12,7 +12,7 @@ endobj
 << /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
 endobj
 5 0 obj
-<<  /Length 496 >>
+<<  /Length 555 >>
 stream
 BT /F1 12 Tf 72 740 Td (NI number AB 12 34 56 C on payslip) Tj ET
 BT /F1 12 Tf 72 720 Td (Employee ce123456d joined) Tj ET
@@ -20,8 +20,9 @@ BT /F1 12 Tf 72 700 Td (Ref PX123456 without suffix) Tj ET
 BT /F1 12 Tf 72 680 Td (Example QQ 12 34 56 C is never issued) Tj ET
 BT /F1 12 Tf 72 660 Td (Prefixes GB 12 34 56 A and TN123456B are never used) Tj ET
 BT /F1 12 Tf 72 640 Td (Codes DA123456A and AB1234567) Tj ET
-BT /F1 12 Tf 72 620 Td (His number is JK 65 43) Tj ET
-BT /F1 12 Tf 72 606 Td (21 B as printed) Tj ET
+BT /F1 12 Tf 72 620 Td (Merged KL123456Bsigned here) Tj ET
+BT /F1 12 Tf 72 600 Td (His number is JK 65 43) Tj ET
+BT /F1 12 Tf 72 586 Td (21 B as printed) Tj ET
 
 endstream
 endobj
@@ -36,9 +37,9 @@ xref
 0000000115 00000 n 
 0000000212 00000 n 
 0000000307 00000 n 
-0000000855 00000 n 
+0000000914 00000 n 
 trailer
 << /Size 7 /Root 1 0 R >>
 startxref
-993
+1052
 %%EOF

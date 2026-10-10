@@ -11,8 +11,16 @@ import type { DetectInput, Span } from "./types";
  * first four characters to the end, read each letter as two digits (A is 10),
  * and the remainder by 97 must be 1. A typo in any one character fails it.
  *
- * No letter or digit touches either end, so an IBAN is never read out of a
- * longer code. An IBAN starts ticked (AC-10).
+ * No letter or digit comes right before it, so an IBAN is never read out of
+ * a longer code. One may come right after it (INV-17, as amended on
+ * 2026-10-10): the country's exact length and the check already say where an
+ * IBAN ends, so the characters past that length are never read, and the next
+ * word glued on (`GB82WEST12345698765432Bank`) or a footnote marker, which
+ * NFKC reads as a digit, no longer drops a real IBAN whole. A code that opens
+ * like an IBAN and runs on past its length lists one only when the check
+ * passes by chance, 1 in 97. The start keeps its rule, because a letter or
+ * digit before it is how a value reads out of a longer code. An IBAN starts
+ * ticked (AC-10).
  *
  * Why it is linear (INV-7): an IBAN may start only at a capital letter with
  * nothing alphanumeric before it, and each start reads at most the longest
@@ -139,7 +147,10 @@ export function detectIban(input: DetectInput): readonly Span[] {
   return spans;
 }
 
-/** Where an IBAN starting at `at` ends, or `null`. */
+/**
+ * Where an IBAN starting at `at` ends, or `null`. It ends at its country's
+ * length, inside a group of four if it must, whatever follows.
+ */
 function ibanAt(points: readonly string[], at: number): number | null {
   if (!holds(points, at, CAPITAL) || !holds(points, at + 1, CAPITAL)) return null;
   const length = IBAN_LENGTHS[points[at] + points[at + 1]];
@@ -162,8 +173,6 @@ function ibanAt(points: readonly string[], at: number): number | null {
     characters += points[end];
     end += 1;
   }
-
-  if (holds(points, end, ALPHANUMERIC)) return null;
   return checksumIsOne(characters) ? end : null;
 }
 

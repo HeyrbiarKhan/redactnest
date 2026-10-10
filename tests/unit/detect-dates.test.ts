@@ -177,9 +177,12 @@ describe("a date is never cut from a longer code", () => {
     ["a letter before a month", "xSeptember 27, 2026"],
     ["a digit after the year", "27 September 20261"],
     ["a letter after the year", "27 September 2026AD"],
-    ["a time joined to an ISO date", "2026-09-27T10:00"],
   ])("finds nothing with %s", (_what, text) => {
     expect(found(text)).toEqual([]);
+  });
+
+  it("finds an ISO date joined to a time, without the time", () => {
+    expect(texts("2026-09-27T10:00")).toEqual(["2026-09-27"]);
   });
 
   it("still finds a date after a hyphen or slash with a space before it", () => {
@@ -187,6 +190,135 @@ describe("a date is never cut from a longer code", () => {
       "05.12.1980",
       "06.12.1980",
     ]);
+  });
+});
+
+/**
+ * Spec 0005, AC-19 and INV-17, as amended on 2026-10-10: a boundary rule
+ * drops a date only where it would be read out of a longer code.
+ */
+describe("date ranges and times (AC-19, INV-17)", () => {
+  it.each([
+    ["a hyphen", "01/05/1980-31/05/1980", ["01/05/1980", "31/05/1980"]],
+    ["an en dash", "01/05/1980–31/05/1980", ["01/05/1980", "31/05/1980"]],
+    [
+      "a hyphen between dotted dates",
+      "05.12.1980-10.12.1980",
+      ["05.12.1980", "10.12.1980"],
+    ],
+    ["a slash between ISO dates", "2026-09-01/2026-09-30", ["2026-09-01", "2026-09-30"]],
+    ["a hyphen between ISO dates", "2026-09-01-2026-09-30", ["2026-09-01", "2026-09-30"]],
+    [
+      "a hyphen between written dates",
+      "1 May 2026-31 May 2026",
+      ["1 May 2026", "31 May 2026"],
+    ],
+    [
+      "a hyphen before a written date",
+      "05/12/1980-3 June 2026",
+      ["05/12/1980", "3 June 2026"],
+    ],
+  ])("finds both of two full dates joined by %s", (_what, text, dates) => {
+    expect(texts(`Leave ${text} approved`)).toEqual(dates);
+  });
+
+  it.each([
+    "3–5 June 2026",
+    "3-5 June 2026",
+    "3−5 June 2026",
+    "3rd-5th of June 2026",
+    "3rd–5th of June 2026",
+    "3-5th June 2026",
+    "June 3–5, 2026",
+    "June 3-5 2026",
+    // The days' order is not checked.
+    "5-3 June 2026",
+  ])("finds the day range %s as one row", (date) => {
+    expect(texts(`Course ${date} in Leeds`)).toEqual([date]);
+  });
+
+  it("reads a range with spaces around its dash as the second day's date", () => {
+    expect(texts("Course 3 - 5 June 2026 in Leeds")).toEqual(["5 June 2026"]);
+  });
+
+  it.each([
+    ["no 31 June", "1-31 June 2026"],
+    ["no 32 May", "1-32 May 2026"],
+  ])("finds no day range with %s", (_what, text) => {
+    expect(texts(`Course ${text} in Leeds`)).toEqual([]);
+  });
+
+  /**
+   * The first day is no real day, so the range is no date; the second day
+   * then reads as a written date beside a separator, which never drops one
+   * (INV-17), and is listed unticked for the visitor to judge.
+   */
+  it("finds the second day's date where a range's first day is not real", () => {
+    expect(found("Course 31-30 June 2026 in Leeds")).toEqual([["30 June 2026", false]]);
+  });
+
+  it.each([
+    ["28 May-3 June 2026", "3 June 2026"],
+    ["5 June–3 July 2026", "3 July 2026"],
+    ["Dec 30-Jan 2, 2026", "Jan 2, 2026"],
+    ["REF-27 September 2026", "27 September 2026"],
+    ["27 September 2026-01", "27 September 2026"],
+  ])("finds the written date beside a separator in %s", (text, date) => {
+    expect(texts(`Term ${text} agreed`)).toEqual([date]);
+  });
+
+  it.each([
+    ["2026-09-27T10:00:00Z", "2026-09-27"],
+    ["1980-05-12T00:00:00+01:00", "1980-05-12"],
+    ["2026-09-27t10:00", "2026-09-27"],
+    ["2026/09/27T10:00", "2026/09/27"],
+  ])("finds the year first date in %s without its time", (text, date) => {
+    expect(texts(`Logged ${text} here`)).toEqual([date]);
+  });
+
+  it.each([
+    "2026-09-01T00:00:00/2026-09-30T23:59:59",
+    "2026-09-01T00:00:00Z/2026-09-30T23:59:59Z",
+    "2026-09-01T00:00:00+01:00/2026-09-30",
+    "2026-09-01T00:00-2026-09-30",
+    "2026-09-01T00:00:00.000-05:00/2026-09-30",
+  ])("finds both dates of the interval %s, each alone", (text) => {
+    expect(texts(`Window ${text} logged`)).toEqual(["2026-09-01", "2026-09-30"]);
+  });
+
+  it.each([
+    ["REF-05.12.1980-06.12.1980"],
+    ["2026-09-27-01"],
+    ["1/05/12/1980"],
+    ["05.12.1980.17"],
+    ["05.12.1980a"],
+    ["05.12.1980T10:00"],
+    ["2026-09-27Tuesday"],
+    ["x27 September 2026"],
+    ["27 September 2026AD"],
+  ])("still finds no date read out of the code %s", (text) => {
+    expect(found(`Ref ${text} here`)).toEqual([]);
+  });
+
+  /**
+   * The joiner parts only where a full date lies beyond it, read with no end
+   * check of its own: here the second date runs on into a letter, so it is
+   * cut, while the first still sees a full date beyond its hyphen.
+   */
+  it("parts at a joiner whose far date is then cut on its own", () => {
+    expect(texts("01/05/1980-31/05/1980x")).toEqual(["01/05/1980"]);
+  });
+
+  it("ticks each date of a range on its own (AC-10)", () => {
+    expect(found("DOB 01/05/1980-31/05/1980")).toEqual([
+      ["01/05/1980", true],
+      ["31/05/1980", true],
+    ]);
+    expect(found("Leave 02/05/2026-31/05/2026")).toEqual([
+      ["02/05/2026", false],
+      ["31/05/2026", false],
+    ]);
+    expect(found("DOB 1980-05-12T00:00")).toEqual([["1980-05-12", true]]);
   });
 });
 

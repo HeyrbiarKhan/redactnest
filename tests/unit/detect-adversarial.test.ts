@@ -18,8 +18,11 @@ import type { DetectorKind } from "@/worker/protocol";
  * Release 3 adds each new kind's own shapes: its values side by side, and cut
  * short just before they would hold; and, since a card is read out of a run
  * of digit groups, a card beside its expiry and long runs of four and of six
- * digit groups. Every detector reads every shape, so each is also tried on
- * the others' worst cases.
+ * digit groups. The update of 2026-10-10 adds the reads its boundary rules
+ * make: dates chained by joiners, day ranges, dates against a `T` and times
+ * that never end, written dates beside separators, and IBANs and National
+ * Insurance numbers glued end to end. Every detector reads every shape, so
+ * each is also tried on the others' worst cases.
  *
  * Three proofs. Each detector finishes a 100,000 character block of every
  * shape within its budget: a second for email and for each release 3
@@ -177,6 +180,22 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["cards beside their expiry", "4111 1111 1111 1111 12/28 "],
   ["one long run of four digit groups", "1234 "],
   ["one long run of six digit groups", "123456 "],
+  // The update of 2026-10-10 (AC-19, AC-21, AC-23, INV-17): a date's end may
+  // read the date beyond a joiner, or a time and its offset, and an IBAN's or a
+  // National Insurance number's end no longer stops at a glued character, so
+  // each of those reads is tried end to end.
+  ["dates joined by hyphens", "01/01/2000-"],
+  ["ISO dates joined by slashes", "2026-09-01/"],
+  ["written dates joined by hyphens", "1 May 2026-"],
+  ["day ranges", "3-5 June 2026 "],
+  ["hyphens between single digits", "1-"],
+  ["year first dates against a T", "2026-09-27T"],
+  ["ISO intervals end to end", "2026-09-01T00:00:00Z/"],
+  ["times that never end", "2026-09-27T1:1:1:1:1:1:1:"],
+  ["written dates joined across months", "28 May-3 June 2026-"],
+  ["written dates after a code", "REF-27 September 2026 "],
+  ["unbroken IBANs glued end to end", "GB82WEST12345698765432"],
+  ["National Insurance numbers glued to letters", "AB123456CD "],
 ];
 
 /**

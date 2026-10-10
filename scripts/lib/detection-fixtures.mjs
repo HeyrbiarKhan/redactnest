@@ -416,6 +416,16 @@ export const DETECT_DATE = Object.freeze([
   ["2026-09-27", false],
   ["09/30/2026", false],
   ["1 May 1990", true],
+  // Spec 0005, AC-19 and INV-17 (update of 2026-10-10): two full dates joined
+  // by a hyphen, a day range, a written date beside a dash, an ISO interval
+  // with times, and an ISO date with its time after a birth word.
+  ["01/05/2026", false],
+  ["31/05/2026", false],
+  ["3-5 June 2026", false],
+  ["3 June 2026", false],
+  ["2026-09-01", false],
+  ["2026-09-30", false],
+  ["1980-05-12", true],
   ["27 September 2026", false],
 ]);
 
@@ -436,6 +446,10 @@ export const DETECT_CARD = Object.freeze([
   // A window that passes by chance, which takes the first group of the
   // spaced Social Security number after it.
   ["3400 0000 0005 123", true],
+  // Spec 0005, INV-15 (update of 2026-10-10): `2223 4000 0566 5566` passes
+  // by chance, and the Visa test card after its first group is the real one,
+  // so the row covers both.
+  ["2223 4000 0566 5566 5556", true],
   ["4012 8888 8888 1881", true],
 ]);
 
@@ -450,6 +464,10 @@ export const DETECT_IBAN = Object.freeze([
   ["GB82 WEST 1234 5698 7654 32", true],
   ["DE89370400440532013000", true],
   ["FR14 2004 1010 0505 0001 3M02 606", true],
+  // Spec 0005, AC-21 and INV-17 (update of 2026-10-10): a footnote style `1`
+  // and a currency code glued after an IBAN.
+  ["IE29 AIBK 9311 5212 3456 78", true],
+  ["ES9121000418450200051332", true],
   ["NL91 ABNA 0417 1643 00", true],
 ]);
 
@@ -464,6 +482,9 @@ export const DETECT_UK_NINO = Object.freeze([
   ["AB 12 34 56 C", true],
   ["ce123456d", true],
   ["PX123456", true],
+  // Spec 0005, AC-23 and INV-17 (update of 2026-10-10): a number glued to
+  // the next word is listed, unticked.
+  ["KL123456B", false],
   ["JK 65 43 21 B", true],
 ]);
 
@@ -471,7 +492,9 @@ export const DETECT_UK_NINO = Object.freeze([
  * Spec 0005, AC-19 and AC-10. Dates, written and numeric, each ticked only
  * after a birth word; the near misses a document is full of (a year alone, a
  * month and year, a day and month, a time, a date cut from a code, impossible
- * dates); and a written date wrapped across two lines of one block.
+ * dates); two dates joined by a hyphen, a day range, a range across months, an
+ * ISO interval with times and an ISO date with its time (INV-17, update of
+ * 2026-10-10); and a written date wrapped across two lines of one block.
  */
 export function detectDate() {
   return document(() => [
@@ -486,8 +509,19 @@ export function detectDate() {
         line("F1", 12, 72, 620, "Since 2019, in September 2026, on 27 September") +
         line("F1", 12, 72, 600, "Meeting at 12:30 on Tuesday, ref INV-05.12.1980") +
         line("F1", 12, 72, 580, "Impossible 31.02.1980 and 31 April 2026") +
-        line("F1", 12, 72, 560, "The lease began on 27 September") +
-        line("F1", 12, 72, 546, "2026 and runs for one year"),
+        line("F1", 12, 72, 560, "Leave 01/05/2026-31/05/2026 approved") +
+        line("F1", 12, 72, 540, "Course 3-5 June 2026 in Leeds") +
+        line("F1", 12, 72, 520, "Term 28 May-3 June 2026 agreed") +
+        line(
+          "F1",
+          12,
+          72,
+          500,
+          "Window 2026-09-01T00:00:00Z/2026-09-30T23:59:59Z logged",
+        ) +
+        line("F1", 12, 72, 480, "DOB 1980-05-12T00:00:00Z exported") +
+        line("F1", 12, 72, 460, "The lease began on 27 September") +
+        line("F1", 12, 72, 446, "2026 and runs for one year"),
     },
   ]);
 }
@@ -506,8 +540,9 @@ const EN_DASH = "\x96";
  * digits glued by hyphens); cards beside an expiry, a row number and another
  * card, typed against an expiry with a hyphen and with an en dash, and
  * spaced as a payment form prints one; a card that passes by chance and
- * cuts into a Social Security number; and a card wrapped across two lines of
- * one block.
+ * cuts into a Social Security number; a number before a card that makes a
+ * window pass by chance, which the card's row covers (INV-15, update of
+ * 2026-10-10); and a card wrapped across two lines of one block.
  */
 export function detectCard() {
   return document(() => [
@@ -529,16 +564,19 @@ export function detectCard() {
         line("F1", 12, 72, 480, "UnionPay 6200-0000-0000-0005 12/28 on file") +
         line("F1", 12, 72, 460, `Visa 4222 2222 2222 2${EN_DASH}12/28 on file`) +
         line("F1", 12, 72, 440, "Ref 3400 0000 0005 123 45 6789 on file") +
-        line("F1", 12, 72, 420, "Backup card 4012 8888") +
-        line("F1", 12, 72, 406, "8888 1881 kept on file"),
+        line("F1", 12, 72, 420, "Ref 2223 4000 0566 5566 5556 on file") +
+        line("F1", 12, 72, 400, "Backup card 4012 8888") +
+        line("F1", 12, 72, 386, "8888 1881 kept on file"),
     },
   ]);
 }
 
 /**
- * Spec 0005, AC-21. The published example IBANs for four countries, grouped,
+ * Spec 0005, AC-21. The published example IBANs for six countries, grouped,
  * unbroken and with letters inside; a wrong check, an unknown country and
- * lower case; and a grouped IBAN wrapped across two lines of one block.
+ * lower case; an IBAN with a footnote style digit after it and one glued to a
+ * currency code (INV-17, update of 2026-10-10); and a grouped IBAN wrapped
+ * across two lines of one block.
  */
 export function detectIban() {
   return document(() => [
@@ -550,8 +588,10 @@ export function detectIban() {
         line("F1", 12, 72, 680, "Typo GB82WEST12345698765433 rejected") +
         line("F1", 12, 72, 660, "Unknown XX82WEST12345698765432 country") +
         line("F1", 12, 72, 640, "Lower gb82west12345698765432 case") +
-        line("F1", 12, 72, 620, "Transfer to NL91 ABNA") +
-        line("F1", 12, 72, 606, "0417 1643 00 today"),
+        line("F1", 12, 72, 620, "See IE29 AIBK 9311 5212 3456 781 above") +
+        line("F1", 12, 72, 600, "Pay ES9121000418450200051332EUR today") +
+        line("F1", 12, 72, 580, "Transfer to NL91 ABNA") +
+        line("F1", 12, 72, 566, "0417 1643 00 today"),
     },
   ]);
 }
@@ -578,8 +618,9 @@ export function detectUsSsn() {
 
 /**
  * Spec 0005, AC-23. National Insurance numbers spaced, in lower case and with
- * no suffix; HMRC's own example and prefixes it never issues; and a number
- * wrapped across two lines of one block.
+ * no suffix; HMRC's own example and prefixes it never issues; a number glued
+ * to the next word, listed unticked (INV-17, update of 2026-10-10); and a
+ * number wrapped across two lines of one block.
  */
 export function detectUkNino() {
   return document(() => [
@@ -591,8 +632,9 @@ export function detectUkNino() {
         line("F1", 12, 72, 680, "Example QQ 12 34 56 C is never issued") +
         line("F1", 12, 72, 660, "Prefixes GB 12 34 56 A and TN123456B are never used") +
         line("F1", 12, 72, 640, "Codes DA123456A and AB1234567") +
-        line("F1", 12, 72, 620, "His number is JK 65 43") +
-        line("F1", 12, 72, 606, "21 B as printed"),
+        line("F1", 12, 72, 620, "Merged KL123456Bsigned here") +
+        line("F1", 12, 72, 600, "His number is JK 65 43") +
+        line("F1", 12, 72, 586, "21 B as printed"),
     },
   ]);
 }
