@@ -474,7 +474,8 @@ The same scratch copy, before and after:
 | `3–5 June 2026`, `3-5 June 2026`, `3rd–5th of June 2026` | nothing | one row, the whole date |
 | `June 3–5, 2026`, `June 3-5 2026` | nothing | one row, the whole date |
 | `2026-09-27T10:00:00Z`, `1980-05-12T00:00:00+01:00`, `2026-09-27t10:00` | nothing | the date alone |
-| `REF-05.12.1980`, `REF-05.12.1980-06.12.1980`, `1/05/12/1980`, `05.12.1980a`, `05.12.1980T10:00`, `2026-09-27Tuesday`, `31-30 June 2026`, `1-32 May 2026` | nothing | nothing |
+| `REF-05.12.1980`, `REF-05.12.1980-06.12.1980`, `1/05/12/1980`, `05.12.1980a`, `05.12.1980T10:00`, `2026-09-27Tuesday`, `1-32 May 2026` | nothing | nothing |
+| `31-30 June 2026` (no 31 June, so no range; corrected by the third update of 2026-10-11, which found this row said nothing while the code and the test list the second day as a written date beside a separator) | nothing | `30 June 2026`, unticked |
 | `2026-09-27-01`, `05.12.1980.17` | no date (a phone row) | no date (the same phone row) |
 | `GB82 WEST 1234 5698 7654 32A`, `GB82WEST12345698765432Bank`, `GB82 WEST 1234 5698 7654 32¹`, `GB82WEST123456987654321234` | nothing | the IBAN, ticked |
 | `XGB82WEST12345698765432` | nothing | nothing |
@@ -657,6 +658,168 @@ A read only pass on a second model (Sonnet 5.5) read the update against the code
 
 Task checks: the renames task 42 had missed (the impossible far date and the cut far date tests, whose comments say the first date is cut) are in; the "still finds no date" block is renamed since it now lists dates beside codes; the Updated line no longer counts the bullets; the Consequences cost example now says what is between the time and the hyphen (a six letter word, or no digit). Measured on the same scratch copy with the three fixes added (the stretch rule, the birth word, month first spacing): the review's cases, the kept rejections, the 1,008 strings (eight change) and the random shapes give the results in the tables above, and the adversarial shapes the figures in *Evidence: linear time*.
 
+## Update of 2026-10-11, third: footnote markers and glued labels
+
+The third fresh model review ([review](../../reviews/2026-10-10-feat-remaining-detectors-third.md)) probed the general boundary rule with about 640,000 generated layouts and found one real silent miss left in the family the second update closed, plus three smaller ones. You asked for exactly these settled, with no new date forms (those go to a feature of their own), favouring finding as before: an extra unticked row is fine, a missed value is not.
+
+### Context
+
+**A footnote marker after a date.** A word processor sets a reference mark flush after the text it marks, as a superscript. NFKC, which detection applies before any pattern runs, turns `¹ ² ³` into `1 2 3`. The review read a page back through MuPDF the way the engine does, with an 8 point `1` drawn after `Born 12/05/1980` at 12 point: at a gap of 1 point or less it came back as `Born 12/05/19801`, and the written and dotted forms as `Born 27 September 20261` and `Geboren am 12.05.1980.1`. A numeric date's last group then had five digits, which the group reader refused, and a written date's year had a digit touching it, which the end check refused; the header comment said so on purpose ("a digit glued to either end is never a date at all") and four tests pinned it. So a date of birth with a footnote after it gave no row and no warning, the one case where the second update's rule, a full real date is never dropped for what follows it, was not kept. The rationale's evidence for the second update had measured the own separator, the letter before and the file name shapes, but never a digit after a year. The same review had already settled the footnote reading for an IBAN (its length and checksum say where it ends) and for a National Insurance number with a suffix.
+
+**The same after a Social Security number and a card.** `partsAt` in `us-ssn.ts` returned nothing when a digit followed the serial, and a card's last unit took the marker as a seventeenth digit, so no window of whole units passed. `SSN 123-45-6789¹` and `Card 4111 1111 1111 1111¹` gave no row; with a space or a full stop before the marker, both were found. A card or a Social Security number with a reference mark is rarer than a footnoted date, but the cause is the same and the harm of a miss larger.
+
+**A label glued to a date by a dot, a hyphen or a slash.** The letter before the separator rejection was measured against `REF-`, `INV-`, dated file names and URL paths, every one with a hyphen or a slash. An abbreviation ends in a full stop and, when extraction loses the space, runs into its value: `Exp.31.12.2026`, `Dt.27/09/2026`, `w.e.f.27.09.2026`. A label can also be glued directly (`Date27/09/2026`, `Dated27 September 2026`) or by a hyphen (`Date-27/09/2026`, `Valid-31/12/2026`). Each gave no row. The birth word exemption already covered one word list for exactly this accident, and the dotted shape (`XXX.DD.MM.YYYY`) was in no measurement table.
+
+**The nits.** The tick's `|| birthGluedTo(points, at)` was dead: `wordBefore` slices the window up to the date's start, so the glued word's lookahead sees the window's end, not the date's digit, and `DOB27/09/1980` was ticked by `wordBefore` alone; its comment claimed otherwise. The time stretch lifts the start rejections for any stretch of digits, spaces, `: . , + @`, hyphens and short letter runs, so a date shortly before a code can read a date out of the code (`Paid 27/09/2026 ref 1/05/12/1980` lists `05/12/1980`), which the Consequences had not said. INV-17 named the letter before and own separator rejections but not the glued digit and glued letter. And the scenario and the evidence row for `31-30 June 2026` said "no date" while the code and `detect-dates.test.ts` list `30 June 2026`.
+
+### Options considered
+
+For the footnote marker after a date:
+
+**Exactly one ASCII digit after a four digit year, kept outside the row (chosen).** A numeric date's last group reads up to five digits and, when the whole is no date, the group without its last digit is tried; a written date's year may have one digit touching it; a dotted date's own full stop and one digit is lifted too; two or more digits, a digit in another script, and a digit after a two digit year still drop the date.
+- Pros: finds every footnote case in the review's matrix (20 forms, with and without a birth word before them, with `¹ ² ³` or a bare digit after); the tick follows AC-10 as for any date; measured cost 1.9% of random `N/N/NNNNN` codes and 3.2% of `20NN-NN-NNN`, every other glued digit shape 0.0% to 0.2%, every extra row unticked; five of 1,110 corpus strings change under it, four of them pinned misses and the fifth (`05.12.19800`) the predicate's own "too long" string, which stays pinned for `isNumericDate` while `detect` now lists its date.
+- Cons: a five digit group is read, so a date and one digit of a longer number is a date and a leftover (`27/09/20261-28/09/2026` now lists both dates, which is right, but `20NN-NN-NNN` codes list one in thirty); two markers or a marker in another script stay a miss.
+
+**Any run of digits after the year, trimmed back to the date.**
+- Pros: covers two markers (`¹²`) and `Born 12/05/198012`.
+- Cons: reads a six digit group as a date and two digits, so `2026-09-27123`, `05.12.198012` and every long number that starts like a date lists a row; the second update measured 100% on those shapes.
+
+**Leave it, recording the miss.**
+- Pros: no code; the IBAN footnote already shows the layout is real.
+- Cons: the date of birth is the value the detector exists for, and the owner's rule says a full real date is never dropped for what follows it.
+
+For the dotted sentence end (`12.05.1980.¹`): **the dot only, after a four digit year, exactly one digit (chosen)**, since the full stop is the sentence's and the marker follows it; against every own separator class, which lists `2026-09-27-1` and `27/09/2026/1`, the shape of a build number or a path step and the shape the own separator rule exists for (both measured at 100% on random real dates under that variant, 0% under the chosen one); and against no lift, which leaves `geboren am 12.05.1980.¹` as the one footnoted form still missed.
+
+For the Social Security number: **one glued ASCII digit after a separated number lists it unticked (chosen)**, as the National Insurance stance (no checksum, so a glued character makes the value uncertain, and an uncertain value is listed unticked); the bare form stays nine digits, since a bare run is told apart from an account number only by its length and the SSN word. Measured, 89% of random `NNN-NN-NNNNN` list an unticked row, the SSA's pass rate on random digits, and nothing but a footnoted number is written that way (`NNN-NN-NNNNNN`, phone like, lists 0%). Against ticked (removes any such code by default) and against leaving it (the miss).
+
+For the card: **a tolerated window, one digit too many at the end of the last unit's last group, carrying a row like a passing window, the row ticked when any window inside it passes whole (chosen)**. The carry matters: a 19 digit UnionPay card whose first 16 digits pass by chance, with a marker after it, left its last group without a row until the start's own tolerated window could carry the row (measured: 1.4% of spaced cards with a marker, every one a 19 digit card, under the first draft; 0.0% with the carry). The group condition and the tick rule come from the cross check: dropping "the unit's last digit" let `4111-1111-1111-1111-1` end its row in a hyphen, and ticking by the start's window alone turned `4521 4111 1111 1111 1111`, a number before a card with no marker at all, into an unticked row whenever its twenty digits less one passed by chance (measured 1.9% of random Visa cards; 0.0% under the chosen tick). Against a tolerated window that never carries (that 1.4%), and against leaving it (95% of cards with a marker have a digit with no row).
+
+For the glued label: **a `DATE_LABELS` list through the birth word's own mechanism, listed unticked, plus lifting the letter before a dot (chosen)**. The list covers the direct and hyphen glue (`Date27/09/2026`, `Date-27/09/2026`), which no dot rule reaches; the dot lift covers every abbreviation (`w.e.f.`, `Rev.`, `No.`, `b.`), which no list ends. Measured: the list changes no corpus string and costs 0.4% of random two letter codes before a hyphen dated date (`DT-`, `TO-`, `ON-`) and 0.1% of three letter ones (`EXP-`); the dot lift lists 100% of `XXX.DD.MM.YYYY` and `name.DD.MM.YYYY.pdf`, both unticked, and changes one corpus string (`2026-09-27 10:00 EST.2026-09-28`, whose second date is now listed), while `vN.DD.MM.YYYY` stays 0% under the own separator rule. Against lifting the glued letter for every written date (`Dated27 September 2026` found, but `Dismay 5 2026` lists `may 5 2026`); against the list alone (every abbreviation not on it stays a miss); against the dot lift alone (`Date27/09/2026` and `Date-27/09/2026` stay misses); and against recording the miss, which the reviewer offered.
+
+For the nits: remove the dead call (chosen; making it "real" has nothing to do, since the tick already holds), add the two time stretch rows to Consequences, reword INV-17 to number every rejection and tolerance, and correct the `31-30 June 2026` lines to `30 June 2026`.
+
+### Rationale
+
+Each tolerance admits exactly one glued digit and nothing else, because one digit is what a footnote marker is and two digits is what a number is: the measured shapes that a wider tolerance admits (`on 05 12 1980`, six digit groups, tracking numbers) all carry two or more. The four digit year condition keeps a two digit year's ambiguity out (`05.12.801` could be `05.12.80` and a marker or `05.12.8` and `01`), and the dot only rule for the own separator keeps the build number shape rejected, since a full stop after a date is a sentence's and a hyphen after a date is a code's. The Social Security number and the card list the value unticked, as a glued National Insurance letter does, because neither has anything that says the marker is not its own digit; a date keeps AC-10's tick, because its calendar and its year's length already say where it ends. The label list and the dot lift split the glued label case by what a list can and cannot do: a short list of labels names the direct and hyphen glue safely (no code spells `Date`), and the dot lift catches every abbreviation at the cost of dotted file names, a shape the second update had already accepted for underscores. INV-17 is reworded to number each rejection and each exemption so the next review can test the rule as written rather than infer it from examples.
+
+### Evidence: the review's cases
+
+Measured on 2026-10-11 through a scratch copy of `src/detect` at commit `c78357c` with each rule as a switch (a `jiti` script in the session's scratchpad, outside the repository; text NFKC normalised first, as `src/engine/find.ts` does), before and after, through each detector alone and through `detect`. `*` marks a ticked row.
+
+| Text | Before | After (own detector) | Through `detect` |
+|---|---|---|---|
+| `Born 12/05/1980¹`, `DOB: 12/05/1980¹` | nothing | `12/05/1980`* | the same |
+| `Signed 27 September 2026¹`, `Sep 27 2026²`, `1st of May 2026³`, `2026-09-27¹` | nothing | the date, unticked | the same |
+| `geboren am 12.05.1980.¹` | nothing | `12.05.1980` | the same |
+| `05.12.19800`, `on 1 May 20261 we`, `on 05.12.19801 we` | nothing | the date | the same |
+| `05-12-1980-3 June 20261` | `05-12-1980` | both dates | the same |
+| `27/09/20261-28/09/2026` | `28/09/2026` | both dates | the same |
+| `Born 12/05/1980¹²`, `Born 12/05/198012`, `Born 12/05/1980١`, `27 September 2026١`, `05.12.80¹`, `1.2.26.1`, `2026-09-27-1`, `27/09/2026/1` | nothing | nothing | nothing |
+| `05.12.1980.17`, `2026-09-27-01` | no date | no date | a phone row each, as before |
+| `Exp.31.12.2026`, `Dt.27/09/2026`, `Date.31.12.2026`, `b.12/05/1980`, `Date-27/09/2026`, `Valid-31/12/2026`, `Date27/09/2026`, `Dated27 September 2026`, `Issued27/09/2026`, `Signed27 September 2026¹` | nothing | the date, unticked | the same |
+| `from27/09/2026 to28/09/2026` | nothing | both dates | the same |
+| `report.27.09.2026.pdf`, `REF.05.12.1980`, `w.e.f.27.09.2026`, `Rev.27.09.2026`, `No.27.09.2026` | nothing | the date, unticked | the same |
+| `report-27-09-2026-v2.pdf`, `REF-05.12.1980`, `v1.05.12.1980`, `M/12/05/1980`, `M-12/05/1980`, `Monday-28/09/2026`, `Toronto27/09/2026`, `photo-27/09/2026`, `Updated27/09/2026`, `Reborn27/09/1980`, `x27 September 2026` | nothing | nothing | nothing |
+| `27/09/2026 Mon-28/09/2026`, `27/09/2026 noon-28/09/2026` | the first date | the first date | the same |
+| `2026-09-27 10:00 EST.2026-09-28` | the first date | both dates | the same |
+| `Paid 27/09/2026 ref 1/05/12/1980` | `27/09/2026`, `05/12/1980` | the same (the time stretch row) | the same |
+| `Leave 2026-09-01-2026-09-30-01` | `2026-09-01`, `09-30-01` | the same (the time stretch row) | the same |
+| `Course 31-30 June 2026 in Leeds` | `30 June 2026` | the same | the same |
+| `DOB27/09/1980`, `D.O.B.12.05.1980` (the dead tick call removed) | the date* | the date* | the same |
+| `SSN 123-45-6789¹`, `SSN 123 45 6789¹`, `123-45-67890` | nothing | the number, unticked | the same |
+| `SSN 223-45-6789¹` | nothing | `223-45-6789`, unticked | the number and `phone[1]`* |
+| `SSN 123-45-6789¹²`, `SSN 123-45-678912` | nothing | nothing | `phone[123-45-678912]`*, as before |
+| `SSN 123456789¹` | nothing | nothing | nothing |
+| `123-45-6789.`, `SSN 123-45-6789 ¹` | the number* | the same | the same |
+| `Card 4111 1111 1111 1111¹`, `Card 4111-1111-1111-1111¹`, `Card 4111111111111111¹`, `41111111111111110`, `Amex 378282246310005¹`, `Visa 4222222222222¹` | nothing | the card, unticked | the same |
+| `411111111111111112`, `4111-1111-1111-1111-1`, `4111-1111-1111-1111-12`, `1234-5678-9012-3456-7890` | nothing | nothing | nothing |
+| `4521 4111 1111 1111 1111` (a number before a card, no marker) | `4111 1111 1111 1111`* | the same (the first draft gave an unticked row of all twenty digits when the twenty less one passed by chance) | the same |
+| `UnionPay 6212345678901232¹` | `62123456789012321`* (17 digits pass by chance) | the same | the same |
+| `4111 1111 1111 11111 5555 5555 5555 4444` | the second card* | `4111 1111 1111 1111`, then the second card* | the same |
+| `2226 4111 1111 1111 11111` | `2226 4111 1111 1111`* (the real card's last group left) | `2226 4111 1111 1111 1111`* | the same |
+| `2223 4000 0566 5566 55561` | `2223 4000 0566 5566`* | `2223 4000 0566 5566 5556`* | the same |
+| `4111 1111 1111 1111 0031` | `4111 1111 1111 1111`* | `4111 1111 1111 1111 003`* | the same |
+| `4111 1111 1111 1111 003 12341`, `4242 4242 4242 4242 4242 4242 4242 42421` | the card and the CVV*; seven groups* | the same; all eight groups* | the same |
+
+The MuPDF read back of a flush marker is the review's own measurement (its *Measurements* table: a 12 point line and an 8 point `1` at a gap of 0 to 1 point read as `19801`, 1.5 points and more as `1980 1`); it was not repeated here.
+
+### Evidence: random code shapes
+
+4,000 random samples per date shape and 10,000 per Social Security and card shape (mulberry32), each as `Ref <code> here`, through the kind's own detector. The figure is how many samples list any row of that kind; a bracketed figure is how many list a ticked one. Dates inside the shapes are real dates in 1900 to 2099.
+
+| Shape | Before | Chosen |
+|---|---|---|
+| `N/N/NNNNN` | 0.0% | 1.9% |
+| `NN/NN/NNNNN`, `NNNN-NN-NNN`, `NN.NN.NNNNN` | 0.0% | 0.1% |
+| `20NN-NN-NNN` | 0.0% | 3.2% |
+| `NN-NN-NNNNN` | 0.0% | 0.2% |
+| `NN-NN-NNNNNN`, `NNN-NN-NNNNN`, `NN.NN.NN.N`, version `N.N.N.N`, `N.NN.NN.N` | 0.0% | 0.0% |
+| real `DD.MM.YYYY.N` (a dotted date, a full stop, a marker) | 0.0% | 100.0% |
+| real `DD.MM.YYYY.NN`, real `YYYY-MM-DD-N`, real `DD/MM/YYYY/N` | 0.0% | 0.0% (with every own separator class lifted, the last two 100%) |
+| real date, one digit glued; two digits glued | 0.0% | 100.0%; 0.0% |
+| `XX-DD.MM.YYYY`, `XXX-DD.MM.YYYY`, `xxDD/MM/YYYY` (random letters; the label list) | 0.0% | 0.4%, 0.1%, 0.3% |
+| `XXXDD.MM.YYYY`, `xxxx-DD-MM-YYYY-v2.pdf`, `vN.DD.MM.YYYY` | 0.0% | 0.0% |
+| `XXX.DD.MM.YYYY`, `xxxx.DD.MM.YYYY.pdf` (the dot lift) | 0.0% | 100.0%, unticked |
+| `xxxx_YYYY-MM-DD.pdf` (already listed) | 100.0% | 100.0% |
+| Social Security `NNN-NN-NNNNN`, `NNN NN NNNNN` | 0.0% | 89.3%, 88.9%, all unticked |
+| Social Security `NNN-NN-NNNNNN`, `SSN NNNNNNNNNN` (bare ten) | 0.0% | 0.0% |
+| card, 17 random digits | 0.7% (ticked) | 3.2% (0.7% ticked) |
+| card, 16 random digits | 2.5% (ticked) | 3.1% (2.5% ticked) |
+| card, 14 random digits | 0.4% (ticked) | 1.4% (0.4% ticked) |
+| card, 20 random digits | 0.0% | 1.6%, unticked |
+| card, `4 4 4 5` random | 1.6% (ticked) | 4.4% (1.6% ticked) |
+| card, `4 4 4 4` random | 2.8% (ticked) | 3.3% (2.8% ticked) |
+| licence key, five four digit groups with hyphens | 0.0% | 1.8%, unticked |
+| real card, one digit glued; two digits glued | 4.2% (ticked, the 17 digit brands by chance); 4.3% | 100.0% (4.2% ticked); 7.8% |
+| real spaced card, one digit glued | 1.2% | 100.0%, unticked |
+
+### Evidence: the card layouts
+
+2,000 random valid cards per layout across six brands (Visa 16, Mastercard, American Express, Discover 16, Diners Club 14, UnionPay 19), each spaced as printed, through the card detector. *Left*: some card digit had no card row. *Taken*: a neighbour's digit (the marker included) went into a card row.
+
+| Layout | Before | Chosen |
+|---|---|---|
+| spaced card, marker after | left 95.3% | left 0.0%, taken 5.7%, unticked 93.0% |
+| 4 digit number, spaced card, marker after | left 95.3% | left 0.0%, taken 8.3%, unticked 91.2% |
+| spaced card, marker after, then a CVV | left 94.7% | left 0.0%, taken 12.7%, unticked 90.8% |
+| unbroken card, marker after | left 95.8% | left 0.0%, taken 4.2%, unticked 95.8% |
+| spaced card, no marker (control) | left 0.0% | left 0.0%, taken 0.0%, unticked 0.0% |
+| 4 digit number, Visa card, no marker (4,000, from the cross check) | unticked 0.0% | unticked 0.0% (the first draft's tick rule gave 1.9%) |
+
+Under the first draft, where a tolerated window was taken only at a start with no passing window and never carried a row, the first layout left 1.4% (every one a 19 digit card whose first 16 digits passed by chance); letting the start's own and later tolerated windows carry the row brought it to 0.0%. The *unticked* figures fall a point or two under the chosen tick rule (any passing window inside the row), where a chance passing window sits inside a marked card's row. The *taken* figures are the marker inside a ticked row where the 17 digits pass whole by chance (4.2%, the brands that issue 17), plus, in the CVV layout, the CVV with its marker (6% more than the 6.7% a CVV already joined).
+
+### Evidence: every detection test string and fixture line
+
+Every double quoted and template string in `tests/unit/detect*.test.ts` (the adversarial file aside) and `scripts/lib/detection-fixtures.mjs` that holds a digit or a capital, 1,110 after deduplication, through `detect` before and after. Eight results change:
+
+| String | Before | After | Switch |
+|---|---|---|---|
+| `05.12.19800`, `on 1 May 20261 we`, `on 05.12.19801 we`, `27 September 20261` | nothing | the date, unticked | the footnote |
+| `05-12-1980-3 June 20261` | `05-12-1980` | both dates | the footnote |
+| `2026-09-27 10:00 EST.2026-09-28` | `2026-09-27` | both dates | the dot lift |
+| `41111111111111110` | nothing | `4111111111111111`, unticked | the card |
+| `123-45-67890` | nothing | `123-45-6789`, unticked | the Social Security number |
+
+The label list and the dot only choice change no string. The card tests built from constants (`NINETEEN`, `NINETEEN_SPACED`, the seeded layouts) were run through the prototype's cases above rather than the string corpus: the 19 digit card before ` 12 28`, `.5` and `/5` is unchanged, and a marker after a seeded layout leaves no card digit outside a card row.
+
+### Evidence: linear time
+
+100,000 and 400,000 characters per shape, every detector together and `date` alone, CPU time, with the chosen rules. Every detector stayed within its budget on every shape; the slowest read of all seven together was 156 ms per 100,000 characters (Social Security numbers with a footnote digit end to end), and four times the input took 3.1 to 5.0 times the time for all seven and 2.3 to 5.1 for `date` (whose reads of 16 to 47 ms sit near the 16 ms grain of the clock). Shapes: dates with a footnote digit 94 ms, ISO dates with one 94, dotted dates with a stop and a digit 78, written dates with one 62, labels glued to dates 94, dotted file names 94, Social Security numbers with one 156, unbroken cards with one 110, spaced cards with one 125, five digit groups 109, dated codes 140, one and two digit groups glued to dates 109.
+
+### Cross check of the third update
+
+A read only pass on a second model (Sonnet 5.5) read the update against the code and ran the unmodified detectors on its own cases. You took every recommended fix. Its points, and what became of each:
+
+1. **A hyphenated unit ending in a one digit group** (`4111-1111-1111-1111-1`) was tolerated by the first draft, whose rule dropped "the unit's last digit", so its row ended in a hyphen, against step 6. Fixed: the marker must be the last digit of a final group of two or more; the case is in AC-20 and the scenario, and gives no card (confirmed on the prototype).
+2. **The tick by the start's window alone unticked a real card** with a number before it and no marker: `4521 4111 1111 1111 1111` became an unticked row of all twenty digits whenever the twenty less one passed as a 19 digit Visa (measured 1.9% of random Visa cards). Fixed: a row is ticked when any window inside it passes whole; 0.0% on the same 4,000 layouts, and the marked layouts' unticked share falls a point or two.
+3. **Card details a builder would invent**: whether the marker counts in the last unit's 1 to 6 limit (it does), which digit is dropped from a 20 digit unit that stores 19 (the last as counted; the 19 stored are judged), and the carry's comparison (the pair of last unit and dropped digit, a passing window winning at the same unit in any visit order). All written into step 3, step 5 and task 47.
+4. **"Exactly one digit" after the dotted own separator and after a Social Security number** did not say that no digit of any script may follow it. Both now say so, as the marker bullet did.
+5. **The scenario said each case is tried with the superscript**, but the detectors do not normalise, so a raw `¹` is a digit of another script to them. The scenario now says the helper NFKC normalises first, as `find.ts` does.
+6. **Small gaps**: `DATE_LABELS` is exported from `src/detect/index.ts` too (task 45 and the preface); AC-10 says a glued label leaves the date unticked unless a birth word is within reach (`Born Date27/09/1980` is ticked); `27/09/2026to28/09/2026`'s second date stays a miss, since the label needs no digit before it (recorded); the footnote retry sits inside `numericAt`, so `joinsDate`'s far side read sees it (said in task 45).
+7. **Counts**: seven pins flip, not six (the `EST.` row is one), and the footnote switch alone changes five corpus strings, four of them pins. The Updated line, the task preface and the options text now say so.
+8. **AC-19 said "only two shapes still drop a real date"** while naming more; it now says "beyond the glued digit cases above". INV-17 omitted the end side joiner exemption (a full date beyond the own separator); added.
+9. Soundness, recorded rather than changed: the same footnote miss for an email address and a phone number (the cross check ran `john@example.com1`, `+44 20 7946 09581` and `(212) 555-01231`: no row), now a Follow-up beside the phone item; footnote numbers of ten and up are the two marker miss (named under Consequences); and a geometry based alternative, a boundary before a small raised glyph in the find step, which would settle every kind at once with no false rows, recorded in that Follow-up as the candidate for the next round. The dot lift's reach past abbreviations (`report.27.09.2026.pdf`) and the Social Security phone piece it judged fine as recorded.
+
 ## References
 
 **Project sources** (verifiable, in this repo):
@@ -680,6 +843,9 @@ Task checks: the renames task 42 had missed (the impossible far date and the cut
 - The [second review of 2026-10-10](../../reviews/2026-10-10-feat-remaining-detectors-second.md): its major and its first three minors, which the second update of 2026-10-10 settles.
 - The second update's measurements of 2026-10-10: each boundary rule as a switch in a scratch copy of `src/detect` at commit `1a45d46`, run through `detect` on the review's cases, every detection test string and fixture line (1,008), random code shapes and 100,000 character adversarial blocks, all outside the repository.
 - `src/detect/date.ts` (`cutFrom`, `numericStartsAt`, `timeEnd`, `TIME_LONGEST`) at commit `1a45d46`, and the tests that pinned the old behaviour in `tests/unit/detect-dates.test.ts`: "a letter after", "a letter after the year", "finds neither date where a dot stands between them", "finds no date where a joiner leads to an impossible one", "reads a range with spaces around its dash as the second day's date", "still finds no date read out of the code" and "parts at a joiner whose far date is then cut on its own".
+- The [third review of 2026-10-10](../../reviews/2026-10-10-feat-remaining-detectors-third.md): its major, its first two minors and its nits, which the third update of 2026-10-11 settles, and its MuPDF read back of a flush footnote marker.
+- The third update's measurements of 2026-10-11: each rule as a switch in a scratch copy of `src/detect` at commit `c78357c`, run through each detector and through `detect` on the review's cases, random code shapes, random valid cards in five layouts, every detection test string and fixture line (1,110) and 100,000 and 400,000 character blocks, all outside the repository.
+- `src/detect/date.ts` (`numericAt`, `cutAtStart`, `cutAtEnd`, the tick's `birthGluedTo` call), `us-ssn.ts` (`partsAt`) and `card.ts` (`cardsIn`, `windowsFrom`) at commit `c78357c`, and the tests that pinned the old behaviour: `detect-dates.test.ts`'s "a five digit year", "a five digit year, numeric", "a digit after the year", "a digit glued after a written date", the `05-12-1980-3 June 20261` row and the `2026-09-27 10:00 EST.2026-09-28` row; `detect-us-ssn.test.ts`'s "a digit after"; `detect-card.test.ts`'s "a digit after".
 
 **Practices & standards**:
 - ISO 13616 IBAN, checked by ISO 7064 MOD 97-10.
