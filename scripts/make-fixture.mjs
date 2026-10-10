@@ -14,12 +14,17 @@ import { join } from "node:path";
 
 import {
   detectBlocked,
+  detectCard,
+  detectDate,
   detectDense,
   detectStamped,
   detectEmail,
+  detectIban,
   detectMany,
   detectPhone,
+  detectUkNino,
   detectUnicode,
+  detectUsSsn,
   detectWraps,
   sampleAgreement,
 } from "./lib/detection-fixtures.mjs";
@@ -442,6 +447,24 @@ const FIXTURES = [
     "detect-wraps.pdf",
     detectWraps(),
     "addresses wrapped across lines, and across blocks",
+  ],
+  // Spec 0005, feature 12: the release 3 detectors.
+  [
+    "detect-date.pdf",
+    detectDate(),
+    "dates written and numeric, birth words, near misses",
+  ],
+  [
+    "detect-card.pdf",
+    detectCard(),
+    "test card numbers, beside other digits, Luhn failures, longer numbers",
+  ],
+  ["detect-iban.pdf", detectIban(), "example IBANs, a wrong check, an unknown country"],
+  ["detect-us-ssn.pdf", detectUsSsn(), "Social Security numbers, bare and never issued"],
+  [
+    "detect-uk-nino.pdf",
+    detectUkNino(),
+    "National Insurance numbers, and prefixes never issued",
   ],
   [
     "sample-agreement.pdf",

@@ -392,6 +392,309 @@ export function detectPhone() {
   ]);
 }
 
+/**
+ * The dates `detect-phone.pdf` holds. Spec 0005, INV-14: a numeric date is
+ * never read as a phone number, so each is left for `date`, and each sits
+ * within reach of "Born", so each is ticked.
+ */
+export const DETECT_PHONE_DATES = Object.freeze([
+  ["12/05/1980", true],
+  ["2026-09-27", true],
+  ["05.12.1980", true],
+]);
+
+/**
+ * The values each release 3 fixture holds, as found, in reading order, with
+ * their tick. Spec 0005, AC-19 to AC-23 and AC-10. The last of each is the one
+ * wrapped across two lines of one block, which the line join finds whole.
+ */
+export const DETECT_DATE = Object.freeze([
+  ["27 September 2026", false],
+  ["05.12.1980", true],
+  ["12th of Sept. 1985", true],
+  ["March 3, 2027", false],
+  ["2026-09-27", false],
+  ["09/30/2026", false],
+  ["1 May 1990", true],
+  // Spec 0005, AC-19 and INV-17 (update of 2026-10-10): two full dates joined
+  // by a hyphen, a day range, a written date beside a dash, an ISO interval
+  // with times, and an ISO date with its time after a birth word.
+  ["01/05/2026", false],
+  ["31/05/2026", false],
+  ["3-5 June 2026", false],
+  ["3 June 2026", false],
+  ["2026-09-01", false],
+  ["2026-09-30", false],
+  ["1980-05-12", true],
+  // Spec 0005, AC-19, AC-10 and INV-17 (second update of 2026-10-10): an
+  // interval with clock times, a date of birth with a name after it and one
+  // glued to its label, a spaced month first range, a day range before a
+  // numeric date, an interval with an offset and a zone name, and a date
+  // glued to a letter.
+  ["27/09/2026", false],
+  ["28/09/2026", false],
+  ["12/05/1980", true],
+  ["14.02.1991", true],
+  ["June 5 - 7, 2026", false],
+  ["7/6/2026", false],
+  ["2026-10-05", false],
+  ["2026-10-06", false],
+  ["03.11.2026", false],
+  // Spec 0005, AC-19, AC-10 and INV-17 (third update of 2026-10-11): a date
+  // of birth with a footnote marker glued after it, a date label glued to a
+  // date by a dot and directly, and an ISO date with a marker.
+  ["12/05/1981", true],
+  ["31.12.2027", false],
+  ["27/09/2027", false],
+  ["2027-09-28", false],
+  ["27 September 2026", false],
+]);
+
+export const DETECT_CARD = Object.freeze([
+  ["4111 1111 1111 1111", true],
+  ["5555-5555-5555-4444", true],
+  ["378282246310005", true],
+  ["6011 1111 1111 1117", true],
+  // Spec 0005, AC-28: a card beside other digits.
+  ["5105105105105100", true],
+  ["3714 496353 98431", true],
+  ["3056 930902 5904", true],
+  ["3530 1113 3330 0000", true],
+  ["6011000990139424", true],
+  ["3566002020360505", true],
+  ["6200-0000-0000-0005", true],
+  ["4222 2222 2222 2", true],
+  // A window that passes by chance, which takes the first group of the
+  // spaced Social Security number after it.
+  ["3400 0000 0005 123", true],
+  // Spec 0005, INV-15 (update of 2026-10-10): `2223 4000 0566 5566` passes
+  // by chance, and the Visa test card after its first group is the real one,
+  // so the row covers both.
+  ["2223 4000 0566 5566 5556", true],
+  // Spec 0005, AC-20 and INV-15 (third update of 2026-10-11): a card with a
+  // footnote marker glued after it, listed unticked.
+  ["5425 2334 3010 9903", false],
+  ["4012 8888 8888 1881", true],
+]);
+
+/**
+ * The rows of other kinds `detect-card.pdf` holds, in reading order. Spec
+ * 0005, AC-3 and INV-16: the rest of the Social Security number the chance
+ * card cuts into is its own row, ticked as the whole number was.
+ */
+export const DETECT_CARD_PIECES = Object.freeze([["us-ssn", "45 6789", true]]);
+
+export const DETECT_IBAN = Object.freeze([
+  ["GB82 WEST 1234 5698 7654 32", true],
+  ["DE89370400440532013000", true],
+  ["FR14 2004 1010 0505 0001 3M02 606", true],
+  // Spec 0005, AC-21 and INV-17 (update of 2026-10-10): a footnote style `1`
+  // and a currency code glued after an IBAN.
+  ["IE29 AIBK 9311 5212 3456 78", true],
+  ["ES9121000418450200051332", true],
+  ["NL91 ABNA 0417 1643 00", true],
+]);
+
+export const DETECT_US_SSN = Object.freeze([
+  ["123-45-6789", true],
+  ["234 56 7890", true],
+  ["345678901", true],
+  // Spec 0005, AC-22 (third update of 2026-10-11): a number with a footnote
+  // marker glued after it, listed unticked.
+  ["178-05-1123", false],
+  ["567 89 0123", true],
+]);
+
+export const DETECT_UK_NINO = Object.freeze([
+  ["AB 12 34 56 C", true],
+  ["ce123456d", true],
+  ["PX123456", true],
+  // Spec 0005, AC-23 and INV-17 (update of 2026-10-10): a number glued to
+  // the next word is listed, unticked.
+  ["KL123456B", false],
+  ["JK 65 43 21 B", true],
+]);
+
+/**
+ * Spec 0005, AC-19 and AC-10. Dates, written and numeric, each ticked only
+ * after a birth word; the near misses a document is full of (a year alone, a
+ * month and year, a day and month, a time, a date cut from a code, impossible
+ * dates); two dates joined by a hyphen, a day range, a range across months, an
+ * ISO interval with times and an ISO date with its time (INV-17, update of
+ * 2026-10-10); an interval with clock times, a name after a date, a birth
+ * word glued to a date, a spaced month first range, a day range before a
+ * numeric date, an interval with an offset and a zone name, and a letter
+ * after a date (INV-17, second update of 2026-10-10); a footnote marker after
+ * a date of birth and after an ISO date, and a date label glued to a date by
+ * a dot and directly (INV-17, third update of 2026-10-11), each marker drawn
+ * as a plain glued `1`, as the IBAN fixture draws its footnote style digit;
+ * and a written date wrapped across two lines of one block.
+ */
+export function detectDate() {
+  return document(() => [
+    {
+      content:
+        line("F1", 12, 72, 740, "Signed 27 September 2026 by both parties") +
+        line("F1", 12, 72, 720, "Date of birth: 05.12.1980") +
+        line("F1", 12, 72, 700, "DOB 12th of Sept. 1985 (verified)") +
+        line("F1", 12, 72, 680, "Renewal due on March 3, 2027 at noon") +
+        line("F1", 12, 72, 660, "Invoice dated 2026-09-27, paid 09/30/2026") +
+        line("F1", 12, 72, 640, "Born on 1 May 1990 in Leeds") +
+        line("F1", 12, 72, 620, "Since 2019, in September 2026, on 27 September") +
+        line("F1", 12, 72, 600, "Meeting at 12:30 on Tuesday, ref INV-05.12.1980") +
+        line("F1", 12, 72, 580, "Impossible 31.02.1980 and 31 April 2026") +
+        line("F1", 12, 72, 560, "Leave 01/05/2026-31/05/2026 approved") +
+        line("F1", 12, 72, 540, "Course 3-5 June 2026 in Leeds") +
+        line("F1", 12, 72, 520, "Term 28 May-3 June 2026 agreed") +
+        line(
+          "F1",
+          12,
+          72,
+          500,
+          "Window 2026-09-01T00:00:00Z/2026-09-30T23:59:59Z logged",
+        ) +
+        line("F1", 12, 72, 480, "DOB 1980-05-12T00:00:00Z exported") +
+        line("F1", 12, 72, 460, "Shift 27/09/2026 10:00-28/09/2026 11:00 booked") +
+        line("F1", 12, 72, 440, "DOB 12/05/1980-Smith on file") +
+        line("F1", 12, 72, 420, "D.O.B.14.02.1991 on file") +
+        line("F1", 12, 72, 400, "Course June 5 - 7, 2026 in York") +
+        line("F1", 12, 72, 380, "Exam 5-7/6/2026 sat") +
+        line(
+          "F1",
+          12,
+          72,
+          360,
+          "Logged 2026-10-05T10:00:00+0100-2026-10-06T09:00:00EST",
+        ) +
+        line("F1", 12, 72, 340, "Noted 03.11.2026a in the margin") +
+        line("F1", 12, 72, 320, "Born 12/05/19811 per the register") +
+        line("F1", 12, 72, 300, "Exp.31.12.2027 printed on the card") +
+        line("F1", 12, 72, 280, "Issued27/09/2027 and logged 2027-09-281 later") +
+        line("F1", 12, 72, 260, "The lease began on 27 September") +
+        line("F1", 12, 72, 246, "2026 and runs for one year"),
+    },
+  ]);
+}
+
+/**
+ * WinAnsiEncoding's en dash, byte 0x96. The fixture writer turns each
+ * character into one byte, so the dash is written as the byte the font's
+ * encoding gives it, and MuPDF reads it back as U+2013.
+ */
+const EN_DASH = "\x96";
+
+/**
+ * Spec 0005, AC-20 and AC-28. Test card numbers spaced, hyphenated and
+ * unbroken, from every brand; a Luhn failure, a number no brand issues, and
+ * two references a card is never cut from (eighteen unbroken digits, and
+ * digits glued by hyphens); cards beside an expiry, a row number and another
+ * card, typed against an expiry with a hyphen and with an en dash, and
+ * spaced as a payment form prints one; a card that passes by chance and
+ * cuts into a Social Security number; a number before a card that makes a
+ * window pass by chance, which the card's row covers (INV-15, update of
+ * 2026-10-10); a card with a footnote marker glued after it, drawn as a plain
+ * `1` (INV-15, third update of 2026-10-11); and a card wrapped across two
+ * lines of one block.
+ */
+export function detectCard() {
+  return document(() => [
+    {
+      content:
+        line("F1", 12, 72, 740, "Visa 4111 1111 1111 1111 on file") +
+        line("F1", 12, 72, 720, "Mastercard 5555-5555-5555-4444 expires soon") +
+        line("F1", 12, 72, 700, "Amex 378282246310005 for travel") +
+        line("F1", 12, 72, 680, "Discover 6011 1111 1111 1117.") +
+        line("F1", 12, 72, 660, "Order 4111 1111 1111 1112 failed") +
+        line("F1", 12, 72, 640, "Account 1234 5678 9012 3456 has no brand") +
+        line("F1", 12, 72, 620, "Reference 411111111111111112 is too long") +
+        line("F1", 12, 72, 600, "Reference 4111-1111-1111-1111-12 is too long") +
+        line("F1", 12, 72, 580, "Mastercard 5105105105105100 12/28 on file") +
+        line("F1", 12, 72, 560, "Amex 3714 496353 98431 12/28 on file") +
+        line("F1", 12, 72, 540, "Diners 3056 930902 5904 12/28 on file") +
+        line("F1", 12, 72, 520, "1 3530 1113 3330 0000 JCB on file") +
+        line("F1", 12, 72, 500, "Cards 6011000990139424 3566002020360505 on file") +
+        line("F1", 12, 72, 480, "UnionPay 6200-0000-0000-0005 12/28 on file") +
+        line("F1", 12, 72, 460, `Visa 4222 2222 2222 2${EN_DASH}12/28 on file`) +
+        line("F1", 12, 72, 440, "Ref 3400 0000 0005 123 45 6789 on file") +
+        line("F1", 12, 72, 420, "Ref 2223 4000 0566 5566 5556 on file") +
+        line("F1", 12, 72, 400, "Mastercard 5425 2334 3010 99031 in the notes") +
+        line("F1", 12, 72, 380, "Backup card 4012 8888") +
+        line("F1", 12, 72, 366, "8888 1881 kept on file"),
+    },
+  ]);
+}
+
+/**
+ * Spec 0005, AC-21. The published example IBANs for six countries, grouped,
+ * unbroken and with letters inside; a wrong check, an unknown country and
+ * lower case; an IBAN with a footnote style digit after it and one glued to a
+ * currency code (INV-17, update of 2026-10-10); and a grouped IBAN wrapped
+ * across two lines of one block.
+ */
+export function detectIban() {
+  return document(() => [
+    {
+      content:
+        line("F1", 12, 72, 740, "IBAN GB82 WEST 1234 5698 7654 32 for salary") +
+        line("F1", 12, 72, 720, "Pay DE89370400440532013000 by Friday") +
+        line("F1", 12, 72, 700, "Account FR14 2004 1010 0505 0001 3M02 606.") +
+        line("F1", 12, 72, 680, "Typo GB82WEST12345698765433 rejected") +
+        line("F1", 12, 72, 660, "Unknown XX82WEST12345698765432 country") +
+        line("F1", 12, 72, 640, "Lower gb82west12345698765432 case") +
+        line("F1", 12, 72, 620, "See IE29 AIBK 9311 5212 3456 781 above") +
+        line("F1", 12, 72, 600, "Pay ES9121000418450200051332EUR today") +
+        line("F1", 12, 72, 580, "Transfer to NL91 ABNA") +
+        line("F1", 12, 72, 566, "0417 1643 00 today"),
+    },
+  ]);
+}
+
+/**
+ * Spec 0005, AC-22. Social Security numbers hyphenated and spaced, a bare one
+ * after an SSN phrase; a bare run with no SSN word and numbers the SSA never
+ * issues; a number with a footnote marker glued after it, drawn as a plain
+ * `1` (third update of 2026-10-11); and a spaced number wrapped across two
+ * lines of one block.
+ */
+export function detectUsSsn() {
+  return document(() => [
+    {
+      content:
+        line("F1", 12, 72, 740, "SSN 123-45-6789 on file") +
+        line("F1", 12, 72, 720, "Spouse 234 56 7890 listed") +
+        line("F1", 12, 72, 700, "Social Security number: 345678901") +
+        line("F1", 12, 72, 680, "Order 456789012 shipped") +
+        line("F1", 12, 72, 660, "Never issued 666-12-3456, 900-12-3456 and 123-45-0000") +
+        line("F1", 12, 72, 640, "SSN 178-05-11231 on the form") +
+        line("F1", 12, 72, 620, "Applicant number 567 89") +
+        line("F1", 12, 72, 606, "0123 confirmed"),
+    },
+  ]);
+}
+
+/**
+ * Spec 0005, AC-23. National Insurance numbers spaced, in lower case and with
+ * no suffix; HMRC's own example and prefixes it never issues; a number glued
+ * to the next word, listed unticked (INV-17, update of 2026-10-10); and a
+ * number wrapped across two lines of one block.
+ */
+export function detectUkNino() {
+  return document(() => [
+    {
+      content:
+        line("F1", 12, 72, 740, "NI number AB 12 34 56 C on payslip") +
+        line("F1", 12, 72, 720, "Employee ce123456d joined") +
+        line("F1", 12, 72, 700, "Ref PX123456 without suffix") +
+        line("F1", 12, 72, 680, "Example QQ 12 34 56 C is never issued") +
+        line("F1", 12, 72, 660, "Prefixes GB 12 34 56 A and TN123456B are never used") +
+        line("F1", 12, 72, 640, "Codes DA123456A and AB1234567") +
+        line("F1", 12, 72, 620, "Merged KL123456Bsigned here") +
+        line("F1", 12, 72, 600, "His number is JK 65 43") +
+        line("F1", 12, 72, 586, "21 B as printed"),
+    },
+  ]);
+}
+
 /** The addresses `detect-blocked.pdf` holds, by the reason each is blocked. */
 export const DETECT_BLOCKED = Object.freeze({
   slanted: "slanted@example.com",
@@ -540,6 +843,10 @@ export const SAMPLE_AGREEMENT = Object.freeze({
  * and three phone numbers, every page readable and nothing blocked, so the
  * review opens with the all clear line and all seven ticked.
  *
+ * It holds no date, card, IBAN or national number on purpose, so the shot shows
+ * exactly the seven items spec 0013 describes, every one ticked: a contract's
+ * own date is listed unticked by the `date` detector (spec 0005, AC-10).
+ *
  * The UK numbers are both London drama numbers on purpose. Ofcom's drama
  * mobile range (`07700 900xxx`) is reserved too, but the phone metadata does
  * not call it a valid allocation, so the detector lists such a number unticked
@@ -557,7 +864,7 @@ export function sampleAgreement() {
           11,
           72,
           700,
-          "This agreement is made on 2 March 2026 between Larkfield Studio Ltd (the Company)",
+          "This agreement is made between Larkfield Studio Ltd (the Company)",
         ) +
         line(
           "F1",
@@ -608,13 +915,7 @@ export function sampleAgreement() {
           `can be reached on ${us} for anything sent from the United States.`,
         ) +
         line("F1", 13, 72, 598, "6. Signatures") +
-        line(
-          "F1",
-          11,
-          72,
-          576,
-          "Signed for Larkfield Studio Ltd and by the Employee on the date above.",
-        ),
+        line("F1", 11, 72, 576, "Signed for Larkfield Studio Ltd and by the Employee."),
     },
   ]);
 }

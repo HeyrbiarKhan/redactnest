@@ -16,12 +16,23 @@
  * Every detector is linear in its input (INV-7): each file says why.
  */
 
+import { detectCard } from "./card";
+import { detectDate } from "./date";
 import { detectEmail } from "./email";
+import { detectIban } from "./iban";
 import { detectPhone } from "./phone";
+import { ALPHANUMERIC } from "./text";
 import type { Detector, DetectInput, Span } from "./types";
+import { detectUkNino } from "./uk-nino";
+import { detectUsSsn } from "./us-ssn";
 import type { DetectorKind } from "@/worker/protocol";
 
+export { CARD_BRANDS, CARD_GROUP_DIGITS, type CardBrand } from "./card";
+export { BIRTH_WORDS, DATE_LABELS, MONTHS } from "./date";
+export { IBAN_LENGTHS } from "./iban";
 export { KEYWORD_REACH } from "./text";
+export { NI_PREFIX_RULES } from "./uk-nino";
+export { SSN_WORDS } from "./us-ssn";
 export {
   EXTENSION_MARKERS,
   MAX_PARSES_PER_GROUP,
@@ -40,38 +51,101 @@ export type { Detector, DetectInput, Span } from "./types";
 export const DETECTORS: Readonly<Record<DetectorKind, Detector>> = Object.freeze({
   email: detectEmail,
   phone: detectPhone,
+  date: detectDate,
+  card: detectCard,
+  iban: detectIban,
+  "us-ssn": detectUsSsn,
+  "uk-nino": detectUkNino,
 });
 
 /**
  * Which kind keeps a place two kinds both claim, highest first. Spec 0005,
  * *Decided within it*: a kind with a checksum or a unique marker outranks a
- * looser digit shape. The full order is `email`, `iban`, `card`, `us-ssn`,
- * `uk-nino`, `phone`, `date`; release 1 holds the two it builds. A rule about
- * patterns, not a cap on the visitor. `tests/unit/detect.test.ts` fails
- * `pnpm typecheck` when a kind has no place here (AC-24).
+ * looser digit shape, so an IBAN's digits never list as a phone number. A
+ * rule about patterns, not a cap on the visitor. `date` comes last, but no
+ * numeric date is ever lost to `phone` for it: the phone detector never reads
+ * one (INV-14). `tests/unit/detect.test.ts` fails `pnpm typecheck` when a kind
+ * has no place here (AC-24).
  */
-export const PRECEDENCE = Object.freeze(["email", "phone"] as const);
+export const PRECEDENCE = Object.freeze([
+  "email",
+  "iban",
+  "card",
+  "us-ssn",
+  "uk-nino",
+  "phone",
+  "date",
+] as const);
 
 /**
  * Every span in one block, in order of `start`, with no position claimed by
- * two. Spec 0005, AC-3.
+ * two. Spec 0005, AC-3 and INV-16.
  *
- * Kinds are taken in `PRECEDENCE` order, and a span that meets a position a
- * higher kind already holds is dropped whole, never trimmed. Positions are
- * marked as they are claimed, so this costs the length of what was found.
+ * Kinds are taken in `PRECEDENCE` order. A span that meets no claimed
+ * position is kept whole. One that meets a position a higher kind already
+ * holds keeps each stretch no higher match holds, trimmed of whitespace at
+ * both ends, as a piece of its own kind with its own tick; a stretch with no
+ * letter or digit is dropped. So no character a detector found is left
+ * without a row: where a false card cuts into a spaced Social Security
+ * number, the rest of that number is still its own row, and unticking the
+ * card can never untick it. The higher row is never touched.
+ *
+ * Positions are marked as they are claimed, and each span's positions are
+ * read once, so this costs the length of what was found.
  */
 export function detect(input: DetectInput): readonly Span[] {
-  const claimed = new Uint8Array(Array.from(input.text).length);
+  const points = Array.from(input.text);
+  const claimed = new Uint8Array(points.length);
   const kept: Span[] = [];
 
   for (const kind of PRECEDENCE) {
     for (const span of DETECTORS[kind](input)) {
-      if (claimed.subarray(span.start, span.end).includes(1)) continue;
-      claimed.fill(1, span.start, span.end);
-      kept.push(span);
+      const pieces = claimed.subarray(span.start, span.end).includes(1)
+        ? freeStretches(points, claimed, span)
+        : [span];
+      for (const piece of pieces) {
+        claimed.fill(1, piece.start, piece.end);
+        kept.push(piece);
+      }
     }
   }
   return kept.sort((a, b) => a.start - b.start);
+}
+
+/** One whitespace code point. Matches one code point, so it cannot backtrack. */
+const SPACE = /^\s$/u;
+
+/**
+ * The stretches of `span` that no claimed position holds, each trimmed of
+ * whitespace and kept only when it holds a letter or a digit, with the span's
+ * kind and tick. Spec 0005, AC-3.
+ */
+function freeStretches(
+  points: readonly string[],
+  claimed: Uint8Array,
+  span: Span,
+): readonly Span[] {
+  const pieces: Span[] = [];
+  let at = span.start;
+
+  while (at < span.end) {
+    if (claimed[at] === 1) {
+      at += 1;
+      continue;
+    }
+    let end = at;
+    while (end < span.end && claimed[end] === 0) end += 1;
+
+    let start = at;
+    let stop = end;
+    while (start < stop && SPACE.test(points[start])) start += 1;
+    while (stop > start && SPACE.test(points[stop - 1])) stop -= 1;
+    if (points.slice(start, stop).some((point) => ALPHANUMERIC.test(point))) {
+      pieces.push({ ...span, start, end: stop });
+    }
+    at = end;
+  }
+  return pieces;
 }
 
 /**

@@ -99,14 +99,22 @@ export type ProgressPhase = (typeof PROGRESS_PHASES)[number];
 /**
  * The kinds of sensitive pattern a detector can find.
  *
- * Spec 0005 decided all seven. Release 1 builds these two; release 3 (feature
- * 12) adds `date`, `card`, `iban`, `us-ssn` and `uk-nino` against the same
- * spec. The order is the order the checklist groups them in (AC-3), and the
- * coverage note is built from this list, so it names only what is looked for
- * (AC-14). A union only ever grows, so adding a member breaks nothing that
- * already reads one.
+ * Spec 0005 decided all seven. Release 1 built `email` and `phone`; release 3
+ * (feature 12) added `date`, `card`, `iban`, `us-ssn` and `uk-nino` against
+ * the same spec. The order is the order the checklist groups them in (AC-3),
+ * and the coverage note is built from this list, so it names only what is
+ * looked for (AC-14). A union only ever grows, so adding a member breaks
+ * nothing that already reads one.
  */
-export const DETECTOR_KINDS = ["email", "phone"] as const;
+export const DETECTOR_KINDS = [
+  "email",
+  "phone",
+  "date",
+  "card",
+  "iban",
+  "us-ssn",
+  "uk-nino",
+] as const;
 
 export type DetectorKind = (typeof DETECTOR_KINDS)[number];
 

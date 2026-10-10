@@ -1184,7 +1184,7 @@ test.describe("the checklist on the tool page (spec 0005, AC-13)", () => {
     await openDocument(page);
 
     await expect(page.getByTestId("coverage")).toHaveText(
-      /RedactNest looked for email addresses and phone numbers\. Anything else, such as names and addresses, stays in the file\./,
+      /RedactNest looked for email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers\. Anything else, such as names and addresses, stays in the file\./,
     );
     await expect(page.locator('[aria-live="polite"] [data-testid="review"]')).toHaveCount(
       0,
@@ -1348,7 +1348,7 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     );
     const main = page.getByRole("main");
     await expect(main).toContainText(
-      "RedactNest finds email addresses and phone numbers in your PDF, lets you tick what to remove, and takes that text out of the file itself.",
+      "RedactNest finds email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers in your PDF, lets you tick what to remove, and takes that text out of the file itself.",
     );
     // Spec 0013, AC-30: said once. "in your browser" is the eyebrow's alone.
     await expect(main).not.toContainText("Your file never leaves your browser.");
@@ -1394,6 +1394,11 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     await expect(finds.getByRole("listitem")).toHaveText([
       "Email addresses",
       "Phone numbers",
+      "Dates",
+      "Card numbers",
+      "Bank account numbers (IBAN)",
+      "US Social Security numbers",
+      "UK National Insurance numbers",
     ]);
     await expect(finds).toContainText("Sensitive details we can detect in your files.");
     await expect(finds).toContainText("Nothing is removed until you tick it.");
@@ -1448,6 +1453,20 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     ];
     expect(fifth?.y).toBe(first?.y);
     expect((fourth?.x ?? 0) + (fourth?.width ?? 0)).toBeLessThan(fifth?.x ?? 0);
+
+    // Feature 12: seven finds in two columns too, so the cards stay close in
+    // height. Read down the first column, then the second: Email addresses to
+    // Card numbers, then the IBAN row to UK National Insurance numbers.
+    const findsList = finds.getByRole("list");
+    expect((await columnsOf(findsList)).count).toBe("2");
+    const rows = finds.getByRole("listitem");
+    const [firstRow, fourthRow, fifthRow] = [
+      await rows.nth(0).boundingBox(),
+      await rows.nth(3).boundingBox(),
+      await rows.nth(4).boundingBox(),
+    ];
+    expect(fifthRow?.y).toBe(firstRow?.y);
+    expect((fourthRow?.x ?? 0) + (fourthRow?.width ?? 0)).toBeLessThan(fifthRow?.x ?? 0);
   });
 
   /**
@@ -1464,11 +1483,15 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     const finds = page.getByTestId("home-finds");
     const strips = page.getByTestId("home-strips");
     const list = strips.getByRole("list");
+    // The Finds rows fold at the same content width, and the cards are always
+    // the same width, so the two lists are always one column or two together.
+    const findsCount = async () => (await columnsOf(finds.getByRole("list"))).count;
 
     // Side by side, with room for two columns at the narrower gap.
     await page.setViewportSize({ width: 1080, height: 800 });
     await page.goto("/");
     expect(await columnsOf(list)).toEqual({ count: "2", gap: "48px", rule: "solid" });
+    expect(await findsCount()).toBe("2");
     // No item wraps in the narrower columns.
     for (const item of await list.getByRole("listitem").all()) {
       expect((await item.boundingBox())?.height).toBe(32);
@@ -1477,6 +1500,7 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     // Side by side and too narrow for two: one column, with no rule.
     await page.setViewportSize({ width: 960, height: 800 });
     expect(await columnsOf(list)).toMatchObject({ count: "auto", rule: "none" });
+    expect(await findsCount()).toBe("auto");
     const [left, right] = [await finds.boundingBox(), await strips.boundingBox()];
     expect(left?.y).toBe(right?.y);
     expect(left?.height).toBe(right?.height);
@@ -1485,12 +1509,14 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     // Stacked, so the card is wide again: two columns at the mockup's gap.
     await page.setViewportSize({ width: 600, height: 900 });
     expect(await columnsOf(list)).toEqual({ count: "2", gap: "64px", rule: "solid" });
+    expect(await findsCount()).toBe("2");
     const [above, below] = [await finds.boundingBox(), await strips.boundingBox()];
     expect((above?.y ?? 0) + (above?.height ?? 0)).toBeLessThanOrEqual(below?.y ?? 0);
 
     // A phone: one column, and nothing scrolls sideways.
     await page.setViewportSize({ width: 320, height: 640 });
     expect((await columnsOf(list)).count).toBe("auto");
+    expect(await findsCount()).toBe("auto");
     await expectNoHorizontalScroll(page);
   });
 
@@ -1508,8 +1534,9 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
    * wide for two columns, and the list stays one column at every width,
    * the two that show two columns at normal size included.
    */
-  test("keeps the Strips list one column at 200% text", async ({ page }) => {
+  test("keeps the Strips and Finds lists one column at 200% text", async ({ page }) => {
     const list = page.getByTestId("home-strips").getByRole("list");
+    const findsList = page.getByTestId("home-finds").getByRole("list");
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/");
     await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
@@ -1520,6 +1547,7 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
         count: "auto",
         rule: "none",
       });
+      expect((await columnsOf(findsList)).count, `${width}px`).toBe("auto");
     }
   });
 

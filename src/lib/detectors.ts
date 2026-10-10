@@ -8,7 +8,15 @@
  * empty state now points at Make a cleaned copy, the action its button names.
  */
 
-import { Mail, Phone, type LucideIcon } from "lucide-react";
+import {
+  Calendar,
+  CreditCard,
+  IdCard,
+  Landmark,
+  Mail,
+  Phone,
+  type LucideIcon,
+} from "lucide-react";
 
 import {
   DETECTOR_KINDS,
@@ -40,6 +48,37 @@ export const DETECTOR_LABELS: Readonly<Record<DetectorKind, DetectorLabel>> =
       icon: Phone,
       label: "Phone numbers",
       noun: Object.freeze({ one: "phone number", other: "phone numbers" }),
+    }),
+    date: Object.freeze({
+      icon: Calendar,
+      label: "Dates",
+      noun: Object.freeze({ one: "date", other: "dates" }),
+    }),
+    card: Object.freeze({
+      icon: CreditCard,
+      label: "Card numbers",
+      noun: Object.freeze({ one: "card number", other: "card numbers" }),
+    }),
+    iban: Object.freeze({
+      icon: Landmark,
+      label: "Bank account numbers (IBAN)",
+      noun: Object.freeze({ one: "IBAN", other: "IBANs" }),
+    }),
+    "us-ssn": Object.freeze({
+      icon: IdCard,
+      label: "US Social Security numbers",
+      noun: Object.freeze({
+        one: "Social Security number",
+        other: "Social Security numbers",
+      }),
+    }),
+    "uk-nino": Object.freeze({
+      icon: IdCard,
+      label: "UK National Insurance numbers",
+      noun: Object.freeze({
+        one: "National Insurance number",
+        other: "National Insurance numbers",
+      }),
     }),
   });
 

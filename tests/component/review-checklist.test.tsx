@@ -117,6 +117,64 @@ describe("the groups (AC-3, AC-13)", () => {
     );
   });
 
+  /**
+   * Spec 0005, AC-24 and *Value sourcing*: every kind feature 12 adds gets
+   * its own group, in `DETECTOR_KINDS` order whatever order the pages give,
+   * each counted with its own noun ("3 dates", "1 IBAN").
+   */
+  describe("with all seven kinds found", () => {
+    const SEVEN: readonly ReviewMatch[] = Object.freeze([
+      match("n1", "uk-nino", "AB 12 34 56 C"),
+      match("d1", "date", "27 September 2026", { tickedByDefault: false }),
+      match("s1", "us-ssn", "123-45-6789"),
+      match("i1", "iban", "GB82 WEST 1234 5698 7654 32"),
+      match("c1", "card", "4111 1111 1111 1111"),
+      match("p1", "phone", "020 7946 0958"),
+      match("e1", "email", "jane@example.com"),
+      match("d2", "date", "05.12.1980", { page: 2 }),
+      match("s2", "us-ssn", "234 56 7890", { page: 2 }),
+      match("d3", "date", "1 May 1990", { page: 2 }),
+    ]);
+
+    it("shows a group for each, in DETECTOR_KINDS order, counted with its own noun", () => {
+      const { container } = show({ matches: SEVEN, ticked: [] });
+
+      expect(
+        groups(container).map((group) => group.querySelector("summary")?.textContent),
+      ).toEqual([
+        "Email addresses1 email address",
+        "Phone numbers1 phone number",
+        "Dates3 dates",
+        "Card numbers1 card number",
+        "Bank account numbers (IBAN)1 IBAN",
+        "US Social Security numbers2 Social Security numbers",
+        "UK National Insurance numbers1 National Insurance number",
+      ]);
+    });
+
+    it("keeps the worker's order inside a new kind's group", () => {
+      const { container } = show({ matches: SEVEN, ticked: [] });
+      const dates = groups(container)[2];
+
+      expect(
+        within(dates)
+          .getAllByRole("checkbox")
+          .map((box) => box.getAttribute("aria-labelledby")),
+      ).toEqual([
+        "select-all-date-label",
+        "match-d1-text",
+        "match-d2-text",
+        "match-d3-text",
+      ]);
+    });
+
+    it("passes axe", async () => {
+      const { container } = show({ matches: SEVEN, ticked: [asMatchId("c1")] });
+
+      await expectNoAxeViolations(container);
+    });
+  });
+
   it("shows no group for a kind with nothing found", () => {
     const { container } = show({ matches: [match("e1", "email", "jane@example.com")] });
 
@@ -218,7 +276,7 @@ describe("the coverage note and the empty state", () => {
     const note = screen.getByTestId("coverage");
     expect(note).toHaveTextContent(COVERAGE_NOTE);
     expect(COVERAGE_NOTE).toBe(
-      "RedactNest looked for email addresses and phone numbers. Anything else, such as names and addresses, stays in the file.",
+      "RedactNest looked for email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers. Anything else, such as names and addresses, stays in the file.",
     );
     const card = screen.getByTestId("checklist");
     expect(card).toContainElement(note);
@@ -245,7 +303,7 @@ describe("the coverage note and the empty state", () => {
     expect(screen.getByText(NOTHING_FOUND.title)).toBeVisible();
     expect(screen.getByText(NOTHING_FOUND.helper)).toBeVisible();
     expect(NOTHING_FOUND.helper).toBe(
-      "RedactNest found no email addresses or phone numbers. Make a cleaned copy to remove metadata and hidden content.",
+      "RedactNest found no email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers or National Insurance numbers. Make a cleaned copy to remove metadata and hidden content.",
     );
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
@@ -259,7 +317,7 @@ describe("the coverage note and the empty state", () => {
 
     expect(screen.getByTestId("coverage")).toHaveTextContent(COVERAGE_NOTE_PARTLY);
     expect(COVERAGE_NOTE_PARTLY).toBe(
-      "RedactNest looked for email addresses and phone numbers on the pages it could read. Anything else, such as names and addresses, stays in the file.",
+      "RedactNest looked for email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers on the pages it could read. Anything else, such as names and addresses, stays in the file.",
     );
   });
 
@@ -269,7 +327,7 @@ describe("the coverage note and the empty state", () => {
     expect(screen.getByText(NOTHING_FOUND_PARTLY.title)).toBeVisible();
     expect(screen.getByText(NOTHING_FOUND_PARTLY.helper)).toBeVisible();
     expect(NOTHING_FOUND_PARTLY.helper).toBe(
-      "RedactNest found no email addresses or phone numbers on the pages it could read. Make a cleaned copy to remove metadata and hidden content.",
+      "RedactNest found no email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers or National Insurance numbers on the pages it could read. Make a cleaned copy to remove metadata and hidden content.",
     );
     expect(screen.queryByText(NOTHING_FOUND.helper)).not.toBeInTheDocument();
   });

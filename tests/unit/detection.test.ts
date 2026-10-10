@@ -20,18 +20,27 @@ import {
   type RedactionTarget,
 } from "@/engine";
 
+import type { DetectorKind } from "@/worker/protocol";
+
 import {
   DETECT_BLOCKED,
+  DETECT_CARD,
+  DETECT_CARD_PIECES,
+  DETECT_DATE,
   DETECT_DENSE_PAGES,
   DETECT_DENSE_PER_PAGE,
+  DETECT_IBAN,
   DETECT_STAMPED,
   DETECT_EMAIL,
   DETECT_MANY_COUNT,
   DETECT_PHONE,
   DETECT_PHONE_COLUMN,
+  DETECT_PHONE_DATES,
   DETECT_PHONE_LISTED,
   DETECT_PHONE_SPACED,
+  DETECT_UK_NINO,
   DETECT_UNICODE_EMAIL,
+  DETECT_US_SSN,
   DETECT_WRAPS,
   denseRow,
   manyAddress,
@@ -89,6 +98,27 @@ function onePage(show: string): ArrayBuffer {
     pdf.destroy();
   }
 }
+
+/**
+ * Feature 12's fixtures, one per release 3 kind, with what each holds as
+ * found, in reading order, and its tick, then the rows of any other kind it
+ * holds (AC-3's pieces, with their kind). The last value in each is wrapped
+ * across two lines of one block.
+ */
+const RELEASE_3: readonly (readonly [
+  DetectorKind,
+  string,
+  readonly (readonly (string | boolean)[])[],
+  readonly (readonly (string | boolean)[])[],
+])[] = [
+  ["date", "detect-date.pdf", DETECT_DATE, []],
+  ["card", "detect-card.pdf", DETECT_CARD, DETECT_CARD_PIECES],
+  ["iban", "detect-iban.pdf", DETECT_IBAN, []],
+  ["us-ssn", "detect-us-ssn.pdf", DETECT_US_SSN, []],
+  ["uk-nino", "detect-uk-nino.pdf", DETECT_UK_NINO, []],
+];
+
+const RELEASE_3_FIXTURES = RELEASE_3.map(([, name]) => name);
 
 function targetsOf(matches: readonly FoundMatch[]): RedactionTarget[] {
   return matches.flatMap((match) => (match.target ? [match.target] : []));
@@ -438,6 +468,7 @@ describe("every unblocked match redacts", () => {
     "detect-phone.pdf",
     "detect-unicode.pdf",
     "detect-blocked.pdf",
+    ...RELEASE_3_FIXTURES,
   ])(
     "in %s, each alone, but for the recorded limit",
     async (name) => {
@@ -455,6 +486,7 @@ describe("every unblocked match redacts", () => {
     "detect-phone.pdf",
     "detect-unicode.pdf",
     "detect-blocked.pdf",
+    ...RELEASE_3_FIXTURES,
   ])(
     "in %s, all together, but for the recorded limit",
     async (name) => {
@@ -614,13 +646,26 @@ describe("code points above U+FFFF", () => {
 
 describe("phone numbers (AC-2, AC-10)", () => {
   it("finds every number with the tick its rule gives, and no look alike", async () => {
-    const found = await find("detect-phone.pdf");
+    const found = (await find("detect-phone.pdf")).filter(
+      (match) => match.kind !== "date",
+    );
 
     expect(found.map((match) => [match.text, match.tickedByDefault])).toEqual(
       DETECT_PHONE.map(([text, ticked]) => [text, ticked]),
     );
     expect(found.every((match) => match.kind === "phone" && match.blocked === null)).toBe(
       true,
+    );
+  });
+
+  /** INV-14: the look alike dates are left for `date`, never read as phone numbers. */
+  it("lists the fixture's numeric dates as dates", async () => {
+    const dates = (await find("detect-phone.pdf")).filter(
+      (match) => match.kind === "date",
+    );
+
+    expect(dates.map((match) => [match.text, match.tickedByDefault])).toEqual(
+      DETECT_PHONE_DATES.map(([text, ticked]) => [text, ticked]),
     );
   });
 
@@ -653,6 +698,199 @@ describe("phone numbers (AC-2, AC-10)", () => {
       });
     }
   });
+});
+
+/**
+ * Feature 12: the release 3 kinds (AC-19 to AC-23, AC-10), through the real
+ * MuPDF. Each fixture lists exactly its values with their ticks, none of its
+ * near misses, and nothing of any other kind but the pieces AC-3 keeps. The
+ * every unblocked match redacts runs above take each fixture too, its pieces
+ * included (AC-6).
+ */
+describe.each(RELEASE_3)("the %s detector on %s", (kind, name, expected, others) => {
+  it("finds every value with its tick, no near miss, and no other row but its pieces", async () => {
+    const found = await find(name);
+
+    expect(
+      found
+        .filter((match) => match.kind === kind)
+        .map((match) => [match.text, match.tickedByDefault]),
+    ).toEqual(expected.map(([text, ticked]) => [text, ticked]));
+    expect(
+      found
+        .filter((match) => match.kind !== kind)
+        .map((match) => [match.kind, match.text, match.tickedByDefault]),
+    ).toEqual(others);
+    expect(found.every((match) => match.blocked === null)).toBe(true);
+  });
+
+  it("gives the value wrapped across two lines one quad per line (AC-4)", async () => {
+    const text = String(expected[expected.length - 1][0]);
+    const wrapped = (await find(name)).at(-1);
+
+    expect(wrapped?.text).toBe(text);
+    expect(wrapped?.target?.text).toBe(text);
+    const quads = wrapped?.target?.quads ?? [];
+    expect(quads).toHaveLength(2);
+    expect(quads[1][1]).not.toBeCloseTo(quads[0][1], 0);
+  });
+
+  it("gives the first value search()'s quads (AC-7)", async () => {
+    const needle = String(expected[0][0]);
+    const [match] = await find(name);
+    const [hit] = searched(name, 0, needle);
+
+    expectSameQuads(match.target?.quads ?? [], hit);
+  });
+});
+
+/**
+ * Spec 0005, AC-28 and AC-3: cards beside other digits in `detect-card.pdf`.
+ * Each card on one line, and the Social Security piece a chance card leaves,
+ * has its own quads, and a run that removes every row leaves each expiry and
+ * both references a card is never cut from.
+ */
+describe("cards beside other digits (AC-28)", () => {
+  it.each([
+    ...DETECT_CARD.slice(0, -1).map(([text]) => String(text)),
+    ...DETECT_CARD_PIECES.map(([, text]) => String(text)),
+  ])("give %s search()'s quads (AC-7)", async (needle) => {
+    const [match] = (await find("detect-card.pdf")).filter(
+      (each) => each.text === needle,
+    );
+    const [hit] = searched("detect-card.pdf", 0, needle);
+
+    expectSameQuads(match.target?.quads ?? [], hit);
+  });
+
+  it("leave each expiry and both references in the redacted page", async () => {
+    const found = await find("detect-card.pdf");
+    const output = await expectRemoved("detect-card.pdf", removable(found));
+    const text = inspect(output, (doc) => pageText(doc, 0));
+
+    // Mastercard, Amex, Diners, UnionPay and the Visa typed against its expiry.
+    expect(occurrences(text, "12/28")).toBe(5);
+    expect(text).toContain("411111111111111112");
+    expect(text).toContain("4111-1111-1111-1111-12");
+  });
+});
+
+/**
+ * Spec 0005, AC-19, AC-21, AC-23, AC-28 and INV-17 (update of 2026-10-10,
+ * and the second update the same day, which made the date's boundary rule
+ * general): the rows the reviews found missing, through the real MuPDF. Each
+ * new row has search()'s quads, the card's included above, and a run removing
+ * every row removes the whole card a chance window overlaps, while each time,
+ * offset and zone name, the word or label beside a date, the first day of a
+ * range before a numeric date, the glued footnote marker, currency code and
+ * words, and the first half of a range across months stay in the file. The
+ * fixtures' own tests above hold that no new line gives a phone row.
+ */
+describe("the review's silent misses (AC-19, AC-21, AC-23, AC-28)", () => {
+  it.each([
+    ["detect-date.pdf", "01/05/2026"],
+    ["detect-date.pdf", "31/05/2026"],
+    ["detect-date.pdf", "3-5 June 2026"],
+    ["detect-date.pdf", "3 June 2026"],
+    ["detect-date.pdf", "2026-09-01"],
+    ["detect-date.pdf", "2026-09-30"],
+    ["detect-date.pdf", "1980-05-12"],
+    ["detect-date.pdf", "27/09/2026"],
+    ["detect-date.pdf", "28/09/2026"],
+    ["detect-date.pdf", "12/05/1980"],
+    ["detect-date.pdf", "14.02.1991"],
+    ["detect-date.pdf", "June 5 - 7, 2026"],
+    ["detect-date.pdf", "7/6/2026"],
+    ["detect-date.pdf", "2026-10-05"],
+    ["detect-date.pdf", "2026-10-06"],
+    ["detect-date.pdf", "03.11.2026"],
+    ["detect-iban.pdf", "IE29 AIBK 9311 5212 3456 78"],
+    ["detect-iban.pdf", "ES9121000418450200051332"],
+    ["detect-uk-nino.pdf", "KL123456B"],
+  ])("give %s's %s search()'s quads (AC-7)", async (name, needle) => {
+    const found = (await find(name)).filter((each) => each.text === needle);
+    const hits = searched(name, 0, needle);
+
+    expect(found).toHaveLength(1);
+    expect(hits).toHaveLength(1);
+    expectSameQuads(found[0].target?.quads ?? [], hits[0]);
+  });
+
+  it.each<[string, readonly string[], readonly string[]]>([
+    ["detect-card.pdf", [], ["2223"]],
+    [
+      "detect-date.pdf",
+      [
+        "28 May",
+        "T23:59:59Z",
+        "T00:00:00Z",
+        "10:00",
+        "11:00",
+        "Smith",
+        "D.O.B.",
+        "5-",
+        "T10:00:00+0100",
+        "T09:00:00EST",
+        "a in the margin",
+      ],
+      [],
+    ],
+    ["detect-iban.pdf", ["1 above", "EUR"], []],
+    ["detect-uk-nino.pdf", ["signed"], []],
+  ])(
+    "leave in %s what no row holds",
+    async (name, kept, gone) => {
+      const output = await expectRemoved(name, removable(await find(name)));
+      const text = inspect(output, (doc) => pageText(doc, 0));
+
+      for (const fragment of kept) expect(text).toContain(fragment);
+      for (const fragment of gone) expect(text).not.toContain(fragment);
+    },
+    60_000,
+  );
+});
+
+/**
+ * Spec 0005, AC-19, AC-20, AC-22, AC-10 and INV-17 (third update of
+ * 2026-10-11): a footnote marker glued after a date of birth, an ISO date, a
+ * card and a Social Security number, each drawn as a plain `1`, and a date
+ * label glued to a date, through the real MuPDF. Each new row has search()'s
+ * quads, and a run removing every row leaves each marker and each glued label
+ * in the file. The fixtures' own tests above hold each row's tick and that no
+ * new line gives a phone row, and the runs that redact every unblocked match
+ * take each new row alone and together.
+ */
+describe("the third review's footnote markers and glued labels (AC-19, AC-20, AC-22)", () => {
+  it.each([
+    ["detect-date.pdf", "12/05/1981"],
+    ["detect-date.pdf", "31.12.2027"],
+    ["detect-date.pdf", "27/09/2027"],
+    ["detect-date.pdf", "2027-09-28"],
+    ["detect-card.pdf", "5425 2334 3010 9903"],
+    ["detect-us-ssn.pdf", "178-05-1123"],
+  ])("give %s's %s search()'s quads (AC-7)", async (name, needle) => {
+    const found = (await find(name)).filter((each) => each.text === needle);
+    const hits = searched(name, 0, needle);
+
+    expect(found).toHaveLength(1);
+    expect(hits).toHaveLength(1);
+    expectSameQuads(found[0].target?.quads ?? [], hits[0]);
+  });
+
+  it.each<[string, readonly string[]]>([
+    ["detect-date.pdf", ["1 per", "Exp.", "Issued", "1 later"]],
+    ["detect-card.pdf", ["1 in the notes"]],
+    ["detect-us-ssn.pdf", ["1 on the form"]],
+  ])(
+    "leave in %s each marker and glued label",
+    async (name, kept) => {
+      const output = await expectRemoved(name, removable(await find(name)));
+      const text = inspect(output, (doc) => pageText(doc, 0));
+
+      for (const fragment of kept) expect(text).toContain(fragment);
+    },
+    60_000,
+  );
 });
 
 /** AC-11 and AC-12: one page at a time, and a page that cannot be read fails. */

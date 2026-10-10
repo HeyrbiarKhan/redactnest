@@ -1,0 +1,67 @@
+# Second review, feat/remaining-detectors, 2026-10-10
+
+**Reviewed by**: Sonnet 5.5 (author on Opus)
+**Scope**: 43 files on the branch against main; the update since the first review (`30f269c..HEAD`, 19 files) read in full
+**Verdict**: Changes requested
+
+## Summary
+The update settles both majors of the first review and I could not break either fix. The card overlap rule held in every card test I ran: a sweep of about 160,000 neighbour layouts over six card shapes, and 200,000 random layouts of valid cards (six brands, hyphenated, spaced and unbroken, with numbers, dates and words beside them and a second card). In all of them every digit of the real card sits inside some row. Date ranges, day ranges, ISO times and the glued IBAN and NINO also work as written. One real silent miss remains inside the same family the update set out to close: an interval whose dates carry a plain `hh:mm` time loses its second date. The two points you asked me to weigh are covered below. The 20 character time limit is a Nit (the realistic gaps next to it are a Minor), and the duplicate accessible name is a Nit.
+
+## Major
+### 🟠 The second date of an interval with times is lost when the times are not ISO, `src/detect/date.ts:259`
+**Problem**: The joiner rule lets a hyphen part two dates only when the hyphen sits exactly where the last listed date ended (`joinsAt`). That end is moved past a time only for the year first `T` form. A date followed by a space and `hh:mm` ends before the time, so the hyphen after the time is not at `joinsAt`, and the next date is cut as "a date touching a separator that touches a digit". I did not find a phone row or any other row that picks it up.
+**Failing inputs (confirmed by running `detect`)**:
+- `27/09/2026 10:00-28/09/2026 11:00` gives `date[27/09/2026]` only. It should also give `28/09/2026`.
+- `27.09.2026 10:00-28.09.2026 11:00` gives the first date only.
+- `27/09/2026, 10:00-28/09/2026` gives the first date only.
+- `27/09/2026 10-28/09/2026` and `27/09/2026 at 10-28/09/2026` give the first date only.
+- `2026-09-27 10:00-2026-09-28 11:00` gives `date[2026-09-27]` and `phone[00-2026-09-28 11]`. Here the second date is covered, but only by an accident of the phone detector (the known phone issue), not by the date rule.
+- With spaces round the hyphen it works (`27/09/2026 10:00 - 28/09/2026 11:00` gives both), so this is only the unspaced form.
+**Why it matters**: This is the same silent miss the first review's second major was about (two dates joined by a hyphen), and the update fixes it only when the time is ISO. Booking exports, leave records and event listings write `dd/mm/yyyy hh:mm-dd/mm/yyyy hh:mm` as often as the ISO form. A date of birth is not at stake in most of these, but a listed date is how the visitor finds a date at all, and a date nobody lists is a date nobody can choose to remove. The coverage note promises dates are looked for. The spec's AC-19 says "both dates of an ISO interval with times are found", so this is a gap the spec words narrowly, not a contradiction, but the spec also says nothing about it.
+**Suggested fix**: At a numeric date's start, also let a joiner part when what stands right before the joiner reads as the end of a clock time: a colon and two digits (`:00`), or a short digit group after a space that follows the previous listed date. A cheap and fail safe form is: the joiner is preceded by `:dd` or by a digit group of one or two digits that itself follows a space after the last listed date's end. Alternatively extend `joinsAt` past an optional space and `hh:mm(:ss)` after any numeric or written date. Add the inputs above to `tests/unit/detect-dates.test.ts` as an `it.each`.
+
+## Minor
+### 🟡 The joiner rule's time grammar is narrower than ISO and than real exports, `src/detect/date.ts:319`
+**Problem**: This is the first of the two points you asked me to weigh. I confirmed the 20 character limit (`TIME_LONGEST`, line 181) and found that it is not the realistic gap. A nanosecond time works: `2026-09-27T10:00:00.123456789Z-2026-09-28T10:00:00Z` gives both dates, because `10:00:00.123456789` is 18 characters. The limit only bites at 21 characters or more of digits, colons and stops: `2026-09-27T10:00:00,123456789012Z-2026-09-28` and `2026-09-27T10:00:00.12345678901234567890Z/2026-09-28` give the first date only. No real timestamp reaches that (nanoseconds is the usual ceiling), so I rate the limit itself a Nit. The same function has other gaps that are realistic, all confirmed, each giving the first date only:
+- `2026-09-27T10:00:00+0100-2026-09-28` (offset without a colon, valid ISO 8601 basic form)
+- `2026-09-27T10:00:00+01-2026-09-28` (hour only offset)
+- `2026-09-27T10:00:00 Z-2026-09-28` (space before the zone)
+- `2026-09-27T10:00:00EST-2026-09-28` (zone name)
+**Why it matters**: Same silent miss as the Major, rarer inputs. The rest of the time handling is correct: a missing zone, `Z`, `z`, `+01:00`, `-01:00` and a lower case `t` all work.
+**Suggested fix on the limit**: A fail safe fix exists, but it must stay linear. Reading the run with no cap would be quadratic on a string such as `2026-09-27T1:2026.09.27T1:2026.09.27T1:...`, where each date after a colon reads the whole rest. The cap is there for INV-7 and is right. Either raise it to about 40 (still bounded, the test at `tests/unit/detect-dates.test.ts:348` should then use a longer run), or remember how far the last run was read and reuse it. On the other gaps: accept an offset of `+hhmm` and `+hh`, an optional space before `Z`, and a run of capital letters of at most five after the time. Add them to the interval `it.each` at `tests/unit/detect-dates.test.ts:353`.
+
+### 🟡 A date followed by a hyphen and a word is dropped whole, `src/detect/date.ts:243`
+**Problem**: `cutFrom` treats a hyphen or a slash followed by a letter as a longer code. `DOB 12/05/1980-Smith`, `born 05.12.1980-London` and `Smith-12/05/1980` all give no row, including the first two, where a birth word is right there. `Mon 27/09/2026-Tue 28/09/2026` loses `27/09/2026`. This rule is not new, and the tests pin its mirror (`REF-05.12.1980`, `2026-09-27Tuesday`), but the update opened the joiner exception beside it, so the gap now stands out: a date followed by a hyphen and a full date is found, a date followed by a hyphen and a name is not.
+**Why it matters**: A date of birth lost with no row and no warning. The engineer's preference is that an extra unticked row is fine and a missed value is not. The NINO fix in this same update takes exactly that stance (list it unticked), and the date detector does not.
+**Suggested fix**: Consider the same treatment: when only a letter-led word sits beyond the separator, list the date unticked instead of dropping it, keeping `REF-05.12.1980` (a letter before the date) as a drop, since that is the real code shape. If the owner prefers to keep the rule, say it in the coverage note and add one test that names it.
+
+### 🟡 A spaced month first day range finds nothing, and a day range before a numeric date finds nothing, `src/detect/date.ts:156`, `src/detect/date.ts:259`
+**Problem**: `June 5 - 7, 2026` gives no row at all (neither `June 5` nor `7, 2026` is a full date, and the range rule needs no spaces). `5-7/6/2026` and `DOB: 5-7/6/2026` give none either: `7/6/2026` is cut by the hyphen that touches the `5`. The spaced day first range is handled sensibly (`5 - 7 June 2026` lists `7 June 2026`, leaving `5` behind, which the spec records). The month first one has no such fallback, and the full year and month are left in the file with no row.
+**Why it matters**: Smaller than the Major, because the first needs spaces round a dash and the second is an unusual way to write a day range. Both leave a real date unlisted.
+**Suggested fix**: Allow optional single spaces round the dash in `DAY_RANGE` for the month first form only, or list the last day with its month and year. For the numeric form, let a one or two digit group joined by a hyphen to a full date part like a joiner does.
+
+### 🟡 No test holds the unspaced interval with a clock time, `tests/unit/detect-dates.test.ts:353`
+**Problem**: The interval cases cover the ISO `T` forms only. Nothing pins `dd/mm/yyyy hh:mm-dd/mm/yyyy hh:mm`, which is the Major above, and nothing pins the offset forms in the Minor above. This is also why the gap went unseen.
+**Suggested fix**: Add those inputs together with the fix, as pending expectations if the fix is deferred.
+
+## Nits
+- ⚪ `src/ui/checklist-item.tsx:99`, accessible names for rows. This is the second point you asked me to weigh. Two rows with the same text ("27 September 2026" twice) do share one accessible name: the checkbox is named only by `aria-labelledby={textId}`, and the page number and context are its description (`aria-describedby`). That is not a WCAG 2.2 AA failure. 4.1.2 asks for a name, not a unique one, 2.4.6 asks that labels describe purpose (they do), and the description gives page and context, which is what tells the two apart. The pattern is the same one emails and phones already use, and a screen reader user can also tell rows apart by moving through the list. The axe tests pass. Dates repeat more than other kinds, so if you want to improve it, set `aria-labelledby` to the text id and the page id together (`match-x-text match-x-page`), so the name reads "27 September 2026 Page 3". It would mean changing the exact string pinned in `tests/component/review-checklist.test.tsx` (the `aria-labelledby` list near line 168). No action needed to ship.
+- ⚪ `src/detect/date.ts:181`, the `TIME_LONGEST` comment says "a rule about how times are written". It would also help to say that the cap is there for INV-7 (a longer run read per date can be quadratic), so nobody lifts it to fix the long time case.
+- ⚪ `src/detect/uk-nino.ts:88`, `AB 12 34 56Dx` and `AB 12 34 56apply` take one extra letter into the row (`D`, `a`). Fail safe and the update says so in its comment. Noted only.
+- ⚪ `src/detect/iban.ts`, the start still drops an IBAN glued to a word before it (`IBANGB82WEST12345698765432` gives no row, and so do `NumberAB123456C` and `DOB27/09/1980`), while the end now accepts one. The update's reason (a letter before is how a value reads out of a longer code) is stated and sound for codes. Text extraction that runs words together does it at the front as often as at the back, so the owner may want to know it is a one sided fix. The IBAN checksum makes a front fix as safe as the end fix.
+
+## Checks you asked for
+- **Card overlap rule (a)**: No silent miss found. Every digit of the real card was inside some row in all the layouts above: number of 3 to 6 digits before the card, after it, on both sides, with an expiry after it, a second card, spaced 4 4 4 4, 4 6 5, hyphenated and unbroken. The cost is a neighbour's digits inside the card row, as the spec records. In `2226 4111 1111 1111 1111 123-45-6789` the SSN keeps its own row, and `2226 4111 1111 1111 1111 05/12/2026` and `... +44 7700 900123` keep their date and phone rows. The 19 digit card test shape I tried was not a valid card of my own making, so I do not count it.
+- **Date rules (b)**: Joiners between two full dates work for hyphen, slash, en dash and em dash, numeric and written, chains of three, and across forms (`31 May 1980/05/12/1980`). `REF-` and `ID-` still drop the date (by design). `2026-09-27-01` is still not a date (it is listed as a phone number, ticked, as before). `5-7 June 2026` is one row, `5-7 June 20261` gives none, and `28-30 February 2026` gives none. The spec example `31-30 June 2026` is known and not re-raised. The Major and the first two Minors above are what falls through.
+- **Glued ends (c)**: An IBAN followed by a word, a digit, or a footnote mark keeps its exact length row. A NINO with a glued letter is listed unticked and takes a suffix letter; a glued digit drops it, as accepted.
+- **Reopened first review misses**: None reopened. The overlap and piece step in `src/detect/index.ts` is unchanged and still loses no position (INV-16, INV-17). Union card rows are cut correctly where a higher kind sits inside them.
+- **Wall and conventions**: No console, storage, network or `any` in the changed detectors. New constants (`TIME_LONGEST`, `DAY_RANGE`, `MAX_GROUP_DIGITS`) are commented as pattern rules and live in `src/detect`. `findNumbers` is not back.
+
+## Strengths
+- The card fix is the right shape: it covers both readings rather than choosing one, so the failure moves from "digits left behind" to "a neighbour's digits inside a row", which is the fail safe side. The rationale file measures the cost.
+- The glued NINO choice (list it unticked) is exactly the stance the project wants, and the comment says why a checksum-free shape cannot be ticked.
+- The joiner rule is bounded and its linearity argument holds. The adversarial shapes added in `tests/unit/detect-adversarial.test.ts` match each new read.
+- Tests are specific: exact row text, near misses pinned, real MuPDF quads checked in `tests/unit/detection.test.ts`.
+
+## Test coverage
+Strong for the new rules: the joiner and range forms, the card overlap and the glued ends all have unit tests, fixtures and engine checks. The gaps are the unspaced interval with a clock time, the non ISO offset forms, a date followed by a hyphen and a word, and a spaced month first range. A seeded 500 run check of INV-15 is in the author's notes; my own 200,000 run fuzz agreed with it.

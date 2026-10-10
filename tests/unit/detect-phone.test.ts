@@ -379,3 +379,25 @@ describe("libphonenumber-js, as the detector relies on it", () => {
     },
   );
 });
+
+/**
+ * The recorded limit on digits other than ASCII (spec 0005, *Consequences*
+ * and Follow-up). Every row of `PHONE_READINGS` but `+` tests its prefix as
+ * ASCII digits, so a national number in Arabic Indic digits gets no reading,
+ * while one written with `+` is parsed, and libphonenumber-js reads those
+ * digits. Devanagari it does not read either way. Pinned so a change to the
+ * readings or to the library's digit handling is noticed.
+ */
+describe("digits other than ASCII", () => {
+  it("finds no national number written in Arabic Indic digits", () => {
+    expect(found("Call ٠٢٠ ٧٩٤٦ ٠٩٥٨ today")).toEqual([]);
+  });
+
+  it("finds an international number written in Arabic Indic digits, ticked", () => {
+    expect(found("Call +٤٤ ٢٠ ٧٩٤٦ ٠٩٥٨ today")).toEqual([["+٤٤ ٢٠ ٧٩٤٦ ٠٩٥٨", true]]);
+  });
+
+  it("finds no number written in Devanagari digits, even with a +", () => {
+    expect(found("Call +४४ २० ७९४६ ०९५८ today")).toEqual([]);
+  });
+});

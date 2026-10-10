@@ -1,7 +1,7 @@
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js/max";
 
 import { isNumericDate } from "./dates";
-import { codePoints, wordBefore, wordList } from "./text";
+import { ALPHANUMERIC, codePoints, HYPHEN, wordBefore, wordList } from "./text";
 import type { DetectInput, Span } from "./types";
 
 /**
@@ -231,10 +231,8 @@ const MAX_GAP = 3;
 const DIGIT = /^\p{Nd}$/u;
 const SPACE = /^\s$/u;
 const LETTER = /^\p{L}$/u;
-/** A letter or a digit: what a number may not be cut out of (AC-2). */
-const ALPHANUMERIC = /^[\p{L}\p{N}]$/u;
-/** A hyphen a unit may be glued by: `-`, U+2010 to U+2015, or U+2212 minus. */
-const HYPHEN = /^[-\u2010-\u2015\u2212]$/u;
+// `ALPHANUMERIC` (what a number may not be cut out of, AC-2) and `HYPHEN` (what
+// a unit may be glued by) come from `./text`, shared with the other detectors.
 /** Written like a phone number: a space, hyphen, dot or bracket inside it (AC-10). */
 const SEPARATOR = /^[\s().\-\u2010-\u2015\u2212]$/u;
 

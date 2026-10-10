@@ -2,14 +2,15 @@
  * Full numeric dates. Spec 0005, *Detectors* (`date`) and INV-14.
  *
  * The phone detector asks this of every unit it reads, so a date is never
- * part of a phone window (AC-2), and release 3's `date` detector will ask it
+ * part of a phone window (AC-2), and the `date` detector (`./date.ts`) asks it
  * for its numeric forms rather than restating them (AC-19). Both asking the
  * same predicate is what leaves every numeric date for `date`, whatever
  * `PRECEDENCE` says. The trunk rule alone cannot do it: `05.12.1980` reads as
- * a `0` then seven digits, a possible UK number.
+ * a `0` then seven digits, a possible UK number. The `date` detector's
+ * written forms ask `isRealDate` too, so one calendar serves every form.
  *
- * Not exported from `@/detect`: it is a rule the detectors share, not a
- * detector.
+ * Not exported from `@/detect`: these are rules the detectors share, not
+ * detectors.
  */
 
 /** The four digit years a date may name. A rule about the pattern, not a cap. */
@@ -61,7 +62,12 @@ export function isNumericDate(text: string): boolean {
   );
 }
 
-function isRealDate(yearText: string, month: number, day: number): boolean {
+/**
+ * Is this a real calendar day in a year the date forms may name? `yearText`
+ * is the year as written: 4 digits run 1900 to 2099, and 2 digits are real
+ * when they are real in either of those centuries.
+ */
+export function isRealDate(yearText: string, month: number, day: number): boolean {
   if (month < 1 || month > 12 || day < 1) return false;
   const years =
     yearText.length === 4

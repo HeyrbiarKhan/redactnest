@@ -295,7 +295,7 @@ test("detection gives way to a second document chosen while it reads", async ({
     buffer: densePdf(),
   });
   await expect(page.getByTestId("progress")).toHaveText(
-    /Looking for email addresses and phone numbers/,
+    /Looking for email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers/,
     { timeout: ENGINE_TIMEOUT },
   );
 

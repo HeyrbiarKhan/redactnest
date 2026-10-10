@@ -1,0 +1,44 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<<  /Length 478 >>
+stream
+BT /F1 12 Tf 72 740 Td (SSN 123-45-6789 on file) Tj ET
+BT /F1 12 Tf 72 720 Td (Spouse 234 56 7890 listed) Tj ET
+BT /F1 12 Tf 72 700 Td (Social Security number: 345678901) Tj ET
+BT /F1 12 Tf 72 680 Td (Order 456789012 shipped) Tj ET
+BT /F1 12 Tf 72 660 Td (Never issued 666-12-3456, 900-12-3456 and 123-45-0000) Tj ET
+BT /F1 12 Tf 72 640 Td (SSN 178-05-11231 on the form) Tj ET
+BT /F1 12 Tf 72 620 Td (Applicant number 567 89) Tj ET
+BT /F1 12 Tf 72 606 Td (0123 confirmed) Tj ET
+
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R >>  >> /Contents 5 0 R >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000212 00000 n 
+0000000307 00000 n 
+0000000837 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+975
+%%EOF

@@ -1673,7 +1673,7 @@ describe("the checklist (spec 0005)", () => {
     await openWith(withMatches());
 
     expect(screen.getByTestId("coverage")).toHaveTextContent(
-      "RedactNest looked for email addresses and phone numbers.",
+      "RedactNest looked for email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers.",
     );
     expect(screen.getByRole("checkbox", { name: "jane@example.com" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "(212) 123 4567" })).not.toBeChecked();
@@ -2750,7 +2750,7 @@ describe("the redact flow (spec 0007)", () => {
       await chooseFile(pdfFile());
 
       expect(await screen.findByTestId("progress")).toHaveTextContent(
-        "Looking for email addresses and phone numbers…",
+        "Looking for email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers…",
       );
     });
 

@@ -337,7 +337,9 @@ describe("phase copy (AC-4)", () => {
   });
 
   it("names what detection looks for, as the coverage note does", () => {
-    expect(PHASE_TEXT.detecting).toBe("Looking for email addresses and phone numbers");
+    expect(PHASE_TEXT.detecting).toBe(
+      "Looking for email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers",
+    );
   });
 
   it("says a run with nothing ticked only strips hidden content", () => {
