@@ -384,6 +384,19 @@ describe("choosing where a card ends (AC-28)", () => {
       `4111 1111 1111 1111 ${CVV}`,
     ]);
   });
+
+  /**
+   * Step 3: only bare units are spaced into a card, and a spaced card opens
+   * with 4 to 6 digits. So taking the longest passing window never reaches
+   * past an unbroken or hyphenated card, even to a CVV the two would pass
+   * with.
+   */
+  it.each([
+    ["unbroken", "4111111111111111"],
+    ["hyphenated", "4111-1111-1111-1111"],
+  ])("leaves a CVV the two would pass with out of a card written %s", (_what, card) => {
+    expect(found(`${card} ${CVV} on file`)).toEqual([[card, true]]);
+  });
 });
 
 /**
@@ -444,6 +457,33 @@ describe("overlapping card windows share one row (AC-28, INV-15)", () => {
   });
 
   /**
+   * The other side of the case above: a phone number on the next line whose
+   * first group passes with the card. `4000 0000 0000 0044` is built so that
+   * its 19 digits with `020` pass as a Visa too, so the row takes `020`, and
+   * the rest of the number keeps its own row (AC-3, INV-16) instead of going
+   * with the card or being dropped.
+   */
+  it("keeps the rest of a phone number whose first group joins a card's row", () => {
+    const card = "4000 0000 0000 0044";
+    const text = `Card ${card} 020 7946 0958 today`;
+    const points = Array.from(text);
+    const join = text.indexOf(" 020");
+    expect(withCheckDigit(`${card.replaceAll(" ", "")}02`)).toBe(
+      `${card.replaceAll(" ", "")}020`,
+    );
+
+    expect(
+      detect({ text, joins: [join] }).map((span) => [
+        span.kind,
+        points.slice(span.start, span.end).join(""),
+      ]),
+    ).toEqual([
+      ["card", `${card} 020`],
+      ["phone", "7946 0958"],
+    ]);
+  });
+
+  /**
    * Pinned, so the merge is a known behaviour: every start's window passes,
    * so the row is carried to the run's end.
    */
@@ -483,4 +523,115 @@ describe("overlapping card windows share one row (AC-28, INV-15)", () => {
       ).toBe(true);
     }
   });
+
+  /**
+   * INV-15 as amended, checked against every window rather than one card:
+   * in runs of spaced groups built at random around real cards, every window
+   * that passes lies inside one card row, no two rows share a digit, and each
+   * row starts and ends on a group's edge (step 6). Which windows pass is
+   * worked out here from steps 3 and 4 as the spec writes them, with this
+   * file's own Luhn digit, not asked of the detector. Seeded, so a failure
+   * names a fixed run.
+   */
+  it("puts every window that passes inside one card row, and no digit in two (INV-15)", () => {
+    let state = 20261010;
+    const random = (below: number): number => {
+      state = (state * 48_271) % 2_147_483_647;
+      return state % below;
+    };
+    const digits = (count: number): string =>
+      Array.from({ length: count }, () => String(random(10))).join("");
+    const prefixes = ["4", "51", "2221", "6011", "3528", "62"];
+    const pieces: (() => string)[] = [
+      () =>
+        spaced(cardFrom(prefixes[random(prefixes.length)] + digits(6), 16), [4, 4, 4, 4]),
+      () => spaced(cardFrom(`37${digits(6)}`, 15), [4, 6, 5]),
+      () => cardFrom(`4${digits(6)}`, 16),
+      // Short groups, some opening as a brand does, so windows pass by chance.
+      () => digits(1 + random(6)),
+      () => `4${digits(3 + random(3))}`,
+      () => `5${digits(3)}`,
+    ];
+
+    let windowsPassed = 0;
+    let rowsCarried = 0;
+    for (let trial = 0; trial < 500; trial += 1) {
+      const groups = Array.from({ length: 2 + random(6) }, () =>
+        pieces[random(pieces.length)](),
+      )
+        .join(" ")
+        .split(" ");
+      const text = `Ref ${groups.join(" ")} on file`;
+      // Every character is ASCII, so offsets and code points agree.
+      const starts = groups.map(
+        (_, index) =>
+          "Ref ".length + groups.slice(0, index).join(" ").length + (index > 0 ? 1 : 0),
+      );
+      const ends = groups.map((group, index) => starts[index] + group.length);
+      const rows = DETECTORS.card({ text, joins: [] });
+
+      for (const [index, row] of rows.entries()) {
+        expect(starts, text).toContain(row.start);
+        expect(ends, text).toContain(row.end);
+        if (index > 0) expect(row.start, text).toBeGreaterThan(rows[index - 1].end);
+      }
+
+      for (let first = 0; first < groups.length; first += 1) {
+        for (let last = first; last < groups.length; last += 1) {
+          if (!isWindow(groups.slice(first, last + 1))) continue;
+          if (!passesStep4(groups.slice(first, last + 1).join(""))) continue;
+          windowsPassed += 1;
+          const holding = rows.filter(
+            (row) => row.start <= starts[first] && row.end >= ends[last],
+          );
+          expect(
+            holding,
+            `${text}: ${groups.slice(first, last + 1).join(" ")}`,
+          ).toHaveLength(1);
+          if (holding[0].start !== starts[first] || holding[0].end !== ends[last]) {
+            rowsCarried += 1;
+          }
+        }
+      }
+    }
+
+    // The runs must hold overlapping windows, or the check above proves little.
+    // This seed gives 1,167 windows that pass and 74 rows carried past one.
+    expect(windowsPassed).toBeGreaterThan(500);
+    expect(rowsCarried).toBeGreaterThan(40);
+  });
 });
+
+/**
+ * Step 3, as the spec writes it: one unit alone, or two or more bare units
+ * whose first holds 4 to 6 digits, whose last holds 1 to 6, and every other 3
+ * to 6, with 19 digits at most.
+ */
+function isWindow(units: readonly string[]): boolean {
+  if (units.length === 1) return true;
+  const within = (unit: string, [least, most]: readonly [number, number]) =>
+    unit.length >= least && unit.length <= most;
+  return (
+    within(units[0], CARD_GROUP_DIGITS.first) &&
+    within(units[units.length - 1], CARD_GROUP_DIGITS.last) &&
+    units.slice(1, -1).every((unit) => within(unit, CARD_GROUP_DIGITS.middle)) &&
+    units.join("").length <= 19
+  );
+}
+
+/** Step 4: 13 to 19 digits that pass Luhn, at a prefix and length a brand issues. */
+function passesStep4(number: string): boolean {
+  return (
+    number.length >= 13 &&
+    number.length <= 19 &&
+    withCheckDigit(number.slice(0, -1)) === number &&
+    CARD_BRANDS.some(
+      (brand) =>
+        brand.lengths.has(number.length) &&
+        brand.prefixes.some(([from, to]) => {
+          const prefix = Number(number.slice(0, from.length));
+          return prefix >= Number(from) && prefix <= Number(to);
+        }),
+    )
+  );
+}

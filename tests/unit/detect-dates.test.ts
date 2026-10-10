@@ -218,8 +218,63 @@ describe("date ranges and times (AC-19, INV-17)", () => {
       "05/12/1980-3 June 2026",
       ["05/12/1980", "3 June 2026"],
     ],
+    // Each joiner the scenario names (`-`, an en dash, `/`) for each of
+    // AC-19's ranges, beside the cases above.
+    [
+      "a slash between slashed dates",
+      "01/05/1980/31/05/1980",
+      ["01/05/1980", "31/05/1980"],
+    ],
+    [
+      "an en dash between dotted dates",
+      "05.12.1980–10.12.1980",
+      ["05.12.1980", "10.12.1980"],
+    ],
+    [
+      "a slash between dotted dates",
+      "05.12.1980/10.12.1980",
+      ["05.12.1980", "10.12.1980"],
+    ],
+    [
+      "an en dash between ISO dates",
+      "2026-09-01–2026-09-30",
+      ["2026-09-01", "2026-09-30"],
+    ],
+    [
+      "an en dash between written dates",
+      "1 May 2026–31 May 2026",
+      ["1 May 2026", "31 May 2026"],
+    ],
+    [
+      "a slash between written dates",
+      "1 May 2026/31 May 2026",
+      ["1 May 2026", "31 May 2026"],
+    ],
+    // The start check sees the written date's end just as a numeric one's.
+    [
+      "a hyphen after a written date",
+      "1 May 2026-31/05/2026",
+      ["1 May 2026", "31/05/2026"],
+    ],
   ])("finds both of two full dates joined by %s", (_what, text, dates) => {
     expect(texts(`Leave ${text} approved`)).toEqual(dates);
+  });
+
+  /** A joiner is one hyphen or one `/`, never `.` (*Detectors*, `date`). */
+  it.each(["05.12.1980.10.12.1980", "2026-09-01.2026-09-30"])(
+    "finds neither date where a dot stands between them: %s",
+    (text) => {
+      expect(found(`Leave ${text} approved`)).toEqual([]);
+    },
+  );
+
+  /**
+   * A joiner parts only where a full date starts right after it. With no 31
+   * February beyond the hyphen, the first date runs on into a longer code and
+   * is cut, and the second is no date.
+   */
+  it("finds no date where a joiner leads to an impossible one", () => {
+    expect(found("Leave 01/05/1980-31/02/1980 approved")).toEqual([]);
   });
 
   it.each([
@@ -231,10 +286,19 @@ describe("date ranges and times (AC-19, INV-17)", () => {
     "3-5th June 2026",
     "June 3–5, 2026",
     "June 3-5 2026",
+    "June 3rd–5th, 2026",
+    "3-5 of June 2026",
     // The days' order is not checked.
     "5-3 June 2026",
+    // Both days are real in a leap year.
+    "28-29 February 2024",
   ])("finds the day range %s as one row", (date) => {
     expect(texts(`Course ${date} in Leeds`)).toEqual([date]);
+  });
+
+  /** The second day is checked against the year too, as the first is. */
+  it("finds no day range whose second day is a leap day in a common year", () => {
+    expect(texts("Course 28-29 February 2023 in Leeds")).toEqual([]);
   });
 
   it("reads a range with spaces around its dash as the second day's date", () => {
@@ -274,6 +338,16 @@ describe("date ranges and times (AC-19, INV-17)", () => {
     ["2026/09/27T10:00", "2026/09/27"],
   ])("finds the year first date in %s without its time", (text, date) => {
     expect(texts(`Logged ${text} here`)).toEqual([date]);
+  });
+
+  /**
+   * `TIME_LONGEST` bounds only how far the joiner rule reads for the time's
+   * end. The date itself is found whatever the time holds.
+   */
+  it("finds the date before a time longer than the joiner rule reads", () => {
+    expect(texts(`Logged 2026-09-27T10:00:00.${"0".repeat(30)}Z here`)).toEqual([
+      "2026-09-27",
+    ]);
   });
 
   it.each([
@@ -368,4 +442,27 @@ describe("dates and phone numbers (INV-14)", () => {
       ).toEqual([["date", date]]);
     },
   );
+
+  /**
+   * `phone` stands above `date` in `PRECEDENCE`, so a phone row holding any
+   * digit of two joined dates would cut them. Through `detect`, each joined
+   * numeric range gives its two dates and no other row (AC-19, INV-14).
+   */
+  it.each([
+    ["01/05/1980-31/05/1980", ["01/05/1980", "31/05/1980"]],
+    ["05.12.1980-10.12.1980", ["05.12.1980", "10.12.1980"]],
+    ["05-12-1980-10-12-1980", ["05-12-1980", "10-12-1980"]],
+    ["2026-09-01/2026-09-30", ["2026-09-01", "2026-09-30"]],
+    ["2026-09-01-2026-09-30", ["2026-09-01", "2026-09-30"]],
+    ["2026-09-01T00:00:00Z/2026-09-30T23:59:59Z", ["2026-09-01", "2026-09-30"]],
+  ])("lists both dates of %s, and no phone number", (range, dates) => {
+    const text = `Leave ${range} approved`;
+    const points = Array.from(text);
+    expect(
+      detect({ text, joins: [] }).map((span) => [
+        span.kind,
+        points.slice(span.start, span.end).join(""),
+      ]),
+    ).toEqual(dates.map((date) => ["date", date]));
+  });
 });

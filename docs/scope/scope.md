@@ -275,7 +275,7 @@ spec [0005](../specs/0005-pattern-detection/index.md) · code in `src/detect` (n
   - [x] Nothing found left without a row (spec 0005, update of 2026-10-08, tasks 31 and 34): the overlap step in `detect` keeps a cut span's free stretches as pieces, and the IBAN, Social Security and National Insurance neighbour layouts pinned through their detectors and through `detect` · AC-3, AC-28, INV-16
   - [x] The review's silent misses (spec 0005, update of 2026-10-10, tasks 35 to 40): overlapping card windows share one row, so no card group is left behind; date ranges, written dates beside a separator, day ranges and ISO dates with times found; an IBAN glued at its end found, a National Insurance number glued to a letter listed unticked; the tests flipped, the new adversarial shapes, and four fixtures with their `verify.md` steps · AC-6, AC-7, AC-10, AC-16, AC-19, AC-21, AC-23, AC-28, INV-15, INV-17
 - [x] Verify it: `/check verify remaining detectors` (first run done; again for the update of 2026-10-10)
-- [ ] Test it: `/test remaining detectors` (first run done; again for the update of 2026-10-10)
+- [x] Test it: `/test remaining detectors` (first run done; again for the update of 2026-10-10)
 - [ ] Review it (fresh model): `/check review remaining detectors` (first review done, [2026-10-10](../reviews/2026-10-10-feat-remaining-detectors.md); again for the update)
 
 ### 11. Telemetry & error monitoring · needs a decision

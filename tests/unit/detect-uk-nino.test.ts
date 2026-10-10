@@ -135,6 +135,7 @@ describe("a National Insurance number glued to what follows it (AC-23, INV-17)",
     ["a suffix past D", "AB123456E", "AB123456"],
     ["a word starting past D", "AB123456Ename", "AB123456"],
     ["a word glued to a spaced number's suffix", "AB 12 34 56Cname", "AB 12 34 56C"],
+    ["a word starting past D glued to a spaced number", "AB 12 34 56Xyz", "AB 12 34 56"],
     ["a letter in another script", "AB123456é", "AB123456"],
   ])("lists it unticked with %s", (_what, text, nino) => {
     expect(found(`Ref ${text} here`)).toEqual([[nino, false]]);

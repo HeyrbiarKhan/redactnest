@@ -169,4 +169,14 @@ describe("an IBAN glued to what follows it (AC-21, INV-17)", () => {
   ])("still finds nothing with %s", (_what, text) => {
     expect(found(text)).toEqual([]);
   });
+
+  /**
+   * The two rules side by side: the first IBAN may touch what follows it, and
+   * the second has a digit right before it, so only the first is listed.
+   */
+  it("lists the first of two IBANs glued together, and not the second", () => {
+    expect(found("See GB82WEST12345698765432GB82WEST12345698765432 today")).toEqual([
+      ["GB82WEST12345698765432", true],
+    ]);
+  });
 });
