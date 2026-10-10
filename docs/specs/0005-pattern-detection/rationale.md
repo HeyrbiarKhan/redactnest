@@ -357,6 +357,167 @@ The complete amended rule (group sizes with a free last group, parting hyphens, 
 
 False cards on 10,000 random spaced numbers: 16 digits in fours 2.8%, 18 grouped 4 4 4 4 2 3.6%, 20 in fours 5.4%, 22 grouped 4 4 4 4 4 2 6.3%, 24 in fours 8.1%.
 
+## Update of 2026-10-10: the review's silent misses
+
+The fresh model review of feature 12 ([review](../../reviews/2026-10-10-feat-remaining-detectors.md)) found values dropped with no row and no warning, each confirmed with a scratch run. You asked for all three settled here, leaning on favour finding: an extra row is fine, a missed value is not. The phone detector's "digits before a number" follow up stays for its own run.
+
+### Context
+
+**A card that loses a group.** `cardsIn` took, from each start, the window reaching the run's end when its end was clear, else the shortest window that passed, and resumed after it. A 4 to 6 digit number before a spaced card can make a 16 digit window that passes by chance from the real card's first three groups: `2226 4111 1111 1111 1111` gave `card[2226 4111 1111 1111]`, and the real card's last `1111` stayed in the file beside a ticked row that looked complete. The update of 2026-10-08 recorded this as a limit (2.5%), and recorded a second one from the same choice: a 17 to 19 digit card with more digits after it keeps its last group when its first 16 also pass. The cross check then judged that every rule preferring a later start only moves the risk after the card; the review pointed out that a rule that does not choose between overlapping windows moves it nowhere.
+
+**Two dates joined by a hyphen.** A date is never read out of a longer code: no letter or digit touches either end, nor a separator that touches one, which is what rejects `REF-05.12.1980`. In `01/05/1980-31/05/1980` the first date's end sees a hyphen then a digit, and the second date's start sees a digit then a hyphen, so both are cut and neither is listed. Employment histories, leave records, contracts and CVs write ranges that way. The same rule drops a written day range (`3–5 June 2026`, whose `5 June 2026` starts after a dash with a digit before it; `June 3–5, 2026` matches no form at all) and an ISO range (`2026-09-01/2026-09-30`).
+
+**Values against the next character.** Every release 3 detector but the card and Social Security ones drops a value when a letter or digit touches its end. `2026-09-27T10:00:00Z` gave no date (a test pinned that on purpose), so a date of birth in a system export vanished. `GB82 WEST 1234 5698 7654 32A` gave no IBAN, nor did an IBAN with a superscript footnote marker after it, which NFKC reads as a digit. `AB123456CD` gave no National Insurance number.
+
+### Options considered
+
+For the card:
+
+**Every window that passes, joined where they overlap (chosen).** From each start the longest window that passes; any window that passes and starts inside the row, when it reaches further, carries the row on.
+- Pros: no card digit left without a row in any of seventeen layouts; closes both recorded limits; simpler than the clear end rule it replaces.
+- Cons: a group after a card joins its row in 0.6% to 8.3% of layouts with digits after it, so a few neighbour digits go with the card.
+
+**Join only the windows of later starts** (the review's suggestion as written).
+- Pros: closes the number before a card with less over reach after it (a phone number's area code 3.3%, a Social Security number's first group 2.3%).
+- Cons: leaves a 17 to 19 digit card's last group in 1.0% to 1.7% of layouts, the second recorded limit.
+
+**Keep the clear end rule and the limit**, as built on 2026-10-08.
+- Pros: a group after a card joins it only when it ends the run.
+- Cons: a real card's group is left with no row in 1.0% to 4.0% of layouts, beside a ticked row that looks complete.
+
+For two dates joined by a hyphen:
+
+**A joiner parts two full dates (chosen).** A hyphen, dash or slash at a date's edge does not cut it when a full date lies beyond it.
+- Pros: finds both dates in every joined form; changes no other result; a code still cuts, since what lies beyond its separator is a letter or digits that are not a full date.
+- Cons: two rows for one range, which the visitor ticks one by one.
+
+**Any hyphen beside digits parts.**
+- Pros: one rule, no look beyond the joiner.
+- Cons: lists `2026-09-27` out of `2026-09-27-01` and other dated codes, which the boundary rule exists to stop.
+
+**One row for the whole range.**
+- Pros: one tick removes the whole period.
+- Cons: reads two values as one, couples their ticks, and needs a new shape where two rows already fit.
+
+For the written day range: **one row holding both days (chosen)**, because the first day alone is not a full date; against listing `5 June 2026` alone, which leaves the first day beside a removed date and still finds nothing in `June 3–5, 2026`.
+
+For the ISO time: **`T` or `t` and a digit after a year first date ends it cleanly (chosen)**, the date row alone; against any letter as a clean end, which reads dates out of codes like `05.12.1980a`.
+
+For the IBAN: **a letter or digit may touch its end, never its start (chosen)**, since the length and the check already say where it ends; against leaving it, which drops a real IBAN for one glued character. Ticked as every IBAN is, because the check is what makes one certain.
+
+For the National Insurance number:
+
+**A letter touching its six digits lists it unticked (chosen).**
+- Pros: a number glued to a word is listed; nothing unsure is removed by default.
+- Cons: product codes shaped two letters, six digits, more letters list unticked rows (55% of random codes of that shape).
+
+**A letter or a digit lists it unticked.**
+- Pros: also finds one with a footnote marker after it.
+- Cons: lists `on 05 12 1980` (the `on 05 12 19` reads as a spaced number), and every tracking number shaped `AB123456789GB` in 55% of cases.
+
+**Leave it, or only say so in the coverage note.**
+- Pros: no new rows.
+- Cons: a real number glued to a word is dropped with no row, which is the miss being fixed; a note warns about every document to cover a rare layout.
+
+### Rationale
+
+Each choice is the one that leaves no measured value without a row while removing nothing unsure by default.
+
+The card rule follows from INV-16. The cross check of 2026-10-08 rejected joining every passing window because the neighbour it reached into then lost its row; since the overlap step keeps each cut span's free stretches as pieces, that neighbour keeps the rest of its digits as its own row, ticked as it was. What remains of the cost is over reach: a few neighbour digits removed with a card, visible in the card row's text. Against a card group left in the file beside a row that looks complete, which is the "looks redacted but is not" case, that is the fail safe side. The review's narrower fix leaves the second limit standing for less than half the over reach, so it buys the smaller saving at the price of a known miss. The joined row also retires the clear end rule, so the card grammar loses a rule rather than gaining one.
+
+The date rules keep the boundary rule's purpose, never reading a date out of a longer code, and narrow only where what lies beyond the separator is itself a full date or a time. Looking beyond the joiner is bounded (one date's forms, without that date's own end check), so the detector stays linear. Dates are unticked unless a birth word is near, so an extra row costs a glance; but none of these forms produced an extra row on any test string or fixture line.
+
+The IBAN and National Insurance choices split on the checksum. An IBAN's length and mod 97 check make a glued end safe to read, at a 1 in 97 chance on codes that already look like an IBAN. A National Insurance number has no checksum, so a glued letter makes it uncertain, and an uncertain value is listed unticked, as phone numbers that are possible but not valid already are. A glued digit is left out because the measured cost is high and the layout rare: a footnote marker after a National Insurance number, against tracking numbers and spaced numbers after a two letter word. The start side stays strict for every kind because a value that starts inside a word is how one reads out of the end of a longer code, the case you asked to keep rejecting.
+
+### Evidence: the card rules on random cards
+
+Measured on 2026-10-10 through `detect` in a scratch copy of `src/detect` with each rule as a switch (a `jiti` script outside the repository, mulberry32 random numbers), 1,000 random valid cards per layout across six brands (Visa 16, Mastercard, American Express, Discover 16, Diners Club 14, UnionPay 19), each spaced as printed. *Left*: some card digit had no card row. *Taken*: a neighbour's digit went into a card row. *Neighbour left*: some digit of the phone or Social Security number had no row of any kind.
+
+| Layout | Clear end, else shortest (2026-10-08) | Later starts joined | Every passing window joined (chosen) |
+|---|---|---|---|
+| card alone, card `12/28`, row number then card, UK number then card | left 0%, taken 0% | left 0%, taken 0% | left 0%, taken 0% |
+| card `03 28` | left 1.0%, taken 0% | left 1.0%, taken 0.6% | left 0%, taken 0.6% |
+| card `1228` | left 1.0%, taken 0% | left 1.0%, taken 5.9% | left 0%, taken 5.9% |
+| card `05.12.2026` | left 1.0%, taken 0% | left 1.0%, taken 0.8% | left 0%, taken 0.8% |
+| card then CVV | left 1.6%, taken 6.0% | left 1.6%, taken 6.7% | left 0%, taken 6.7% |
+| two cards | left 1.5% | left 1.3% | left 0% |
+| card, next line UK number | left 1.0%, taken 0%, neighbour left 9.9% | left 1.0%, taken 3.3%, neighbour left 9.8% | left 0%, taken 7.3%, neighbour left 9.8% |
+| card, next line spaced SSN | left 1.7%, taken 0%, neighbour left 0% | left 1.7%, taken 2.3%, neighbour left 0% | left 0%, taken 8.3%, neighbour left 0% |
+| card, next line 4 digit reference | left 1.5%, taken 1.9% | left 1.5%, taken 3.9% | left 0%, taken 3.9% |
+| 4 digit number then card | left 1.8%, taken 2.2% | left 0%, taken 2.2% | left 0%, taken 2.2% |
+| 5 digit number then card | left 1.3%, taken 1.6% | left 0%, taken 1.6% | left 0%, taken 1.6% |
+| 6 digit number then card | left 1.6%, taken 1.6% | left 0%, taken 1.6% | left 0%, taken 1.6% |
+| two 4 digit groups then card | left 4.0%, taken 4.4% | left 0%, taken 4.4% | left 0%, taken 4.4% |
+| spaced SSN then card | left 2.6%, taken 3.0%, neighbour left 0% | left 0%, taken 3.0%, neighbour left 0% | left 0%, taken 3.0%, neighbour left 0% |
+
+The UK number's *neighbour left* is the phone detector's own choice (a valid window starting in the card's last groups), the same under every card rule; it is the phone Follow-up in `index.md`. A 19 digit UnionPay card whose first 16 digits also pass, then ` 12 28`, 2,000 cards: found whole 0% under the 2026-10-08 rule, 2.0% with later starts joined, 100% with every passing window joined.
+
+False cards on 10,000 random spaced numbers per shape are equally common under all three rules (16 digits in fours 2.6%, 18 grouped 4 4 4 4 2 3.4%, 20 in fours 5.2%, 24 in fours 7.5%, 32 in fours 12.5%, 48 in fours 21.2%, 30 in sixes 2.0%). Joining changes only their size: mean digits in a false card row 16.00 to 16.14 at 24 digits in fours, 16.75 to 17.16 at 48, 18.00 to 18.12 at 30 in sixes.
+
+### Evidence: dates, IBANs and National Insurance numbers
+
+The same scratch copy, before and after:
+
+| Text | Before | After |
+|---|---|---|
+| `01/05/1980-31/05/1980`, `01/05/1980–31/05/1980` | nothing | both dates |
+| `05.12.1980-10.12.1980` | nothing | both dates |
+| `2026-09-01/2026-09-30`, `2026-09-01-2026-09-30` | nothing | both dates |
+| `1 May 2026-31 May 2026` | nothing | both dates |
+| `3–5 June 2026`, `3-5 June 2026`, `3rd–5th of June 2026` | nothing | one row, the whole date |
+| `June 3–5, 2026`, `June 3-5 2026` | nothing | one row, the whole date |
+| `2026-09-27T10:00:00Z`, `1980-05-12T00:00:00+01:00`, `2026-09-27t10:00` | nothing | the date alone |
+| `REF-05.12.1980`, `REF-05.12.1980-06.12.1980`, `1/05/12/1980`, `05.12.1980a`, `05.12.1980T10:00`, `2026-09-27Tuesday`, `31-30 June 2026`, `1-32 May 2026` | nothing | nothing |
+| `2026-09-27-01`, `05.12.1980.17` | no date (a phone row) | no date (the same phone row) |
+| `GB82 WEST 1234 5698 7654 32A`, `GB82WEST12345698765432Bank`, `GB82 WEST 1234 5698 7654 32¹`, `GB82WEST123456987654321234` | nothing | the IBAN, ticked |
+| `XGB82WEST12345698765432` | nothing | nothing |
+| `AB123456CD`, `AB123456Cname`, `AB123456C7` | nothing | `AB123456C`, unticked |
+| `AB 12 34 56 C7` | `AB 12 34 56`, ticked | the same |
+| `AB123456Ename` | nothing | `AB123456`, unticked |
+| `AB1234567`, `AB1234561`, `AB123456789GB` | nothing | nothing (the accepted miss) |
+| `AB 12 34 56 CDate` | `AB 12 34 56`, ticked | the same |
+
+False rows from the glued ends, 100,000 random codes per shape:
+
+| Shape | Before | IBAN end may touch | NI letter glued | NI letter or digit glued |
+|---|---|---|---|---|
+| country code, 2 digits, 30 random capitals and digits | 0% | 1.02%, ticked | | |
+| country code, 2 digits, 20 random digits, then `Bank` | 0% | 0.67%, ticked | | |
+| 40 random capitals and digits | 0% | 0% | | |
+| 2 letters, 6 digits, 2 letters (a product code) | 0% | | 55.1%, unticked | 55.1%, unticked |
+| 2 letters, 6 digits, then `Ltd` | 0% | | 55.1%, unticked | 55.1%, unticked |
+| 2 letters, 9 digits, `GB` (a tracking number) | 0% | | 0% | 55.2%, unticked |
+| 2 letters, 7 digits | 0% | | 0% | 55.1%, unticked |
+| 2 letters, 6 digits (already listed before, ticked) | 55.1% | | 55.1% | 55.1% |
+
+On every detection test string and fixture line (837 holding a digit or a capital), the card rule, the joiner rule and the day range change nothing. The `T` rule changes one result (the pin `2026-09-27T10:00`), the IBAN rule two (`GB82WEST123456987654321`, `GB82WEST12345698765432X`) and the National Insurance rule two (`AB123456E`, `AB123456CX`). Allowing a glued digit as well would have changed four more, among them `on 05 12 1980 we`, which would list `on 05 12 19` as a National Insurance number. The card tests built from constants change in three places: a 19 digit card whose first 16 pass, before ` 12 28` and before `.5` or `/5`, is taken whole, and `4111 1111 1111 1111 003 1234` takes the CVV.
+
+Linear time: on 100,000 characters of a hyphen joined chain of numeric dates, a slash joined chain of ISO dates, a hyphen joined chain of written dates, day ranges, `1-` repeated, ISO dates against `T`, spaced fours, cards end to end, glued IBANs and glued National Insurance numbers, the slowest read by `date`, `card`, `iban` or `uk-nino` took 62 ms of CPU time, against AC-16's 1 second.
+
+### Cross check of the update
+
+A read only pass on a second model (Sonnet 5.5) read the update against the code and probed today's `detect`. You took every recommended fix. Its points, and what became of each:
+
+1. **A written date beside a dash is still dropped in a range across months.** `28 May-3 June 2026`, `5 June–3 July 2026` and `Dec 30-Jan 2, 2026` gave no row, because the first half has no year, so the joiner rule cannot part it. Fixed by applying the separator part of the cut to numeric dates only: a date with a month name is never a code. The options were that rule; a written range form for each pairing of months, which needs more patterns and finds nothing more; or recording the limit.
+2. **The second date of an ISO interval with times is dropped.** In `2026-09-01T00:00:00/2026-09-30T23:59:59` the first date ends before its `T`, so nothing ends at the `/`. Fixed by taking a date's end past its time for the joiner rule only, the row staying the date alone.
+3. **Two real cards side by side can share one row**, which the update had not measured: 6.8% of random pairs, and always for a card repeated end to end. Recorded under Consequences and pinned with `4242 4242 4242 4242` twice; nothing is left without a row.
+4. **The new card fixture line reused `4111 1111 1111 1111`**, which the fixture's first line already holds, so the per target removal count and AC-7's search needle would both see two. The line now uses `2223 4000 0566 5566 5556`, a Visa test card new to the page.
+5. **Builder details** the spec left open, now written into *Detectors*: which written forms take a day range, that the day order is not checked and the group does not capture, that the joiner is one character compared with the last listed date's end, what "year first" means for the `T`, how a glued National Insurance letter reads in each spaced and unspaced case, that the grouped IBAN still ends at its country's length, that the card's steps 1 to 4 are unchanged, and each new adversarial shape's text.
+6. **Wording**: AC-28's expiry `12 28` can only lend its first group to a card; AC-21's footnote example now says how `¹` reads after NFKC; the date fixture's day range uses an ASCII hyphen, since the unit tests hold the dashes.
+7. Not changed: a word glued before an IBAN or a National Insurance number (`IBANGB82WEST12345698765432` gives none) stays a recorded, unmeasured limit, for the reason in *Rationale* above.
+
+Measured on the same scratch copy with both date fixes added:
+
+| Text | Before | After |
+|---|---|---|
+| `28 May-3 June 2026`, `5 June–3 July 2026`, `Dec 30-Jan 2, 2026` | nothing | `3 June 2026`, `3 July 2026`, `Jan 2, 2026` |
+| `REF-27 September 2026`, `27 September 2026-01` | nothing | `27 September 2026` |
+| `x27 September 2026`, `27 September 2026AD`, `27 September 20261` | nothing | nothing |
+| `2026-09-01T00:00:00/2026-09-30T23:59:59`, the same with `Z` on each, `2026-09-01T00:00:00+01:00/2026-09-30`, `2026-09-01T00:00-2026-09-30` | nothing | both dates, each alone |
+| `REF-05.12.1980`, `1/05/12/1980`, `2026-09-27-01` | no date | no date |
+
+Neither fix changes any of the 837 detection test strings and fixture lines beyond the results listed above. On 100,000 characters of written dates joined across months, ISO intervals end to end, times that never end and written dates after a code, the slowest `date` read took 78 ms.
+
 ## References
 
 **Project sources** (verifiable, in this repo):
@@ -373,6 +534,9 @@ False cards on 10,000 random spaced numbers: 16 digits in fours 2.8%, 18 grouped
 - `docs/.agent-cache/research/pattern-detection.md`: the research check of 2026-09-27 behind the links below.
 - The update's measurements of 2026-10-08: the four kinds beside other digits through `detect` in `src/detect`, a prototype of each card window rule on random valid cards and random spaced numbers, a probe page read through `openDocumentWith` and `findMatches` in `src/engine` on the MuPDF.js 1.28.1 in `node_modules`, and, after the cross check, the parting hyphen, the short slash group and the three overlap rules on random layouts and on every detection test string and fixture line, all outside the repository.
 - `tests/unit/detect.test.ts`'s "drops a lower kind's span whole … never trims it", the test that pinned the overlap rule this update replaces.
+- The [review of 2026-10-10](../../reviews/2026-10-10-feat-remaining-detectors.md): its two majors and its first minor, which the update of 2026-10-10 settles.
+- The update's measurements of 2026-10-10: each rule as a switch in a scratch copy of `src/detect` at commit `30f269c`, run through `detect` on random cards and layouts, random code shapes, every detection test string and fixture line, and 100,000 character adversarial blocks, all outside the repository.
+- `src/detect/date.ts` (`cutFrom`, `numericAt`, `writtenAt`), `iban.ts`, `uk-nino.ts` and `card.ts` (`cardsIn`, `clearAfter`) at commit `30f269c`, and the tests that pinned the old behaviour: `detect-dates.test.ts`'s "a time joined to an ISO date", `detect-iban.test.ts`'s "one character too many, unbroken" and "a letter after", `detect-uk-nino.test.ts`'s "a suffix past D" and "a letter after", and `detect-card.test.ts`'s "choosing where a card ends".
 - `src/detect/card.ts`, `iban.ts`, `us-ssn.ts` and `uk-nino.ts` as built by feature 12 (commit `686df40`), and `tests/unit/detect-card.test.ts`'s "never cut from a longer number" block.
 
 **Practices & standards**:
@@ -386,6 +550,7 @@ False cards on 10,000 random spaced numbers: 16 digits in fours 2.8%, 18 grouped
 - The UK numbering plan: national numbers are written with the trunk prefix `0`.
 - Unicode NFKC normalisation.
 - Fail closed: a check that cannot finish counts against the match.
+- ISO 8601 and RFC 3339: a date and a time joined by `T` (RFC 3339 also allows `t`), and an interval written with `/`.
 
 **Links** (web verified in the research check of 2026-09-27):
 - libphonenumber-js: https://github.com/catamphetamine/libphonenumber-js
