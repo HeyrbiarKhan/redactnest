@@ -147,3 +147,40 @@ describe("a footnote marker after a Social Security number (AC-22, AC-10)", () =
     expect(found(nfkc(text))).toEqual([]);
   });
 });
+
+/**
+ * The marker's edges (AC-22, AC-10): what may follow it, the separators a
+ * number takes, the SSA's rules and the start rule, which a marker never
+ * relaxes, and the number after a marked one.
+ */
+describe("a footnote marker after a Social Security number, at its edges (AC-22, AC-10)", () => {
+  // covers: AC-22 (only a digit right after the marker makes a longer number)
+  it.each([
+    ["a letter after the marker", "SSN 123-45-6789¹a", "123-45-6789"],
+    ["a full stop after the marker", "SSN 123-45-6789¹.", "123-45-6789"],
+    ["a space and a digit after the marker", "SSN 123 45 6789¹ 2", "123 45 6789"],
+    ["en dashes for hyphens", "SSN 123–45–6789¹", "123–45–6789"],
+  ])("lists the number with %s, unticked", (_what, text, ssn) => {
+    expect(found(nfkc(`${text} here`))).toEqual([[ssn, false]]);
+  });
+
+  // covers: AC-22 (a marker never lifts the SSA's rules or the start rule)
+  it.each([
+    ["an area of 000", "SSN 000-45-6789¹"],
+    ["an area from 900", "SSN 923-45-6789¹"],
+    ["a group of 00", "SSN 123-00-6789¹"],
+    ["a serial of 0000", "SSN 123-45-0000¹"],
+    ["mixed separators", "SSN 123-45 6789¹"],
+    ["a digit before", "SSN 0123-45-6789¹"],
+  ])("finds nothing with %s and a marker", (_what, text) => {
+    expect(found(nfkc(`${text} here`))).toEqual([]);
+  });
+
+  // covers: AC-22, AC-10 (the scan resumes at the marker, which hides nothing after it)
+  it("lists the number after a marked one, ticked as usual", () => {
+    expect(found(nfkc("SSN 123-45-6789¹ and 234-56-7890 on file"))).toEqual([
+      ["123-45-6789", false],
+      ["234-56-7890", true],
+    ]);
+  });
+});

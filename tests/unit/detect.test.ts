@@ -245,6 +245,31 @@ describe("footnote markers through detect (AC-19, AC-20, AC-22)", () => {
    * phone row's tick (AC-3, INV-16). One character too many removed by
    * default, never one too few.
    */
+  /**
+   * The other forms each detector reads a marker after, a glued label, and two
+   * marked values on one line: no phone row reads a marker or the value
+   * before it, and each value keeps its own detector's tick.
+   */
+  // covers: AC-19, AC-20, AC-22, AC-10, INV-14
+  it.each<[string, [DetectorKind, string, boolean][]]>([
+    ["Logged 2026-09-27¹ here", [["date", "2026-09-27", false]]],
+    ["Signed 27 September 2026¹ here", [["date", "27 September 2026", false]]],
+    ["Exp.31.12.2026 here", [["date", "31.12.2026", false]]],
+    ["SSN 123 45 6789¹ here", [["us-ssn", "123 45 6789", false]]],
+    ["Amex 378282246310005¹ here", [["card", "378282246310005", false]]],
+    ["Card 4111-1111-1111-1111¹ here", [["card", "4111-1111-1111-1111", false]]],
+    ["Card 4111111111111111¹ exp 12/28", [["card", "4111111111111111", false]]],
+    [
+      "DOB 12/05/1980¹ SSN 123-45-6789¹",
+      [
+        ["date", "12/05/1980", true],
+        ["us-ssn", "123-45-6789", false],
+      ],
+    ],
+  ])("lists %s with no phone row", (text, expected) => {
+    expect(withTicks(nfkc(text))).toEqual(expected);
+  });
+
   it("leaves the marker after SSN 223-45-6789¹ as a ticked phone piece", () => {
     expect(withTicks(nfkc("SSN 223-45-6789¹"))).toEqual([
       ["us-ssn", "223-45-6789", false],

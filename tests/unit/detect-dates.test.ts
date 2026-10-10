@@ -1022,6 +1022,138 @@ describe("footnote markers and glued labels (AC-19, AC-10, INV-17)", () => {
   });
 });
 
+/**
+ * The third update's rules past the spec's named examples (AC-19, AC-10,
+ * INV-17): what may stand after a marker, every form a marker may follow, a
+ * marker on the far side of a joiner, and how a glued label is told from a
+ * word that only ends like one. Each case goes through NFKC first, as the find
+ * step does.
+ */
+describe("footnote markers and glued labels, at their edges (AC-19, AC-10, INV-17)", () => {
+  // covers: AC-19, INV-17 (a marker has no digit of any script after it)
+  it.each([
+    ["a numeric date", "27/09/2026¹١"],
+    ["a written date", "27 September 2026¹١"],
+    ["a dotted date's stop", "12.05.1980.¹١"],
+    ["an ISO date, as two digits", "2026-09-27¹²"],
+  ])(
+    "finds no date when another digit follows the marker after %s: %s",
+    (_what, text) => {
+      expect(found(nfkc(`Ref ${text} here`))).toEqual([]);
+    },
+  );
+
+  // covers: AC-19 (only a digit after the marker makes a longer number)
+  it.each([
+    ["27/09/2026¹a", "27/09/2026"],
+    ["27/09/2026¹.", "27/09/2026"],
+    ["12.05.1980.¹a", "12.05.1980"],
+  ])("lists the date in %s, since no digit follows the marker", (text, date) => {
+    expect(found(nfkc(`Seen ${text} here`))).toEqual([[date, false]]);
+  });
+
+  // covers: AC-19 (a marker after any form with a four digit year)
+  it.each([
+    ["a month first numeric date", "09/27/2026¹", "09/27/2026"],
+    ["a hyphen dated date", "27-09-2026¹", "27-09-2026"],
+    ["one digit day and month", "1/5/2026¹", "1/5/2026"],
+    ["a year of the last century", "27/09/1999¹", "27/09/1999"],
+    ["a month first written date", "September 27, 2026¹", "September 27, 2026"],
+    ["a day range", "3–5 June 2026¹", "3–5 June 2026"],
+    ["a spaced month first day range", "June 5 - 7, 2026¹", "June 5 - 7, 2026"],
+  ])("lists %s with a marker, the marker outside: %s", (_what, text, date) => {
+    expect(found(nfkc(`Seen ${text} here`))).toEqual([[date, false]]);
+  });
+
+  /**
+   * The retry without the last digit asks `isNumericDate` again, and a
+   * written date's calendar check runs before its end is looked at, so a
+   * marker never turns a day that does not exist into one.
+   */
+  // covers: AC-19
+  it.each(["31/02/2026¹", "2026-02-30¹", "29.02.2027¹", "31 April 2026¹"])(
+    "finds no date in the impossible %s",
+    (text) => {
+      expect(found(nfkc(`Seen ${text} here`))).toEqual([]);
+    },
+  );
+
+  // covers: AC-19 (the scan resumes at the marker, which hides nothing after it)
+  it("lists two dates that each carry a marker", () => {
+    expect(found(nfkc("Seen 27/09/2026¹ and 28/09/2026² here"))).toEqual([
+      ["27/09/2026", false],
+      ["28/09/2026", false],
+    ]);
+  });
+
+  /**
+   * The far side of a joiner is read by the same `numericAt`, so a marker
+   * after a joined pair's second date leaves both listed, and two digits
+   * leave the second no date. The first then meets the own separator rule as
+   * any date does: a hyphen dated one before a hyphen and digits is cut, and a
+   * slash dated one is not, since the hyphen is not its own separator.
+   */
+  // covers: AC-19, INV-17
+  it.each([
+    ["2026-09-01-2026-09-30¹", ["2026-09-01", "2026-09-30"]],
+    ["01/05/1980-31/05/1980¹", ["01/05/1980", "31/05/1980"]],
+    ["2026-09-01-2026-09-30¹²", []],
+    ["01/05/1980-31/05/1980¹²", ["01/05/1980"]],
+  ])("reads a marker on the far side of the joiner in %s", (text, dates) => {
+    expect(texts(nfkc(`Leave ${text} approved`))).toEqual(dates);
+  });
+
+  /**
+   * Through one separator means a slash too, and a label glued to a month
+   * first written date lifts the letter glued to its month as it does for a
+   * day first one. Each control puts a word that is no label in the label's
+   * place, and gives none, so the label is what lists the date.
+   */
+  // covers: AC-19, AC-10 (a label lists the date and never ticks it)
+  it.each([
+    ["Exp/31/12/2026", "31/12/2026", "Note/31/12/2026"],
+    ["Date/27/09/2026", "27/09/2026", "Note/27/09/2026"],
+    ["DateSeptember 27, 2026", "September 27, 2026", "xSeptember 27, 2026"],
+    ["fromSep 27 2026", "Sep 27 2026", "xSep 27 2026"],
+  ])("lists the date glued to a label in %s, unticked", (text, date, control) => {
+    expect(found(`Seen ${text} here`)).toEqual([[date, false]]);
+    expect(found(`Seen ${control} here`)).toEqual([]);
+  });
+
+  /**
+   * A label is a whole word: a letter or a digit right before it makes it the
+   * end of something else, so what is glued to the date is no label and the
+   * date is dropped.
+   */
+  // covers: AC-19, INV-17
+  it.each([
+    "1Date27/09/2026",
+    "xDate-27/09/2026",
+    "ExpDate27/09/2026",
+    "ValidFrom27/09/2026",
+  ])("finds no date in %s", (text) => {
+    expect(found(`Seen ${text} here`)).toEqual([]);
+  });
+
+  // covers: AC-19, AC-10 (a glued word and a marker together)
+  it.each([
+    ["Date27/09/2026¹", "27/09/2026", false],
+    ["Exp.31.12.2026.¹", "31.12.2026", false],
+    ["D.O.B.12.05.1980¹", "12.05.1980", true],
+  ])("lists the date in %s, glued word and marker both outside", (text, date, ticked) => {
+    expect(found(nfkc(`Seen ${text} here`))).toEqual([[date, ticked]]);
+  });
+
+  // covers: AC-19, INV-17 (a letter before a dot never cuts, whatever the date's own separator)
+  it.each([
+    ["Rev.27/09/2026", "27/09/2026"],
+    ["Rev.27-09-2026", "27-09-2026"],
+    ["Rev.2026-09-27", "2026-09-27"],
+  ])("lists the date after a letter and a dot in %s, unticked", (text, date) => {
+    expect(found(`Seen ${text} here`)).toEqual([[date, false]]);
+  });
+});
+
 describe("dates and phone numbers (INV-14)", () => {
   /**
    * The trunk rule alone would read `05.12.1980` as a `0` then seven digits, a

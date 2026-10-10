@@ -739,6 +739,88 @@ describe("a footnote marker after a card (AC-20, AC-10, INV-15)", () => {
 });
 
 /**
+ * The marker's edges (AC-20, AC-10, INV-15): a payment form's short last
+ * group, the expiry and CVV printed after a marked card, a marker on every
+ * brand, two cards with a marker each, two marker digits, and the chance that
+ * a marked number passes whole. Each case goes through NFKC first, as the
+ * find step does.
+ */
+describe("a footnote marker after a card, at its edges (AC-20, AC-10, INV-15)", () => {
+  /**
+   * A payment form closes a 13 digit card with a group of one, so a marker
+   * makes that group two digits, and the marker is its last.
+   */
+  // covers: AC-20, INV-15
+  it("lists a card closed by a one digit group and a marker, unticked", () => {
+    expect(found(nfkc("Visa 4222 2222 2222 2¹ on file"))).toEqual([
+      ["4222 2222 2222 2", false],
+    ]);
+  });
+
+  // covers: AC-20, AC-28 (the expiry and CVV after a marked card stay outside its row)
+  it.each([
+    ["spaced, then its expiry", "4111 1111 1111 1111¹ 12/28", "4111 1111 1111 1111"],
+    ["unbroken, typed against its expiry", "4111111111111111¹-12/28", "4111111111111111"],
+    [
+      "hyphenated, typed against its expiry",
+      "4111-1111-1111-1111¹-12/28",
+      "4111-1111-1111-1111",
+    ],
+    [
+      "unbroken, then its expiry and CVV",
+      `4111111111111111¹ 12/28 ${CVV}`,
+      "4111111111111111",
+    ],
+    ["spaced, then a group of two", "4111 1111 1111 1111¹ 12", "4111 1111 1111 1111"],
+  ])("lists the card %s alone, unticked", (_what, text, card) => {
+    expect(found(nfkc(`Card ${text} on file`))).toEqual([[card, false]]);
+  });
+
+  // covers: AC-20, AC-10
+  it.each([
+    ["a Mastercard", "5555555555554444"],
+    ["a Mastercard in the 2 series", "2223003122003222"],
+    ["a Discover", "6011111111111117"],
+    ["a 14 digit Diners Club", "30569309025904"],
+    ["a UnionPay", "6200000000000005"],
+  ])("lists %s with a marker alone, unticked", (_what, card) => {
+    expect(found(nfkc(`Card ${card}¹ on file`))).toEqual([[card, false]]);
+  });
+
+  // covers: AC-20, INV-15 (no unit belongs to two cards)
+  it("lists two spaced cards that each carry a marker, each its own row", () => {
+    expect(found(nfkc("Card 4111 1111 1111 1111¹ 5555 5555 5555 4444² on file"))).toEqual(
+      [
+        ["4111 1111 1111 1111", false],
+        ["5555 5555 5555 4444", false],
+      ],
+    );
+  });
+
+  // covers: AC-20 (a marker is one digit, never two)
+  it.each([
+    ["a spaced card", "4111 1111 1111 1111¹²"],
+    ["a 19 digit card", `${cardFrom("62", 19)}¹²`],
+  ])("finds no card with two marker digits after %s", (_what, text) => {
+    expect(found(nfkc(`Card ${text} on file`))).toEqual([]);
+  });
+
+  /**
+   * The cost AC-20 records, on a published test card: JCB's
+   * `3530111333300000` with a `1` glued on is 17 digits that pass whole by
+   * chance, so they are listed whole and ticked, the marker inside the row.
+   * This file's own step 4 says they pass, not the detector.
+   */
+  // covers: AC-20, AC-10
+  it("lists a JCB test card whose marker passes whole with it whole, ticked", () => {
+    expect(passesStep4("35301113333000001")).toBe(true);
+    expect(found(nfkc("Card 3530111333300000¹ on file"))).toEqual([
+      ["35301113333000001", true],
+    ]);
+  });
+});
+
+/**
  * Step 3, as the spec writes it: one unit alone, or two or more bare units
  * whose first holds 4 to 6 digits, whose last holds 1 to 6, and every other 3
  * to 6, with `most` digits at most: 19 for a window that passes, 20 for one
