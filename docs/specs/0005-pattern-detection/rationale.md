@@ -94,6 +94,13 @@ A small named entity recognition model (a model that tags words as names, places
 | A hyphen or dash before an expiry (update of 2026-10-08) | parts when its far side touches a slash shape | glues, recorded as a limit |
 | A short group glued to a slash, `12` of `12/28` (update of 2026-10-08) | ends the run, so long cards before an expiry stay whole | read as a unit, as first written |
 | A higher match cutting into a lower one (update of 2026-10-08) | the lower keeps each free stretch as its own row | merged into the higher; or dropped whole, as first built |
+| How a date's edges are judged (second update of 2026-10-10) | one general rule: a real date is never dropped for what follows it, with two measured rejections | the review's forms added one by one, a fourth round |
+| Which rejections stay (second update of 2026-10-10) | a letter before the date or before its separator; the date's own separator running on with digits | none at all, which lists version numbers and French phone numbers as dates |
+| What may stand between two joined dates (second update of 2026-10-10, after the cross check) | only a time, judged by its characters: digits, whitespace, `: . , + @`, hyphens, letters in runs of at most 5, within 40 code points | a grammar of times stepped over after each date (the first draft, which read `-12` as an offset); the ISO `T` form only, as first built |
+| A day range with spaces round its dash (second update of 2026-10-10, after the cross check) | one row for the whole range in the month first form only | every written form (the first draft, which swallows a heading number); or the second day's date alone, as before |
+| A birth word glued to its date (second update of 2026-10-10, from the cross check) | listed and ticked | dropped, as before; or listed unticked |
+| The tick of a date with something glued after it (second update of 2026-10-10) | AC-10's birth word rule, unchanged | unticked whatever stands before it, as a glued National Insurance letter is |
+| `TIME_LONGEST` (second update of 2026-10-10) | 40, now the longest stretch between two dates, the cap kept for INV-7 | 20; or no cap, which is quadratic |
 
 ## Rationale
 
@@ -518,6 +525,138 @@ Measured on the same scratch copy with both date fixes added:
 
 Neither fix changes any of the 837 detection test strings and fixture lines beyond the results listed above. On 100,000 characters of written dates joined across months, ISO intervals end to end, times that never end and written dates after a code, the slowest `date` read took 78 ms.
 
+## Update of 2026-10-10, second: the general date boundary rule
+
+The second fresh model review ([review](../../reviews/2026-10-10-feat-remaining-detectors-second.md)) found more dates with no row, all silent misses and all in the family the first update set out to close. You asked for a general rule in place of a third round of forms: a full, real date is never dropped because of what follows it or what it is joined to, at worst listed unticked, with only the rejections that measurement shows are needed, and `TIME_LONGEST` raised to about 40. Favour finding: extra unticked rows are fine, missed values are not.
+
+### Context
+
+The first update kept the old boundary rule, any separator touching a letter or digit cuts a numeric date, and carved exceptions out of it one form at a time: a joiner to another full date, and a `T` time after an ISO date. Each exception was right and each left the next form outside it. The review's list: an interval whose dates carry a plain clock time (`27/09/2026 10:00-28/09/2026 11:00` lists the first date only, because the hyphen after `10:00` is not where the first date ended); an offset without a colon, an hour only offset, a space before `Z` or a zone name before the joiner (each a time the `T` reader did not read to its end); a date of birth followed by a hyphen and a name (`DOB 12/05/1980-Smith` gives no row, a hyphen touching a letter); a spaced month first range (`June 5 - 7, 2026` matches no form); and a day range before a numeric date (`5-7/6/2026`, a hyphen touching a digit). Each is a real date that the rule dropped for what stood beside it.
+
+The rule's purpose was never to drop dates. It was to keep a date from being read out of a longer code (`REF-05.12.1980`, `2026-09-27-01`), and it did that by rejecting far more than those codes. The fix is to name the codes and reject only them.
+
+### Options considered
+
+**One general rule with two measured rejections (chosen).** A date that passes `isRealDate` is listed whatever follows it. It is dropped only for a letter glued to its start or before the separator before it (the reference code shape), or for its own separator running on with digits on either side (the longer number shape). Both rejections are lifted by a joiner with only a time between it and the last listed date, and by a birth word glued to the date.
+- Pros: finds every case in the review and every case the rule's shape admits in future; the two rejections each have a measured reason; changes eight of 1,008 test and fixture strings, every one a real date now listed.
+- Cons: dated codes of other shapes (`2026-09-27/01`, `2026-09-27-A1`, a date glued to a letter) and dates inside file names and URL paths list unticked rows; a hyphen dated or ISO date after a hyphen is still dropped when what stands between it and the last date is not a time.
+
+**Add the review's forms one by one** (a plain `hh:mm` time, the three offset forms, a zone name, a word after a hyphen, spaces in the month first range, a short group before a slashed date).
+- Pros: each is a small change with a narrow effect.
+- Cons: the third round of the same work, with a fourth waiting in the next review; every form not yet named stays a silent miss, which is the failure this product exists to prevent.
+
+**No rejection at all**: every real date listed, whatever stands on either side but a glued letter or digit.
+- Pros: the simplest rule, nothing to measure.
+- Cons: measured on random codes, lists 62% of version numbers (`1.2.3.4` holds the date `1.2.3`), 35% of French phone numbers (`01-02-03-04-05`), 9% of sort codes with a fourth group, 15% to 27% of serials of two digit groups, every `REF-` and `INV-` code and every dated file name; and takes `05/12/1980` out of `1/05/12/1980`.
+
+For what may stand between two joined dates:
+
+**Only a time, judged by its characters (chosen, after the cross check).** The joiner before a date lifts both rejections when the stretch from the last listed date's end to the joiner is empty or looks like a time: at most 40 code points, at least one digit, and nothing but digits, whitespace, `: . , + @`, hyphens and letters in runs of at most five.
+- Pros: no grammar of times, so `@ 10:00`, `10h00`, `UTC+1`, `GMT+01:00`, `PM EST` and the next form are all covered; nothing is parsed, so nothing can swallow part of the next date; one bounded read, only at a start whose rejection would fire.
+- Cons: a stretch with a six letter word (`10:00 Monday-`) or no digit (` ref INV-`) is not a time, so a hyphen dated or ISO date after it is still dropped; a short word with a digit beside it also counts as a time, so `01/05/1980 2 x-2026-09-28` would list the second date (a real date, so an extra row at worst).
+
+**A grammar of times stepped over after each date** (this update's first draft): a glued `T` or a comma, a gap and an optional `at`; a run of digits and `: . ,`; then `Z`, an offset (`+01:00`, `+0100`, `+01`, hour at most 14) or one to five letters.
+- Pros: reads only what a time is.
+- Cons: the cross check showed it reads `-12` as an hour offset in `27-09-2026 10:00-12-10-2026`, so the joiner is no longer where the time ends and the second date is dropped, a silent miss of its own; and `@`, `10h00`, `UTC+1` and `PM EST` sat outside it, the fourth round of forms.
+
+**The ISO `T` reader as built**, which the review showed loses the second date in every other form.
+
+For the day range: **spaces in the month first form only (chosen, after the cross check)**, one row for `June 5 - 7, 2026`, where nothing but a day can stand between the month and the dash; day first, `3 - 5 June 2026` keeps listing `5 June 2026`. Against spaces in every form (the first draft), under which `Table 2 - 14 March 2026` and `Item 12 - 5 June 2026` list `2 - 14 March 2026` and `12 - 5 June 2026`, the heading's number removed with the date; and against the second day's date alone month first, which finds nothing in `June 5 - 7, 2026`.
+
+For a birth word glued to its date (from the cross check): **listed and ticked (chosen)**. `DOB27/09/1980`, `DOB-12/05/1980`, `D.O.B.12.05.1980` and `Born-05.12.1980` gave no row, under the glued letter and letter before separator rejections, which were measured against `REF-`, `INV-` and file names only; a birth word is none of those, and a date of birth is the most sensitive date there is. Against dropping it, as before; and against listing it unticked, as a glued National Insurance letter is, which that rule needs only because the number has no checksum.
+
+For the tick: **AC-10's rule unchanged, plus the glued birth word (chosen)**. A birth word before a date ticks it whatever is glued after it (`DOB 12/05/1980-Smith`, `DOB 12/05/1980Smith`), because the word is the signal and the date is real; against unticked whenever something is glued, which would leave the headline case, a date of birth, for the visitor to tick.
+
+For `TIME_LONGEST`: **40 (chosen)**, now the longest stretch between two dates, past any real timestamp (nanoseconds is 18 characters) with room for a gap, a zone and a word; against no cap, which on `2026-09-27T1:2026.09.27T1:…` makes each start read the whole rest (quadratic, INV-7), and against remembering how far the last stretch was read, which is more state for a case no document writes.
+
+### Rationale
+
+The rule is general because the misses were general: each review named a form the exceptions had not reached, and no list of forms ends. The two rejections are kept because each has a measured cost without it, and each is the shape of a code rather than the shape of a date: a letter before the separator is how references are written, and the date's own separator running on is how a longer number of the same shape reads. Everything else beside a date is a word, a time, a different kind of number or a sentence, none of which makes the date less real; listing it costs a glance, and dropping it costs a date of birth. The cross check moved the time rule from a grammar to a character class for the same reason the boundary rule moved from forms to a general rule: a grammar is a list, the list had already missed four forms, and parsing an offset had found a way to be wrong rather than merely incomplete. Judging the stretch by its characters can only ever let a real date be listed, so its one failure mode is an extra unticked row.
+
+### Evidence: the review's cases
+
+Measured on 2026-10-10 through a scratch copy of `src/detect` with each rule as a switch (a `jiti` script outside the repository), before and after, through the `date` detector alone and through `detect`.
+
+| Text | Before | After (`date`) | Through `detect` |
+|---|---|---|---|
+| `27/09/2026 10:00-28/09/2026 11:00`, `27.09.2026 10:00-28.09.2026 11:00`, `27/09/2026, 10:00-28/09/2026`, `27/09/2026 10-28/09/2026`, `27/09/2026 at 10-28/09/2026` | the first date | both dates | both dates |
+| `2026-09-27 10:00-2026-09-28 11:00` | the first date | both dates | `2026-09-27`, then `phone[00-2026-09-28 11]`, unticked |
+| `2026-09-27 10-2026-09-28`, `2026-09-27 at 10-2026-09-28`, `2026-09-27 @ 10:00-2026-09-28`, `2026-09-27 10h00-2026-09-28`, `2026-09-27 10:00-11:00-2026-09-28` | the first date | both dates | both dates |
+| `27-09-2026 10:00-12-10-2026 11:00` (the cross check's case, which the first draft's offset reader dropped) | the first date | both dates | both dates |
+| `2026-09-27T10:00:00+0100-2026-09-28`, `+01-`, ` Z-`, `EST-`, `,123456789012Z-`, `.12345678901234567890Z/` | the first date | both dates | both dates |
+| `27 September 2026 10:00-2026-09-28`, `2026-09-27 10:00 pm-2026-09-28`, `2026-09-27 10:00 PM EST-2026-09-28`, `2026-09-27 10:00 UTC+1-2026-09-28`, `2026-09-27 10:00 GMT+01:00-2026-09-28` | the first date | both dates | both dates |
+| `2026-09-27 10:00 Monday-2026-09-28`, `2026-09-27 ref INV-2026-09-28`, `01/05/1980 Smith-12/05/1980` | the first date | the first date | the first date |
+| `DOB 12/05/1980-Smith`, `born 05.12.1980-London`, `DOB 12/05/1980Smith` | nothing | the date, ticked | the same |
+| `DOB27/09/1980`, `DOB-12/05/1980`, `D.O.B.12.05.1980`, `Born-05.12.1980`, `DOB27 September 1980` | nothing | the date, ticked | the same |
+| `Reborn27/09/1980` | nothing | nothing | nothing |
+| `Mon 27/09/2026-Tue 28/09/2026` | `28/09/2026` | both dates | both dates |
+| `June 5 - 7, 2026` | nothing | one row, the whole range | the same |
+| `5 - 7 June 2026`, `3 - 5 June 2026`, `Table 2 - 14 March 2026`, `Item 12 - 5 June 2026` | the second day's date | the same (the first draft, spaces in every form, gave the whole: `2 - 14 March 2026`) | the same |
+| `5-7/6/2026`, `DOB: 5-7/6/2026` | nothing | `7/6/2026`, unticked then ticked | the same |
+| `Fig 3/4/05a` | nothing | `3/4/05`, unticked | the same |
+| `Smith-12/05/1980`, `REF05.12.1980`, `REF-05.12.1980`, `INV/12/05/2026`, `example.com/2026/09/27/slug`, `1/05/12/1980`, `x27 September 2026`, `27 September 20261` | nothing | nothing | nothing |
+| `2026-09-27-01`, `05.12.1980.17`, `05.12.1980-17` | no date | no date, no date, `05.12.1980` | a phone row each (the first ticked), as before |
+| `05.12.1980a`, `05.12.1980T10:00`, `2026-09-27Tuesday`, `27 September 2026AD`, `2026-09-27/01`, `2026-09-27-A1` | nothing | the date, unticked | the same |
+| `REF-05.12.1980-06.12.1980` | nothing | `06.12.1980` | the same |
+| `2026-09-01.2026-09-30` | nothing | both dates | the same |
+| `05.12.1980.10.12.1980` | nothing | nothing | nothing |
+| `01/05/1980-31/02/1980`, `01/05/1980-31/05/1980x` | nothing, `01/05/1980` | `01/05/1980`; both dates | the same |
+
+### Evidence: every detection test string and fixture line
+
+Every double quoted and template string in `tests/unit/detect*.test.ts` (the adversarial file aside) and `scripts/lib/detection-fixtures.mjs` that holds a digit or a capital, 1,008 after deduplication, through `detect` before and after. Eight results change under the chosen rule:
+
+| String | Before | After |
+|---|---|---|
+| `05.12.1980a`, `05.12.1980T10:00`, `2026-09-27Tuesday`, `27 September 2026AD` | nothing | the date, unticked |
+| `2026-09-01.2026-09-30` | nothing | both dates |
+| `Leave 01/05/1980-31/02/1980 approved` | nothing | `01/05/1980` |
+| `REF-05.12.1980-06.12.1980` | nothing | `06.12.1980` |
+| `01/05/1980-31/05/1980x` | `01/05/1980` | both dates |
+
+With spaces allowed in the day first range too (the first draft), one more changes: `Course 3 - 5 June 2026 in Leeds` lists `3 - 5 June 2026`. Without the own separator rule, two more: `1/05/12/1980` lists `1/05/12` and `05.12.1980.10.12.1980` lists both dates. Without the letter before rule, two more: `REF-05.12.1980` and the fixture line `Meeting at 12:30 on Tuesday, ref INV-05.12.1980` each list `05.12.1980`. With a glued letter still cutting, only four change (the two joiner cases, the dotted ISO pair and the impossible far date). The birth word exemption changes no string in the corpus (the one it touched, `DOB` then 32 spaces then a date, is a template the extractor had collapsed).
+
+### Evidence: random code shapes
+
+2,000 random samples per shape (mulberry32), each as `Ref <code> here`, through the `date` detector. The figure is how many samples list any date row. Dates inside the shapes are real dates in 1900 to 2099.
+
+| Shape | Before | Chosen | No own separator rule | No letter before rule |
+|---|---|---|---|---|
+| `YYYY-MM-DD-NN`, `YYYY-MM-DD-NNNN`, `DD.MM.YYYY.NN`, `NN/DD/MM/YYYY`, `NNN-YYYY-MM-DD` | 0% | 0% | 100% | 0% |
+| `XXX-DD.MM.YYYY` (`REF-`), `report-DD-MM-YYYY-v2.pdf` | 0% | 0% | 0% | 100% |
+| `XXXDD.MM.YYYY` | 0% | 0% | 0% | 0% |
+| `YYYY-MM-DD/NN`, `DD.MM.YYYY-NN`, `DD/MM/YYYY-NNN`, `NN-DD/MM/YYYY`, `YYYY-MM-DD-XX`, `YYYY-MM-DD-XX-NN`, `YYYY-MM-DDX`, `DD/MM/YYYYXXX`, `report_YYYY-MM-DD.pdf`, `/YYYY/MM/DD/slug` | 0% | 100% | 100% | 100% |
+| version `N.N.N.N` | 0% | 0% | 62.4% | 0% |
+| French phone `0N-NN-NN-NN-NN` | 0% | 0% | 34.7% | 0% |
+| serial of five two digit groups, hyphens; of eight; of six, dots | 0%, 0.6%, 0% | 0%, 0.6%, 0% | 15.5%, 27.4%, 19.4% | 0%, 0.6%, 0% |
+| sort code with a fourth group `NN-NN-NN-NN` | 0% | 0% | 9.3% | 0% |
+| serial `NNNN-NN-NN-NNNN`, `NN-NN-NNNN-NN`, `XX-NN-NN-NNNN`, licence key `NNNN-NNNN-NNNN-NNNN`, IP address, UK and US phone numbers with hyphens | 0% | 0% | 0% to 0.9% | 0% to 0.1% |
+| ISO timestamp then a word, `DD/MM/YYYY hh:mm-DD/MM/YYYY hh:mm`, `YYYY-MM-DD hh:mm-YYYY-MM-DD` | 100% (the first date) | 100% (both dates) | 100% | 100% |
+| numbered heading, a spaced dash, a written date (`Table 7 - 14 March 2026`) | 100% (the date alone) | 100% (the date alone; the first draft gave `7 - 14 March 2026`) | 100% | 100% |
+
+The 0.6% on the eight group serial is the same before and after: its first three groups read as a date with a two digit year, and the joiner rule parts it when the next three do too.
+
+### Evidence: linear time
+
+100,000 characters per shape, every detector, CPU time, with the chosen rule. The slowest `date` read was 78 ms (dated codes `2026-09-27-01-` end to end, and hyphens between single digits); dates with clock times joined by hyphens 63 ms, ISO dates with clock times 47 ms, hyphen dated times 47 ms, basic offsets and zone names 62 and 47 ms, dates glued to letters 47 ms, dates joined to words 63 ms, birth words glued to dates 46 ms, spaced month first ranges 16 ms, day ranges before numeric dates 46 ms, times longer than `TIME_LONGEST` 47 ms, times that never end 31 ms, times then five letters 32 ms, a stretch of short words and digits before each joiner 46 ms, dates glued by commas 46 ms, times with a comma 31 ms. Every detector stayed within its budget on every shape (the slowest of all, every detector together, 219 ms).
+
+### Cross check of the second update
+
+A read only pass on a second model (Sonnet 5.5) read the update against the code, the tests and the review, and probed today's `detect`. Its points, and what became of each:
+
+1. **The joiner exemption was written into the own separator rejection only**, so `EST-`, ` Z-` and `Z/` before a joiner (a letter before the separator) would still drop the second date. Fixed: both exemptions lift both start rejections, said in the Decision, the Detectors block and task 41.
+2. **The offset reader swallowed the first group of a hyphen dated second date**: in `27-09-2026 10:00-12-10-2026 11:00` it read `-12` as an hour offset, so the joiner was no longer where the time ended, a silent miss of the first draft's own making. Fixed by dropping the grammar of times for the character class stretch above, which parses nothing; the case is in AC-19 and the scenario.
+3. **AC-19 promised rows `detect` does not give** for `2026-09-27 10:00-2026-09-28 11:00` and `05.12.1980-17`, which the phone row covers. AC-19 now says its rows are the `date` detector's and names both end to end results; the phone Follow-up records the cross check's candidate fix (cut a phone unit before a hyphen when a year first date follows it).
+4. **A birth word glued to its date was dropped** (`DOB-12/05/1980`, `D.O.B.12.05.1980`, `DOB27/09/1980`, `Born-05.12.1980`). Fixed: the birth word exemption, listed and ticked, in AC-10, AC-19, the Decision and the Detectors block; measured, it changes nothing else.
+5. **Details of the time reader a builder would invent** (the gap after a glued `T`, `Z` against the letter rule, the offset alternatives' order, the sign's class, the letter class, the zone after a cut run, spaces per side of the dash, and `WRITTEN_LONGEST` growing by eleven rather than six). The reader is gone; the stretch rule has none of those choices, and the day range now says the spaces are counted per side and the growth is `2 * MAX_GAP`.
+6. **Time forms outside the reader** (`@ 10:00`, `UTC+1`, `GMT+01:00`, `10h00`, `10:00 PM EST`). All inside the stretch rule, measured, and in AC-19.
+7. **The spaced day first range swallows a heading number** (`Table 2 - 14 March 2026` would list `2 - 14 March 2026`). Fixed: spaces in the month first form only, the day first forms as before, recorded under Consequences with the measurement.
+8. **INV-17's last sentence overclaimed**: forms with no pattern (`05-Jan-2026`, `27/Sep/2026`, `2026.09.27`, `20260927`, `27 Sep 26`, `15 March,2026`) are missed whatever the boundary rule says. INV-17 reworded, the forms recorded under Consequences, and a Follow-up added to bring them to `/architect`.
+9. **No natural text corpus was measured**, and `example.com/2026/09/27/slug` and `INV/12/05/2026` are dropped (a letter before the slash) while the table's URL shape had nothing before it. Recorded under Consequences; `Fig 3/4/05a` lists `3/4/05`, pinned in the scenario.
+10. **INV-7 holds, with one untested shape**: dates glued by commas (`1.1.00,`), where `,` is a time character. Added to task 43 and timed (46 ms).
+
+Task checks: the renames task 42 had missed (the impossible far date and the cut far date tests, whose comments say the first date is cut) are in; the "still finds no date" block is renamed since it now lists dates beside codes; the Updated line no longer counts the bullets; the Consequences cost example now says what is between the time and the hyphen (a six letter word, or no digit). Measured on the same scratch copy with the three fixes added (the stretch rule, the birth word, month first spacing): the review's cases, the kept rejections, the 1,008 strings (eight change) and the random shapes give the results in the tables above, and the adversarial shapes the figures in *Evidence: linear time*.
+
 ## References
 
 **Project sources** (verifiable, in this repo):
@@ -538,6 +677,9 @@ Neither fix changes any of the 837 detection test strings and fixture lines beyo
 - The update's measurements of 2026-10-10: each rule as a switch in a scratch copy of `src/detect` at commit `30f269c`, run through `detect` on random cards and layouts, random code shapes, every detection test string and fixture line, and 100,000 character adversarial blocks, all outside the repository.
 - `src/detect/date.ts` (`cutFrom`, `numericAt`, `writtenAt`), `iban.ts`, `uk-nino.ts` and `card.ts` (`cardsIn`, `clearAfter`) at commit `30f269c`, and the tests that pinned the old behaviour: `detect-dates.test.ts`'s "a time joined to an ISO date", `detect-iban.test.ts`'s "one character too many, unbroken" and "a letter after", `detect-uk-nino.test.ts`'s "a suffix past D" and "a letter after", and `detect-card.test.ts`'s "choosing where a card ends".
 - `src/detect/card.ts`, `iban.ts`, `us-ssn.ts` and `uk-nino.ts` as built by feature 12 (commit `686df40`), and `tests/unit/detect-card.test.ts`'s "never cut from a longer number" block.
+- The [second review of 2026-10-10](../../reviews/2026-10-10-feat-remaining-detectors-second.md): its major and its first three minors, which the second update of 2026-10-10 settles.
+- The second update's measurements of 2026-10-10: each boundary rule as a switch in a scratch copy of `src/detect` at commit `1a45d46`, run through `detect` on the review's cases, every detection test string and fixture line (1,008), random code shapes and 100,000 character adversarial blocks, all outside the repository.
+- `src/detect/date.ts` (`cutFrom`, `numericStartsAt`, `timeEnd`, `TIME_LONGEST`) at commit `1a45d46`, and the tests that pinned the old behaviour in `tests/unit/detect-dates.test.ts`: "a letter after", "a letter after the year", "finds neither date where a dot stands between them", "finds no date where a joiner leads to an impossible one", "reads a range with spaces around its dash as the second day's date", "still finds no date read out of the code" and "parts at a joiner whose far date is then cut on its own".
 
 **Practices & standards**:
 - ISO 13616 IBAN, checked by ISO 7064 MOD 97-10.
