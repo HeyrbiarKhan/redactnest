@@ -34,7 +34,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 21 | Launch readiness | Release 2 | done |
 | 22 | Brand & UI refresh | Release 2 | done |
 | 23 | Legal review | Release 6 | planned |
-| 24 | Detector follow ups | Release 3 | planned |
+| 24 | Detector follow ups | Release 3 | in-progress |
 | 25 | More date forms | Release 3 | planned |
 | 26 | UI polish | Release 3 | planned |
 
@@ -283,11 +283,20 @@ spec [0005](../specs/0005-pattern-detection/index.md) · code in `src/detect` (n
 - [x] Test it: `/test remaining detectors` (first run done, and again for the update of 2026-10-10; again for the second update; again for the third update)
 - [x] Review it (fresh model): `/check review remaining detectors` (first review done, [2026-10-10](../reviews/2026-10-10-feat-remaining-detectors.md); for the update, [second review](../reviews/2026-10-10-feat-remaining-detectors-second.md); for the second update, [third review](../reviews/2026-10-10-feat-remaining-detectors-third.md); for the third update, [fourth review](../reviews/2026-10-11-feat-remaining-detectors-fourth.md))
 
-### 24. Detector follow ups · needs a decision · Beta + review · from spec 0005
+### 24. Detector follow ups · in-progress · Beta + review · from spec 0005
 The misses feature 12 and its four reviews left open in spec 0005's Follow-up, designed in one pass because they share a cause: a neighbour, or a footnote marker glued to a value, hides that value or gives it the wrong row. A superscript boundary in the find step is the candidate that could settle most of the marker cases at once, instead of one digit tolerances kind by kind.
 **Done when:** every open detector item in spec 0005's Follow-up is settled, measured before any rule changes. A phone window no longer takes digits from a neighbour or reads a full date (with a footnote marker or without) as a phone number, so INV-14 holds for every layout the date detector reads. A footnote marker glued after an email, a phone number, a date with a two digit year, a bare Social Security number after its word, or a National Insurance number with no suffix either gets a row or stays a recorded, measured miss. And a real raised marker read through MuPDF is held by a test.
 **Also owed here:** spec 0005's smaller open items: a comment at each of the two INV-14 guards in `src/detect/phone.ts` naming the other, `covering` in `src/engine/find.ts` built only from ordinary matches' sound quads (the pattern detection review's Minor 1), and the phone budget measured on the CI runner. Also spec 0013's `/test` item from feature 12: pin the Finds columns as the Strips list's are pinned (AC-11).
-- [ ] Design it (spec): `/architect detector follow ups`
+spec [0014](../specs/0014-detector-follow-ups/index.md) · code in `src/detect` (`phone.ts`, `date.ts`, `us-ssn.ts`, `uk-nino.ts`), `src/engine` (`find.ts`, the off line constants), `scripts/lib/detection-fixtures.mjs`, `scripts/make-fixture.mjs`, `.github/workflows/ci.yml`
+- [x] Design it (spec): `/architect detector follow ups`
+- [ ] Build it: `/develop detector follow ups`
+  - [ ] The phone rescue: a stranded digit group joins the row a valid window extends, unticked; `detect-phone.pdf` gains the two leak lines · AC-1, AC-2, AC-14
+  - [ ] The off line boundary in the find step: glyphs smaller and shifted off their line, or raised by code point, leave the text as a join and the target quads part round them; `detect-markers.pdf` with a real raised marker after every kind, and the engine tests that each row redacts with the marker left · AC-4 to AC-8
+  - [ ] The text rules: the two INV-14 unit rules in the phone detector, and the one digit tolerances for a two digit year, a bare Social Security number and a National Insurance number, each measured on random codes first · AC-3, AC-9, AC-10
+  - [ ] Bookkeeping: the `covering` comment, the CI step that prints the phone detector's time, the Finds columns pin, spec 0005's amendments and ticks · AC-10 to AC-13
+- [ ] Verify it: `/check verify detector follow ups`
+- [ ] Test it: `/test detector follow ups`
+- [ ] Review it (fresh model): `/check review detector follow ups`
 
 ### 26. UI polish · from spec 0013
 Two visual fixes, no new design (your call, 2026-10-11). On the home page, the Strips card's items look different from the Finds rows beside them. On `/tool`, while a document opens, the spinner and its phase line ("Looking for …") sit in the right rail beside an empty left column.
@@ -352,6 +361,7 @@ Something a business buyer can sign, ready before somebody asks for it under tim
 Out of scope for the current build pass, kept so the plan stays honest.
 - **OCR for scanned PDFs**: the obvious next move once rectangles exist · needs a decision
 - **Per country EU national IDs**: beyond the UK National Insurance number already planned · needs a decision
+- **Masking lower detector kinds**: run each lower kind with every position a higher kind holds read as whitespace, so a phone window can never start inside a card and `5500 0000 0000 0004 05/12/2026` lists its date whole; needs its own measurement against the overlap piece cases · needs a decision · from spec 0014
 - **Batch processing**: more than one document at a time · needs a decision
 - **Teams and organizations**: shared accounts and seats · needs a decision
 - **API access**: programmatic redaction · needs a decision

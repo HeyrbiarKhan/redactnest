@@ -1,0 +1,28 @@
+# Verify: Detector follow ups · spec 0014
+
+_Steps derived from spec 0014's acceptance criteria and its Value sourcing table. `/check verify` runs these; `/test` locks the durable ones._
+
+Run the tool at `/tool` against a production build (`pnpm build && pnpm start`). The fixtures are `tests/fixtures/detect-*.pdf`, written by `node scripts/make-fixture.mjs`; `detect-markers.pdf` is new here and holds one page. Every row's text is read as the checklist shows it, and every "paste the page's text" step opens the downloaded file in a reader and copies the page.
+
+## UI / manual
+
+- [ ] Open `detect-phone.pdf` → the `9346 212 555 0123` line lists one Phone row `9346 212 555 0123`, unticked; the card then UK number line lists its card and `020 7946 0958`; every row the file listed before is still there with the same tick → AC-1, AC-2
+- [ ] In `detect-phone.pdf`, tick the `9346 212 555 0123` row, redact, download and paste the page's text → none of its digits remain, and every other number's row behaved as before → AC-1, AC-7
+- [ ] Open `detect-markers.pdf` → one row per value line, each with its text without the marker and with the tick AC-6 names; the `27-09-2026` line lists a Dates row and no Phone row; the ordinal lines list `27 September 2026` and `1 of May 2026`; the `H2O` line lists `020 7946 0958`; the two digit marker line, the Arabic Indic marker line, the two gap lines, the all 8 pt line, the Chromium shaped line and the U+00B9 line each list their value; the guard line lists `020 7946 0958`, ticked → AC-4, AC-5, AC-6
+- [ ] In `detect-markers.pdf`, read each row's context → the text after the value starts at the space or the word after the marker, never at the marker → AC-6
+- [ ] In `detect-markers.pdf`, tick every row, redact, download and paste the page's text → every value is gone, every marker glyph and every raised ordinal letter is still there, and the run did not refuse; the ordinal rows' boxes are drawn in two pieces with the raised letters between them → AC-7
+- [ ] In `detect-markers.pdf`, tick only the `27-09-2026` Dates row, redact → the run passes (today's phone row there refuses with the overreach message) → AC-7
+- [ ] Open `detect-date.pdf`, `detect-us-ssn.pdf` and `detect-uk-nino.pdf` → the new AC-9 lines list `12/05/80` (ticked, after its birth word), `123456789` (unticked) and `AB123456` (unticked), each with the plain digit outside the row; every row listed before is still there → AC-8, AC-9
+- [ ] Open the dense document `tests/e2e/cancel.spec.ts` builds, or `detect-dense.pdf` → the open completes within the speed project's line, with the same rows as before → AC-14
+
+## Code and records
+
+- [ ] `tests/unit/detect-phone.test.ts` holds every AC-1, AC-2 and AC-3 case by name, and every spec 0005 AC-27 case still passes → AC-1, AC-2, AC-3
+- [ ] `tests/unit/detection.test.ts` reads `detect-markers.pdf` and asserts rows, text, ticks, `after` and that no target quad contains a marker's centre; every other detect fixture's expectations are unchanged → AC-6, AC-8
+- [ ] `tests/unit/redaction-check.test.ts` redacts each `detect-markers.pdf` row alone and together, finds the marker in the output, and still refuses `superscript.pdf` → AC-7
+- [ ] `src/engine` holds `OFF_LINE_SIZE_MAX` (0.9), `OFF_LINE_SHIFT_MIN` (0.15), `OFF_LINE_STRETCH_MAX` (4), `OFF_LINE_MIN_LINE_GLYPHS` (3) and `SUPERSCRIPT_CODE_POINTS`, each commented as a rule about pages; the code point pin passes; no page or size limit elsewhere → AC-4, AC-5
+- [ ] The two INV-14 guard comments in `src/detect/phone.ts` and the `covering` comment in `src/engine/find.ts` are present → AC-10
+- [ ] `.github/workflows/ci.yml` runs `tests/unit/detect-adversarial.test.ts` alone on one worker with the verbose reporter, still read only (`tests/unit/workflows.test.ts` passes), and `rationale.md` holds the figure from the pull request's run as wall time with the runner and date, the National Insurance tolerance's random code figure, and the built code's corpus and flag count reruns → AC-9, AC-11, AC-13
+- [ ] Spec 0005 carries every amendment *Amends spec 0005* lists and its two met Follow-ups are ticked with their pointers → AC-13
+- [ ] The Finds columns pin is in `tests/e2e/design-system.spec.ts` and `tests/component/app/home-page.test.tsx`, and spec 0013's Follow-up item is ticked → AC-12
+- [ ] `tests/unit/detect-adversarial.test.ts` holds a rescue shape within the budget and the parse count pin still passes → AC-14
