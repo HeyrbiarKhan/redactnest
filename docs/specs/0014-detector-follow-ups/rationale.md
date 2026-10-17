@@ -20,9 +20,9 @@ The owner's rule for every detector decision since 2026-10-08: extra unticked ro
 
 **Option 1: merge every overlapping valid window into one row (the card's rule).** Where two windows that pass overlap, one row covers both. Pros: the simplest statement, a precedent in `card`, fixes the leak (digits lost 36% to 1.6%). Cons: a window across the middle of two numbers side by side is valid by chance far more often for phones than for cards (no checksum): 60% of random US pairs and 45% of bracketed pairs share one unticked row, so a staff list's column loses most of its ticks.
 
-**Option 2: rescue a stranded unit (chosen).** Valid windows, then possible windows, as today; then a unit both passes left free, which a valid window starting inside a valid row covers, joins the nearest row to its left. Pros: loses no digit today keeps in a row, in any string, because it runs last and only adds; two numbers share a row only where today leaves the second number's digits with no row (1.2% of random UK pairs, never US pairs); changes none of the corpus strings; the joined row starts unticked. Cons: a UK number with a stray group after it lists unticked 12% of the time with the group in its row, because an 8 digit window such as `0958 1234` is valid under the GB metadata; the first number in a shared row loses its tick; the chooser gains a third pass.
+**Option 2: rescue a stranded unit (chosen).** Valid windows, then possible windows, as today; then a unit both passes left free, which a valid window starting inside a valid row covers, is rescued, and each stretch of rescued units is listed as a row of its own, unticked. (Until 2026-10-17 the stretch joined the nearest row to its left; how a stretch is listed is weighed below.) Pros: loses no digit today keeps in a row, in any string, because it runs last and only adds; every row today lists keeps its end and its tick; no row it lists touches two numbers; changes none of the corpus strings. Cons: a stray group after a UK number lists as an extra unticked row about 12% of the time, because an 8 digit window such as `0958 1234` is valid under the GB metadata; a number cut by a stray group reads as two rows; the chooser gains a third pass.
 
-**Option 3: rescue only with a window at least as long as the row's own.** Option 2 with a guard against short rescuing windows. Pros: keeps 88% of the UK ticks above. Cons: leaves 12% of US numbers leaking with three groups before (6% under option 2), which is a miss, and the owner's rule puts a miss above a tick.
+**Option 3: rescue only with a window at least as long as the row's own.** Option 2 with a guard against short rescuing windows. Pros: rescues fewer stray groups (under the joined row it kept 88% of the UK ticks above; with stretch rows no tick is at stake). Cons: leaves 12% of US numbers leaking with three groups before (6% under option 2), which is a miss, and the owner's rule puts a miss above an extra row.
 
 **Option 4: keep today's chooser and record the leak.** Pros: no change. Cons: the leak is live, in the worst shape a miss can take.
 
@@ -43,6 +43,18 @@ Phone outranks date in `detect`, so a stretch the rescue joins wins any position
 **Option 2: a guard inside the phone detector, no join of a unit followed by a letter or a slash.** Pros: the phone detector alone; no new field. Cons: it also stops the rescue wherever a word follows the number (`9346 212 555 0123 today`), the commonest case in prose, by construction; and any date form it does not foresee still loses its day.
 
 **Option 3: record it as an exception to AC-1.** Pros: no change. Cons: a date reads `June 2014` or `/01/1992` beside a number in up to 1.8% of such strings, and the number loses its tick; it breaks INV-14's promise that phone never takes a numeric date's digits.
+
+With stretch rows (below) the yield is still needed: a stretch row with no yield takes a date's leading digits in up to 1.83% of a layout's strings, the same as the joined row did (*Evidence*).
+
+### How a rescued stretch is listed (from the owner, 2026-10-17)
+
+The owner's bar: the default never removes less than today. No digit loses a row, no row loses a tick, and the digits ticked by default are at least today's.
+
+**Option 1: join the stretch into the row to its left, unticked (the rule of 2026-10-15).** Pros: one row per number where a stray group cut it, so the row reads as the number. Cons: the joined row had to be unticked, since it may hold a neighbour's digits, so the default removes less than today wherever a rescue fires: `9346 212 555 0123` goes from seven digits removed by default to none, a US number after one to three stray groups is removed less by default in 34.6% to 40.9% of a layout's strings, and beside dates a ticked row of today's loses its tick in up to 8.87% of strings (*Evidence*). It fails the bar.
+
+**Option 2: list each stretch as a row of its own, unticked, in spec 0005's piece shape (chosen).** Pros: every row today's chooser lists is returned untouched, so it keeps exactly its end and its tick, and the default removes at least what it removes today in every string measured; the stretch lists every digit the joined row listed; no row the rescue lists touches two numbers (the joined row did in 37 of 40,000 strings); the chooser is simpler, since a stretch is marked rather than joined and `Span` needs only a flag. Cons: a number cut by a stray group reads as two rows, the first ticked and holding the stray group, the second unticked, so a visitor who ticks nothing keeps the stretch's digits, as today; a stray group after a number is an extra unticked row.
+
+**Option 3: join the stretch and keep the row's own tick.** Pros: one row, and the default removes the whole number. Cons: it would tick, by default, a stray group nobody chose wherever one joins (a reference or account number after a phone number, about 12% of UK numbers with a group after), which INV-2 forbids, and it ticks digits no valid window reads as part of the number.
 
 ### The footnote boundary
 
@@ -70,11 +82,13 @@ Running each lower kind with a higher kind's positions read as spaces would stop
 
 ## Rationale
 
-The leak decides itself once measured: option 1's 60% shared rows would undo the side by side guarantee spec 0005's AC-27 was built for, and option 3 trades a miss for a tick, which the owner's rule forbids. Option 2 loses nothing today's chooser keeps, and its only cost is a tick on a shape (a UK number then a stray group, or two numbers whose second today has no row) where the row still holds the number.
+The leak decides itself once measured: option 1's 60% shared rows would undo the side by side guarantee spec 0005's AC-27 was built for, and option 3 trades a miss for fewer rows, which the owner's rule forbids. Option 2 loses nothing today's chooser keeps, and, with each stretch a row of its own, its only cost is an extra unticked row on a shape (a UK number then a stray group, or a number cut by a stray group before it) where today's row is still listed as it is today.
 
 Where the rescue runs decides itself the same way. Run last, it can only add to what today's chooser lists, so "no digit today keeps is lost" holds in every string by construction, and the measurement confirms it rather than carrying it. Run first, it competes with the possible pass for the same units and can lose a number today finds, which is a miss, and the owner's rule puts a miss above everything else here. The reach skip changes no result and brings numbers side by side back to today's cost, so it is taken too. The first draft's layouts drew mostly valid numbers, which is why they did not show the cost of running first; the build's layouts draw UK local numbers at random, so about a quarter are only possible, and they did.
 
 The date yield follows from the same bar measured where it matters: through `detect`, not the phone detector alone. Every earlier check ran the phone detector by itself, which cannot see that a rescued group is also a date's day. Option 1 lets the date detector's own reading decide, so it needs no grammar and cannot drift from what that detector reads; option 2 would cost the rescue its commonest case to guard a rarer one, and option 3 leaves a date with fewer digits than today, which is a miss.
+
+How a stretch is listed follows from the owner's bar of 2026-10-17. The rescue exists to give a stranded digit a row; it never had a reason to change a row today's chooser lists. Joining the stretch did change one, and because the joined row could hold a neighbour's digits it had to be unticked, so the default removed less than today exactly where the rescue fired. Listing the stretch as its own row keeps the whole gain (every digit the rescue lists) and drops the whole cost in ticks, by construction: today's rows are returned untouched, and the measurement confirms that in every check rather than carrying it. Keeping the joined row's tick would meet the bar too, but by ticking stray groups nobody chose. What is left is a second row where a visitor once saw one, which the owner's rule, extra unticked rows are fine and missed values are not, accepts.
 
 The boundary was chosen over wider text tolerances because MuPDF hands the engine the two facts a marker is made of, a smaller size and a shifted baseline, exactly and per glyph, while the text rules can only guess from one digit. Both facts together were needed: size alone would drop small print on the baseline (8 pt text inside a 12 pt line, measured as the same line) and shift alone has no margin on OCR layers; together they flagged none of the 78,856 glyphs in every fixture and every local scan. The code point trigger costs one `Set` lookup per character and covers the one shape geometry cannot see. Reading a stretch as a join reuses the line join rule the find step already has, so no detector changes for it. The stretch cap exists because a whole value aligned at its cap height beside larger text is both smaller and raised; no document in hand shows it, so the cap is a guard with a recorded shape rather than a measured rule.
 
@@ -82,7 +96,7 @@ The tolerances stay because the fixtures and OCR output draw exactly the shape t
 
 ## Evidence
 
-All scripts are in the session scratchpads (`probe/geom.mjs`, `probe/phone.mjs`, `probe/phone2.mjs`, `probe/flags.mjs` for the first round; `probe/layouts.mjs`, `probe/corpus.mjs` and the `alt` prototype from the build; `check.mjs`, `timing.mjs`, `phone2-all.mjs`, `gap.mjs`, `layouts-gap.mjs`, `cross-kind2.mjs`, `fix-check.mjs` and the `fix` prototype from the update of 2026-10-15); nothing was written in the repository. Each loads the real engine or the real detectors through `jiti` with `@` aliased to `src`. The prototypes are scratch copies of `src/detect` with `chosenIn` replaced; `base` is the repository's own `src/detect`. Seeded random generators, so each run repeats.
+All scripts are in the session scratchpads (`probe/geom.mjs`, `probe/phone.mjs`, `probe/phone2.mjs`, `probe/flags.mjs` for the first round; `probe/layouts.mjs`, `probe/corpus.mjs` and the `alt` prototype from the build; `check.mjs`, `timing.mjs`, `phone2-all.mjs`, `gap.mjs`, `layouts-gap.mjs`, `cross-kind2.mjs`, `fix-check.mjs` and the `fix` prototype from the update of 2026-10-15; `check-piece.mjs`, `layouts-piece.mjs`, `cross-piece.mjs`, `cross-noyield.mjs`, `shared-piece.mjs`, `timing-piece.mjs`, `uk-losses.mjs`, `uk-first-kinds.mjs`, `plus-alone.mjs` and the `piece`, `noyield` and `joined` prototypes from the update of 2026-10-17); nothing was written in the repository. Each loads the real engine or the real detectors through `jiti` with `@` aliased to `src`. The prototypes are scratch copies of `src/detect` with `chosenIn` replaced; `base` is the repository's own `src/detect`. Seeded random generators, so each run repeats.
 
 ### A raised glyph through MuPDF (`geom.mjs`, Helvetica 12 pt, marker as a second text object)
 
@@ -156,7 +170,7 @@ Corpus: every string literal holding a digit in `tests/unit/detect*.test.ts` and
 
 Random layouts, 3,000 per cell, seeded. Numbers drawn from real area codes and exchanges (US `3 3 4`, US `(3) 3-4`, UK area plus local, UK `+44`); stray groups are four random digits. "Lost" is any digit of the number with no phone row; "ticked" is the row holding the whole number ticked. "First draft" is the rescue run before the possible pass; "chosen" runs it last, with the reach skip. The last column and the two `+44` rows were added by the rerun of 2026-10-15 (`phone2-all.mjs`, the same seeds), which reproduced every other cell.
 
-| Layout | Shape | Today lost / ticked | Greedy merge | Rescue, first draft | Length guarded | Rescue last (chosen) |
+| Layout | Shape | Today lost / ticked | Greedy merge | Rescue, first draft | Length guarded | Rescue last, joined (2026-10-15) |
 |---|---|---|---|---|---|---|
 | 1 group before | US 3 3 4 | 36.3% / 63.7% | 1.6% / 63.7% | 1.6% / 63.7% | 1.6% / 63.7% | 1.6% / 63.7% |
 | 1 group before | UK area local | 4.5% / 88.5% | 1.9% / 88.5% | 1.9% / 88.5% | 1.9% / 88.5% | 1.9% / 88.5% |
@@ -172,11 +186,11 @@ Random layouts, 3,000 per cell, seeded. Numbers drawn from real area codes and e
 | `Ref NNNNN` before, group after | UK area local | 5.6% / 79.3% | 4.9% / 69.2% | 4.9% / 69.2% | 5.2% / 74.5% | 4.9% / 69.2% |
 | `Ref NNNNN` before, group after | UK +44 | 0.0% / 92.6% | 0.0% / 86.0% | 0.0% / 86.0% | 0.0% / 92.6% | 0.0% / 86.0% |
 
-Bracketed US numbers lose nothing and keep every tick in the omitted rows; `+44` numbers lose nothing in any layout under any rule, and the rows where a rescue costs them ticks are all listed (the first draft of this table omitted two of them). The UK numbers' remaining losses (11.3% with three groups before) are a four digit group that forms no valid window with the number under any rule, the same today.
+Bracketed US numbers lose nothing and keep every tick in the omitted rows; `+44` numbers lose nothing in any layout under any rule, and the rows where a rescue costs them ticks are all listed (the first draft of this table omitted two of them). The UK numbers' remaining losses (11.3% with three groups before) are explained under *The UK losses the rescue leaves* below: through `detect`, 9.8 of those 11.3 points are digits a chance card holds, and the rest a UK number that is only possible. (This paragraph first said they were a group that forms no valid window with the number; the 2026-10-17 measurement showed that was incomplete.)
 
 Two numbers side by side, 3,000 pairs per cell. "One row" here is one row covering both numbers whole:
 
-| Pair | Shape | Today either lost / both ticked / one row | Greedy merge | Rescue, first draft | Length guarded | Rescue last (chosen) |
+| Pair | Shape | Today either lost / both ticked / one row | Greedy merge | Rescue, first draft | Length guarded | Rescue last, joined (2026-10-15) |
 |---|---|---|---|---|---|---|
 | side by side | US 3 3 4 | 1.3% / 98.7% / 0.0% | 1.3% / 38.9% / 59.8% | 1.3% / 98.7% / 0.0% | 1.3% / 98.7% / 0.0% | 1.3% / 98.7% / 0.0% |
 | side by side | US (3) 3-4 | 0.0% / 100% / 0.0% | 0.0% / 55.3% / 44.7% | 0.0% / 100% / 0.0% | 0.0% / 100% / 0.0% | 0.0% / 100% / 0.0% |
@@ -185,9 +199,9 @@ Two numbers side by side, 3,000 pairs per cell. "One row" here is one row coveri
 | a group between | UK area local | 8.4% / 80.0% / 0.0% | 6.7% / 70.1% / 1.6% | 6.7% / 70.1% / 0.0% | 6.9% / 76.1% / 0.0% | 6.8% / 70.1% / 0.0% |
 | a group between | UK +44 | 0.0% / 86.6% / 0.0% | 0.0% / 80.4% / 0.0% | 0.0% / 80.4% / 0.0% | 0.0% / 86.6% / 0.0% | 0.0% / 80.4% / 0.0% |
 
-The 1.2% of UK pairs in one row under either rescue are pairs whose second number today has no row at all: its digits join the first number's row, which is then unticked. The first draft of this record called that 0%; the table always showed 1.2%.
+The 1.2% of UK pairs in one row under either rescue are pairs whose second number today has no row at all: its digits join the first number's row, which is then unticked. The first draft of this record called that 0%; the table always showed 1.2%. With stretch rows those digits are a row of their own, and no row touches both numbers (0.0%, below).
 
-Named cases under the chosen rule: `9346 212 555 0123` one unticked row; `0131 410 5214 020 2977 5777` unchanged (`0131 410 5214` ticked, `020 2977 5777` possible and unticked; the first draft gave `020` to the first row and left `2977 5777` with no row); `212 526 5087 020 2208 1633 24` lists `212 526 5087 020` unticked and `2208 1633 24` ticked, through `detect` as through the phone detector alone (today `212 526 5087` ticked and `020` with no row); `Box 2000 212 555 0123` and `Ste 1 212 555 0123` unchanged; `6293 6608 0005 7382 276 020 7946 0958` the card and `020 7946 0958` (unticked, the phone row having been cut by the card); `212 555 0123 9346 415 234 5678` lists `212 555 0123` ticked and `9346 415 234 5678` unticked (today `9346 415 234` ticked and `5678` lost); `020 7946 0958 020 7946 0321`, `212 555 0123 212 555 0124`, `1 212 555 0123`, `Call 020 7946 0958@example.com`, `123 45 6789 1234`, `SSN 223-45-6789¹` and `2026-09-27 10:00-2026-09-28 11:00` unchanged.
+Named cases under the joined rule of 2026-10-15 (the stretch rows' are below): `9346 212 555 0123` one unticked row; `0131 410 5214 020 2977 5777` unchanged (`0131 410 5214` ticked, `020 2977 5777` possible and unticked; the first draft gave `020` to the first row and left `2977 5777` with no row); `212 526 5087 020 2208 1633 24` lists `212 526 5087 020` unticked and `2208 1633 24` ticked, through `detect` as through the phone detector alone (today `212 526 5087` ticked and `020` with no row); `Box 2000 212 555 0123` and `Ste 1 212 555 0123` unchanged; `6293 6608 0005 7382 276 020 7946 0958` the card and `020 7946 0958` (unticked, the phone row having been cut by the card); `212 555 0123 9346 415 234 5678` lists `212 555 0123` ticked and `9346 415 234 5678` unticked (today `9346 415 234` ticked and `5678` lost); `020 7946 0958 020 7946 0321`, `212 555 0123 212 555 0124`, `1 212 555 0123`, `Call 020 7946 0958@example.com`, `123 45 6789 1234`, `SSN 223-45-6789¹` and `2026-09-27 10:00-2026-09-28 11:00` unchanged.
 
 Time under the first draft (one run each, this machine): 100,000 characters of four digit groups 162 ms today, 166 ms; 10,000 US numbers side by side 245 ms today, 422 ms, because every unit inside a row asked its windows during the rescue, where today's pass skipped them. The reach skip removes that cost; the figures for the chosen rule are below.
 
@@ -197,7 +211,7 @@ Time under the first draft (one run each, this machine): 100,000 characters of f
 
 Same layouts, 3,000 per cell, seeded; phone alone. "One row" here is any row touching both numbers, a looser test than the first round's, which is why today already shows 5.6% (a possible window across two numbers' middles). Rows where all three columns agree are omitted.
 
-| Layout | Shape | Today lost / ticked | Rescue, first draft | Rescue last (chosen) |
+| Layout | Shape | Today lost / ticked | Rescue, first draft | Rescue last, joined |
 |---|---|---|---|---|
 | 1 group before | US 3 3 4 | 36.2% / 63.8% | 0.0% / 63.8% | 0.0% / 63.8% |
 | 1 group before | UK area local | 4.8% / 71.3% | 3.4% / 71.3% | 3.4% / 71.3% |
@@ -213,7 +227,7 @@ Same layouts, 3,000 per cell, seeded; phone alone. "One row" here is any row tou
 | `Ref NNNNN` before, group after | UK area local | 1.2% / 66.2% | 1.1% / 60.6% | 1.1% / 60.6% |
 | `Ref NNNNN` before, group after | UK +44 | 8.6% / 72.4% | 8.6% / 63.2% | 8.6% / 63.2% |
 
-| Pair | Shape | Today either lost / both ticked / one row | Rescue, first draft | Rescue last (chosen) |
+| Pair | Shape | Today either lost / both ticked / one row | Rescue, first draft | Rescue last, joined |
 |---|---|---|---|---|
 | side by side | UK area local | 5.6% / 53.2% / 5.6% | **6.7%** / 53.2% / **7.7%** | 4.6% / 53.2% / 5.6% |
 | a group between | US 3 3 4 | 36.1% / 63.9% / 0.0% | 0.0% / 60.2% / 0.0% | 0.0% / 60.2% / 0.0% |
@@ -231,11 +245,11 @@ The 0.1 point gap in "a group between, UK area local", string by string (`gap.mj
 
 Every string the chosen rule loses there, today loses with the same rows. The 11 share one shape: a stray group, then a UK number that is only possible, so the possible pass's longest window at the group takes the number's first groups and strands its last.
 
-Per string (`check.mjs`): 40,000 seeded strings of one to four numbers (US `3 3 4`, UK area plus local, UK `+44`), each with an optional stray group of two to five digits before it and one at the end. Against today's chooser: 32,269 list the same rows, 7,731 only move a row's end later, and none differs in any other way; none leaves a digit without a row that today puts in one; 37 have a row touching two numbers where today has none, and each such row's added units are units today leaves with no row, as the rule guarantees.
+Per string (`check.mjs`), under the joined rule: 40,000 seeded strings of one to four numbers (US `3 3 4`, UK area plus local, UK `+44`), each with an optional stray group of two to five digits before it and one at the end. Against today's chooser: 32,269 list the same rows, 7,731 only move a row's end later, and none differs in any other way; none leaves a digit without a row that today puts in one; 37 have a row touching two numbers where today has none, and each such row's added units are units today leaves with no row, as the rule guarantees.
 
 Time (`timing.mjs`): CPU time per call, each sample averaged over at least 300 ms, the median of five, in rotating order, this machine. The build's own single run read 188 ms against 172 ms on the US numbers.
 
-| Shape (100,000 characters unless named) | Today | Rescue last, reach skip (chosen) | Rescue last, no skip |
+| Shape (100,000 characters unless named) | Today | Rescue last, joined, reach skip | Rescue last, joined, no skip |
 |---|---|---|---|
 | four digit groups | 25 ms | 25 ms | 23 ms |
 | 10,000 US numbers side by side | 172 ms | 164 ms | 609 ms |
@@ -250,7 +264,7 @@ Time (`timing.mjs`): CPU time per call, each sample averaged over at least 300 m
 
 60,000 seeded strings, six layouts drawn at random: a US, UK or `+44` number, an optional stray group of one to four digits, and a date in one of ten forms (`21 June 2014`, `5th of June 2014`, `June 21, 2014`, `June 21 2014`, `21 June`, `18/01/1992`, `05.12.80`, `2026-09-27`, the spaced `05 12 1980`, a day range), sometimes after a birth or date word. Each string through today's `detect` and each rule's. "Positions lost" is a string where some position one of today's rows holds is not held by a row of the same kind; "tick lost" is a string where one of today's ticked phone rows is no longer ticked, which counts the stray group cost AC-2 accepts as well.
 
-| Layout | Strings | First draft: positions lost / tick lost | Rescue last, no yield | Rescue last with the yield (chosen) |
+| Layout | Strings | First draft: positions lost / tick lost | Rescue last, joined, no yield | Rescue last, joined, with the yield |
 |---|---|---|---|---|
 | number, date | 10,030 | 0.60% / 1.01% | 0.54% / 0.94% | **0.00%** / 0.40% |
 | number, group, date | 9,952 | 1.20% / 9.08% | 0.94% / 8.89% | **0.00%** / 8.87% |
@@ -259,7 +273,7 @@ Time (`timing.mjs`): CPU time per call, each sample averaged over at least 300 m
 | date, number | 9,958 | 0.00% / 3.52% | 0.00% / 3.52% | 0.00% / 3.52% |
 | date, group, number | 9,918 | 0.01% / 5.99% | 0.00% / 5.98% | 0.00% / 5.98% |
 
-Every position lost without the yield is a date's leading digits taken into a phone row: a day before a month name, a day range, or the day before a slash. The yield's remaining tick losses beside a date are a spaced numeric date the date detector does not read (`+44 20 8052 7523 16 07 1995` gains ` 16`, 173 of 187 cases in 20,000 number then date strings; the rest gain more of the same spaced digits), which is a stray group to the phone detector. Under the yield, the corpus through `detect` is unchanged (1,258 strings, 0 change), and the named cases list as AC-1 and AC-15 say.
+Every position lost without the yield is a date's leading digits taken into a phone row: a day before a month name, a day range, or the day before a slash. Under the joined rule, the yield's remaining tick losses beside a date (with stretch rows there are none; the group becomes an extra unticked row) are a spaced numeric date the date detector does not read (`+44 20 8052 7523 16 07 1995` gains ` 16`, 173 of 187 cases in 20,000 number then date strings; the rest gain more of the same spaced digits), which is a stray group to the phone detector. Under the yield, the corpus through `detect` is unchanged (1,258 strings, 0 change), and the named cases list as AC-1 and AC-15 say.
 
 ### The cross check of 2026-10-15 (another model, read only)
 
@@ -280,6 +294,154 @@ It found the design sound and the rescue last as simple as it can be, and raised
 13. The prototype's `SKIP` switch does not ship (data model, task 1).
 
 The owner's question about the 0.1 point gap, and the check through `detect` it prompted, found the date case above, which became AC-15.
+
+### The rescued stretch as its own row (2026-10-17)
+
+The `piece` prototype is the repository's `src/detect` with `chosenIn`, `detectPhone`, `Span` and `detect` changed as AC-1, AC-2 and AC-15 now say; `joined` is the 2026-10-15 rule (the `fix` copy); `noyield` is `piece` with the yield taken out. Each script replays an earlier script's generator and seed exactly, and the today and joined columns below reproduce every cell of the tables above.
+
+Named cases, rows as listed, a `+` for ticked:
+
+| Text | Today | Joined (2026-10-15) | Stretch rows (chosen) |
+|---|---|---|---|
+| `9346 212 555 0123` | `9346 212 555`+ | `9346 212 555 0123` | `9346 212 555`+, `0123` |
+| `9346 212 555 0123 ext. 45` | `9346 212 555`+ | `9346 212 555 0123 ext. 45` | `9346 212 555`+, `0123 ext. 45` |
+| `212 526 5087 020 2208 1633 24` | `212 526 5087`+, `2208 1633 24`+ | `212 526 5087 020`, `2208 1633 24`+ | `212 526 5087`+, `020`, `2208 1633 24`+ |
+| `212 555 0123 9346 415 234 5678` | `212 555 0123`+, `9346 415 234`+ | `212 555 0123`+, `9346 415 234 5678` | `212 555 0123`+, `9346 415 234`+, `5678` |
+| `6293 6608 0005 7382 276 020 7946 0958`, through `detect` | card+, phone `020`+ | card+, phone `020 7946 0958` | card+, phone `020`+, phone `7946 0958` |
+| `212 918 8665 1119 21 June 2014`, through `detect` | `212 918 8665`+, date | `212 918 8665 1119`, date | `212 918 8665`+, `1119`, date |
+| `+44 20 3149 6135 18/01/1992`, through `detect` | `+44 20 3149 6135`+, date | `+44 20 3149 6135`+, date | `+44 20 3149 6135`+, date (the stretch `18` dropped) |
+
+`0131 410 5214 020 2977 5777`, `01865 514994 0472 0117 853 0001`, `Box 2000 212 555 0123`, `Ste 1 212 555 0123`, `1 212 555 0123`, the two side by side pairs, `Call 020 7946 0958@example.com`, `123 45 6789 1234`, `SSN 223-45-6789¹`, `2026-09-27 10:00-2026-09-28 11:00` and `212 555 0123 9346 21 June 2014` list exactly today's rows under all three rules. Through `DETECTORS.phone` alone the stretch rows list `1119 21` and `18` whole.
+
+Per string (`check-piece.mjs`, `check.mjs`'s 40,000 strings). Phone alone, 32,269 list today's rows and 7,731 add rows; through `detect`, 32,486 and 7,514. In both, 0 strings where a row of today's changes its start, its end or its tick; 0 where a digit today puts in a row loses it; 0 where the digits in ticked rows are not a superset of today's; 0 where an added row overlaps one of today's; and the digits in rows equal the joined rule's in every string (0 fewer, 0 more). The ticked digits exceed the joined rule's in 7,731 strings alone and 7,585 through `detect`. `shared-piece.mjs`, the same strings with each number's place: no added row touches two numbers (the joined rule made 37 such rows); in 1,044 an added row holds a next number's first digits where today leaves them with no row, as `020` above.
+
+Corpus: 1,258 strings through `detect`, 0 change.
+
+Both rounds' layouts (`layouts-piece.mjs`), 3,000 per cell, the same seeds. "Below today" is a string where some digit of the number sits in a ticked row today and in none after, so the default removes less. Cells where all three rules agree are omitted; under stretch rows the ticked and below today columns are today's in every cell, and so is "whole by default" (every digit in a ticked row), not shown.
+
+First round, through `detect`:
+
+| Layout | Shape | Today lost / ticked | Joined lost / ticked / below today | Stretch rows (chosen) lost / ticked / below today |
+|---|---|---|---|---|
+| 1 group before | US 3 3 4 | 36.3% / 63.7% | 1.6% / 63.7% / 34.6% | 1.6% / 63.7% / 0.0% |
+| 1 group before | UK area local | 4.5% / 88.5% | 1.9% / 88.5% / 2.6% | 1.9% / 88.5% / 0.0% |
+| 3 groups before | US 3 3 4 | 44.7% / 55.3% | 5.8% / 55.3% / 39.8% | 5.8% / 55.3% / 0.0% |
+| 3 groups before | US (3) 3-4 | 6.9% / 93.1% | 0.0% / 93.1% / 6.9% | 0.0% / 93.1% / 0.0% |
+| 3 groups before | UK area local | 15.3% / 79.6% | 11.3% / 79.6% / 4.2% | 11.3% / 79.6% / 0.0% |
+| 1 group after | UK area local | 0.0% / 91.9% | 0.0% / 80.1% / 11.9% | 0.0% / 91.9% / 0.0% |
+| 1 group after | UK +44 | 0.0% / 93.1% | 0.0% / 85.9% / 7.2% | 0.0% / 93.1% / 0.0% |
+| 2 groups after | US 3 3 4 | 0.0% / 100.0% | 0.0% / 99.7% / 0.3% | 0.0% / 100.0% / 0.0% |
+| 2 groups after | UK area local | 1.3% / 91.7% | 1.3% / 79.0% / 12.8% | 1.3% / 91.7% / 0.0% |
+| 2 groups after | UK +44 | 0.0% / 93.5% | 0.0% / 86.9% / 6.6% | 0.0% / 93.5% / 0.0% |
+| Ref NNNNN before, group after | US 3 3 4 | 9.3% / 89.9% | 2.7% / 89.9% / 6.6% | 2.7% / 89.9% / 0.0% |
+| Ref NNNNN before, group after | UK area local | 5.6% / 79.3% | 4.9% / 69.2% / 10.9% | 4.9% / 79.3% / 0.0% |
+| Ref NNNNN before, group after | UK +44 | 0.0% / 92.6% | 0.0% / 86.0% / 6.6% | 0.0% / 92.6% / 0.0% |
+
+| Pair | Shape | Today either lost / both ticked / one row | Joined, the same / either below today | Stretch rows (chosen), the same / either below today |
+|---|---|---|---|---|
+| side by side | UK area local | 4.1% / 83.0% / 0.0% | 2.9% / 83.0% / 1.2% / 2.0% | 2.9% / 83.0% / 0.0% / 0.0% |
+| a group between | US 3 3 4 | 38.5% / 61.5% / 0.0% | 3.2% / 57.9% / 0.0% / 39.4% | 3.2% / 61.5% / 0.0% / 0.0% |
+| a group between | UK area local | 8.4% / 80.0% / 0.0% | 6.8% / 70.1% / 0.0% / 13.0% | 6.8% / 80.0% / 0.0% / 0.0% |
+| a group between | UK +44 | 0.0% / 86.6% / 0.0% | 0.0% / 80.4% / 0.0% / 6.9% | 0.0% / 86.6% / 0.0% / 0.0% |
+
+The build, phone alone:
+
+| Layout | Shape | Today lost / ticked | Joined lost / ticked / below today | Stretch rows (chosen) lost / ticked / below today |
+|---|---|---|---|---|
+| 1 group before | US 3 3 4 | 36.2% / 63.8% | 0.0% / 63.8% / 36.2% | 0.0% / 63.8% / 0.0% |
+| 1 group before | UK area local | 4.8% / 71.3% | 3.4% / 71.3% / 1.4% | 3.4% / 71.3% / 0.0% |
+| 3 groups before | US 3 3 4 | 40.9% / 59.1% | 0.0% / 59.1% / 40.9% | 0.0% / 59.1% / 0.0% |
+| 3 groups before | US (3) 3-4 | 6.0% / 94.0% | 0.0% / 94.0% / 6.0% | 0.0% / 94.0% / 0.0% |
+| 3 groups before | UK area local | 6.2% / 72.2% | 3.9% / 72.2% / 2.3% | 3.9% / 72.2% / 0.0% |
+| 1 group after | UK area local | 4.2% / 73.5% | 4.2% / 64.2% / 9.3% | 4.2% / 73.5% / 0.0% |
+| 1 group after | UK +44 | 8.5% / 73.6% | 8.5% / 64.2% / 9.4% | 8.5% / 73.6% / 0.0% |
+| 2 groups after | US 3 3 4 | 0.0% / 100.0% | 0.0% / 99.8% / 0.2% | 0.0% / 100.0% / 0.0% |
+| 2 groups after | UK area local | 4.2% / 73.9% | 4.2% / 65.4% / 8.6% | 4.2% / 73.9% / 0.0% |
+| 2 groups after | UK +44 | 8.4% / 73.3% | 8.4% / 61.6% / 11.7% | 8.4% / 73.3% / 0.0% |
+| Ref NNNNN before, group after | US 3 3 4 | 5.7% / 93.6% | 0.0% / 93.6% / 5.7% | 0.0% / 93.6% / 0.0% |
+| Ref NNNNN before, group after | UK area local | 1.2% / 66.2% | 1.1% / 60.6% / 5.8% | 1.1% / 66.2% / 0.0% |
+| Ref NNNNN before, group after | UK +44 | 8.6% / 72.4% | 8.6% / 63.2% / 9.2% | 8.6% / 72.4% / 0.0% |
+
+| Pair | Shape | Today either lost / both ticked / one row | Joined, the same / either below today | Stretch rows (chosen), the same / either below today |
+|---|---|---|---|---|
+| side by side | UK area local | 5.6% / 53.2% / 5.6% | 4.6% / 53.2% / 5.6% / 3.2% | 4.6% / 53.2% / 5.6% / 0.0% |
+| a group between | US 3 3 4 | 36.1% / 63.9% / 0.0% | 0.0% / 60.2% / 0.0% / 39.8% | 0.0% / 63.9% / 0.0% / 0.0% |
+| a group between | UK area local | 10.0% / 52.4% / 0.5% | 8.5% / 46.0% / 0.5% / 10.0% | 8.5% / 52.4% / 0.5% / 0.0% |
+| a group between | UK +44 | 12.5% / 51.8% / 0.0% | 12.5% / 45.8% / 0.0% / 8.5% | 12.5% / 51.8% / 0.0% / 0.0% |
+
+Through `detect` beside dates (`cross-piece.mjs`, `cross-noyield.mjs`, `cross-kind2.mjs`'s 60,000 strings). "Ticked row changed" is any ticked row of today's, of any kind, not listed with the same start, end and tick; "less than today" is a string whose ticked positions are not a superset of today's.
+
+| Layout | Strings | Joined with the yield: tick lost / less than today | Stretch rows, no yield: positions lost | Stretch rows with the yield (chosen): positions lost / ticked row changed / less than today |
+|---|---|---|---|---|
+| number, date | 10,030 | 0.40% / 0.40% | 0.54% | 0.00% / 0.00% / 0.00% |
+| number, group, date | 9,952 | 8.87% / 8.87% | 0.94% | 0.00% / 0.00% / 0.00% |
+| group, number, date | 9,910 | 7.78% / 7.78% | 1.83% | 0.00% / 0.00% / 0.00% |
+| number, date, number | 10,232 | 4.47% / 4.47% | 1.51% | 0.00% / 0.00% / 0.00% |
+| date, number | 9,958 | 3.52% / 3.52% | 0.00% | 0.00% / 0.00% / 0.00% |
+| date, group, number | 9,918 | 5.98% / 5.98% | 0.00% | 0.00% / 0.00% / 0.00% |
+
+Every position the stretch rows lose with no yield is a date's leading digits (`212 918 8665 1119 21 June 2014` lists `1119 21` and `June 2014`; `2389 +44 20 3149 6135 18/01/1992` lists `18` and `/01/1992`), which is why the yield stays. With the yield, the strings whose rows differ from today's are the same under both rules, 0.40% to 8.87% by layout; under stretch rows each difference is an added unticked row.
+
+Time (`timing-piece.mjs`), `timing.mjs`'s shapes and method, CPU time per call, the median of five samples each averaged over at least 300 ms, rotating order, this machine (which runs today's figures faster than the machine of 2026-10-15):
+
+| Shape (100,000 characters unless named) | Today | Stretch rows, reach skip (chosen) | Stretch rows, no skip | Joined, reach skip |
+|---|---|---|---|---|
+| four digit groups | 27 ms | 26 ms | 25 ms | 25 ms |
+| 10,000 US numbers side by side | 120 ms | 125 ms | 453 ms | 125 ms |
+| UK numbers side by side | 26 ms | 26 ms | 45 ms | 27 ms |
+| US numbers in brackets | 22 ms | 22 ms | 33 ms | 23 ms |
+| a stray group, then a US number | 31 ms | 47 ms | 57 ms | 41 ms |
+| a US number, then a stray group | 31 ms | 45 ms | 52 ms | 43 ms |
+| six digit groups | 15 ms | 16 ms | 15 ms | 14 ms |
+| (0) groups | 22 ms | 22 ms | 22 ms | 21 ms |
+
+Every shape of `tests/unit/detect-adversarial.test.ts` (80 read from its list) through the phone detector alone, one call each, then the heaviest timed the same way as above:
+
+| Adversarial shape | Today | Stretch rows (chosen) | Joined |
+|---|---|---|---|
+| random groups of one to three digits | 360 ms | 547 ms | 484 ms |
+| random one and two digit groups | 266 ms | 547 ms | 578 ms |
+| single digit groups | 235 ms | 235 ms | 203 ms |
+| single zeros | 328 ms | 273 ms | 344 ms |
+| repeated 00 prefixes | 120 ms | 115 ms | 125 ms |
+| two digit groups | 94 ms | 86 ms | 90 ms |
+| repeated 011 prefixes | 66 ms | 63 ms | 66 ms |
+| digits split by spaces | 43 ms | 44 ms | 41 ms |
+| cards beside their expiry | 45 ms | 47 ms | 43 ms |
+| one long run of four digit groups | 31 ms | 31 ms | 37 ms |
+| UK numbers side by side | 30 ms | 31 ms | 31 ms |
+| US numbers side by side | 30 ms | 31 ms | 30 ms |
+
+Reading: the reach skip keeps numbers side by side at today's cost. Where nearly every unit inside a row has a free unit in reach, as in random one to three digit groups, the rescue asks most units' windows and the time grows by half to double, under either rule; the worst, about 547 ms, is within AC-16's 2 s. One call each put the worst at 282 ms today and 562 ms with stretch rows.
+
+### The UK losses the rescue leaves (2026-10-17)
+
+`uk-losses.mjs` replays the layouts above and classifies every string that still loses a digit under stretch rows; `uk-first-kinds.mjs` counts the first round's cell over rows of every kind; `plus-alone.mjs` draws 20,000 `+44` numbers the build's way with a new seed. A number's verdict is libphonenumber-js's `max` metadata on the number alone.
+
+| Cell | Lose, stretch rows (today) | Same digits as today | Cause |
+|---|---|---|---|
+| Three groups before a UK area number, first round, through `detect` | 11.3% (15.3%) | 329 of 339; the other 10 lose fewer | 9.8 points: the stray groups and the number's head read as a card that passes the Luhn check by chance (300 of 3,000 strings hold a card), and card outranks phone, so those digits are in a card row and the rest in a phone piece; nothing is left without a row. 1.5 points (5.8 today): no row of any kind, the build's cause below. |
+| Three groups before a UK area number, the build, phone alone | 3.9% (6.2%) | 118 of 118 | Every number is only possible. A window starting at a stray group takes its head and the last group is left: a possible window, unticked (92 strings; `6156 2500 1764 020 6393 7381` lists `1764 020 6393`, read as a US number with its trunk `1`, and leaves `7381`), or a valid one, ticked (26; `7411 7028 0901 020 2045 9229` lists `0901 020 2045`, a UK `09` number, and leaves `9229`). The rescue follows only valid windows, and the number's own window is only possible. |
+| A `+44` number then a group, the build | 8.5% (8.5%) | 255 of 255 | Every number is only possible, and its `+44` (for `01632`, its area code too) is left: the valid pass finds no valid window from the `+`, moves on and takes a valid US reading of what follows, ticked. 137 strings read the number's own national digits as US (`+44 20 2350 8363` lists `20 2350 8363`, the US number 202 350 8363, and leaves `+44`); 118 read an `01632` number's local digits and the stray group as US (`+44 1632 833 546 5086` lists `833 546 5086` and leaves `+44 1632`). |
+| Two `+44` numbers with a group between, the build | 12.5% (12.5%) | 271 of 271 (first number), 116 of 116 (second) | The same cause, in each number's own run: the first number loses 9.0% (136 strings its `+44` to its own digits read as US, 135 its `+44 1632` to a US reading that takes the group between), the second 3.9% (all its `+44`). |
+| A `+44` number alone, 20,000 drawn the build's way | 4.0% | (no rescue applies) | 27.4% of these numbers are only possible, and every one that loses its `+44` is one of them. With a group after, 8.7%. |
+
+Reading: no string in these cells loses a digit the rescue could have kept under AC-1's rule, and none loses more than today. The losses differ in weight. The `+44` cells leave the country code, and for an `01632` number the area code, while the subscriber's digits sit in a ticked row. The three groups cells leave a number's last group, the subscriber's own digits, beside a row that holds the rest. Both need the number to be only possible under the metadata, which a number in an allocated range is not; the first round's `+44` numbers, drawn after `20 7`, `20 3`, `161` and `113`, never lose a digit.
+
+### The cross check of 2026-10-17 (another model, read only)
+
+It found the stretch row design sound: rows the two passes choose are untouched, a stretch never overlaps a row or crosses a slash, the reach skip and the choice not to ask units in possible rows change no result, and the yield cannot change a lower kind's resolution. It raised eight gaps, each taken on the owner's word:
+
+1. A stretch's `reading` had no stored source; it is now the reading of the row owning the unit just before the stretch, which is always owned (AC-2, value sourcing).
+2. The yield trimmed only whitespace, so `212 918 8665 1119-21 June 2014` listed `1119-`; it now trims back to the last letter or digit (AC-15). Rerun with the prototype changed to match: every figure in *The rescued stretch as its own row* is unchanged (0 on every bar, the corpus unchanged), and that string lists `1119`.
+3. Which lower spans the yield reads: those kinds' spans as their detectors return them, sorted by start, against the stretch's full end, extension included; a stretch that begins inside one is dropped (AC-15, value sourcing).
+4. `rescued` is removed by destructuring before precedence, so no piece `freeStretches` builds carries it (AC-15).
+5. The "rows equal today's" pin needs a baseline once the chooser is rebuilt: today's rows are written as literals, and the reach skip is pinned by today's parse count on numbers side by side (test scenarios, task 2).
+6. The extension argument is now the real one: a row with a unit after it has no extension, and a stretch is never a run's first unit, so it never starts inside an extension's digits (data model; `212 555 0123 ext. 4567 212 555 0124` pinned unchanged).
+7. `MAX_PARSES_PER_GROUP` still bounds each start; the total grows only by the starts the rescue asks (AC-14).
+8. Pins for a stretch a higher kind takes whole (`9346 212 555 0123@example.com`, the stretch dropped), one beside an IBAN (`0123` kept, unticked) and one with an extension (`0123 ext. 45`) (test scenarios).
+
+It also suggested that AC-1's "none of the 1,258 strings changes" was too strong, since the rescue adds rows; it was measured (0 of 1,258 change through `detect`), so it stands.
 
 ### Carried from the fourth review (not remeasured here)
 

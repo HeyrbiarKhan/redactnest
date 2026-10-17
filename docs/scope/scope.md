@@ -290,7 +290,7 @@ The misses feature 12 and its four reviews left open in spec 0005's Follow-up, d
 spec [0014](../specs/0014-detector-follow-ups/index.md) · code in `src/detect` (`phone.ts`, `date.ts`, `us-ssn.ts`, `uk-nino.ts`), `src/engine` (`find.ts`, the off line constants), `scripts/lib/detection-fixtures.mjs`, `scripts/make-fixture.mjs`, `.github/workflows/ci.yml`
 - [x] Design it (spec): `/architect detector follow ups`
 - [ ] Build it: `/develop detector follow ups`
-  - [ ] The phone rescue: after both choosing passes, a stranded digit group joins the row a valid window extends, unticked, and yields to a date in `detect`; `detect-phone.pdf` gains the four rescue lines · AC-1, AC-2, AC-14, AC-15
+  - [ ] The phone rescue: after both choosing passes, a stranded digit group a valid window covers is listed as a row of its own, unticked, every row listed today kept exactly as it is, and the group yields to a date in `detect`; `detect-phone.pdf` gains the four rescue lines · AC-1, AC-2, AC-14, AC-15
   - [ ] The off line boundary in the find step: glyphs smaller and shifted off their line, or raised by code point, leave the text as a join and the target quads part round them; `detect-markers.pdf` with a real raised marker after every kind, and the engine tests that each row redacts with the marker left · AC-4 to AC-8
   - [ ] The text rules: the two INV-14 unit rules in the phone detector, and the one digit tolerances for a two digit year, a bare Social Security number and a National Insurance number, each measured on random codes first · AC-3, AC-9, AC-10
   - [ ] Bookkeeping: the `covering` comment, the CI step that prints the phone detector's time, the Finds columns pin, spec 0005's amendments and ticks · AC-10 to AC-13
@@ -362,6 +362,7 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **OCR for scanned PDFs**: the obvious next move once rectangles exist · needs a decision
 - **Per country EU national IDs**: beyond the UK National Insurance number already planned · needs a decision
 - **Masking lower detector kinds**: run each lower kind with every position a higher kind holds read as whitespace, so a phone window can never start inside a card and `5500 0000 0000 0004 05/12/2026` lists its date whole; needs its own measurement against the overlap piece cases · needs a decision · from spec 0014
+- **Phone numbers the metadata calls only possible, beside stray groups**: a window from a stray group strands a UK number's last group, and a `+44` number loses its country code to a US reading of its digits; two candidate rescues that only add unticked rows, to measure together like spec 0014's AC-1 · needs a decision · from spec 0014
 - **Batch processing**: more than one document at a time · needs a decision
 - **Teams and organizations**: shared accounts and seats · needs a decision
 - **API access**: programmatic redaction · needs a decision
