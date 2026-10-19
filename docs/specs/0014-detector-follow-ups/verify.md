@@ -30,3 +30,5 @@ Run the tool at `/tool` against a production build (`pnpm build && pnpm start`).
 - [ ] Spec 0005 carries every amendment *Amends spec 0005* lists and its two met Follow-ups are ticked with their pointers → AC-13
 - [ ] The Finds columns pin is in `tests/e2e/design-system.spec.ts` and `tests/component/app/home-page.test.tsx`, and spec 0013's Follow-up item is ticked → AC-12
 - [ ] `tests/unit/detect-adversarial.test.ts` holds a rescue shape within the budget and the parse count pin still passes → AC-14
+- [ ] `pnpm exec vitest run --project unit tests/unit/detect-adversarial.test.ts -t "exactly as often"` → passes: 2,000 seeded US numbers side by side parse exactly 2,000 times, as before the rescue, so the reach skip holds → AC-1, AC-14
+- [ ] `node scripts/make-fixture.mjs`, then `git status tests/fixtures` → clean: `detect-markers.pdf` and the four changed detect fixtures are written from the script alone → AC-6, AC-9
