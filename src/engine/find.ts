@@ -194,6 +194,14 @@ async function findOnPage(
     // where a match from ordinary extraction already does, so one place on
     // the page is one row. Listed after the page's ordinary matches, in their
     // own reading order.
+    //
+    // Only sound quads say where an ordinary match sits: an unsound one has no
+    // inside worth asking about, so a point test against it could hide a
+    // hidden match that sits somewhere else. A match found only with
+    // replacement text ignored, at a place whose ordinary match has unsound
+    // quads, is therefore listed too, as two blocked rows for one place. That
+    // has no safety effect, since neither row can be ticked (spec 0014,
+    // AC-10, the pattern detection review's Minor 1).
     const covering = targets.flatMap(({ quads }) => quads.filter(isSoundQuad));
     const hiddenContext = contextReader(ignoring.points, contextChars);
     const hidden = candidatesIn(ignoring, index)

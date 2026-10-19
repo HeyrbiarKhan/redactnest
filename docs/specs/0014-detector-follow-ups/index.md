@@ -154,11 +154,11 @@ Skateboard: the live leak is the thinnest usable whole and ships first on its ow
 9. Add one AC-9 line per kind to `detect-date.pdf`, `detect-us-ssn.pdf` and `detect-uk-nino.pdf` (a plain glued digit, as those fixtures draw markers), regenerate, extend the expectations and `verify.md`. Satisfies **AC-9**, **AC-8** (built).
 
 **Slice 4: bookkeeping**
-10. The `covering` comment in `src/engine/find.ts`. Satisfies **AC-10**.
+10. The `covering` comment in `src/engine/find.ts`. Satisfies **AC-10** (built).
 11. `/test`: the Finds columns pin of spec 0013's AC-11 in `tests/e2e/design-system.spec.ts` and `tests/component/app/home-page.test.tsx`; tick spec 0013's Follow-up. Satisfies **AC-12**.
 12. `/check verify`: `verify.md` here, and the new steps in spec 0005's `verify.md`. Satisfies **AC-6**, **AC-7**, **AC-9**.
 13. Add the CI step of AC-11 to `.github/workflows/ci.yml` (read only, as every workflow but the tag deploy must stay; `tests/unit/workflows.test.ts` holds that), read the worst phone time from the pull request's run and record it in `rationale.md` with the runner and date; answer the 1 s question in Follow-up. Satisfies **AC-11**.
-14. Amend spec 0005 as *Amends spec 0005* lists, tick its met Follow-ups, and record the fourth review's four Minors as met. Satisfies **AC-13**.
+14. Amend spec 0005 as *Amends spec 0005* lists, tick its met Follow-ups, and record the fourth review's four Minors as met. Satisfies **AC-13** (built).
 
 ## Consequences
 
