@@ -121,8 +121,10 @@ describe("a National Insurance number beside other digits (AC-28)", () => {
  * to the six digits no longer hides the number. It is listed unticked, taking
  * that letter when it is a suffix letter, whatever follows it. Spec 0014,
  * AC-9: so does one digit with nothing alphanumeric after it, a footnote
- * marker as NFKC reads `¹`, outside the row; two digits, or one with a letter
- * or digit after it, still drop it as part of a longer number.
+ * marker as NFKC reads `¹`, outside the row, when the number is written with
+ * no space; two digits, one with a letter or digit after it, or one after a
+ * number with a space in it still drop it, the last because the phone
+ * detector reads those digit groups as it did before.
  */
 describe("a National Insurance number glued to what follows it (AC-23, INV-17)", () => {
   it.each([
@@ -167,6 +169,11 @@ describe("a National Insurance number glued to what follows it (AC-23, INV-17)",
     ["a marker then a word", "AB1234561name"],
     ["a tracking number", "AB123456789GB"],
     ["a spaced date after two letters", "on 05 12 1980"],
+    // Spec 0014, AC-9, as narrowed on 2026-10-19: written with a space, the
+    // number's digits are the phone detector's, as before.
+    ["a marker after a spaced number", "AB 12 34 561"],
+    ["a marker after a space before the digits", "AB 1234561"],
+    ["a marker after a space before the last pair", "AB1234 561"],
   ])("still finds nothing with %s", (_what, text) => {
     expect(found(`Ref ${text} here`)).toEqual([]);
   });

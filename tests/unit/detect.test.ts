@@ -418,36 +418,75 @@ describe("footnote markers through detect (AC-19, AC-20, AC-22)", () => {
     expect(withTicks(nfkc(text))).toEqual(expected);
   });
 
-  /**
-   * Spec 0014, AC-3: a date with a marker glued on as a plain digit lists as
-   * the date, and the digits beside it give no phone row, since the phone
-   * detector reads that unit as a date (INV-14).
-   */
-  it.each<[string, [DetectorKind, string, boolean][]]>([
-    ["DOB: 05.12.1980¹ 12 High Street", [["date", "05.12.1980", true]]],
-    ["John Smith 05.12.1980¹ 44 Engineer", [["date", "05.12.1980", false]]],
-    ["Born 05.12.1980¹ 44 years", [["date", "05.12.1980", true]]],
-    ["John Smith 1980-12-05¹ 44", [["date", "1980-12-05", false]]],
-    ["Page 3 05.12.1980¹", [["date", "05.12.1980", false]]],
-    ["27-09-2026¹ 5", [["date", "27-09-2026", false]]],
-    ["12-05-19801", [["date", "12-05-1980", false]]],
-    [
-      "2026-09-27 10:00-2026-09-28 11:00",
-      [
-        ["date", "2026-09-27", false],
-        ["date", "2026-09-28", false],
-      ],
-    ],
-    ["01-02-03-04-05", [["phone", "01-02-03-04-05", false]]],
-  ])("lists %s with no phone row holding a date (spec 0014, AC-3)", (text, expected) => {
-    expect(withTicks(nfkc(text))).toEqual(expected);
-  });
-
   it("leaves the marker after SSN 223-45-6789¹ as a ticked phone piece", () => {
     expect(withTicks(nfkc("SSN 223-45-6789¹"))).toEqual([
       ["us-ssn", "223-45-6789", false],
       ["phone", "1", true],
     ]);
+  });
+});
+
+/**
+ * Spec 0014, AC-9, as the owner narrowed it on 2026-10-19: a marker read on
+ * OCR text, where it is a plain digit, never takes a digit from a row listed
+ * before spec 0014, and never a tick. The bare Social Security marker, the two
+ * digit year marker and AC-3's two phone unit rules each did, so they were
+ * dropped; the National Insurance marker stays only where letters glue the
+ * number shut. Each row is written out as `detect` listed it before.
+ */
+describe("a marker on OCR text beside other rows (spec 0014, AC-9)", () => {
+  it("keeps the phone row after SSN 123-45-6789 whole and ticked", () => {
+    expect(withTicks("SSN 123-45-6789 tel 2125550123 ok")).toEqual([
+      ["us-ssn", "123-45-6789", true],
+      ["phone", "2125550123", true],
+    ]);
+  });
+
+  // Each listed a marker reading that cut or replaced the row below.
+  it.each<[string, [DetectorKind, string, boolean][]]>([
+    ["SSN 2125550123", [["phone", "2125550123", false]]],
+    ["Born 25.05.804 282 246 9648", [["phone", "25.05.804 282", true]]],
+    ["21-05-566 988 7048", [["phone", "21-05-566 988", true]]],
+    ["22-04-20137 8", [["phone", "22-04-20137 8", true]]],
+    ["DOB: 05.12.19801 12 High Street", [["phone", "05.12.19801 12", false]]],
+    [
+      "Ref 78-1972-01-21 020 3114 8249",
+      [
+        ["phone", "78-1972-01-21", true],
+        ["phone", "020 3114 8249", true],
+      ],
+    ],
+    [
+      "2026-09-27 10:00-2026-09-28 11:00",
+      [
+        ["date", "2026-09-27", false],
+        ["phone", "00-2026-09-28 11", false],
+      ],
+    ],
+    // A National Insurance number with a space in it: the phone row stands.
+    ["NI PX 85 87 420 020", [["phone", "85 87 420 020", true]]],
+  ])("keeps the rows listed before in %s", (text, expected) => {
+    expect(withTicks(text)).toEqual(expected);
+  });
+
+  // Written together, the letters keep the phone detector out of the digits.
+  it.each<[string, [DetectorKind, string, boolean][]]>([
+    [
+      "NI AB1234561 212 555 0123",
+      [
+        ["uk-nino", "AB123456", false],
+        ["phone", "212 555 0123", true],
+      ],
+    ],
+    [
+      "Tel 212 555 0123 NI AB1234561 ok",
+      [
+        ["phone", "212 555 0123", true],
+        ["uk-nino", "AB123456", false],
+      ],
+    ],
+  ])("adds only the National Insurance row in %s", (text, expected) => {
+    expect(withTicks(text)).toEqual(expected);
   });
 });
 

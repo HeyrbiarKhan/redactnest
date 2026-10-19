@@ -480,9 +480,6 @@ export const DETECT_DATE = Object.freeze([
   ["31.12.2027", false],
   ["27/09/2027", false],
   ["2027-09-28", false],
-  // Spec 0014, AC-9: a date of birth with a two digit year and a footnote
-  // marker glued after it, listed and ticked, the marker outside the row.
-  ["12/05/82", true],
   ["27 September 2026", false],
 ]);
 
@@ -538,9 +535,6 @@ export const DETECT_US_SSN = Object.freeze([
   // Spec 0005, AC-22 (third update of 2026-10-11): a number with a footnote
   // marker glued after it, listed unticked.
   ["178-05-1123", false],
-  // Spec 0014, AC-9: a bare number after its SSN word with a marker glued
-  // after it, listed unticked.
-  ["141592653", false],
   ["567 89 0123", true],
 ]);
 
@@ -573,8 +567,7 @@ export const DETECT_UK_NINO = Object.freeze([
  * a date of birth and after an ISO date, and a date label glued to a date by
  * a dot and directly (INV-17, third update of 2026-10-11), each marker drawn
  * as a plain glued `1`, as the IBAN fixture draws its footnote style digit;
- * a date of birth with a two digit year and a marker (spec 0014, AC-9); and a
- * written date wrapped across two lines of one block.
+ * and a written date wrapped across two lines of one block.
  */
 export function detectDate() {
   return document(() => [
@@ -616,9 +609,8 @@ export function detectDate() {
         line("F1", 12, 72, 320, "Born 12/05/19811 per the register") +
         line("F1", 12, 72, 300, "Exp.31.12.2027 printed on the card") +
         line("F1", 12, 72, 280, "Issued27/09/2027 and logged 2027-09-281 later") +
-        line("F1", 12, 72, 260, "Born 12/05/821 per the register") +
-        line("F1", 12, 72, 240, "The lease began on 27 September") +
-        line("F1", 12, 72, 226, "2026 and runs for one year"),
+        line("F1", 12, 72, 260, "The lease began on 27 September") +
+        line("F1", 12, 72, 246, "2026 and runs for one year"),
     },
   ]);
 }
@@ -700,9 +692,8 @@ export function detectIban() {
  * Spec 0005, AC-22. Social Security numbers hyphenated and spaced, a bare one
  * after an SSN phrase; a bare run with no SSN word and numbers the SSA never
  * issues; a number with a footnote marker glued after it, drawn as a plain
- * `1` (third update of 2026-10-11); a bare number after its SSN word with a
- * marker, drawn the same way (spec 0014, AC-9); and a spaced number wrapped
- * across two lines of one block.
+ * `1` (third update of 2026-10-11); and a spaced number wrapped across two
+ * lines of one block.
  */
 export function detectUsSsn() {
   return document(() => [
@@ -714,9 +705,8 @@ export function detectUsSsn() {
         line("F1", 12, 72, 680, "Order 456789012 shipped") +
         line("F1", 12, 72, 660, "Never issued 666-12-3456, 900-12-3456 and 123-45-0000") +
         line("F1", 12, 72, 640, "SSN 178-05-11231 on the form") +
-        line("F1", 12, 72, 620, "SSN 1415926531 on the form") +
-        line("F1", 12, 72, 600, "Applicant number 567 89") +
-        line("F1", 12, 72, 586, "0123 confirmed"),
+        line("F1", 12, 72, 620, "Applicant number 567 89") +
+        line("F1", 12, 72, 606, "0123 confirmed"),
     },
   ]);
 }

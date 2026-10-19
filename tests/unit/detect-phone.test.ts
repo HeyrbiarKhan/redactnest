@@ -437,39 +437,34 @@ describe("what is not a phone number", () => {
 });
 
 /**
- * Spec 0014, AC-3, upholding INV-14 for text with no raised glyph, as an OCR
- * layer hands a footnote marker over: a numeric date with one digit glued on
- * is a date unit, and a year first date inside a hyphen glued unit is a unit
- * of its own, so no window holds either. Each listed a phone row before.
+ * Spec 0014, AC-9, as the owner narrowed it on 2026-10-19: only a full numeric
+ * date is a date unit (INV-14). A date with one digit glued on, as OCR text
+ * hands a footnote marker over, and a year first date inside a hyphen glued
+ * unit stay phone units, as before spec 0014. Read as date units, they took
+ * digits from these rows: `22-04-20137 8` lost its ticked row to an unticked
+ * date, and `78-1972-01-21`, which no date row reads, lost its row
+ * altogether. A drawn marker is off its line (AC-4) and never reaches here.
+ * Each row is written out as the detector listed it before.
  */
-describe("dates inside a phone unit (spec 0014, AC-3)", () => {
-  it.each([
-    ["a dotted date with a marker", "DOB: 05.12.19801 12 High Street"],
-    ["a year first date with a marker", "John Smith 1980-12-051 44"],
-    ["a dotted date, a dot and a marker", "Born 12.05.1980.1 44 years"],
-    ["a dashed date with a marker before a digit", "27-09-20261 5"],
-    ["a dotted date with a marker after a page number", "Page 3 05.12.19801"],
-    // The two digit year, mirrored from the date detector's tolerance (AC-9).
-    ["a dashed date with a two digit year and a marker", "Born 05-12-801 2345 x"],
-    ["a dotted date with a two digit year, a dot and a marker", "Born 05.12.80.1 2345 x"],
-    // The year first date is cut out on both sides.
-    ["an ISO interval with plain times", "2026-09-27 10:00-2026-09-28 11:00"],
-    ["a year first date inside a hyphen glued code", "Ref 00-2026-09-28-11 here"],
-  ])("finds nothing in %s", (_what, text) => {
-    expect(found(text)).toEqual([]);
-  });
-
+describe("a date with a digit glued on stays a phone unit (spec 0014, AC-9)", () => {
   it.each<[string, [string, boolean][]]>([
-    // No four digit group, so nothing is cut.
-    ["01-02-03-04-05", [["01-02-03-04-05", false]]],
-    // The date opens its unit with nothing cut before it, so it keeps its row.
+    ["DOB: 05.12.19801 12 High Street", [["05.12.19801 12", false]]],
+    ["Born 12.05.1980.1 44 years", [["12.05.1980.1 44", false]]],
+    ["John Smith 1980-12-051 44", [["1980-12-051 44", false]]],
+    ["22-04-20137 8", [["22-04-20137 8", true]]],
+    ["21-05-566 988 7048", [["21-05-566 988", true]]],
+    ["Born 25.05.804 282 246 9648", [["25.05.804 282", true]]],
+    ["Born 05.12.80.1 2345 x", [["05.12.80.1 2345", false]]],
+    [
+      "Ref 78-1972-01-21 020 3114 8249",
+      [
+        ["78-1972-01-21", true],
+        ["020 3114 8249", true],
+      ],
+    ],
+    ["Ref 00-2026-09-28-11 here", [["00-2026-09-28-11", false]]],
     ["2026-09-27-01", [["2026-09-27-01", true]]],
-    // A two digit year takes a marker only after a two digit day and month,
-    // as the date detector does (AC-9). The date detector lists neither of
-    // these, so were the unit a date unit its digits would have no row.
-    ["Born 5-12-801 2345 x", [["5-12-801 2345", true]]],
-    ["Born 5.12.801 2345 x", [["5.12.801 2345", true]]],
-  ])("keeps the row in %s", (text, rows) => {
+  ])("keeps the row listed before in %s", (text, rows) => {
     expect(found(text)).toEqual(rows);
   });
 });

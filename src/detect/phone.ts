@@ -232,14 +232,6 @@ const MAX_GAP = 3;
 
 /** A digit in any script. */
 const DIGIT = /^\p{Nd}$/u;
-/** An ASCII digit, the only kind a numeric date or its footnote marker holds. */
-const ASCII_DIGIT = /^[0-9]$/u;
-/**
- * Anything but an ASCII digit, which parts a numeric date into its groups.
- * Unanchored, since `split` asks it at each code point, but still one code
- * point with no quantifier.
- */
-const NOT_ASCII_DIGIT = /[^0-9]/u;
 const SPACE = /^\s$/u;
 const LETTER = /^\p{L}$/u;
 // `ALPHANUMERIC` (what a number may not be cut out of, AC-2) and `HYPHEN` (what
@@ -320,15 +312,6 @@ function groupAt(points: readonly string[], at: number): Group | null {
  * The unit at `at`: a group, then further groups each glued to the one before
  * by one hyphen, one dot, or nothing where a bracket closes or opens between
  * them (`(0)20`, `(212)555-0123`).
- *
- * A year first date glued inside by hyphens is cut out as a unit of its own
- * (spec 0014, AC-3, upholding INV-14): the unit before it ends at the hyphen,
- * and the date's own unit, which then opens right after a hyphen glued to a
- * digit, ends with the date. So `00-2026-09-28-11` parts into `00`,
- * `2026-09-28` and `11`, and the hyphens at the cuts end the run, as any
- * character but whitespace or a slash after a unit does. A date that opens its
- * unit with nothing cut before it is left as it is, so `2026-09-27-01` keeps
- * today's row.
  */
 function unitAt(
   points: readonly string[],
@@ -336,9 +319,6 @@ function unitAt(
 ): Omit<Unit, "plus" | "afterSlash"> | null {
   let group = groupAt(points, at);
   if (!group) return null;
-
-  const cutBefore = HYPHEN.test(points[at - 1] ?? "") && DIGIT.test(points[at - 2] ?? "");
-  const cutDateEnd = cutBefore ? yearFirstDateAt(points, at) : null;
 
   let digits = "";
   let count = 0;
@@ -358,11 +338,8 @@ function unitAt(
     end = group.end;
 
     const glue = points[end];
-    if (end === cutDateEnd) {
-      group = null;
-    } else if (glue !== undefined && (HYPHEN.test(glue) || glue === ".")) {
-      const cut = HYPHEN.test(glue) && yearFirstDateAt(points, end + 1) !== null;
-      group = cut ? null : groupAt(points, end + 1);
+    if (glue !== undefined && (HYPHEN.test(glue) || glue === ".")) {
+      group = groupAt(points, end + 1);
     } else if (group.bracketed || glue === "(") {
       group = groupAt(points, end);
     } else {
@@ -370,52 +347,8 @@ function unitAt(
     }
   }
 
-  const text = points.slice(at, end).join("");
-  const date = isNumericDate(text) || isMarkedDate(text);
+  const date = isNumericDate(points.slice(at, end).join(""));
   return { start: at, end, digits, count, written, firstGroup, date };
-}
-
-/**
- * Where a year first date glued by hyphens (`2026-09-28`, four digits, then
- * two and two) that starts at `at` ends, or `null`. Reads at most three
- * groups, so it costs a bounded stretch after `at` (INV-7).
- */
-function yearFirstDateAt(points: readonly string[], at: number): number | null {
-  const year = groupAt(points, at);
-  if (!year || year.bracketed || codePoints(year.digits).length !== 4) return null;
-  if (!HYPHEN.test(points[year.end] ?? "")) return null;
-  const month = groupAt(points, year.end + 1);
-  if (!month || month.bracketed || !HYPHEN.test(points[month.end] ?? "")) return null;
-  const day = groupAt(points, month.end + 1);
-  if (!day || day.bracketed) return null;
-  return isNumericDate(points.slice(at, day.end).join("")) ? day.end : null;
-}
-
-/**
- * Is a unit, as written, a numeric date with one footnote digit glued on?
- * Spec 0014, AC-3, upholding INV-14 for text with no raised glyph, such as
- * OCR text, where a marker comes back as a plain digit: `05.12.1980¹` reads
- * `05.12.19801`, which no phone window may hold.
- *
- * The digit may follow the date or a dot after it (`12.05.1980.1`, as spec
- * 0005's INV-17 reads a dot). The date's year has four digits, or two after a
- * day and a month of two digits each (`12-05-801`), the same shapes the date
- * detector tolerates a marker after (AC-9), so a unit the date detector lists
- * is never read as a phone number.
- */
-function isMarkedDate(text: string): boolean {
-  if (!ASCII_DIGIT.test(text.at(-1) ?? "")) return false;
-  const bare = text.slice(0, -1);
-  return [bare, bare.endsWith(".") ? bare.slice(0, -1) : ""].some(
-    (date) => isNumericDate(date) && yearAllowsMarker(date),
-  );
-}
-
-/** A four digit year, or a two digit one after a two digit day and month. */
-function yearAllowsMarker(date: string): boolean {
-  const [first = "", second = "", third = ""] = date.split(NOT_ASCII_DIGIT);
-  if (first.length === 4 || third.length === 4) return true;
-  return first.length === 2 && second.length === 2 && third.length === 2;
 }
 
 /**
