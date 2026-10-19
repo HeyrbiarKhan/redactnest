@@ -34,7 +34,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 21 | Launch readiness | Release 2 | done |
 | 22 | Brand & UI refresh | Release 2 | done |
 | 23 | Legal review | Release 6 | planned |
-| 24 | Detector follow ups | Release 3 | in-progress |
+| 24 | Detector follow ups | Release 3 | done |
 | 25 | More date forms | Release 3 | planned |
 | 26 | UI polish | Release 3 | planned |
 
@@ -283,9 +283,9 @@ spec [0005](../specs/0005-pattern-detection/index.md) · code in `src/detect` (n
 - [x] Test it: `/test remaining detectors` (first run done, and again for the update of 2026-10-10; again for the second update; again for the third update)
 - [x] Review it (fresh model): `/check review remaining detectors` (first review done, [2026-10-10](../reviews/2026-10-10-feat-remaining-detectors.md); for the update, [second review](../reviews/2026-10-10-feat-remaining-detectors-second.md); for the second update, [third review](../reviews/2026-10-10-feat-remaining-detectors-third.md); for the third update, [fourth review](../reviews/2026-10-11-feat-remaining-detectors-fourth.md))
 
-### 24. Detector follow ups · in-progress · Beta + review · from spec 0005
+### 24. Detector follow ups · done · Beta + review · from spec 0005
 The misses feature 12 and its four reviews left open in spec 0005's Follow-up, designed in one pass because they share a cause: a neighbour, or a footnote marker glued to a value, hides that value or gives it the wrong row. A superscript boundary in the find step is the candidate that could settle most of the marker cases at once, instead of one digit tolerances kind by kind.
-**Done when:** every open detector item in spec 0005's Follow-up is settled, measured before any rule changes. A phone window no longer takes digits from a neighbour or reads a full date (with a footnote marker or without) as a phone number, so INV-14 holds for every layout the date detector reads. A footnote marker glued after an email, a phone number, a date with a two digit year, a bare Social Security number after its word, or a National Insurance number with no suffix either gets a row or stays a recorded, measured miss. And a real raised marker read through MuPDF is held by a test.
+**Done when:** every open detector item in spec 0005's Follow-up is settled, measured before any rule changes. A digit group a phone window strands beside a number gets a row of its own, unticked. A full date with a footnote marker drawn raised is never read as a phone number, because the off line boundary in the find step parts the marker from the date before any detector reads it (spec 0014, AC-4 and AC-6). A plain digit glued to a date, as OCR text gives, still reads into a phone row as it did before this feature, and so does the ISO interval with plain times (`00-2026-09-28 11`): the date units that fixed both were taken out in the owner's narrowing of 2026-10-19, and spec 0014's Follow-up records both for `/architect`. A footnote marker glued after an email, a phone number, a date with a two digit year, a bare Social Security number after its word, or a National Insurance number with no suffix either gets a row or stays a recorded, measured miss. And a real raised marker read through MuPDF is held by a test.
 **Also owed here:** spec 0005's smaller open items: a comment at each of the two INV-14 guards in `src/detect/phone.ts` naming the other, `covering` in `src/engine/find.ts` built only from ordinary matches' sound quads (the pattern detection review's Minor 1), and the phone budget measured on the CI runner. Also spec 0013's `/test` item from feature 12: pin the Finds columns as the Strips list's are pinned (AC-11).
 spec [0014](../specs/0014-detector-follow-ups/index.md) · code in `src/detect` (`phone.ts`, `uk-nino.ts`), `src/engine` (`find.ts`, the off line constants), `scripts/lib/detection-fixtures.mjs`, `scripts/make-fixture.mjs`, `.github/workflows/ci.yml`
 - [x] Design it (spec): `/architect detector follow ups`
