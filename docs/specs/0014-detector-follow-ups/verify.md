@@ -6,7 +6,7 @@ Run the tool at `/tool` against a production build (`pnpm build && pnpm start`).
 
 ## UI / manual
 
-- [ ] Open `detect-phone.pdf` → the `9346 212 555 0123` line lists `9346 212 555`, ticked, and a second Phone row `0123`, unticked; the `0131 410 5214 020 2977 5777` line lists `0131 410 5214`, ticked, and `020 2977 5777`, unticked, with no digit left outside a row; the card then UK number line lists its card, a Phone row `020`, ticked, and a Phone row `7946 0958`, unticked; every row the file listed before is still there with the same text and the same tick → AC-1, AC-2
+- [ ] Open `detect-phone.pdf` → the `9346 212 555 0123` line lists `9346 212 555`, ticked, and a second Phone row `0123`, unticked; the `0131 410 5214 020 2977 5777` line lists `0131 410 5214`, ticked, and `020 2977 5777`, unticked, with no digit left outside a row; the card then UK number line (`6293 6608 0005 7382 276 020 7946 0612`, its number unlike any other on the page) lists its card, a Phone row `020`, ticked, and a Phone row `7946 0612`, unticked; every row the file listed before is still there with the same text and the same tick → AC-1, AC-2
 - [ ] In `detect-phone.pdf`, the `212 918 8665 1119 21 June 2014` line lists a Phone row `212 918 8665`, ticked, a Phone row `1119`, unticked, and a Dates row `21 June 2014` whole → AC-15
 - [ ] In `detect-phone.pdf`, redact with the default ticks only, download and paste the page's text → every digit the build before this spec removed is gone (`9346 212 555` among them) and the rescued rows' digits remain (`0123`), so the default removed no less than before → AC-2
 - [ ] In `detect-phone.pdf`, tick the `0123` row as well, redact, download and paste the page's text → none of the line's digits remain, and every other number's row behaved as before → AC-1, AC-7
@@ -20,6 +20,8 @@ Run the tool at `/tool` against a production build (`pnpm build && pnpm start`).
 ## Code and records
 
 - [ ] `tests/unit/detect-phone.test.ts` holds every AC-1, AC-2 and AC-3 case by name, and every spec 0005 AC-27 case still passes → AC-1, AC-2, AC-3
+- [ ] `tests/unit/detect.test.ts` holds every AC-15 case through `detect` and through `DETECTORS.phone`, and pins with `toStrictEqual` that no span `detect` returns carries `rescued` → AC-15
+- [ ] `tests/unit/detection.test.ts` lists `detect-phone.pdf`'s four rescue lines (`DETECT_PHONE`, `DETECT_PHONE_OTHERS`, `DETECT_PHONE_DATES`) and redacts every row alone and together → AC-1, AC-15
 - [ ] `tests/unit/detection.test.ts` reads `detect-markers.pdf` and asserts rows, text, ticks, `after` and that no target quad contains a marker's centre; every other detect fixture's expectations are unchanged → AC-6, AC-8
 - [ ] `tests/unit/redaction-check.test.ts` redacts each `detect-markers.pdf` row alone and together, finds the marker in the output, and still refuses `superscript.pdf` → AC-7
 - [ ] `src/engine` holds `OFF_LINE_SIZE_MAX` (0.9), `OFF_LINE_SHIFT_MIN` (0.15), `OFF_LINE_STRETCH_MAX` (4), `OFF_LINE_MIN_LINE_GLYPHS` (3) and `SUPERSCRIPT_CODE_POINTS`, each commented as a rule about pages; the code point pin passes; no page or size limit elsewhere → AC-4, AC-5

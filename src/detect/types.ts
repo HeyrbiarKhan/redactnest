@@ -24,6 +24,12 @@ export interface Span {
   readonly end: number;
   /** The detector's own recommendation, spec 0005, AC-10. */
   readonly tickedByDefault: boolean;
+  /**
+   * A stretch the phone rescue lists as a row of its own (spec 0014, AC-1).
+   * Only `detectPhone` sets it, and `detect` reads it and strips it, so it
+   * never leaves this folder (AC-15).
+   */
+  readonly rescued?: true;
 }
 
 /**

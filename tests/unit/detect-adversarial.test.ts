@@ -34,6 +34,10 @@ import type { DetectorKind } from "@/worker/protocol";
  * code point past its marker, and a date start may look for a glued date
  * label as for a birth word, so it adds each value with one digit glued on,
  * labels glued to dates, dotted file names, and runs of five digit groups.
+ * Spec 0014's rescue asks for the windows of units inside a valid row where a
+ * stranded group is in reach, so it adds a stray group before and after each
+ * number, and numbers beside stray groups and written dates, where each
+ * stretch then yields to the date (AC-14).
  * Every detector reads every shape, so each is also tried on the others'
  * worst cases.
  *
@@ -103,6 +107,27 @@ function randomGroups(seed: number, sizes: number, separators: string): string {
     text += separators[next(separators.length)];
   }
   return text.slice(0, LENGTH);
+}
+
+/**
+ * `count` US numbers side by side, each `NXX NXX XXXX` with a real area code,
+ * seeded like `randomGroups`, so hardly two are alike and the memo cannot
+ * hide a parse.
+ */
+function usNumbersSideBySide(count: number): string {
+  let state = 777;
+  const next = (below: number) => {
+    state = (state * 48_271) % 2_147_483_647;
+    return state % below;
+  };
+  const digits = (length: number) =>
+    Array.from({ length }, () => String(next(10))).join("");
+  const areas = ["212", "415", "312", "617", "202"];
+
+  return Array.from(
+    { length: count },
+    () => `${areas[next(areas.length)]} ${2 + next(8)}${digits(2)} ${digits(4)}`,
+  ).join(" ");
 }
 
 /**
@@ -244,6 +269,11 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["unbroken cards with a footnote digit", "41111111111111111 "],
   ["spaced cards with a footnote digit", "4111 1111 1111 11111 "],
   ["five digit groups", "12345/12345/12345 "],
+  // Spec 0014, AC-14: every row with a stranded group in reach, so the rescue
+  // asks for its units' windows, and stretches that each yield to a date.
+  ["a stray group before each US number", "9346 212 555 0123 "],
+  ["a stray group after each US number", "212 555 0123 9346 "],
+  ["numbers, stray groups and written dates", "212 918 8665 1119 21 June 2014 "],
 ];
 
 /**
@@ -324,6 +354,19 @@ describe("the phone detector's parses", () => {
     parses.mockClear();
     DETECTORS.phone({ text: "020 7946 0958 and 020 7946 0958", joins: [] });
     expect(parses).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * Spec 0014, AC-14: the rescue asks for a unit's windows only where a
+   * stranded group is in reach, and numbers side by side leave none, so they
+   * cost exactly the parses they cost before the rescue. The count is a
+   * literal read from the detector as it stood before spec 0014, one parse
+   * per number; asking at every unit inside a row, with no reach test, parses
+   * 5,827 times here.
+   */
+  it("parses US numbers side by side exactly as often as before the rescue", () => {
+    DETECTORS.phone({ text: usNumbersSideBySide(2_000), joins: [] });
+    expect(parses).toHaveBeenCalledTimes(2_000);
   });
 
   it.each(SHAPES)(

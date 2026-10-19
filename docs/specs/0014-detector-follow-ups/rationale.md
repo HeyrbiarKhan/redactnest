@@ -443,6 +443,19 @@ It found the stretch row design sound: rows the two passes choose are untouched,
 
 It also suggested that AC-1's "none of the 1,258 strings changes" was too strong, since the rescue adds rows; it was measured (0 of 1,258 change through `detect`), so it stands.
 
+### The rescue as built (2026-10-19, task 2)
+
+The same scripts as *The rescued stretch as its own row* and *The UK losses the rescue leaves*, with today read from a copy of `src/detect` taken before the build and the stretch rows column read from the built `src/detect`. The built code differs from the `piece` prototype in three ways that change no row: a stretch carries the reading of the row just before it (never read), the yield is one sweep rather than a scan of every date per stretch, and no switch ships.
+
+- Named cases: every case in the table above lists the same rows, phone alone and through `detect`, and so do the strings listed under it.
+- Per string (`check-piece.mjs`, 40,000 strings): phone alone 32,269 the same and 7,731 adding rows; through `detect` 32,486 and 7,514; 0 on every bar (a row of today's changed, a tick lost, a digit lost, the default below today, an added row over one of today's). Corpus: 1,258 strings through `detect`, 0 change.
+- Both rounds' layouts (`layouts-piece.mjs`): every cell equals the stretch rows column above, the below today column 0.0% in every cell.
+- Beside dates (`cross-piece.mjs`, 60,000 strings): 0.00% positions lost, 0.00% ticked rows changed and 0.00% below today in all six layouts; rows differ from today's in 0.40% to 8.87%, as above, each an added unticked row.
+- The UK losses (`uk-losses.mjs`): every cell as recorded, every losing string losing the same digits as today.
+- Parses (`tests/unit/detect-adversarial.test.ts`): 2,000 seeded US numbers side by side parse 2,000 times before the build and after; with the reach test switched off, 5,827.
+
+Time, `timing.mjs`'s method on this machine, today against the built code: four digit groups 26 ms and 26 ms; 10,000 US numbers side by side 125 ms and 120 ms; UK numbers side by side 26 ms and 24 ms; US numbers in brackets 22 ms and 24 ms; a stray group then a US number 31 ms and 47 ms; a US number then a stray group 31 ms and 47 ms; six digit groups 15 ms and 14 ms; `(0)` groups 20 ms and 22 ms. The heaviest adversarial shapes: random one and two digit groups 266 ms and 546 ms, random groups of one to three digits 242 ms and 391 ms, single digit groups 195 ms and 188 ms, single zeros 172 ms and 180 ms; every other shape within a few milliseconds of today. All within AC-16's 2 s; `tests/unit/detect-adversarial.test.ts` passes alone with the three rescue shapes added.
+
 ### Carried from the fourth review (not remeasured here)
 
 The date plus one digit unit rule: 0 of 1,102 strings change; the four stolen examples become date rows; the phone side loses only a unit shaped like a real date plus one digit (about 0.1% of random `NN-NN-NNNNN` units). The two digit year tolerance with both leading groups of two digits: 6.4% to 6.7% unticked dates on random `NN?NN?NNN` codes, 0.0% on `N.N.NNN` and `N.NN.NNN`; 2 of 1,102 strings change, both pins. The bare Social Security tolerance: 3 of 1,102 strings change, all pins; 89.1% of random ten digit runs after `SSN ` list an unticked row. The real raised marker: glued at gaps up to 1.0 pt at 8 and 7 pt and 0.5 pt at 6.5 pt.

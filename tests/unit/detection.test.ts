@@ -37,6 +37,7 @@ import {
   DETECT_PHONE_COLUMN,
   DETECT_PHONE_DATES,
   DETECT_PHONE_LISTED,
+  DETECT_PHONE_OTHERS,
   DETECT_PHONE_SPACED,
   DETECT_UK_NINO,
   DETECT_UNICODE_EMAIL,
@@ -151,8 +152,10 @@ function occurrences(haystack: string, needle: string): number {
 /**
  * Redact `targets` from `name` and prove each is gone: on its page, the
  * output holds one occurrence fewer of its text than the source did, for each
- * target that named it. The engine's own self check has also passed, or the
- * run would have thrown.
+ * time a target's text holds it. A target holds its own text once, and a
+ * longer target may hold it too: spec 0014's rescued `0123` sits inside
+ * `(212) 555-0123` on the same page, and both go. The engine's own self check
+ * has also passed, or the run would have thrown.
  */
 async function expectRemoved(name: string, targets: readonly RedactionTarget[]) {
   const source = fixture(name);
@@ -160,10 +163,13 @@ async function expectRemoved(name: string, targets: readonly RedactionTarget[]) 
 
   for (const target of targets) {
     const text = target.text.replace(/\s/gu, "");
-    const named = targets.filter(
-      (other) => other.page === target.page && other.text.replace(/\s/gu, "") === text,
-    ).length;
-    expect(occurrences(packedText(output, target.page), text)).toBe(
+    const named = targets
+      .filter((other) => other.page === target.page)
+      .reduce(
+        (held, other) => held + occurrences(other.text.replace(/\s/gu, ""), text),
+        0,
+      );
+    expect(occurrences(packedText(output, target.page), text), text).toBe(
       occurrences(packedText(source, target.page), text) - named,
     );
   }
@@ -647,15 +653,24 @@ describe("code points above U+FFFF", () => {
 describe("phone numbers (AC-2, AC-10)", () => {
   it("finds every number with the tick its rule gives, and no look alike", async () => {
     const found = (await find("detect-phone.pdf")).filter(
-      (match) => match.kind !== "date",
+      (match) => match.kind === "phone",
     );
 
     expect(found.map((match) => [match.text, match.tickedByDefault])).toEqual(
       DETECT_PHONE.map(([text, ticked]) => [text, ticked]),
     );
-    expect(found.every((match) => match.kind === "phone" && match.blocked === null)).toBe(
-      true,
+    expect(found.every((match) => match.blocked === null)).toBe(true);
+  });
+
+  /** Spec 0014: the card before a UK number, the only other kind on the page. */
+  it("lists the card beside a number and nothing else", async () => {
+    const others = (await find("detect-phone.pdf")).filter(
+      (match) => match.kind !== "phone" && match.kind !== "date",
     );
+
+    expect(
+      others.map((match) => [match.kind, match.text, match.tickedByDefault]),
+    ).toEqual(DETECT_PHONE_OTHERS.map((row) => [...row]));
   });
 
   /** INV-14: the look alike dates are left for `date`, never read as phone numbers. */

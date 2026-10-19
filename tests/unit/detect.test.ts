@@ -154,6 +154,114 @@ describe("resolving overlaps (AC-3)", () => {
 });
 
 /**
+ * Spec 0014, AC-1 and AC-15, through `detect`: a stretch the phone rescue
+ * lists is a row of its own, unticked, and yields to a date, since phone
+ * outranks date and the phone detector cannot see where a date is read. It is
+ * cut back to its last letter or digit before the date, or dropped where
+ * nothing is left, and every row of today's keeps its place and its tick.
+ */
+describe("a rescued stretch beside other kinds (spec 0014, AC-15)", () => {
+  it.each<[string, [DetectorKind, string, boolean][], string[]]>([
+    // `1119` is a free group before the date, so it keeps a row; without the
+    // yield the date became `June 2014`.
+    [
+      "212 918 8665 1119 21 June 2014",
+      [
+        ["phone", "212 918 8665", true],
+        ["phone", "1119", false],
+        ["date", "21 June 2014", false],
+      ],
+      ["212 918 8665", "1119 21"],
+    ],
+    // The hyphen at the cut goes with it.
+    [
+      "212 918 8665 1119-21 June 2014",
+      [
+        ["phone", "212 918 8665", true],
+        ["phone", "1119", false],
+        ["date", "21 June 2014", false],
+      ],
+      ["212 918 8665", "1119-21"],
+    ],
+    // The date begins at the stretch's first digit, so it is dropped; without
+    // the yield the date became `/01/1992`.
+    [
+      "+44 20 3149 6135 18/01/1992",
+      [
+        ["phone", "+44 20 3149 6135", true],
+        ["date", "18/01/1992", false],
+      ],
+      ["+44 20 3149 6135", "18"],
+    ],
+    [
+      "212 555 0123 9346 21 June 2014",
+      [
+        ["phone", "212 555 0123", true],
+        ["date", "21 June 2014", false],
+      ],
+      ["212 555 0123"],
+    ],
+    // A higher kind holds the whole stretch, so precedence leaves no piece.
+    [
+      "9346 212 555 0123@example.com",
+      [
+        ["phone", "9346 212 555", true],
+        ["email", "0123@example.com", true],
+      ],
+      ["9346 212 555", "0123"],
+    ],
+    // Nothing below phone meets the stretch, so it is listed whole.
+    [
+      "9346 212 555 0123 GB82 WEST 1234 5698 7654 32",
+      [
+        ["phone", "9346 212 555", true],
+        ["phone", "0123", false],
+        ["iban", "GB82 WEST 1234 5698 7654 32", true],
+      ],
+      ["9346 212 555", "0123", "5698 7654 32"],
+    ],
+    [
+      "9346 212 555 0123 ext. 45",
+      [
+        ["phone", "9346 212 555", true],
+        ["phone", "0123 ext. 45", false],
+      ],
+      ["9346 212 555", "0123 ext. 45"],
+    ],
+    // Today's piece `020` beside the card keeps its tick (spec 0005, INV-16),
+    // and the rest of the UK number is a stretch, unticked, where today it
+    // had no row.
+    [
+      "6293 6608 0005 7382 276 020 7946 0958",
+      [
+        ["card", "6293 6608 0005 7382 276", true],
+        ["phone", "020", true],
+        ["phone", "7946 0958", false],
+      ],
+      ["7382 276 020", "7946 0958"],
+    ],
+  ])("resolves %s", (text, expected, phoneAlone) => {
+    expect(withTicks(text)).toEqual(expected);
+    // The yield lives in `detect`, so the phone detector alone still lists
+    // each stretch whole.
+    const points = Array.from(text);
+    expect(
+      DETECTORS.phone({ text, joins: [] }).map((span) =>
+        points.slice(span.start, span.end).join(""),
+      ),
+    ).toEqual(phoneAlone);
+  });
+
+  it("returns no span carrying rescued", () => {
+    expect(detect({ text: "212 918 8665 1119 21 June 2014", joins: [] })).toStrictEqual([
+      { kind: "phone", start: 0, end: 12, tickedByDefault: true },
+      { kind: "phone", start: 13, end: 17, tickedByDefault: false },
+      { kind: "date", start: 18, end: 30, tickedByDefault: false },
+    ]);
+  });
+});
+
+/**
  * Spec 0005, AC-28, through `detect`: an IBAN, a Social Security number and
  * a National Insurance number beside other digits are each found whole, with
  * whatever their neighbours are, and no card. Each kind's own detector finds

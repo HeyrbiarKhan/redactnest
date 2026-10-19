@@ -274,6 +274,123 @@ describe("numbers side by side", () => {
   });
 });
 
+/**
+ * Spec 0014, AC-1 and AC-2: after both choosing passes, a digit group they
+ * leave stranded beside a valid row, which a valid window from that row
+ * covers, is listed as a row of its own, unticked and marked `rescued`.
+ *
+ * `today` is what the detector listed before the rescue, written out as
+ * literals rather than read from a copy of the old code: the rows not marked
+ * `rescued` must equal it exactly, so every row today lists keeps its start,
+ * end and tick, and the default never removes less than today (INV-1, INV-2).
+ */
+describe("the rescue of stranded digit groups (spec 0014, AC-1, AC-2)", () => {
+  function rows(text: string, rescued: boolean): [string, boolean][] {
+    const points = Array.from(text);
+    return DETECTORS.phone({ text, joins: [] })
+      .filter((span) => (span.rescued === true) === rescued)
+      .map((span) => [points.slice(span.start, span.end).join(""), span.tickedByDefault]);
+  }
+
+  it.each<[string, [string, boolean][], [string, boolean][]]>([
+    // A stray group before a number: the valid pass takes it with the
+    // number's head, and today the number's last group has no row.
+    ["9346 212 555 0123", [["9346 212 555", true]], [["0123", false]]],
+    // An extension is read after a stretch as after any row.
+    ["9346 212 555 0123 ext. 45", [["9346 212 555", true]], [["0123 ext. 45", false]]],
+    // The possible pass takes `020` before the rescue runs, so the second
+    // number keeps its own row: the pin on the rescue's place, last.
+    [
+      "0131 410 5214 020 2977 5777",
+      [
+        ["0131 410 5214", true],
+        ["020 2977 5777", false],
+      ],
+      [],
+    ],
+    // A next number's first digits, left with no row today.
+    [
+      "212 526 5087 020 2208 1633 24",
+      [
+        ["212 526 5087", true],
+        ["2208 1633 24", true],
+      ],
+      [["020", false]],
+    ],
+    [
+      "212 555 0123 9346 415 234 5678",
+      [
+        ["212 555 0123", true],
+        ["9346 415 234", true],
+      ],
+      [["5678", false]],
+    ],
+    // Through the phone detector alone; `detect.test.ts` holds what the card
+    // leaves of it.
+    [
+      "6293 6608 0005 7382 276 020 7946 0958",
+      [["7382 276 020", true]],
+      [["7946 0958", false]],
+    ],
+    // The rescue lives in the phone detector, so a date's digits are rescued
+    // here and the yield in `detect` gives them back (AC-15).
+    ["212 918 8665 1119 21 June 2014", [["212 918 8665", true]], [["1119 21", false]]],
+    ["+44 20 3149 6135 18/01/1992", [["+44 20 3149 6135", true]], [["18", false]]],
+    // Nothing is stranded in any of these, so each lists exactly today's rows.
+    ["Box 2000 212 555 0123", [["212 555 0123", true]], []],
+    ["Ste 1 212 555 0123", [["1 212 555 0123", true]], []],
+    [
+      "020 7946 0958 020 7946 0321",
+      [
+        ["020 7946 0958", true],
+        ["020 7946 0321", true],
+      ],
+      [],
+    ],
+    [
+      "212 555 0123 212 555 0124",
+      [
+        ["212 555 0123", true],
+        ["212 555 0124", true],
+      ],
+      [],
+    ],
+    // A row with a unit after it has no extension, and a stretch never starts
+    // inside an extension's digits, which open the next run.
+    [
+      "212 555 0123 ext. 4567 212 555 0124",
+      [
+        ["212 555 0123 ext. 4567", true],
+        ["212 555 0124", true],
+      ],
+      [],
+    ],
+  ])(
+    "keeps today's rows in %s and lists each stretch unticked",
+    (text, today, stretches) => {
+      expect(rows(text, false)).toEqual(today);
+      expect(rows(text, true)).toEqual(stretches);
+    },
+  );
+
+  it("marks only a stretch as rescued, and never a row the two passes chose", () => {
+    const spans = DETECTORS.phone({ text: "9346 212 555 0123", joins: [] });
+    expect(spans).toStrictEqual([
+      { kind: "phone", start: 0, end: 12, tickedByDefault: true },
+      { kind: "phone", start: 13, end: 17, tickedByDefault: false, rescued: true },
+    ]);
+  });
+
+  /**
+   * A recorded miss (spec 0014, *Consequences*): the UK number here is only
+   * possible, so a window starting at a stray group takes its head and the
+   * rescue, which follows only valid windows, cannot reach `0001`.
+   */
+  it("leaves a number that is only possible cut as today", () => {
+    expect(rows("01865 514994 0472 0117 853 0001", true)).toEqual([]);
+  });
+});
+
 /** AC-2: a number is found however its digits are grouped. */
 describe("every grouping kept", () => {
   it.each([

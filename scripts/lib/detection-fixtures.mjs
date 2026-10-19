@@ -335,6 +335,29 @@ export const DETECT_PHONE = Object.freeze([
   ...DETECT_PHONE_LISTED.map((number) => [number, true]),
   ["020 7946 0400", true],
   ["(212) 555-0142", true],
+  // Spec 0014, AC-1 and AC-2: a group the choosing passes leave stranded is a
+  // row of its own, unticked, and every row listed before keeps its tick.
+  ["9346 212 555", true],
+  ["0123", false],
+  ["0131 410 5214", true],
+  ["020 2977 5777", false],
+  // What the card leaves of the UK number after it: today's piece and the
+  // rescued stretch. The number differs from the page's other numbers, so no
+  // two rows packed together spell one of them.
+  ["020", true],
+  ["7946 0612", false],
+  // Spec 0014, AC-15: the stretch `1119 21` yields to the date.
+  ["212 918 8665", true],
+  ["1119", false],
+]);
+
+/**
+ * The values other than phone numbers and dates that `detect-phone.pdf`
+ * holds, as found, with their kind and tick: the card spec 0014 put before a
+ * UK number.
+ */
+export const DETECT_PHONE_OTHERS = Object.freeze([
+  ["card", "6293 6608 0005 7382 276", true],
 ]);
 
 /**
@@ -353,7 +376,10 @@ export const DETECT_PHONE = Object.freeze([
  *    list, a call log line with a time before the number and a duration
  *    after it, and a US number beside a ZIP+4;
  *  - a dotted date starting with `0`, which the trunk rule alone would read as
- *    a UK number.
+ *    a UK number;
+ *  - spec 0014's rescue (AC-1, AC-2, AC-15): a stray group before a number, a
+ *    number that is only possible after a valid one, a card then a UK number,
+ *    and a number, a stray group and a written date.
  */
 export function detectPhone() {
   return document(() => [
@@ -387,7 +413,11 @@ export function detectPhone() {
         ) +
         line("F1", 12, 72, 290, "12:30 020 7946 0400 3 min") +
         line("F1", 12, 72, 270, "Ship to CA 90210-1234 (212) 555-0142") +
-        line("F1", 12, 72, 250, "Born 05.12.1980 in Leeds"),
+        line("F1", 12, 72, 250, "Born 05.12.1980 in Leeds") +
+        line("F1", 12, 72, 230, "Notes 9346 212 555 0123 kept") +
+        line("F1", 12, 72, 210, "Notes 0131 410 5214 020 2977 5777 kept") +
+        line("F1", 12, 72, 190, "Paid 6293 6608 0005 7382 276 020 7946 0612 kept") +
+        line("F1", 12, 72, 170, "Notes 212 918 8665 1119 21 June 2014 kept"),
     },
   ]);
 }
@@ -395,12 +425,15 @@ export function detectPhone() {
 /**
  * The dates `detect-phone.pdf` holds. Spec 0005, INV-14: a numeric date is
  * never read as a phone number, so each is left for `date`, and each sits
- * within reach of "Born", so each is ticked.
+ * within reach of "Born", so each is ticked. The last, a written date after
+ * a number and a stray group, keeps every digit because a rescued stretch
+ * yields to it (spec 0014, AC-15); no birth word stands before it.
  */
 export const DETECT_PHONE_DATES = Object.freeze([
   ["12/05/1980", true],
   ["2026-09-27", true],
   ["05.12.1980", true],
+  ["21 June 2014", false],
 ]);
 
 /**
