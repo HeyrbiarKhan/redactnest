@@ -296,7 +296,7 @@ spec [0014](../specs/0014-detector-follow-ups/index.md) · code in `src/detect` 
   - [x] Bookkeeping: the `covering` comment, the CI step that prints the phone detector's time, the Finds columns pin, spec 0005's amendments and ticks · AC-10 to AC-13
 - [x] Verify it: `/check verify detector follow ups`
 - [x] Test it: `/test detector follow ups`
-- [ ] Review it (fresh model): `/check review detector follow ups`
+- [x] Review it (fresh model): `/check review detector follow ups` (first review done, [2026-10-19](../reviews/2026-10-19-feat-detector-followups.md))
 
 ### 26. UI polish · from spec 0013
 Two visual fixes, no new design (your call, 2026-10-11). On the home page, the Strips card's items look different from the Finds rows beside them. On `/tool`, while a document opens, the spinner and its phase line ("Looking for …") sit in the right rail beside an empty left column.
