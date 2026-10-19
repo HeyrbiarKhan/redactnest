@@ -297,7 +297,7 @@ spec [0014](../specs/0014-detector-follow-ups/index.md) · code in `src/detect` 
   - [x] The first review's fix (the owner's narrowing, 2026-10-19): AC-3's two unit rules and the two digit year and bare Social Security markers taken out, the National Insurance marker kept only for a number written with no space, each measured against main through `detect` so no row main lists loses a digit or a tick; the review's two Minors and two nits · AC-3, AC-9, AC-11
 - [x] Verify it: `/check verify detector follow ups`
 - [x] Test it: `/test detector follow ups`
-- [x] Review it (fresh model): `/check review detector follow ups` (first review done, [2026-10-19](../reviews/2026-10-19-feat-detector-followups.md))
+- [x] Review it (fresh model): `/check review detector follow ups` (first review done, [2026-10-19](../reviews/2026-10-19-feat-detector-followups.md); for the first review's fix, [second review](../reviews/2026-10-19-feat-detector-followups-second.md))
 
 ### 26. UI polish · from spec 0013
 Two visual fixes, no new design (your call, 2026-10-11). On the home page, the Strips card's items look different from the Finds rows beside them. On `/tool`, while a document opens, the spinner and its phase line ("Looking for …") sit in the right rail beside an empty left column.
