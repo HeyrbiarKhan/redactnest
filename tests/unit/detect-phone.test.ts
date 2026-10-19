@@ -464,6 +464,11 @@ describe("dates inside a phone unit (spec 0014, AC-3)", () => {
     ["01-02-03-04-05", [["01-02-03-04-05", false]]],
     // The date opens its unit with nothing cut before it, so it keeps its row.
     ["2026-09-27-01", [["2026-09-27-01", true]]],
+    // A two digit year takes a marker only after a two digit day and month,
+    // as the date detector does (AC-9). The date detector lists neither of
+    // these, so were the unit a date unit its digits would have no row.
+    ["Born 5-12-801 2345 x", [["5-12-801 2345", true]]],
+    ["Born 5.12.801 2345 x", [["5.12.801 2345", true]]],
   ])("keeps the row in %s", (text, rows) => {
     expect(found(text)).toEqual(rows);
   });

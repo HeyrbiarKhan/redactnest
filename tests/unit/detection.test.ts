@@ -94,9 +94,10 @@ function onePage(show: string): ArrayBuffer {
 }
 
 /**
- * A one page PDF whose one line is drawn piece by piece in Helvetica, each
+ * A one page PDF whose lines are drawn piece by piece in Helvetica, each
  * piece its own text object placed where the one before ends, at its own
- * size and rise, as `detect-markers.pdf` draws a marker. For the guards no
+ * size and rise, as `detect-markers.pdf` draws a marker. A piece on a new
+ * `line` starts that line, 14pt below the one before. For the guards no
  * committed fixture should carry.
  */
 function piecesPage(
@@ -104,13 +105,16 @@ function piecesPage(
     readonly text: string;
     readonly size?: number;
     readonly rise?: number;
+    readonly line?: number;
   }[],
 ): ArrayBuffer {
   const font = new mupdf.Font("Helvetica");
   let x = 72;
+  let on = 0;
   let content = "";
-  for (const { text, size = 12, rise = 0 } of parts) {
-    content += `BT /F1 ${size} Tf 1 0 0 1 ${x} ${700 + rise} Tm (${text}) Tj ET\n`;
+  for (const { text, size = 12, rise = 0, line = 0 } of parts) {
+    if (line !== on) [x, on] = [72, line];
+    content += `BT /F1 ${size} Tf 1 0 0 1 ${x} ${700 - 14 * line + rise} Tm (${text}) Tj ET\n`;
     for (const character of text) {
       x += font.advanceGlyph(font.encodeCharacter(character.codePointAt(0) ?? 0)) * size;
     }
@@ -1072,6 +1076,46 @@ describe("glyphs off their line (spec 0014, AC-4 to AC-6)", () => {
     },
   );
 
+  /**
+   * AC-4: a marker glued on both sides leaves one synthetic space, so the word
+   * after it cannot glue on to the value in its place. With no space the
+   * email address would read `john@example.comtoday`.
+   */
+  it("stands one space where a marker glued on both sides leaves", async () => {
+    const bytes = piecesPage([
+      { text: "Mail john@example.com" },
+      { text: "1", size: 8, rise: 5 },
+      { text: "today please" },
+    ]);
+    const doc = await openDocumentWith(mupdf, bytes, LIMITS);
+    try {
+      const found = await doc.findMatches({ contextChars: 40 });
+      expect(
+        found.map((match) => [match.kind, match.text, match.after.slice(0, 7)]),
+      ).toEqual([["email", "john@example.com", " today "]]);
+    } finally {
+      doc.close();
+    }
+  });
+
+  /** AC-4: a marker that closes its line leaves the line join, and no space of its own. */
+  it("leaves only the line join where a marker closes its line", async () => {
+    const bytes = piecesPage([
+      { text: "Tel 020 7946 0958" },
+      { text: "1", size: 8, rise: 5 },
+      { text: "today please", line: 1 },
+    ]);
+    const doc = await openDocumentWith(mupdf, bytes, LIMITS);
+    try {
+      const found = await doc.findMatches({ contextChars: 40 });
+      expect(
+        found.map((match) => [match.kind, match.text, match.after.slice(0, 7)]),
+      ).toEqual([["phone", "020 7946 0958", " today "]]);
+    } finally {
+      doc.close();
+    }
+  });
+
   /** AC-4 and AC-8: the boundary meets nothing on any other page this suite reads. */
   it("finds no glyph off its line in any other committed fixture", () => {
     const names = readdirSync(new URL("../fixtures/", import.meta.url)).filter(
@@ -1108,6 +1152,162 @@ describe("glyphs off their line (spec 0014, AC-4 to AC-6)", () => {
     expect(SUPERSCRIPT_CODE_POINTS.size).toBe(114);
     expect(SUPERSCRIPT_CODE_POINTS.has(0xb9)).toBe(true);
     expect(SUPERSCRIPT_CODE_POINTS.has(0x1d57)).toBe(true);
+  });
+});
+
+/**
+ * One line of hand built glyphs, laid along `direction` from (72, 700): each
+ * glyph `size` tall and half as wide, its origin `rise` up off the line's
+ * baseline. y runs down the page, as MuPDF's does, so up the glyph is the
+ * direction turned a quarter turn back.
+ */
+function glyphLine(
+  parts: readonly {
+    readonly text: string;
+    readonly size?: number;
+    readonly rise?: number;
+  }[],
+  {
+    direction = [1, 0],
+    line = 0,
+  }: { readonly direction?: readonly [number, number]; readonly line?: number } = {},
+): Character[] {
+  const [ux, uy] = direction;
+  const [upX, upY] = [uy, -ux];
+  const glyphs: Character[] = [];
+  let along = 0;
+  for (const { text, size = 10, rise = 0 } of parts) {
+    for (const glyph of text) {
+      const width = size / 2;
+      const [ox, oy] = [72 + ux * along + upX * rise, 700 + uy * along + upY * rise];
+      const [ex, ey] = [ox + ux * width, oy + uy * width];
+      glyphs.push({
+        code: glyph.codePointAt(0) ?? 0,
+        origin: [ox, oy],
+        quad: [
+          ox + upX * size,
+          oy + upY * size,
+          ex + upX * size,
+          ey + upY * size,
+          ox,
+          oy,
+          ex,
+          ey,
+        ],
+        angle: Math.atan2(uy, ux),
+        direction,
+        block: 0,
+        line,
+      });
+      along += width;
+    }
+  }
+  return glyphs;
+}
+
+/**
+ * Spec 0014, AC-4 and AC-5, glyph by glyph: `offLineGlyphs` on lines built by
+ * hand, so each rule is held on its own, at its edge, with no font or MuPDF
+ * layout in the way. The line's text is 10 units tall, so `OFF_LINE_SIZE_MAX`
+ * is a 9 unit glyph and `OFF_LINE_SHIFT_MIN` a 1.5 unit shift, both exact.
+ */
+describe("which glyphs are off their line (spec 0014, AC-4, AC-5)", () => {
+  const off = (glyphs: readonly Character[]) => Array.from(offLineGlyphs(glyphs));
+
+  it.each<[string, Parameters<typeof glyphLine>[0], number[]]>([
+    [
+      "a small raised marker",
+      [{ text: "Ref" }, { text: "1", size: 6.5, rise: 3 }],
+      [0, 0, 0, 1],
+    ],
+    [
+      "a small lowered one",
+      [{ text: "CO" }, { text: "2", size: 6.5, rise: -2 }, { text: "s" }],
+      [0, 0, 1, 0],
+    ],
+    // "At most" OFF_LINE_SIZE_MAX of the dominant height, and "at least"
+    // OFF_LINE_SHIFT_MIN of it off the baseline: each edge, and just past it.
+    [
+      "a glyph exactly the size cap",
+      [{ text: "Ref" }, { text: "1", size: 9, rise: 3 }],
+      [0, 0, 0, 1],
+    ],
+    [
+      "a glyph just over the size cap",
+      [{ text: "Ref" }, { text: "1", size: 9.5, rise: 3 }],
+      [0, 0, 0, 0],
+    ],
+    [
+      "a glyph exactly the least shift",
+      [{ text: "Ref" }, { text: "1", size: 6, rise: 1.5 }],
+      [0, 0, 0, 1],
+    ],
+    [
+      "a glyph just short of the least shift",
+      [{ text: "Ref" }, { text: "1", size: 6, rise: 1.4 }],
+      [0, 0, 0, 0],
+    ],
+    // Smaller and shifted both: either alone is ordinary text.
+    [
+      "small print on the baseline",
+      [{ text: "Total" }, { text: "incl", size: 7 }],
+      [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    ],
+    ["a full size glyph raised", [{ text: "Ref" }, { text: "1", rise: 4 }], [0, 0, 0, 0]],
+    // Fewer than OFF_LINE_MIN_LINE_GLYPHS glyphs taller than the cap set no
+    // baseline, so nothing is off by geometry.
+    [
+      "two full size glyphs and a raised one",
+      [{ text: "No" }, { text: "1", size: 6.5, rise: 3 }],
+      [0, 0, 0],
+    ],
+    // The dominant height is the upper median, so three raised glyphs after
+    // three full size ones still leave the line's height at 10.
+    [
+      "three raised glyphs after three full size ones",
+      [{ text: "Ref" }, { text: "123", size: 6.5, rise: 3 }],
+      [0, 0, 0, 1, 1, 1],
+    ],
+    // Whitespace is never off, however it is drawn.
+    [
+      "a small raised space",
+      [{ text: "Ref" }, { text: " ", size: 6.5, rise: 3 }, { text: "x" }],
+      [0, 0, 0, 0, 0],
+    ],
+    // AC-5: a superscript code point is off whatever its geometry, and still
+    // counts toward the line's medians, so it lets the `2` after it be judged.
+    ["a full size ¹ on the baseline", [{ text: "No" }, { text: "¹" }], [0, 0, 1]],
+    ["a full size plain 1 on the baseline", [{ text: "No" }, { text: "1" }], [0, 0, 0]],
+    [
+      "a raised 2 after a full size ¹",
+      [{ text: "Re" }, { text: "¹" }, { text: "2", size: 6.5, rise: 3 }],
+      [0, 0, 1, 1],
+    ],
+  ])("reads %s", (_what, parts, expected) => {
+    expect(off(glyphLine(parts))).toEqual(expected);
+  });
+
+  /** Per MuPDF line, never across one: a marker on a line of its own stays. */
+  it("judges each line by its own glyphs", () => {
+    const glyphs = [
+      ...glyphLine([{ text: "Ref" }]),
+      ...glyphLine([{ text: "1", size: 6.5, rise: 3 }], { line: 1 }),
+    ];
+
+    expect(off(glyphs)).toEqual([0, 0, 0, 0]);
+  });
+
+  /** The shift is measured along the line's normal, so a turned line reads as a level one. */
+  it.each<[string, readonly [number, number]]>([
+    ["up the page", [0, -1]],
+    ["at 45 degrees", [Math.SQRT1_2, -Math.SQRT1_2]],
+  ])("reads a line turned %s as a level one", (_what, direction) => {
+    expect(
+      off(glyphLine([{ text: "Ref" }, { text: "1", size: 6.5, rise: 3 }], { direction })),
+    ).toEqual([0, 0, 0, 1]);
+    expect(
+      off(glyphLine([{ text: "Total" }, { text: "incl", size: 7 }], { direction })),
+    ).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0]);
   });
 });
 

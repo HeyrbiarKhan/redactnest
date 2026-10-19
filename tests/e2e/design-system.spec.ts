@@ -1456,9 +1456,11 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
 
     // Feature 12: seven finds in two columns too, so the cards stay close in
     // height. Read down the first column, then the second: Email addresses to
-    // Card numbers, then the IBAN row to UK National Insurance numbers.
+    // Card numbers, then the IBAN row to UK National Insurance numbers. The
+    // rows are soft tiles, so the columns sit 12 pixels apart with no rule
+    // between them (spec 0014, AC-12, the pin spec 0013's AC-11 owed).
     const findsList = finds.getByRole("list");
-    expect((await columnsOf(findsList)).count).toBe("2");
+    expect(await columnsOf(findsList)).toEqual({ count: "2", gap: "12px", rule: "none" });
     const rows = finds.getByRole("listitem");
     const [firstRow, fourthRow, fifthRow] = [
       await rows.nth(0).boundingBox(),
@@ -1485,13 +1487,18 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     const list = strips.getByRole("list");
     // The Finds rows fold at the same content width, and the cards are always
     // the same width, so the two lists are always one column or two together.
-    const findsCount = async () => (await columnsOf(finds.getByRole("list"))).count;
+    // Wherever Finds has two, they sit 12 pixels apart with no rule at every
+    // width, since its gap never steps as the Strips gap does (spec 0014,
+    // AC-12).
+    const findsColumns = () => columnsOf(finds.getByRole("list"));
+    const findsCount = async () => (await findsColumns()).count;
+    const FINDS_TWO = { count: "2", gap: "12px", rule: "none" };
 
     // Side by side, with room for two columns at the narrower gap.
     await page.setViewportSize({ width: 1080, height: 800 });
     await page.goto("/");
     expect(await columnsOf(list)).toEqual({ count: "2", gap: "48px", rule: "solid" });
-    expect(await findsCount()).toBe("2");
+    expect(await findsColumns()).toEqual(FINDS_TWO);
     // No item wraps in the narrower columns.
     for (const item of await list.getByRole("listitem").all()) {
       expect((await item.boundingBox())?.height).toBe(32);
@@ -1509,7 +1516,7 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     // Stacked, so the card is wide again: two columns at the mockup's gap.
     await page.setViewportSize({ width: 600, height: 900 });
     expect(await columnsOf(list)).toEqual({ count: "2", gap: "64px", rule: "solid" });
-    expect(await findsCount()).toBe("2");
+    expect(await findsColumns()).toEqual(FINDS_TWO);
     const [above, below] = [await finds.boundingBox(), await strips.boundingBox()];
     expect((above?.y ?? 0) + (above?.height ?? 0)).toBeLessThanOrEqual(below?.y ?? 0);
 

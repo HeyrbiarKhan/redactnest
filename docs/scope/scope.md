@@ -295,7 +295,7 @@ spec [0014](../specs/0014-detector-follow-ups/index.md) · code in `src/detect` 
   - [x] The text rules: the two INV-14 unit rules in the phone detector, and the one digit tolerances for a two digit year, a bare Social Security number and a National Insurance number, each measured on random codes first · AC-3, AC-9, AC-10
   - [ ] Bookkeeping: the `covering` comment, the CI step that prints the phone detector's time, the Finds columns pin, spec 0005's amendments and ticks · AC-10 to AC-13
 - [ ] Verify it: `/check verify detector follow ups`
-- [ ] Test it: `/test detector follow ups`
+- [x] Test it: `/test detector follow ups`
 - [ ] Review it (fresh model): `/check review detector follow ups`
 
 ### 26. UI polish · from spec 0013

@@ -201,6 +201,18 @@ describe("a rescued stretch beside other kinds (spec 0014, AC-15)", () => {
       ],
       ["212 555 0123"],
     ],
+    // A numeric date stops the stretch before any yield is needed: no phone
+    // window holds a date unit (spec 0005, INV-14), so even the phone
+    // detector alone leaves the date out of `0123`.
+    [
+      "9346 212 555 0123 05.12.1980",
+      [
+        ["phone", "9346 212 555", true],
+        ["phone", "0123", false],
+        ["date", "05.12.1980", false],
+      ],
+      ["9346 212 555", "0123"],
+    ],
     // A higher kind holds the whole stretch, so precedence leaves no piece.
     [
       "9346 212 555 0123@example.com",
@@ -258,6 +270,34 @@ describe("a rescued stretch beside other kinds (spec 0014, AC-15)", () => {
       { kind: "phone", start: 13, end: 17, tickedByDefault: false },
       { kind: "date", start: 18, end: 30, tickedByDefault: false },
     ]);
+  });
+
+  /**
+   * Every way a stretch leaves the yield, so `rescued` never reaches the
+   * engine: listed whole, with an extension, beside a higher kind, beside a
+   * card's piece, and stopped before a numeric date. Each string holds a span
+   * the phone detector marks `rescued`, checked first so a case cannot pass
+   * by holding no stretch at all.
+   */
+  it.each([
+    "9346 212 555 0123",
+    "9346 212 555 0123 ext. 45",
+    "9346 212 555 0123 GB82 WEST 1234 5698 7654 32",
+    "6293 6608 0005 7382 276 020 7946 0958",
+    "212 526 5087 020 2208 1633 24",
+    "9346 212 555 0123 05.12.1980",
+  ])("strips rescued from every span detect returns for %s", (text) => {
+    expect(
+      DETECTORS.phone({ text, joins: [] }).some((span) => span.rescued === true),
+    ).toBe(true);
+    for (const span of detect({ text, joins: [] })) {
+      expect(Object.keys(span).sort()).toEqual([
+        "end",
+        "kind",
+        "start",
+        "tickedByDefault",
+      ]);
+    }
   });
 });
 

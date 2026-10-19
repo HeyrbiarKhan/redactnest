@@ -247,6 +247,25 @@ describe("the trio and the band (AC-10, AC-11)", () => {
     }
   });
 
+  /**
+   * Spec 0014, AC-12, the pin spec 0013's AC-11 owed: the Finds rows fold into
+   * two columns by the card's own width, as Strips does, 12 pixels apart with
+   * no rule, and no row splits across the two. jsdom lays nothing out, so the
+   * browser test reads the computed columns and this holds the classes.
+   */
+  it("sets the Finds rows in unruled columns by the card's own width", () => {
+    render(<HomePage />);
+
+    const finds = screen.getByTestId("home-finds");
+    expect(finds).toHaveClass("@container");
+    const list = within(finds).getByRole("list");
+    expect(list).toHaveClass("@min-[26rem]:columns-2", "@min-[26rem]:gap-x-3");
+    expect(list.className).not.toMatch(/column-rule/u);
+    for (const item of within(list).getAllByRole("listitem")) {
+      expect(item).toHaveClass("break-inside-avoid");
+    }
+  });
+
   it("ticks every claimed kind in one Strips list, set in ruled columns", () => {
     render(<HomePage />);
 
