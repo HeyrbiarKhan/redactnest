@@ -70,11 +70,13 @@ How an off line stretch reads: as a join (chosen; `27ᵗʰ September 2026` reads
 
 ### The text tolerances once the boundary lands
 
-**Option 1: keep them and add the three measured ones (chosen).** Pros: OCR text and PDFs that draw a marker as a plain digit still list; the three new ones take the fourth review's measured shapes. Cons: their measured noise stays (unticked rows on random codes).
+**Option 1: keep them and add the three measured ones (chosen first, narrowed to option 4 on 2026-10-19).** Pros: OCR text and PDFs that draw a marker as a plain digit still list; the three new ones take the fourth review's measured shapes. Cons: their measured noise stays (unticked rows on random codes), and, measured after the first review, the two digit year and the bare Social Security ones, and the National Insurance one on a spaced number, take digits and ticks from rows today lists (*The owner's narrowing*, below).
 
 **Option 2: keep them as they are.** Pros: no new noise. Cons: the two digit year, bare Social Security and National Insurance misses stay for OCR text.
 
 **Option 3: retire them.** Pros: cleaner rules. Cons: every OCR'd footnote goes back to giving no row.
+
+**Option 4: keep them, and add only the measured one that takes nothing from a row today lists (chosen by the owner, 2026-10-19).** The National Insurance marker after a number written with no space: its two letters glue the digits shut, so no other detector reads them, and on every shape measured its row takes nothing from a row of today's. Pros: the default never removes less than today. Cons: on OCR text, a plain digit marker after a two digit year date, a bare Social Security number or a spaced National Insurance number still hides the value, as today; a drawn marker is off its line (AC-4), so a PDF that draws one lists it.
 
 ### Masking lower kinds
 
@@ -92,7 +94,7 @@ How a stretch is listed follows from the owner's bar of 2026-10-17. The rescue e
 
 The boundary was chosen over wider text tolerances because MuPDF hands the engine the two facts a marker is made of, a smaller size and a shifted baseline, exactly and per glyph, while the text rules can only guess from one digit. Both facts together were needed: size alone would drop small print on the baseline (8 pt text inside a 12 pt line, measured as the same line) and shift alone has no margin on OCR layers; together they flagged none of the 78,856 glyphs in every fixture and every local scan. The code point trigger costs one `Set` lookup per character and covers the one shape geometry cannot see. Reading a stretch as a join reuses the line join rule the find step already has, so no detector changes for it. The stretch cap exists because a whole value aligned at its cap height beside larger text is both smaller and raised; no document in hand shows it, so the cap is a guard with a recorded shape rather than a measured rule.
 
-The tolerances stay because the fixtures and OCR output draw exactly the shape the boundary cannot see, and the three additions were already measured by the fourth review at costs the owner's rule accepts.
+The tolerances stay because the fixtures and OCR output draw exactly the shape the boundary cannot see, and the three additions were already measured by the fourth review at costs the owner's rule accepts. That measurement counted the rows each tolerance adds on random codes, through its own detector; it never asked what a marker reading does to a row another detector lists beside it. Asked through `detect` after the first review, the two digit year, the bare Social Security number, a spaced National Insurance number and AC-3's date units each took digits and ticks from rows today lists, which breaks the bar of 2026-10-17 that the default never removes less than today, so only the National Insurance tolerance on a number written with no space stays (option 4). A tolerance is a guess from one digit, and a guess that wins a place another detector reads today has to be measured beside that detector, not alone.
 
 ## Evidence
 
@@ -468,6 +470,8 @@ Time, `timing.mjs`'s method on this machine, today against the built code: four 
 
 ### The text rules as built (2026-10-19, tasks 7 and 8)
 
+_Superseded in part the same day: the owner took out AC-3's two unit rules and the two digit year and bare Social Security tolerances, and narrowed the National Insurance one to a number written with no space. See *The owner's narrowing*, below._
+
 `corpus-units.mjs` reads the corpus (every string literal holding a digit in `tests/unit/detect*.test.ts` and `scripts/lib/detection-fixtures.mjs`, NFKC normalised, the build's extraction) through `detect`, before slice 3 and after; `measure-ac9.mjs` reads 20,000 seeded random codes per shape through each kind's own detector.
 
 - AC-3 alone, on 1,349 strings: 4 change, all the ISO interval with plain times (`2026-09-27 10:00-2026-09-28 11:00` and its kin), whose phone row `00-2026-09-28 11` goes and whose second date lists. With the two digit year mirror taken out the same 4 change, so the corpus cannot tell the mirror in from out; it stays, mirrored from AC-9, so that a two digit year date the date detector lists with its marker is never also a phone unit (`Born 05-12-801 2345 x` listed `05-12-801 2345` as a phone row before and lists `05-12-80`, ticked, after).
@@ -494,7 +498,7 @@ Reading: the two digit year and the bare Social Security tolerances cost what th
 AC-11's step, the last in the `checks` job of `.github/workflows/ci.yml`, runs `tests/unit/detect-adversarial.test.ts` alone on one worker with Vitest's verbose reporter, which prints each test's wall time in the log.
 
 - Source: CI run #181 (https://github.com/HeyrbiarKhan/redactnest/actions/runs/39201379578), job "Lint, format, types, unit tests", on commit `bd30169`, runner `ubuntu-latest` (GitHub hosted), 2026-10-19. 1,248 of 1,248 tests passed, and the step took 143.73 s.
-- Why this run and not a pull request's: AC-11 asks for the pull request's own run, but `ci.yml` runs on push only (`on: push`), so a pull request never gets a run of its own. Run #181 is the run the pull request will show for this commit.
+- Why this run: `ci.yml` runs on push only (`on: push`), so a pull request never gets a run of its own, and AC-11 asks for the run the pull request shows (reworded from "the pull request's own run" after the first review). Run #181 is that run for this commit.
 - What the figure is: the wall time of one `finishes within its budget` test, which builds its 100,000 characters and calls the detector once, on one worker with nothing beside it. The test itself asserts CPU time against the budget, and it passed on every shape.
 
 | Phone shape | Wall time on the runner |
@@ -504,7 +508,7 @@ AC-11's step, the last in the `checks` job of `.github/workflows/ci.yml`, runs `
 | single digit groups | 291 ms |
 | single zeros | 252 ms |
 
-The worst `finishes within its budget` time of every other detector, each against its 1 s budget: date 98 ms, card 71 ms, iban 48 ms, us-ssn 37 ms, email 20 ms, uk-nino 13 ms.
+The worst `finishes within its budget` time of every other detector on spec 0005's AC-16 shapes, each against its 1 s budget (other tests take longer, such as the email line join test at 50 ms, which is not one of those shapes): date 98 ms, card 71 ms, iban 48 ms, us-ssn 37 ms, email 20 ms, uk-nino 13 ms.
 
 Reading: the Follow-up's line was 0.5 s, under which the 1 s phone budget would go back to `/architect`. The worst phone time is 946 ms, so the 2 s budget stands. On the runner the heaviest shape takes about half of the 2 s budget, and a 1 s budget would leave it 54 ms of room. It is also about 1.7 times the 547 ms this machine measured for the same shape (AC-14; 546 ms on the built code), so a budget read from this machine would be too tight for CI. The rescue is what brought it there: before it, the same shape took 266 ms on this machine. The same figure answers spec 0005's Follow-up item on the CI runner, since 946 ms is not well under 1 s.
 
@@ -514,4 +518,45 @@ The date plus one digit unit rule: 0 of 1,102 strings change; the four stolen ex
 
 ### Measured in the build
 
-Nothing the build owed is left to measure. The National Insurance tolerance on random codes (task 8) is in *The text rules as built*, and so is the year first cut rule against the side by side cases (task 7): the corpus holds spec 0005's AC-27 cases, and AC-3 alone changes only the ISO intervals. The corpus rerun on the built code is in *The rescue as built* (task 2) and *The text rules as built* (task 7), the flag count in *The boundary as built* (task 6), and the CI figure in *The phone budget on the CI runner* (task 13).
+Nothing the build owed is left to measure. The National Insurance tolerance on random codes (task 8) is in *The text rules as built*, and so is the year first cut rule against the side by side cases (task 7): the corpus holds spec 0005's AC-27 cases, and AC-3 alone changes only the ISO intervals. The corpus rerun on the built code is in *The rescue as built* (task 2) and *The text rules as built* (task 7), the flag count in *The boundary as built* (task 6), and the CI figure in *The phone budget on the CI runner* (task 13). The owner's narrowing after the first review is measured in its own section, below.
+
+### The owner's narrowing (2026-10-19, after the first review)
+
+The first review found that the bare Social Security marker took a phone number's ticked digits (`SSN 123-45-6789 tel 2125550123 ok`: today `us-ssn 123-45-6789` and `phone 2125550123`, both ticked; the build `us-ssn 123-45-6789`, ticked, `us-ssn 212555012`, unticked, and `phone 3`, ticked). The owner measured that shape and the two digit year's through `detect` against today, 2,000 random strings per shape, the marker digit itself not counted: 49.2% of `SSN 123-45-6789 tel <bare ten digit US number> ok` ticked fewer digits than today; 6.2% of `Born dd-mm-yy<digit> <spaced US number>`; and `dd-mm-yy<digit> ddd dddd` left a digit with no row today lists in 48.7% and ticked fewer in 13.1%. The owner dropped both tolerances, and the two digit year mirror in the phone detector with them, and kept the National Insurance one, which the owner's run showed losing nothing.
+
+`measure.mjs` then asked the three bars of every shape the narrowing touches, through `detect`, against today's `src/detect` (main) loaded beside the branch through `jiti`: the build before the narrowing ("before") and the narrowed code ("after"), 2,000 seeded random strings per shape, 56,000 in all. The phone numbers drawn include only possible ones (random area codes, UK local numbers at random), the dates every numeric and written form, and the digit groups one to four groups of one to four digits. The columns: a row of today's is not listed with the same kind, start, end and tick (changed); a letter or digit today puts in a row is in none (lost a row); a letter or digit today ticks is not ticked (ticked fewer). The glued marker digit is not counted in the last two, as in the owner's run.
+
+| Shape | Before: changed | lost a row | ticked fewer | After: all three |
+|---|---|---|---|---|
+| `NI AB123456<d> <phone> ok` and six more National Insurance layouts written with no space (after a phone number, before and after dates, digit groups and punctuation, random letter pairs) | 0.0% | 0.0% | 0.0% | 0.0% |
+| `NI AB 12 34 56<d> <phone>` (spaced) | 25.8% | 0.0% | 14.4% | 0.0% |
+| `NI AB 123456<d> <phone>` (a space after the letters) | 18.7% | 0.0% | 12.2% | 0.0% |
+| `AB 12 34 56<d> <digit groups>` | 62.4% | 0.0% | 30.1% | 0.0% |
+| `<digit groups> AB 12 34 56<d> ok` | 0.0% | 0.0% | 0.0% | 0.0% |
+| `SSN <separated> NI AB123456<d> <digit groups> <phone>` | 2.9% | 0.0% | 0.1% | 0.0% |
+| `SSN <separated> tel <bare ten digit US number> ok` | 86.6% | 0.0% | 49.4% | 0.0% |
+| `SSN <bare ten digits> <phone>` | 88.8% | 0.0% | 0.0% | 0.0% |
+| `SSN <nine digits><d> <digit groups>` | 81.0% | 0.0% | 2.1% | 0.0% |
+| `SSN: <nine digits><d> <date>` | 78.4% | 0.0% | 0.5% | 0.0% |
+| `Born dd?mm?yy<d> <spaced US number>` | 23.1% | 0.0% | 3.5% | 0.0% |
+| `dd?mm?yy<d> ddd dddd` | 41.4% | 41.4% | 9.6% | 0.0% |
+| `Born dd.mm.yy.<d> <phone>` | 14.7% | 0.0% | 3.6% | 0.0% |
+| `dd/mm/yy<d> <digit groups>` | 0.0% | 0.0% | 0.0% | 0.0% |
+| `<phone> dd?mm?yy<d> ok` | 0.5% | 0.0% | 0.5% | 0.0% |
+| `Born dd?mm?yyyy<d> <spaced US number>` | 0.0% | 0.0% | 0.0% | 0.0% |
+| `dd?mm?yyyy<d> <digit groups>` | 22.1% | 21.1% | 7.1% | 0.0% |
+| `yyyy-mm-dd<d> <digit groups>` | 28.2% | 25.0% | 5.5% | 0.0% |
+| `<digit groups> dd.mm.yyyy<d> <phone>` | 25.5% | 25.5% | 1.2% | 0.0% |
+| `dd.mm.yyyy.<d> ddd dddd` | 0.0% | 0.0% | 0.0% | 0.0% |
+| `Ref <d>-yyyy-mm-dd(-<d>) <phone>` (a year first date glued inside) | 22.3% | 22.3% | 8.0% | 0.0% |
+
+`?` is a separator drawn from `-`, `/` and `.`, and `<d>` one random digit. Counting the marker digit too changes only the two digit year rows with a phone number after the date (lost a row 23.1% and 14.7%, ticked fewer 8.2% and 7.3%, before), and is 0.0% after on every shape.
+
+Reading:
+
+- The bare Social Security and two digit year shapes repeat the owner's finding on a different draw (49.4% against 49.2%; the two digit year shapes draw the separator and the day more widely, so their figures differ). After the narrowing every such row is today's.
+- The National Insurance tolerance loses nothing when the number is written with no space, in every layout. With a space anywhere in it, the phone detector reads its digit groups today, often as a ticked number (`NI PX 85 87 420 020`: today `phone 85 87 420 020`, ticked), and the marker reading took them: today's phone row was cut to a piece (`0 020`) and `PX 85 87 42` listed unticked, so the default removed less. The owner narrowed the tolerance to a number written with no space. Cost: `AB 12 34 56¹` on OCR text still lists nothing, as today.
+- AC-3's two unit rules failed the same bars. The four digit year date unit took a phone row today lists and gave its digits an unticked date (`22-04-20137 8`: today `phone 22-04-20137 8`, ticked) or left the digits after the date with no row (`05.11.19622 72 3 91`: today `phone 05.11.19622 72`). The year first cut left the glued date with no row at all, since the date detector does not read a date glued after `78-` (`Ref 78-1972-01-21 020 3114 8249`: today `phone 78-1972-01-21`, ticked). The corpus check of tasks 7 and 8 saw neither: the corpus holds the named cases, where each rule gained, and no random layout. The owner dropped both, so `phone.ts` keeps only the rescue and the two INV-14 guard comments.
+- After the narrowing, the only rows any shape adds are unticked: the National Insurance row where the number is written with no space, and the rescue's stretches (up to 5.1% of a shape's strings).
+
+The corpus (`corpus-bars.mjs`: every string literal holding a digit in `tests/unit/detect*.test.ts` and `scripts/lib/detection-fixtures.mjs`, NFKC normalised, 1,393 strings from 13 files): 21 list differently from today, every one an added unticked row (the rescue's stretches and the date yield of AC-1 and AC-15, and the National Insurance marker on a number written with no space), and none changes, empties or unticks a row today lists. `detect-date.pdf` and `detect-us-ssn.pdf`, written again by `make-fixture.mjs`, are byte for byte today's.
