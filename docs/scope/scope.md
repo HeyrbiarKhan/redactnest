@@ -294,7 +294,7 @@ spec [0014](../specs/0014-detector-follow-ups/index.md) · code in `src/detect` 
   - [x] The off line boundary in the find step: glyphs smaller and shifted off their line, or raised by code point, leave the text as a join and the target quads part round them; `detect-markers.pdf` with a real raised marker after every kind, and the engine tests that each row redacts with the marker left · AC-4 to AC-8
   - [x] The text rules: the two INV-14 unit rules in the phone detector, and the one digit tolerances for a two digit year, a bare Social Security number and a National Insurance number, each measured on random codes first · AC-3, AC-9, AC-10
   - [x] Bookkeeping: the `covering` comment, the CI step that prints the phone detector's time, the Finds columns pin, spec 0005's amendments and ticks · AC-10 to AC-13
-- [ ] Verify it: `/check verify detector follow ups`
+- [x] Verify it: `/check verify detector follow ups`
 - [x] Test it: `/test detector follow ups`
 - [ ] Review it (fresh model): `/check review detector follow ups`
 
