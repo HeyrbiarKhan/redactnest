@@ -82,7 +82,7 @@ describe("HMRC's prefix rules (AC-23)", () => {
 describe("what the NI detector does not read as one (AC-23)", () => {
   it.each([
     ["five digits", "AB12345C"],
-    ["seven digits", "AB1234567"],
+    ["eight digits", "AB12345678"],
     ["two spaces", "AB  12 34 56 C"],
     ["a space inside a pair", "AB 1 234 56 C"],
     ["one letter", "A123456C"],
@@ -119,8 +119,12 @@ describe("a National Insurance number beside other digits (AC-28)", () => {
 /**
  * Spec 0005, AC-23, AC-10 and INV-17, as amended on 2026-10-10: a letter glued
  * to the six digits no longer hides the number. It is listed unticked, taking
- * that letter when it is a suffix letter, whatever follows it. A digit glued to
- * the six digits still drops it, as part of a longer number.
+ * that letter when it is a suffix letter, whatever follows it. Spec 0014,
+ * AC-9: so does one digit with nothing alphanumeric after it, a footnote
+ * marker as NFKC reads `¹`, outside the row, when the number is written with
+ * no space; two digits, one with a letter or digit after it, or one after a
+ * number with a space in it still drop it, the last because the phone
+ * detector reads those digit groups as it did before.
  */
 describe("a National Insurance number glued to what follows it (AC-23, INV-17)", () => {
   it.each([
@@ -137,6 +141,10 @@ describe("a National Insurance number glued to what follows it (AC-23, INV-17)",
     ["a word glued to a spaced number's suffix", "AB 12 34 56Cname", "AB 12 34 56C"],
     ["a word starting past D glued to a spaced number", "AB 12 34 56Xyz", "AB 12 34 56"],
     ["a letter in another script", "AB123456é", "AB123456"],
+    // The pins `AB1234567` and `AB1234561` flipped with spec 0014, AC-9.
+    ["a footnote marker after a number with no suffix", "AB1234561", "AB123456"],
+    ["a digit after the six digits", "AB1234567", "AB123456"],
+    ["a marker before a full stop", "AB1234561.", "AB123456"],
   ])("lists it unticked with %s", (_what, text, nino) => {
     expect(found(`Ref ${text} here`)).toEqual([[nino, false]]);
   });
@@ -156,9 +164,16 @@ describe("a National Insurance number glued to what follows it (AC-23, INV-17)",
   });
 
   it.each([
-    ["a digit after the six digits", "AB1234567"],
-    ["a footnote marker after a number with no suffix", "AB1234561"],
+    ["two digits after the six digits", "AB12345678"],
+    ["a marker then a suffix letter", "AB1234561C"],
+    ["a marker then a word", "AB1234561name"],
     ["a tracking number", "AB123456789GB"],
+    ["a spaced date after two letters", "on 05 12 1980"],
+    // Spec 0014, AC-9, as narrowed on 2026-10-19: written with a space, the
+    // number's digits are the phone detector's, as before.
+    ["a marker after a spaced number", "AB 12 34 561"],
+    ["a marker after a space before the digits", "AB 1234561"],
+    ["a marker after a space before the last pair", "AB1234 561"],
   ])("still finds nothing with %s", (_what, text) => {
     expect(found(`Ref ${text} here`)).toEqual([]);
   });

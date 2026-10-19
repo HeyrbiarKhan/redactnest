@@ -13,14 +13,24 @@ import type { DetectInput, Span } from "./types";
  * longer code.
  *
  * A National Insurance number starts ticked (AC-10), except one with a letter
- * glued to its six digits (INV-17, as amended on 2026-10-10). With no
+ * or a footnote marker glued to its six digits (INV-17, as amended on
+ * 2026-10-10 and by spec 0014). With no
  * checksum, two letters, six digits and more letters is as often a product
  * code as a number glued to the next word, so it is listed unticked for the
  * visitor to judge, rather than dropped with a real number inside it. That
  * letter joins the row when it is a suffix letter, whatever follows it
- * (`AB123456CD` lists `AB123456C`). A digit glued to the six digits still
- * drops it, as part of a longer number: allowing one would list a spaced date
- * after two letters and every tracking number shaped `AB123456789GB`.
+ * (`AB123456CD` lists `AB123456C`). Exactly one ASCII digit glued to the six
+ * digits with nothing alphanumeric after it is a footnote marker, as NFKC
+ * reads `¹` (spec 0014, AC-9), when the number is written with no space: the
+ * number is listed unticked with the digit outside its row (`AB123456¹`).
+ * Two letters glued to the digits keep the phone detector out of them, so the
+ * row takes no digit any other row would hold. With a space in the number
+ * (`AB 12 34 56¹`), the phone detector can read its digit groups, often as a
+ * ticked number, so the marker drops it as before and the phone row stands.
+ * Two or more digits, or one with a letter or digit after it, still drop it as
+ * part of a longer number, so a spaced date after two letters
+ * (`on 05 12 1980`) and a tracking number shaped `AB123456789GB` are never
+ * listed.
  *
  * Why it is linear (INV-7): a number may start only at a letter with nothing
  * alphanumeric before it, and each start reads at most fourteen code points.
@@ -100,8 +110,20 @@ function ninoAt(points: readonly string[], at: number): Found | null {
   }
   if (!holds(points, end, ALPHANUMERIC)) return { end, tickedByDefault: true };
 
+  // One footnote marker glued to six digits written together with the letters:
+  // listed, unticked, the digit outside the row. Any other digit drops the
+  // number, and so does a marker after a number with a space in it, whose
+  // digit groups the phone detector reads as today (spec 0014, AC-9).
+  const together = end === at + 2 + PAIRS * 2;
+  if (
+    together &&
+    holds(points, end, ASCII_DIGIT) &&
+    !holds(points, end + 1, ALPHANUMERIC)
+  ) {
+    return { end, tickedByDefault: false };
+  }
   // A letter glued to the six digits: listed, unticked, taking the letter when
-  // it is a suffix letter, whatever follows it. A digit drops the number.
+  // it is a suffix letter, whatever follows it.
   if (!holds(points, end, LETTER_ANY_SCRIPT)) return null;
   return { end: holds(points, end, SUFFIX) ? end + 1 : end, tickedByDefault: false };
 }

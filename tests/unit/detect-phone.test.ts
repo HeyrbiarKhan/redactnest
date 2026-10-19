@@ -31,6 +31,11 @@ function texts(text: string, joins: readonly number[] = []): string[] {
   return found(text, joins).map(([number]) => number);
 }
 
+/** Each character NFKC normalised on its own, as the find step hands text over. */
+function nfkc(text: string): string {
+  return Array.from(text, (point) => point.normalize("NFKC")).join("");
+}
+
 describe("numbers found and ticked (AC-2, AC-10)", () => {
   it.each([
     ["a UK national number", "Call 020 7946 0958 today", "020 7946 0958"],
@@ -274,6 +279,123 @@ describe("numbers side by side", () => {
   });
 });
 
+/**
+ * Spec 0014, AC-1 and AC-2: after both choosing passes, a digit group they
+ * leave stranded beside a valid row, which a valid window from that row
+ * covers, is listed as a row of its own, unticked and marked `rescued`.
+ *
+ * `today` is what the detector listed before the rescue, written out as
+ * literals rather than read from a copy of the old code: the rows not marked
+ * `rescued` must equal it exactly, so every row today lists keeps its start,
+ * end and tick, and the default never removes less than today (INV-1, INV-2).
+ */
+describe("the rescue of stranded digit groups (spec 0014, AC-1, AC-2)", () => {
+  function rows(text: string, rescued: boolean): [string, boolean][] {
+    const points = Array.from(text);
+    return DETECTORS.phone({ text, joins: [] })
+      .filter((span) => (span.rescued === true) === rescued)
+      .map((span) => [points.slice(span.start, span.end).join(""), span.tickedByDefault]);
+  }
+
+  it.each<[string, [string, boolean][], [string, boolean][]]>([
+    // A stray group before a number: the valid pass takes it with the
+    // number's head, and today the number's last group has no row.
+    ["9346 212 555 0123", [["9346 212 555", true]], [["0123", false]]],
+    // An extension is read after a stretch as after any row.
+    ["9346 212 555 0123 ext. 45", [["9346 212 555", true]], [["0123 ext. 45", false]]],
+    // The possible pass takes `020` before the rescue runs, so the second
+    // number keeps its own row: the pin on the rescue's place, last.
+    [
+      "0131 410 5214 020 2977 5777",
+      [
+        ["0131 410 5214", true],
+        ["020 2977 5777", false],
+      ],
+      [],
+    ],
+    // A next number's first digits, left with no row today.
+    [
+      "212 526 5087 020 2208 1633 24",
+      [
+        ["212 526 5087", true],
+        ["2208 1633 24", true],
+      ],
+      [["020", false]],
+    ],
+    [
+      "212 555 0123 9346 415 234 5678",
+      [
+        ["212 555 0123", true],
+        ["9346 415 234", true],
+      ],
+      [["5678", false]],
+    ],
+    // Through the phone detector alone; `detect.test.ts` holds what the card
+    // leaves of it.
+    [
+      "6293 6608 0005 7382 276 020 7946 0958",
+      [["7382 276 020", true]],
+      [["7946 0958", false]],
+    ],
+    // The rescue lives in the phone detector, so a date's digits are rescued
+    // here and the yield in `detect` gives them back (AC-15).
+    ["212 918 8665 1119 21 June 2014", [["212 918 8665", true]], [["1119 21", false]]],
+    ["+44 20 3149 6135 18/01/1992", [["+44 20 3149 6135", true]], [["18", false]]],
+    // Nothing is stranded in any of these, so each lists exactly today's rows.
+    ["Box 2000 212 555 0123", [["212 555 0123", true]], []],
+    ["Ste 1 212 555 0123", [["1 212 555 0123", true]], []],
+    [
+      "020 7946 0958 020 7946 0321",
+      [
+        ["020 7946 0958", true],
+        ["020 7946 0321", true],
+      ],
+      [],
+    ],
+    [
+      "212 555 0123 212 555 0124",
+      [
+        ["212 555 0123", true],
+        ["212 555 0124", true],
+      ],
+      [],
+    ],
+    // A row with a unit after it has no extension, and a stretch never starts
+    // inside an extension's digits, which open the next run.
+    [
+      "212 555 0123 ext. 4567 212 555 0124",
+      [
+        ["212 555 0123 ext. 4567", true],
+        ["212 555 0124", true],
+      ],
+      [],
+    ],
+  ])(
+    "keeps today's rows in %s and lists each stretch unticked",
+    (text, today, stretches) => {
+      expect(rows(text, false)).toEqual(today);
+      expect(rows(text, true)).toEqual(stretches);
+    },
+  );
+
+  it("marks only a stretch as rescued, and never a row the two passes chose", () => {
+    const spans = DETECTORS.phone({ text: "9346 212 555 0123", joins: [] });
+    expect(spans).toStrictEqual([
+      { kind: "phone", start: 0, end: 12, tickedByDefault: true },
+      { kind: "phone", start: 13, end: 17, tickedByDefault: false, rescued: true },
+    ]);
+  });
+
+  /**
+   * A recorded miss (spec 0014, *Consequences*): the UK number here is only
+   * possible, so a window starting at a stray group takes its head and the
+   * rescue, which follows only valid windows, cannot reach `0001`.
+   */
+  it("leaves a number that is only possible cut as today", () => {
+    expect(rows("01865 514994 0472 0117 853 0001", true)).toEqual([]);
+  });
+});
+
 /** AC-2: a number is found however its digits are grouped. */
 describe("every grouping kept", () => {
   it.each([
@@ -316,6 +438,58 @@ describe("what is not a phone number", () => {
     ["a date glued by en dashes", "Born 05–12–1980 in Leeds"],
   ])("finds nothing in %s", (_what, text) => {
     expect(found(text)).toEqual([]);
+  });
+});
+
+/**
+ * Spec 0014, AC-9, as the owner narrowed it on 2026-10-19: only a full numeric
+ * date is a date unit (INV-14). A date with one digit glued on, as OCR text
+ * hands a footnote marker over, and a year first date inside a hyphen glued
+ * unit stay phone units, as before spec 0014. Read as date units, they took
+ * digits from these rows: `22-04-20137 8` lost its ticked row to an unticked
+ * date, and `78-1972-01-21`, which no date row reads, lost its row
+ * altogether. A drawn marker is off its line (AC-4) and never reaches here.
+ * Each row is written out as the detector listed it before.
+ */
+// covers: AC-3, AC-9
+describe("a date with a digit glued on stays a phone unit (spec 0014, AC-3, AC-9)", () => {
+  it.each<[string, [string, boolean][]]>([
+    ["DOB: 05.12.19801 12 High Street", [["05.12.19801 12", false]]],
+    ["Born 12.05.1980.1 44 years", [["12.05.1980.1 44", false]]],
+    ["John Smith 1980-12-051 44", [["1980-12-051 44", false]]],
+    ["22-04-20137 8", [["22-04-20137 8", true]]],
+    ["21-05-566 988 7048", [["21-05-566 988", true]]],
+    ["Born 25.05.804 282 246 9648", [["25.05.804 282", true]]],
+    ["Born 05.12.80.1 2345 x", [["05.12.80.1 2345", false]]],
+    [
+      "Ref 78-1972-01-21 020 3114 8249",
+      [
+        ["78-1972-01-21", true],
+        ["020 3114 8249", true],
+      ],
+    ],
+    ["Ref 00-2026-09-28-11 here", [["00-2026-09-28-11", false]]],
+    ["2026-09-27-01", [["2026-09-27-01", true]]],
+  ])("keeps the row listed before in %s", (text, rows) => {
+    expect(found(text)).toEqual(rows);
+  });
+});
+
+/**
+ * Spec 0014, AC-3: the cases it lists on NFKC text that the table above does
+ * not hold, each with the rows main lists. The DOB line is written raw, marker
+ * and all, so the pin also holds that NFKC folds `¹` into a plain `1` that
+ * reads into the phone row, which is why a drawn marker must be off its line
+ * (AC-4) before it gets here.
+ */
+// covers: AC-3
+describe("AC-3's cases on NFKC text keep main's phone rows (spec 0014, AC-3)", () => {
+  it.each<[string, [string, boolean][]]>([
+    ["DOB: 05.12.1980¹ 12 High Street", [["05.12.19801 12", false]]],
+    ["2026-09-27 10:00-2026-09-28 11:00", [["00-2026-09-28 11", false]]],
+    ["01-02-03-04-05", [["01-02-03-04-05", false]]],
+  ])("lists main's rows in %s", (text, rows) => {
+    expect(found(nfkc(text))).toEqual(rows);
   });
 });
 

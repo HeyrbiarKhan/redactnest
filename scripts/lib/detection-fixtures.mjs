@@ -335,6 +335,29 @@ export const DETECT_PHONE = Object.freeze([
   ...DETECT_PHONE_LISTED.map((number) => [number, true]),
   ["020 7946 0400", true],
   ["(212) 555-0142", true],
+  // Spec 0014, AC-1 and AC-2: a group the choosing passes leave stranded is a
+  // row of its own, unticked, and every row listed before keeps its tick.
+  ["9346 212 555", true],
+  ["0123", false],
+  ["0131 410 5214", true],
+  ["020 2977 5777", false],
+  // What the card leaves of the UK number after it: today's piece and the
+  // rescued stretch. The number differs from the page's other numbers, so no
+  // two rows packed together spell one of them.
+  ["020", true],
+  ["7946 0612", false],
+  // Spec 0014, AC-15: the stretch `1119 21` yields to the date.
+  ["212 918 8665", true],
+  ["1119", false],
+]);
+
+/**
+ * The values other than phone numbers and dates that `detect-phone.pdf`
+ * holds, as found, with their kind and tick: the card spec 0014 put before a
+ * UK number.
+ */
+export const DETECT_PHONE_OTHERS = Object.freeze([
+  ["card", "6293 6608 0005 7382 276", true],
 ]);
 
 /**
@@ -353,7 +376,10 @@ export const DETECT_PHONE = Object.freeze([
  *    list, a call log line with a time before the number and a duration
  *    after it, and a US number beside a ZIP+4;
  *  - a dotted date starting with `0`, which the trunk rule alone would read as
- *    a UK number.
+ *    a UK number;
+ *  - spec 0014's rescue (AC-1, AC-2, AC-15): a stray group before a number, a
+ *    number that is only possible after a valid one, a card then a UK number,
+ *    and a number, a stray group and a written date.
  */
 export function detectPhone() {
   return document(() => [
@@ -387,7 +413,11 @@ export function detectPhone() {
         ) +
         line("F1", 12, 72, 290, "12:30 020 7946 0400 3 min") +
         line("F1", 12, 72, 270, "Ship to CA 90210-1234 (212) 555-0142") +
-        line("F1", 12, 72, 250, "Born 05.12.1980 in Leeds"),
+        line("F1", 12, 72, 250, "Born 05.12.1980 in Leeds") +
+        line("F1", 12, 72, 230, "Notes 9346 212 555 0123 kept") +
+        line("F1", 12, 72, 210, "Notes 0131 410 5214 020 2977 5777 kept") +
+        line("F1", 12, 72, 190, "Paid 6293 6608 0005 7382 276 020 7946 0612 kept") +
+        line("F1", 12, 72, 170, "Notes 212 918 8665 1119 21 June 2014 kept"),
     },
   ]);
 }
@@ -395,12 +425,15 @@ export function detectPhone() {
 /**
  * The dates `detect-phone.pdf` holds. Spec 0005, INV-14: a numeric date is
  * never read as a phone number, so each is left for `date`, and each sits
- * within reach of "Born", so each is ticked.
+ * within reach of "Born", so each is ticked. The last, a written date after
+ * a number and a stray group, keeps every digit because a rescued stretch
+ * yields to it (spec 0014, AC-15); no birth word stands before it.
  */
 export const DETECT_PHONE_DATES = Object.freeze([
   ["12/05/1980", true],
   ["2026-09-27", true],
   ["05.12.1980", true],
+  ["21 June 2014", false],
 ]);
 
 /**
@@ -509,9 +542,15 @@ export const DETECT_UK_NINO = Object.freeze([
   ["AB 12 34 56 C", true],
   ["ce123456d", true],
   ["PX123456", true],
+  // Spec 0014, AC-9: one digit glued after a number with no suffix is a
+  // footnote marker, so the near miss `AB1234567` now lists `AB123456`,
+  // unticked, the digit outside the row.
+  ["AB123456", false],
   // Spec 0005, AC-23 and INV-17 (update of 2026-10-10): a number glued to
   // the next word is listed, unticked.
   ["KL123456B", false],
+  // Spec 0014, AC-9: a number with no suffix and a marker glued after it.
+  ["WL654321", false],
   ["JK 65 43 21 B", true],
 ]);
 
@@ -675,8 +714,9 @@ export function detectUsSsn() {
 /**
  * Spec 0005, AC-23. National Insurance numbers spaced, in lower case and with
  * no suffix; HMRC's own example and prefixes it never issues; a number glued
- * to the next word, listed unticked (INV-17, update of 2026-10-10); and a
- * number wrapped across two lines of one block.
+ * to the next word, listed unticked (INV-17, update of 2026-10-10); a number
+ * with no suffix and a marker drawn as a plain glued `1` (spec 0014, AC-9);
+ * and a number wrapped across two lines of one block.
  */
 export function detectUkNino() {
   return document(() => [
@@ -689,8 +729,159 @@ export function detectUkNino() {
         line("F1", 12, 72, 660, "Prefixes GB 12 34 56 A and TN123456B are never used") +
         line("F1", 12, 72, 640, "Codes DA123456A and AB1234567") +
         line("F1", 12, 72, 620, "Merged KL123456Bsigned here") +
-        line("F1", 12, 72, 600, "His number is JK 65 43") +
-        line("F1", 12, 72, 586, "21 B as printed"),
+        line("F1", 12, 72, 600, "NI number WL6543211 on file") +
+        line("F1", 12, 72, 580, "His number is JK 65 43") +
+        line("F1", 12, 72, 566, "21 B as printed"),
+    },
+  ]);
+}
+
+/**
+ * Helvetica's advance widths for printable ASCII, from U+0020 to U+007E, in
+ * thousandths of an em: its AFM, which MuPDF's built in Helvetica matches.
+ */
+const HELVETICA_ASCII = Object.freeze([
+  278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556,
+  556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667,
+  667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722,
+  667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500,
+  556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278,
+  556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+]);
+
+/** How far `text`, in Helvetica at `size`, moves the pen. */
+function helveticaAdvance(text, size) {
+  return [...text].reduce(
+    (sum, character) =>
+      sum + (HELVETICA_ASCII[character.charCodeAt(0) - 32] * size) / 1000,
+    0,
+  );
+}
+
+/**
+ * One line drawn piece by piece, each piece its own text object placed with
+ * `Tm` where the one before it ends, as the fourth review drew a marker: a
+ * piece is `{ text, size, rise, gap }` in Helvetica, or `{ hex, advance,
+ * size, rise }` in the identity font.
+ */
+function pieces(y, parts) {
+  let x = 72;
+  let content = "";
+  for (const { text, hex, advance, size = 12, rise = 0, gap = 0 } of parts) {
+    x += gap;
+    const at = `1 0 0 1 ${num(Number(x.toFixed(3)))} ${num(y + rise)} Tm`;
+    content +=
+      hex === undefined
+        ? `BT /F1 ${size} Tf ${at} ${literal(text)} Tj ET\n`
+        : `BT /U ${size} Tf ${at} <${hex}> Tj ET\n`;
+    x += hex === undefined ? helveticaAdvance(text, size) : advance;
+  }
+  return content;
+}
+
+/** A footnote marker as word processors draw one: 8 pt, raised 5 pt, no gap. */
+const MARKER = Object.freeze({ text: "1", size: 8, rise: 5 });
+
+/**
+ * The lines of `detect-markers.pdf`, top to bottom, each a list of pieces in
+ * Helvetica 12 pt unless a piece says otherwise. Spec 0014, AC-6.
+ */
+const MARKER_LINES = Object.freeze([
+  [{ text: "Mail john@example.com" }, MARKER, { text: " today" }],
+  [{ text: "Tel 020 7946 0958" }, MARKER, { text: " today" }],
+  [{ text: "Call (212) 555-0123" }, MARKER, { text: " today" }],
+  [{ text: "Call +44 20 7946 0958" }, MARKER, { text: " today" }],
+  [{ text: "Born 12/05/1980" }, MARKER, { text: " on file" }],
+  [{ text: "Born 12/05/80" }, MARKER, { text: " on file" }],
+  [{ text: "SSN 123456789" }, MARKER, { text: " on file" }],
+  [{ text: "SSN 123-45-6789" }, MARKER, { text: " on file" }],
+  [{ text: "Card 4111 1111 1111 1111" }, MARKER, { text: " on file" }],
+  [{ text: "IBAN GB82 WEST 1234 5698 7654 32" }, MARKER, { text: " on file" }],
+  [{ text: "NI AB123456" }, MARKER, { text: " on file" }],
+  [{ text: "NI AB123456C" }, MARKER, { text: " on file" }],
+  [{ text: "DOB 27-09-2026" }, MARKER, { text: " 5 Street" }],
+  // An ordinal's letters raised as a word processor types them.
+  [{ text: "Signed 27" }, { ...MARKER, text: "th" }, { text: " September 2026 here" }],
+  [{ text: "On 1" }, { ...MARKER, text: "st" }, { text: " of May 2026 here" }],
+  // A subscript, lowered 2 pt.
+  [
+    { text: "Water H" },
+    { ...MARKER, text: "2", rise: -2 },
+    { text: "O then 020 7946 0958" },
+  ],
+  // A marker of two glyphs.
+  [{ text: "Born 12/05/1980" }, { ...MARKER, text: "10" }, { text: " on file" }],
+  // A marker in another script, the Arabic Indic one, through the identity font.
+  [
+    { text: "Born 12/05/1980" },
+    { hex: "0661", advance: (600 * 8) / 1000, size: 8, rise: 5 },
+    { text: " on file" },
+  ],
+  // MuPDF keeps a raised glyph glued up to a 1 pt gap; at 1.5 pt it reads a space.
+  [{ text: "Born 12/05/1980" }, { ...MARKER, gap: 1 }, { text: " on file" }],
+  [{ text: "Born 12/05/1980" }, { ...MARKER, gap: 1.5 }, { text: " on file" }],
+  // A full size `¹` through Helvetica's WinAnsi encoding, code 0xB9: off its
+  // line by its code point alone.
+  [{ text: "Born 12/05/1980¹ on file" }],
+  // Chromium's default superscript: 10 pt raised 4.2 pt after 12 pt text.
+  [{ text: "Born 12/05/1980" }, { ...MARKER, size: 10, rise: 4.2 }, { text: " on file" }],
+  // A whole line in small print, with a smaller marker still.
+  [
+    { text: "Born 12/05/1980", size: 8 },
+    { ...MARKER, size: 5.5, rise: 3 },
+    { text: " on file", size: 8 },
+  ],
+  // The guard: a whole value drawn small and raised, after a space, so it is
+  // glued to no kept glyph and stays in the text.
+  [{ text: "Tel: " }, { text: "020 7946 0958", size: 8, rise: 5 }],
+]);
+
+/**
+ * The values `detect-markers.pdf` holds, in reading order: kind, text, tick,
+ * and how the text after the value begins, which is never the marker. Spec
+ * 0014, AC-6.
+ */
+export const DETECT_MARKERS = Object.freeze([
+  ["email", "john@example.com", true, " today"],
+  ["phone", "020 7946 0958", true, " today"],
+  ["phone", "(212) 555-0123", true, " today"],
+  ["phone", "+44 20 7946 0958", true, " today"],
+  ["date", "12/05/1980", true, " on file"],
+  ["date", "12/05/80", true, " on file"],
+  ["us-ssn", "123456789", true, " on file"],
+  ["us-ssn", "123-45-6789", true, " on file"],
+  ["card", "4111 1111 1111 1111", true, " on file"],
+  ["iban", "GB82 WEST 1234 5698 7654 32", true, " on file"],
+  ["uk-nino", "AB123456", true, " on file"],
+  ["uk-nino", "AB123456C", true, " on file"],
+  ["date", "27-09-2026", true, " 5 Street"],
+  ["date", "27 September 2026", false, " here"],
+  ["date", "1 of May 2026", false, " here"],
+  ["phone", "020 7946 0958", true, " Born"],
+  ["date", "12/05/1980", true, " on file"],
+  ["date", "12/05/1980", true, " on file"],
+  ["date", "12/05/1980", true, " on file"],
+  ["date", "12/05/1980", true, " 1 on file"],
+  ["date", "12/05/1980", true, " on file"],
+  ["date", "12/05/1980", true, " on file"],
+  ["date", "12/05/1980", true, " on file"],
+  ["phone", "020 7946 0958", true, ""],
+]);
+
+/**
+ * Spec 0014, AC-4 to AC-8. A value of every kind with a real raised footnote
+ * marker after it, drawn as a second text object 8 pt and raised 5 pt with no
+ * gap, as a word processor draws one; raised ordinals and a lowered subscript;
+ * a marker of two glyphs, one in another script, one 1 pt and one 1.5 pt
+ * clear, a full size `¹` glyph, Chromium's shape and a line in small print;
+ * and a whole value drawn small and raised after a space, which stays in the
+ * text. One page, so the browser suite can open it.
+ */
+export function detectMarkers() {
+  return document(({ add }) => [
+    {
+      fonts: `/U ${identityFont(add)} 0 R`,
+      content: MARKER_LINES.map((parts, row) => pieces(750 - row * 26, parts)).join(""),
     },
   ]);
 }

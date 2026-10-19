@@ -64,8 +64,10 @@ export const DETECTORS: Readonly<Record<DetectorKind, Detector>> = Object.freeze
  * looser digit shape, so an IBAN's digits never list as a phone number. A
  * rule about patterns, not a cap on the visitor. `date` comes last, but no
  * numeric date is ever lost to `phone` for it: the phone detector never reads
- * one (INV-14). `tests/unit/detect.test.ts` fails `pnpm typecheck` when a kind
- * has no place here (AC-24).
+ * one (INV-14). A rescued stretch's phone row is cut back where a lower kind's
+ * span begins, or dropped, before precedence is applied (spec 0014, AC-15), so
+ * the rescue never takes a date's digits either. `tests/unit/detect.test.ts`
+ * fails `pnpm typecheck` when a kind has no place here (AC-24).
  */
 export const PRECEDENCE = Object.freeze([
   "email",
@@ -90,6 +92,9 @@ export const PRECEDENCE = Object.freeze([
  * number, the rest of that number is still its own row, and unticking the
  * card can never untick it. The higher row is never touched.
  *
+ * Before that, each stretch the phone rescue lists yields to the kinds below
+ * `phone` (spec 0014, AC-15), and no span leaves with `rescued`.
+ *
  * Positions are marked as they are claimed, and each span's positions are
  * read once, so this costs the length of what was found.
  */
@@ -98,8 +103,22 @@ export function detect(input: DetectInput): readonly Span[] {
   const claimed = new Uint8Array(points.length);
   const kept: Span[] = [];
 
+  // Every kind below `phone` runs once, as today, and its spans as its
+  // detector returns them are what a rescued stretch yields to.
+  const lower = new Map<DetectorKind, readonly Span[]>(
+    PRECEDENCE.slice(PRECEDENCE.indexOf("phone") + 1).map((kind) => [
+      kind,
+      DETECTORS[kind](input),
+    ]),
+  );
+  const spansOf = (kind: DetectorKind): readonly Span[] =>
+    lower.get(kind) ??
+    (kind === "phone"
+      ? yieldRescued(points, DETECTORS.phone(input), [...lower.values()].flat())
+      : DETECTORS[kind](input));
+
   for (const kind of PRECEDENCE) {
-    for (const span of DETECTORS[kind](input)) {
+    for (const span of spansOf(kind)) {
       const pieces = claimed.subarray(span.start, span.end).includes(1)
         ? freeStretches(points, claimed, span)
         : [span];
@@ -110,6 +129,59 @@ export function detect(input: DetectInput): readonly Span[] {
     }
   }
   return kept.sort((a, b) => a.start - b.start);
+}
+
+/**
+ * The phone spans with each rescued stretch cut back where a lower kind's span
+ * begins, or dropped, and `rescued` stripped from every one. Spec 0014, AC-15.
+ *
+ * The phone detector cannot see where the date detector reads a date, and
+ * phone outranks date, so without this a stretch could take a date's day:
+ * `212 918 8665 1119 21 June 2014` would cut the date to `June 2014`. A
+ * stretch's end moves back to the earliest start among the lower spans that
+ * overlap it, extension included, then back to its last letter or digit, so a
+ * space or hyphen at the cut goes too; a stretch with nothing left is
+ * dropped. No row the two choosing passes chose is rescued, so this never
+ * touches one of today's rows (spec 0014, INV-7).
+ *
+ * One sweep: the phone spans come in start order and never overlap, so a
+ * pointer over the lower spans in start order only moves forward. `reach` is
+ * the furthest end among the lower spans starting at or before the stretch,
+ * so a lower span already running into it drops it whole.
+ */
+function yieldRescued(
+  points: readonly string[],
+  phone: readonly Span[],
+  lower: readonly Span[],
+): readonly Span[] {
+  const byStart = [...lower].sort((a, b) => a.start - b.start);
+  const kept: Span[] = [];
+  let next = 0;
+  let reach = -1;
+
+  for (const { rescued, ...span } of phone) {
+    while (next < byStart.length && byStart[next].start <= span.start) {
+      reach = Math.max(reach, byStart[next].end);
+      next += 1;
+    }
+    if (!rescued) {
+      kept.push(span);
+      continue;
+    }
+
+    const later = byStart[next];
+    let end =
+      reach > span.start
+        ? span.start
+        : later !== undefined && later.start < span.end
+          ? later.start
+          : span.end;
+    if (end < span.end) {
+      while (end > span.start && !ALPHANUMERIC.test(points[end - 1])) end -= 1;
+    }
+    if (end > span.start) kept.push({ ...span, end });
+  }
+  return kept;
 }
 
 /** One whitespace code point. Matches one code point, so it cannot backtrack. */

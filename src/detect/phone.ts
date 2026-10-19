@@ -18,15 +18,18 @@ import type { DetectInput, Span } from "./types";
  * In order: one pass cuts the block into runs of digit groups; a unit that is
  * a full numeric date is marked; every stretch of units is a window, given one
  * reading or none by `PHONE_READINGS` and parsed at most once; valid windows
- * are taken first, then possible ones; an extension joins a taken window; and
- * the tick is decided.
+ * are taken first, then possible ones; the units both left stranded beside a
+ * valid row are rescued, each stretch its own row (spec 0014); an extension
+ * joins a taken window; and the tick is decided.
  *
  * Why it is linear (INV-7): the scan reads each code point a bounded number of
  * times. A window holds at most `MAX_WINDOW_DIGITS` digits as written, so each
  * unit starts at most that many windows. Each start costs at most
  * `MAX_PARSES_PER_GROUP` parses, and a verdict is kept for the block, so the
  * same digits under the same reading are parsed once. The two choosing passes
- * step over each unit once.
+ * and the rescue step over each unit once, the rescue's reach test reading
+ * forward over units whose digits sum to at most `MAX_WINDOW_DIGITS`, so at
+ * most that many, and one sweep lists the rescued stretches (spec 0014, AC-14).
  */
 
 /**
@@ -253,6 +256,9 @@ export function detectPhone(input: DetectInput): readonly Span[] {
       start: window.start,
       end: keeps ? extension : window.end,
       tickedByDefault: ticks(window, points),
+      // `detect` reads it to yield the stretch to a date, then strips it
+      // (spec 0014, AC-15).
+      ...(window.rescued ? { rescued: true } : {}),
     };
   });
 }
@@ -465,6 +471,8 @@ interface Window {
   readonly last: number;
   readonly reading: PhoneReading;
   readonly valid: boolean;
+  /** A stretch the rescue lists as a row of its own, never ticked (spec 0014, AC-1, AC-2). */
+  readonly rescued?: true;
 }
 
 /**
@@ -479,6 +487,8 @@ function windowsFrom(
   judge: Judge,
 ): readonly Window[] {
   const opening = run[first];
+  // INV-14, first guard: no window starts at a date unit. The second, in the
+  // loop below, stops a window growing into one; together no window holds one.
   if (opening.date || joinsLongerCode(points, opening.start - 1, -1)) return [];
 
   const windows: Window[] = [];
@@ -489,6 +499,8 @@ function windowsFrom(
 
   for (let index = first; index < run.length; index += 1) {
     const unit = run[index];
+    // INV-14, second guard: a window stops before a date unit. The first, at
+    // the top, keeps one from starting there.
     if (unit.date || (index > first && unit.afterSlash)) break;
     // Counted as written, `(0)` included, so a run of `(0)` groups cannot grow
     // one window without end.
@@ -549,17 +561,34 @@ function joinsLongerCode(points: readonly string[], at: number, away: -1 | 1): b
  * only free units, the same way. So `Box 2000 212 555 0123` lists
  * `212 555 0123`, not `2000 212 555` (possible, not valid) with `0123` left
  * behind. No unit belongs to two windows (INV-13).
+ *
+ * Then the rescue (spec 0014, AC-1): a unit both passes left free, which a
+ * valid window starting inside a valid row covers, is rescued, and each
+ * stretch of rescued units is listed as a row of its own, never ticked. So
+ * `9346 212 555 0123` lists `9346 212 555` as today and `0123` beside it,
+ * where today `0123` stays in the file with no row.
+ *
+ * It runs last on purpose, so it only ever lists units today's passes leave
+ * with no row, and every row they chose keeps exactly its start, end, units
+ * and tick (spec 0014, INV-1). Run before the possible pass, it took `020` from
+ * `020 2977 5777` and left `2977 5777` in the file. A stretch is a row of its
+ * own, not joined into the row beside it, because a joined row would hold a
+ * neighbour's digits and so could not keep its tick: the default would then
+ * remove less than today (spec 0014, INV-2). And because phone outranks date,
+ * `detect` makes a stretch yield to a date (spec 0014, AC-15 and INV-7).
  */
 function chosenIn(run: Run, points: readonly string[], judge: Judge): readonly Window[] {
   const cache: (readonly Window[] | undefined)[] = [];
   const windowsAt = (first: number) =>
     (cache[first] ??= windowsFrom(run, first, points, judge));
 
-  const taken = new Uint8Array(run.length);
+  // The row each unit belongs to, counted from 1 in the order chosen, so 0 is a
+  // free unit. Rows 1 to `validRows` are the valid pass's.
+  const owner = new Uint32Array(run.length);
   const chosen: Window[] = [];
   const take = (first: number, window: Window) => {
-    taken.fill(1, first, window.last);
     chosen.push(window);
+    owner.fill(chosen.length, first, window.last);
     return window.last;
   };
 
@@ -567,23 +596,76 @@ function chosenIn(run: Run, points: readonly string[], judge: Judge): readonly W
     const valid = longest(windowsAt(first), (window) => window.valid);
     first = valid ? take(first, valid) : first + 1;
   }
+  const validRows = chosen.length;
 
   // Where each stretch of free units ends, found once from the right, so the
   // second pass costs the run's length.
   const freeUntil = new Uint32Array(run.length + 1);
   freeUntil[run.length] = run.length;
   for (let index = run.length - 1; index >= 0; index -= 1) {
-    freeUntil[index] = taken[index] ? index : freeUntil[index + 1];
+    freeUntil[index] = owner[index] !== 0 ? index : freeUntil[index + 1];
   }
 
   for (let first = 0; first < run.length;) {
-    if (taken[first]) {
+    if (owner[first] !== 0) {
       first += 1;
       continue;
     }
     const limit = freeUntil[first];
     const possible = longest(windowsAt(first), (window) => window.last <= limit);
     first = possible ? take(first, possible) : first + 1;
+  }
+
+  // The rescue. The valid pass visited every unit outside its rows and found
+  // no valid window there, so every valid window covering a free unit starts
+  // inside a valid row; only those units are asked, and a possible row's units
+  // never. A unit is asked only where a free unit not yet rescued is in reach,
+  // as `windowsFrom` caps a window by digits as written, so numbers side by
+  // side cost no lookup beyond today's (AC-14). The reach test ignores the date
+  // and slash stops `windowsFrom` also applies: it can only ask more often than
+  // needed, never less. The order units are asked in changes nothing, and a
+  // second rescue would rescue nothing, because the windows a unit starts read
+  // only the run, never which units are rescued.
+  const rescued = new Uint8Array(run.length);
+  const reachesFree = (first: number) => {
+    let written = run[first].written;
+    for (let index = first + 1; index < run.length; index += 1) {
+      written += run[index].written;
+      if (written > MAX_WINDOW_DIGITS) return false;
+      if (owner[index] === 0 && rescued[index] === 0) return true;
+    }
+    return false;
+  };
+  for (let first = 0; first < run.length; first += 1) {
+    const row = owner[first];
+    if (row === 0 || row > validRows || !reachesFree(first)) continue;
+    const reach = longest(windowsAt(first), (window) => window.valid);
+    if (!reach) continue;
+    for (let index = first + 1; index < reach.last; index += 1) {
+      if (owner[index] === 0) rescued[index] = 1;
+    }
+  }
+
+  // Each stretch of rescued units is a row of its own. A stretch is maximal
+  // and never a run's first unit, so the unit just before it is always in a
+  // row, whose reading it carries; `ticks` never reads it, since a stretch is
+  // never valid (AC-2).
+  for (let first = 0; first < run.length;) {
+    if (rescued[first] === 0) {
+      first += 1;
+      continue;
+    }
+    let last = first;
+    while (last < run.length && rescued[last] === 1) last += 1;
+    chosen.push({
+      start: run[first].start,
+      end: run[last - 1].end,
+      last,
+      reading: chosen[owner[first - 1] - 1].reading,
+      valid: false,
+      rescued: true,
+    });
+    first = last;
   }
 
   return chosen.sort((a, b) => a.start - b.start);

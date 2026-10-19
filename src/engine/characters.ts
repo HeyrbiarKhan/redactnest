@@ -46,6 +46,62 @@ export const LINE_HEIGHT_MIN = 0.67;
 export const LINE_HEIGHT_MAX = 1.5;
 
 /**
+ * When a glyph is off its line, so not part of the text a detector reads: a
+ * footnote marker, a subscript, an ordinal's raised letters. Spec 0014, AC-4.
+ * Rules about pages, not caps on the visitor, so they live here where no
+ * environment variable can switch the boundary off (spec 0006, INV-7).
+ *
+ * A glyph is off its line when its quad is at most `OFF_LINE_SIZE_MAX` of the
+ * line's dominant height and its origin sits at least `OFF_LINE_SHIFT_MIN` of
+ * that height off the line's baseline: smaller and shifted both, since a size
+ * change alone is small print on the baseline and a shift alone wobbles on an
+ * OCR layer. 0.9 because Chromium's default superscript prints at 0.83 of its
+ * line (Word's at 0.65, LaTeX's at 0.70); 0.15 because a table cell aligned
+ * middle beside a taller one sits only 0.06 off, while every superscript and
+ * subscript measured sits 0.23 or more. A line with fewer than
+ * `OFF_LINE_MIN_LINE_GLYPHS` glyphs taller than the cap has no baseline worth
+ * the name, so nothing on it is off by geometry. A run of more than
+ * `OFF_LINE_STRETCH_MAX` such glyphs is text, not a marker, and stays.
+ * Measured on MuPDF 1.28.1 against every fixture, the local OCR scans and a
+ * page printed by Chromium (spec 0014's `rationale.md`).
+ */
+export const OFF_LINE_SIZE_MAX = 0.9;
+export const OFF_LINE_SHIFT_MIN = 0.15;
+export const OFF_LINE_STRETCH_MAX = 4;
+export const OFF_LINE_MIN_LINE_GLYPHS = 3;
+
+/**
+ * The code points that are off their line whatever their geometry, since a
+ * font may draw them full size on the baseline and NFKC would fold `¹` into a
+ * `1` glued to the value before it. Spec 0014, AC-5. The ranges AC-5 names:
+ * `ª`, `²`, `³`, `¹`, `º`, the superscripts and subscripts block, and the
+ * raised letters ordinals use. Left out by name are the ones in those ranges
+ * that NFKC folds to no letter or digit (the raised and lowered `+ − = ( )`)
+ * and the three the ranges leave unassigned, so every member reads as a
+ * letter or digit, as `tests/unit/detection.test.ts` pins. A rule about
+ * pages, not a cap on the visitor.
+ */
+export const SUPERSCRIPT_CODE_POINTS: ReadonlySet<number> = (() => {
+  const ranges = [
+    [0x00aa, 0x00aa],
+    [0x00b2, 0x00b3],
+    [0x00b9, 0x00ba],
+    [0x2070, 0x209c],
+    [0x02b0, 0x02b8],
+    [0x02e0, 0x02e4],
+    [0x1d2c, 0x1d6a],
+  ] as const;
+  const signs = new Set([
+    0x2072, 0x2073, 0x207a, 0x207b, 0x207c, 0x207d, 0x207e, 0x208a, 0x208b, 0x208c,
+    0x208d, 0x208e, 0x208f,
+  ]);
+  const members = ranges.flatMap(([from, to]) =>
+    Array.from({ length: to - from + 1 }, (_, at) => from + at),
+  );
+  return Object.freeze(new Set(members.filter((code) => !signs.has(code))));
+})();
+
+/**
  * The two ways a page is read as the visitor sees it: by detection (spec 0005,
  * which reads both), by target validation (AC-27), and by the Vitest target
  * helper.

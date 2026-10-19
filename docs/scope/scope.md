@@ -34,6 +34,9 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 21 | Launch readiness | Release 2 | done |
 | 22 | Brand & UI refresh | Release 2 | done |
 | 23 | Legal review | Release 6 | planned |
+| 24 | Detector follow ups | Release 3 | done |
+| 25 | More date forms | Release 3 | planned |
+| 26 | UI polish | Release 3 | planned |
 
 ## Foundations
 
@@ -260,7 +263,7 @@ spec [0013](../specs/0013-brand-ui-refresh/index.md) · code in `src/ui/brand-ma
 
 ## Release 3: Widen the net, and see it working
 
-Detectors first (your call, 2026-10-07): spec 0005 already covers them, so they go straight to `/develop` and give visitors more to find right away. Telemetry follows.
+Detectors first (your call, 2026-10-07): spec 0005 already covers them, so they go straight to `/develop` and give visitors more to find right away. Then the misses feature 12's reviews left open (feature 24), a small visual polish (feature 26), and the date forms with no pattern yet (feature 25), still before telemetry, since telemetry never sees content and so cannot measure a miss (your call, 2026-10-11). Telemetry follows.
 
 ### 12. Remaining detectors · done · Beta + review
 Dates, credit cards with Luhn validation, IBAN with checksum validation, US Social Security numbers, and UK National Insurance numbers, built against the detection spec already written in release 1.
@@ -279,6 +282,33 @@ spec [0005](../specs/0005-pattern-detection/index.md) · code in `src/detect` (n
 - [x] Verify it: `/check verify remaining detectors` (first run done, and again for the update of 2026-10-10; again for the second update; again for the third update)
 - [x] Test it: `/test remaining detectors` (first run done, and again for the update of 2026-10-10; again for the second update; again for the third update)
 - [x] Review it (fresh model): `/check review remaining detectors` (first review done, [2026-10-10](../reviews/2026-10-10-feat-remaining-detectors.md); for the update, [second review](../reviews/2026-10-10-feat-remaining-detectors-second.md); for the second update, [third review](../reviews/2026-10-10-feat-remaining-detectors-third.md); for the third update, [fourth review](../reviews/2026-10-11-feat-remaining-detectors-fourth.md))
+
+### 24. Detector follow ups · done · Beta + review · from spec 0005
+The misses feature 12 and its four reviews left open in spec 0005's Follow-up, designed in one pass because they share a cause: a neighbour, or a footnote marker glued to a value, hides that value or gives it the wrong row. A superscript boundary in the find step is the candidate that could settle most of the marker cases at once, instead of one digit tolerances kind by kind.
+**Done when:** every open detector item in spec 0005's Follow-up is settled, measured before any rule changes. A digit group a phone window strands beside a number gets a row of its own, unticked. A full date with a footnote marker drawn raised is never read as a phone number, because the off line boundary in the find step parts the marker from the date before any detector reads it (spec 0014, AC-4 and AC-6). A plain digit glued to a date, as OCR text gives, still reads into a phone row as it did before this feature, and so does the ISO interval with plain times (`00-2026-09-28 11`): the date units that fixed both were taken out in the owner's narrowing of 2026-10-19, and spec 0014's Follow-up records both for `/architect`. A footnote marker glued after an email, a phone number, a date with a two digit year, a bare Social Security number after its word, or a National Insurance number with no suffix either gets a row or stays a recorded, measured miss. And a real raised marker read through MuPDF is held by a test.
+**Also owed here:** spec 0005's smaller open items: a comment at each of the two INV-14 guards in `src/detect/phone.ts` naming the other, `covering` in `src/engine/find.ts` built only from ordinary matches' sound quads (the pattern detection review's Minor 1), and the phone budget measured on the CI runner. Also spec 0013's `/test` item from feature 12: pin the Finds columns as the Strips list's are pinned (AC-11).
+spec [0014](../specs/0014-detector-follow-ups/index.md) · code in `src/detect` (`phone.ts`, `uk-nino.ts`), `src/engine` (`find.ts`, the off line constants), `scripts/lib/detection-fixtures.mjs`, `scripts/make-fixture.mjs`, `.github/workflows/ci.yml`
+- [x] Design it (spec): `/architect detector follow ups`
+- [x] Build it: `/develop detector follow ups`
+  - [x] The phone rescue: after both choosing passes, a stranded digit group a valid window covers is listed as a row of its own, unticked, every row listed today kept exactly as it is, and the group yields to a date in `detect`; `detect-phone.pdf` gains the four rescue lines · AC-1, AC-2, AC-14, AC-15
+  - [x] The off line boundary in the find step: glyphs smaller and shifted off their line, or raised by code point, leave the text as a join and the target quads part round them; `detect-markers.pdf` with a real raised marker after every kind, and the engine tests that each row redacts with the marker left · AC-4 to AC-8
+  - [x] The text rules: the two INV-14 unit rules in the phone detector, and the one digit tolerances for a two digit year, a bare Social Security number and a National Insurance number, each measured on random codes first · AC-3, AC-9, AC-10
+  - [x] Bookkeeping: the `covering` comment, the CI step that prints the phone detector's time, the Finds columns pin, spec 0005's amendments and ticks · AC-10 to AC-13
+  - [x] The first review's fix (the owner's narrowing, 2026-10-19): AC-3's two unit rules and the two digit year and bare Social Security markers taken out, the National Insurance marker kept only for a number written with no space, each measured against main through `detect` so no row main lists loses a digit or a tick; the review's two Minors and two nits · AC-3, AC-9, AC-11
+- [x] Verify it: `/check verify detector follow ups`
+- [x] Test it: `/test detector follow ups`
+- [x] Review it (fresh model): `/check review detector follow ups` (first review done, [2026-10-19](../reviews/2026-10-19-feat-detector-followups.md); for the first review's fix, [second review](../reviews/2026-10-19-feat-detector-followups-second.md))
+
+### 26. UI polish · from spec 0013
+Two visual fixes, no new design (your call, 2026-10-11). On the home page, the Strips card's items look different from the Finds rows beside them. On `/tool`, while a document opens, the spinner and its phase line ("Looking for …") sit in the right rail beside an empty left column.
+**Done when:** each Strips item on the home page is a row with the Finds rows' style and text size, the two cards still sit side by side at equal height from `md`, and each list is still one list to a screen reader; and on `/tool`, while a document opens, the spinner and phase line show in the left column in the drop zone's place, with the polite region still announcing each phase once, never remounting, and focus never moved (spec 0013, AC-14, AC-16, AC-20).
+**Also owed here:** spec 0013's AC-11 (the Strips items) and AC-16 (the opening state's layout) amended as built, and `scripts/make-brand.mjs` rerun if either change shows in a brand picture.
+- [ ] Build it: `/develop UI polish`
+
+### 25. More date forms · needs a decision · Beta + review · from spec 0005
+Date forms the date detector has no pattern for, so a date written that way gets no row whatever stands beside it: a written month with separators (`05-Jan-2026`, `27/Sep/2026`), year first with dots or one digit parts (`2026.09.27`, `2026/9/7`), unseparated (`20260927`), a written date with a two digit year (`27 Sep 26`), spaced separators, the legal formula (`27th day of September 2026`), German style ordinals and odd commas. Exports, UK documents, deeds and contracts write these.
+**Done when:** each listed form is either found, with its own near misses measured, or recorded as a miss with its reason; a change to `isNumericDate` reruns the phone look alike cases, since the phone detector shares it (INV-14); and every form found redacts through the real engine from a fixture.
+- [ ] Design it (spec): `/architect more date forms`
 
 ### 11. Telemetry & error monitoring · needs a decision
 Enough numbers to know whether the funnel works and whether anything is failing silently, without ever touching document content.
@@ -332,6 +362,8 @@ Something a business buyer can sign, ready before somebody asks for it under tim
 Out of scope for the current build pass, kept so the plan stays honest.
 - **OCR for scanned PDFs**: the obvious next move once rectangles exist · needs a decision
 - **Per country EU national IDs**: beyond the UK National Insurance number already planned · needs a decision
+- **Masking lower detector kinds**: run each lower kind with every position a higher kind holds read as whitespace, so a phone window can never start inside a card and `5500 0000 0000 0004 05/12/2026` lists its date whole; needs its own measurement against the overlap piece cases · needs a decision · from spec 0014
+- **Phone numbers the metadata calls only possible, beside stray groups**: a window from a stray group strands a UK number's last group, and a `+44` number loses its country code to a US reading of its digits; two candidate rescues that only add unticked rows, to measure together like spec 0014's AC-1 · needs a decision · from spec 0014
 - **Batch processing**: more than one document at a time · needs a decision
 - **Teams and organizations**: shared accounts and seats · needs a decision
 - **API access**: programmatic redaction · needs a decision
@@ -339,6 +371,8 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **Dark mode**: light only for now (spec 0003). Needs its own decision: the colour roles redefined for dark, a second contrast contract, and axe runs in both schemes. It would follow the system setting, since a toggle cannot remember a choice without storage · needs a decision · from spec 0003
 - **A memory limit for blanking scan pixels**: spec 0004's padded pass rewrites every scan page it touches as Flate. One ticked match on each page of a 50 page 300 dpi grey scan measured 917 MB and a file 4.9 times larger. Pro now opens 50 page scans with no such limit, so this is more urgent: settle it before the paid cap rises above 50 (spec 0012) · needs a decision · from spec 0006
 - **Name the item behind a refused run**: carry the `MatchId` with a run refusal where the engine can trace one, so the checklist can point at it. Waits for feature 11's refusal counts, alongside spec 0005's Follow-up on `replacement-text` · needs a decision · from spec 0007
+- **Trial removal at open**: one working copy with every unblocked match ticked, checked for surviving replacement text, so a match it names is blocked before review. It would catch replacement text wider than a match and some other self check causes, at the cost of about one redaction run added to every open, and it cannot prove every smaller tick set. Waits for the same `replacement-text` counts as the line above · needs a decision · from spec 0005
+- **Report two MuPDF.js issues upstream**: replacement text spans (as device metatext callbacks or a structured text flag), which would close spec 0005's AC-9 limit, and the structured text walker's `String.fromCharCode`, which cuts code points above U+FFFF (line 1150 of `dist/mupdf.js` in 1.28.1). Once a release fixes the second, the AC-26 pin fails and the repair in `walkCharacters` can go · from spec 0005
 - **Page preview in review**: page images on the main thread are a new kind of document data (spec 0002, INV-1). Spec 0013 left it with feature 14, which renders pages for rectangles, and feature 14 now carries it · needs a decision · from spec 0007
 - **The crooked scan line on a straight scan**: spec 0006's line (AC-25) shows whenever a match is blocked `slanted-text` on a machine read page, and says the scan is slightly crooked. On a straight scan with a picture pasted before OCR, OCR's lines beside the picture can come out slanted, so the line shows and its advice to straighten the scan may not help (4 matches on the local `scan-dense-photo-before.pdf`). It fails safe: the matches stay blocked and shown. Decide what the line says, or when it shows, measured first · needs a decision · from spec 0010
 - **Host MuPDF's source ourselves**: attach each shipped version's source archive as a release asset on our own repository, if Artifex ever stop serving one we still ship. AGPL section 6(d) keeps its availability our duty (spec 0009, Option 4) · from spec 0009

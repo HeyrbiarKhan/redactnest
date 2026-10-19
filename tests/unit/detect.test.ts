@@ -154,6 +154,154 @@ describe("resolving overlaps (AC-3)", () => {
 });
 
 /**
+ * Spec 0014, AC-1 and AC-15, through `detect`: a stretch the phone rescue
+ * lists is a row of its own, unticked, and yields to a date, since phone
+ * outranks date and the phone detector cannot see where a date is read. It is
+ * cut back to its last letter or digit before the date, or dropped where
+ * nothing is left, and every row of today's keeps its place and its tick.
+ */
+describe("a rescued stretch beside other kinds (spec 0014, AC-15)", () => {
+  it.each<[string, [DetectorKind, string, boolean][], string[]]>([
+    // `1119` is a free group before the date, so it keeps a row; without the
+    // yield the date became `June 2014`.
+    [
+      "212 918 8665 1119 21 June 2014",
+      [
+        ["phone", "212 918 8665", true],
+        ["phone", "1119", false],
+        ["date", "21 June 2014", false],
+      ],
+      ["212 918 8665", "1119 21"],
+    ],
+    // The hyphen at the cut goes with it.
+    [
+      "212 918 8665 1119-21 June 2014",
+      [
+        ["phone", "212 918 8665", true],
+        ["phone", "1119", false],
+        ["date", "21 June 2014", false],
+      ],
+      ["212 918 8665", "1119-21"],
+    ],
+    // The date begins at the stretch's first digit, so it is dropped; without
+    // the yield the date became `/01/1992`.
+    [
+      "+44 20 3149 6135 18/01/1992",
+      [
+        ["phone", "+44 20 3149 6135", true],
+        ["date", "18/01/1992", false],
+      ],
+      ["+44 20 3149 6135", "18"],
+    ],
+    [
+      "212 555 0123 9346 21 June 2014",
+      [
+        ["phone", "212 555 0123", true],
+        ["date", "21 June 2014", false],
+      ],
+      ["212 555 0123"],
+    ],
+    // A numeric date stops the stretch before any yield is needed: no phone
+    // window holds a date unit (spec 0005, INV-14), so even the phone
+    // detector alone leaves the date out of `0123`.
+    [
+      "9346 212 555 0123 05.12.1980",
+      [
+        ["phone", "9346 212 555", true],
+        ["phone", "0123", false],
+        ["date", "05.12.1980", false],
+      ],
+      ["9346 212 555", "0123"],
+    ],
+    // A higher kind holds the whole stretch, so precedence leaves no piece.
+    [
+      "9346 212 555 0123@example.com",
+      [
+        ["phone", "9346 212 555", true],
+        ["email", "0123@example.com", true],
+      ],
+      ["9346 212 555", "0123"],
+    ],
+    // Nothing below phone meets the stretch, so it is listed whole.
+    [
+      "9346 212 555 0123 GB82 WEST 1234 5698 7654 32",
+      [
+        ["phone", "9346 212 555", true],
+        ["phone", "0123", false],
+        ["iban", "GB82 WEST 1234 5698 7654 32", true],
+      ],
+      ["9346 212 555", "0123", "5698 7654 32"],
+    ],
+    [
+      "9346 212 555 0123 ext. 45",
+      [
+        ["phone", "9346 212 555", true],
+        ["phone", "0123 ext. 45", false],
+      ],
+      ["9346 212 555", "0123 ext. 45"],
+    ],
+    // Today's piece `020` beside the card keeps its tick (spec 0005, INV-16),
+    // and the rest of the UK number is a stretch, unticked, where today it
+    // had no row.
+    [
+      "6293 6608 0005 7382 276 020 7946 0958",
+      [
+        ["card", "6293 6608 0005 7382 276", true],
+        ["phone", "020", true],
+        ["phone", "7946 0958", false],
+      ],
+      ["7382 276 020", "7946 0958"],
+    ],
+  ])("resolves %s", (text, expected, phoneAlone) => {
+    expect(withTicks(text)).toEqual(expected);
+    // The yield lives in `detect`, so the phone detector alone still lists
+    // each stretch whole.
+    const points = Array.from(text);
+    expect(
+      DETECTORS.phone({ text, joins: [] }).map((span) =>
+        points.slice(span.start, span.end).join(""),
+      ),
+    ).toEqual(phoneAlone);
+  });
+
+  it("returns no span carrying rescued", () => {
+    expect(detect({ text: "212 918 8665 1119 21 June 2014", joins: [] })).toStrictEqual([
+      { kind: "phone", start: 0, end: 12, tickedByDefault: true },
+      { kind: "phone", start: 13, end: 17, tickedByDefault: false },
+      { kind: "date", start: 18, end: 30, tickedByDefault: false },
+    ]);
+  });
+
+  /**
+   * Every way a stretch leaves the yield, so `rescued` never reaches the
+   * engine: listed whole, with an extension, beside a higher kind, beside a
+   * card's piece, and stopped before a numeric date. Each string holds a span
+   * the phone detector marks `rescued`, checked first so a case cannot pass
+   * by holding no stretch at all.
+   */
+  it.each([
+    "9346 212 555 0123",
+    "9346 212 555 0123 ext. 45",
+    "9346 212 555 0123 GB82 WEST 1234 5698 7654 32",
+    "6293 6608 0005 7382 276 020 7946 0958",
+    "212 526 5087 020 2208 1633 24",
+    "9346 212 555 0123 05.12.1980",
+  ])("strips rescued from every span detect returns for %s", (text) => {
+    expect(
+      DETECTORS.phone({ text, joins: [] }).some((span) => span.rescued === true),
+    ).toBe(true);
+    for (const span of detect({ text, joins: [] })) {
+      expect(Object.keys(span).sort()).toEqual([
+        "end",
+        "kind",
+        "start",
+        "tickedByDefault",
+      ]);
+    }
+  });
+});
+
+/**
  * Spec 0005, AC-28, through `detect`: an IBAN, a Social Security number and
  * a National Insurance number beside other digits are each found whole, with
  * whatever their neighbours are, and no card. Each kind's own detector finds
@@ -275,6 +423,92 @@ describe("footnote markers through detect (AC-19, AC-20, AC-22)", () => {
       ["us-ssn", "223-45-6789", false],
       ["phone", "1", true],
     ]);
+  });
+});
+
+/**
+ * Spec 0014, AC-9, as the owner narrowed it on 2026-10-19: a marker read on
+ * OCR text, where it is a plain digit, never takes a digit from a row listed
+ * before spec 0014, and never a tick. The bare Social Security marker, the two
+ * digit year marker and AC-3's two phone unit rules each did, so they were
+ * dropped; the National Insurance marker stays only where letters glue the
+ * number shut. Each row is written out as `detect` listed it before.
+ */
+describe("a marker on OCR text beside other rows (spec 0014, AC-9)", () => {
+  it("keeps the phone row after SSN 123-45-6789 whole and ticked", () => {
+    expect(withTicks("SSN 123-45-6789 tel 2125550123 ok")).toEqual([
+      ["us-ssn", "123-45-6789", true],
+      ["phone", "2125550123", true],
+    ]);
+  });
+
+  // Each listed a marker reading that cut or replaced the row below.
+  it.each<[string, [DetectorKind, string, boolean][]]>([
+    ["SSN 2125550123", [["phone", "2125550123", false]]],
+    ["Born 25.05.804 282 246 9648", [["phone", "25.05.804 282", true]]],
+    ["21-05-566 988 7048", [["phone", "21-05-566 988", true]]],
+    ["22-04-20137 8", [["phone", "22-04-20137 8", true]]],
+    ["DOB: 05.12.19801 12 High Street", [["phone", "05.12.19801 12", false]]],
+    [
+      "Ref 78-1972-01-21 020 3114 8249",
+      [
+        ["phone", "78-1972-01-21", true],
+        ["phone", "020 3114 8249", true],
+      ],
+    ],
+    [
+      "2026-09-27 10:00-2026-09-28 11:00",
+      [
+        ["date", "2026-09-27", false],
+        ["phone", "00-2026-09-28 11", false],
+      ],
+    ],
+    // A National Insurance number with a space in it: the phone row stands.
+    ["NI PX 85 87 420 020", [["phone", "85 87 420 020", true]]],
+  ])("keeps the rows listed before in %s", (text, expected) => {
+    expect(withTicks(text)).toEqual(expected);
+  });
+
+  // Written together, the letters keep the phone detector out of the digits.
+  it.each<[string, [DetectorKind, string, boolean][]]>([
+    [
+      "NI AB1234561 212 555 0123",
+      [
+        ["uk-nino", "AB123456", false],
+        ["phone", "212 555 0123", true],
+      ],
+    ],
+    [
+      "Tel 212 555 0123 NI AB1234561 ok",
+      [
+        ["phone", "212 555 0123", true],
+        ["uk-nino", "AB123456", false],
+      ],
+    ],
+  ])("adds only the National Insurance row in %s", (text, expected) => {
+    expect(withTicks(text)).toEqual(expected);
+  });
+});
+
+/**
+ * Spec 0014, AC-3: no unit is a date unless it is a full numeric date, and no
+ * unit is cut at one, as on main. These are its cases the table above does not
+ * hold (`22-04-20137 8`, the normalised DOB line, `Ref 78-1972-01-21 020 3114
+ * 8249` and the ISO interval are there), each with the rows main lists. The
+ * DOB line is written raw, marker and all, and read as the find step hands it
+ * over, so the pin holds the whole OCR path from `¹` to the phone row.
+ */
+// covers: AC-3
+describe("AC-3's cases on NFKC text keep main's rows (spec 0014, AC-3)", () => {
+  it.each<[string, [DetectorKind, string, boolean][]]>([
+    ["DOB: 05.12.1980¹ 12 High Street", [["phone", "05.12.19801 12", false]]],
+    ["Born 12.05.1980.1 44 years", [["phone", "12.05.1980.1 44", false]]],
+    ["John Smith 1980-12-051 44", [["phone", "1980-12-051 44", false]]],
+    ["Ref 00-2026-09-28-11 here", [["phone", "00-2026-09-28-11", false]]],
+    ["2026-09-27-01", [["phone", "2026-09-27-01", true]]],
+    ["01-02-03-04-05", [["phone", "01-02-03-04-05", false]]],
+  ])("lists main's rows in %s", (text, expected) => {
+    expect(withTicks(nfkc(text))).toEqual(expected);
   });
 });
 

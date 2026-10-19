@@ -35,6 +35,12 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
 
+      # The phone detector's worst time on spec 0005's adversarial shapes, as
+      # this runner measures it (spec 0014, AC-11). The full suite above runs
+      # the file beside every other, which times the pool; alone on one worker,
+      # the verbose reporter prints each test's own wall time in the log.
+      - run: pnpm exec vitest run --project unit --maxWorkers=1 --reporter=verbose tests/unit/detect-adversarial.test.ts
+
   browser:
     name: Browser tests
     runs-on: ubuntu-latest

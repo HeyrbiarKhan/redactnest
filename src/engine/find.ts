@@ -5,12 +5,23 @@ import type { BlockedReason, Concealment } from "@/worker/protocol";
 
 import {
   EXTRACTION_OPTIONS,
+  OFF_LINE_MIN_LINE_GLYPHS,
+  OFF_LINE_SHIFT_MIN,
+  OFF_LINE_SIZE_MAX,
+  OFF_LINE_STRETCH_MAX,
   originIndex,
+  SUPERSCRIPT_CODE_POINTS,
   walkCharacters,
   type Character,
 } from "./characters";
 import { checkpoint, EngineFailure } from "./failure";
-import { containsPoint, isSoundQuad, quadBounds, quadCentre } from "./geometry";
+import {
+  containsPoint,
+  isSoundQuad,
+  quadBounds,
+  quadCentre,
+  quadHeight,
+} from "./geometry";
 import { imageReachVerdicts } from "./pixels";
 import { slantedTargets, unsoundTargetsIn } from "./targets";
 import type {
@@ -32,6 +43,11 @@ import type {
  * their raw code points as the target's `text`. A match the engine would refuse
  * is still listed, blocked, with no target (AC-8, INV-2).
  *
+ * A short stretch of glyphs off its line and glued to the text, such as a
+ * footnote marker, is not part of the text a detector reads, a target's text
+ * or a target quad (spec 0014, INV-3), so no detector meets a real raised
+ * marker and no ticked row holds one, which the self check would refuse.
+ *
  * Nothing here calls `search()` (INV-11), so MuPDF.js's 500 quad cap on search
  * can never drop a match (AC-25). Document text lives in here for the length
  * of one page and is never logged, stored or sent (INV-5).
@@ -49,12 +65,16 @@ interface BlockText {
  * One page as detection reads it. `points` is the page text, one code point
  * per entry, each character NFKC normalised on its own. `source` maps every
  * position back to the character it came from, or to -1 for a synthetic space.
+ * `left` marks, over `characters`, each one of an off line stretch that left
+ * the text (spec 0014, AC-4), whitespace inside the stretch included, so a
+ * span's quads can be parted round it (AC-7).
  */
 interface PageText {
   readonly characters: readonly Character[];
   readonly points: readonly string[];
   readonly source: Int32Array;
   readonly blocks: readonly BlockText[];
+  readonly left: Uint8Array;
 }
 
 /** A match before the checks decide whether it can be ticked. */
@@ -174,6 +194,14 @@ async function findOnPage(
     // where a match from ordinary extraction already does, so one place on
     // the page is one row. Listed after the page's ordinary matches, in their
     // own reading order.
+    //
+    // Only sound quads say where an ordinary match sits: an unsound one has no
+    // inside worth asking about, so a point test against it could hide a
+    // hidden match that sits somewhere else. A match found only with
+    // replacement text ignored, at a place whose ordinary match has unsound
+    // quads, is therefore listed too, as two blocked rows for one place. That
+    // has no safety effect, since neither row can be ticked (spec 0014,
+    // AC-10, the pattern detection review's Minor 1).
     const covering = targets.flatMap(({ quads }) => quads.filter(isSoundQuad));
     const hiddenContext = contextReader(ignoring.points, contextChars);
     const hidden = candidatesIn(ignoring, index)
@@ -281,45 +309,73 @@ function readable<T>(read: () => T): T {
 }
 
 /**
- * Read a page and build its text. Spec 0005, *The find step*, step 1.
+ * Read a page and build its text. Spec 0005, *The find step*, steps 1 and 1b.
  *
  * Each text block's characters in order, the lines inside a block joined by
  * one synthetic space and blocks joined the same way, with no space added
  * where either side is already whitespace. Image blocks carry no characters,
  * so the reader never visits them.
+ *
+ * Step 1b (spec 0014, AC-4 and AC-5): each short off line stretch glued to
+ * the text, such as a footnote marker or an ordinal's raised letters, leaves
+ * it, and one synthetic space stands in its place, not listed in `joins`, so
+ * the email rejoin never reads it as a line break. None stands where either
+ * side is already whitespace, or where the stretch opens or closes its line
+ * and the line join stands instead. That is the one reading under which
+ * `27ᵗʰ September 2026` reads `27 September 2026` and `1980¹on` reads
+ * `1980 on`: dropped with no space the next word would glue on, and kept as
+ * text the marker glues to the value. The stretch only takes positions out,
+ * never adds a character or widens what a span can cover (INV-4).
  */
 function pageText(page: PDFPage, options: string): PageText {
   const characters: Character[] = [];
   walkCharacters(page, options, (character) => characters.push(character));
+  const { left, spaced } = leavingStretches(characters, offLineGlyphs(characters));
 
   const points: string[] = [];
   const source: number[] = [];
   const blocks: BlockText[] = [];
   let block: { start: number; joins: number[] } | null = null;
+  // The block and line of the last character written, which a stretch that
+  // left can stand between.
+  let blockOf = -1;
   let line = -1;
+  let spaceDue = false;
 
   const joinable = (next: string | undefined) =>
     points.length > 0 &&
     !WHITESPACE.test(points[points.length - 1]) &&
     next !== undefined &&
     !WHITESPACE.test(next);
+  const space = () => {
+    points.push(" ");
+    source.push(-1);
+  };
 
   for (let index = 0; index < characters.length; index += 1) {
+    if (left[index] === 1) {
+      spaceDue ||= spaced[index] === 1;
+      continue;
+    }
     const character = characters[index];
     const normalised = normalise(character.code);
 
-    if (block === null || character.block !== characters[index - 1].block) {
+    if (block === null || character.block !== blockOf) {
       if (block !== null) blocks.push({ ...block, end: points.length });
-      if (joinable(normalised[0])) {
-        points.push(" ");
-        source.push(-1);
-      }
+      if (joinable(normalised[0])) space();
       block = { start: points.length, joins: [] };
-    } else if (character.line !== line && joinable(normalised[0])) {
-      block.joins.push(points.length - block.start);
-      points.push(" ");
-      source.push(-1);
+    } else if (character.line !== line) {
+      if (joinable(normalised[0])) {
+        block.joins.push(points.length - block.start);
+        space();
+      }
+    } else if (spaceDue && joinable(normalised[0])) {
+      // A stretch that neither opens nor closes its line, so the character
+      // after it is on the same line.
+      space();
     }
+    spaceDue = false;
+    blockOf = character.block;
     line = character.line;
 
     for (const point of normalised) {
@@ -329,7 +385,139 @@ function pageText(page: PDFPage, options: string): PageText {
   }
   if (block !== null) blocks.push({ ...block, end: points.length });
 
-  return { characters, points, source: Int32Array.from(source), blocks };
+  return { characters, points, source: Int32Array.from(source), blocks, left };
+}
+
+/**
+ * Which of a page's characters are off their line, 1 for each. Spec 0014,
+ * AC-4 and AC-5.
+ *
+ * Judged per MuPDF line, never across one, so a marker MuPDF puts on a line of
+ * its own is never off that line. On each line the solid glyphs are its non
+ * whitespace characters; whitespace is never off. The dominant height is the
+ * upper median of their quad heights, and the dominant baseline the upper
+ * median, over the glyphs taller than `OFF_LINE_SIZE_MAX` of it, of each
+ * origin's offset along the line's normal. A glyph is off when it is no taller
+ * than that cap and its origin sits at least `OFF_LINE_SHIFT_MIN` of the
+ * dominant height off the baseline, with at least `OFF_LINE_MIN_LINE_GLYPHS`
+ * tall glyphs to set it; or, whatever its geometry, when its code point is in
+ * `SUPERSCRIPT_CODE_POINTS`. Each line's glyphs are read twice, once for the
+ * medians and once to judge, after a sort of each line's own values.
+ */
+export function offLineGlyphs(characters: readonly Character[]): Uint8Array {
+  const off = new Uint8Array(characters.length);
+  for (let first = 0; first < characters.length;) {
+    let end = first + 1;
+    while (end < characters.length && characters[end].line === characters[first].line) {
+      end += 1;
+    }
+    markLine(characters, first, end, off);
+    first = end;
+  }
+  return off;
+}
+
+/** AC-4 and AC-5 on the line held by `characters` from `first` to `end`. */
+function markLine(
+  characters: readonly Character[],
+  first: number,
+  end: number,
+  off: Uint8Array,
+): void {
+  const solid: number[] = [];
+  for (let index = first; index < end; index += 1) {
+    if (!isSpace(characters[index].code)) solid.push(index);
+  }
+  if (solid.length === 0) return;
+
+  // The normal to the line, so a shift is measured the same way on a turned
+  // line as on a level one.
+  const [dx, dy] = characters[first].direction;
+  const offset = (character: Character) =>
+    -character.origin[0] * dy + character.origin[1] * dx;
+
+  const heights = solid.map((index) => quadHeight(characters[index].quad));
+  const dominant = upperMedian(heights);
+  const cap = OFF_LINE_SIZE_MAX * dominant;
+  const tall = solid.filter((_, at) => heights[at] > cap);
+  const byGeometry = tall.length >= OFF_LINE_MIN_LINE_GLYPHS;
+  const baseline = byGeometry
+    ? upperMedian(tall.map((index) => offset(characters[index])))
+    : 0;
+
+  solid.forEach((index, at) => {
+    const character = characters[index];
+    const shifted =
+      byGeometry &&
+      heights[at] <= cap &&
+      Math.abs(offset(character) - baseline) >= OFF_LINE_SHIFT_MIN * dominant;
+    if (shifted || SUPERSCRIPT_CODE_POINTS.has(character.code)) off[index] = 1;
+  });
+}
+
+/** The value at the middle of `values` once sorted, the upper one of two. */
+function upperMedian(values: readonly number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+/** Whitespace as the page writes it, which is never off its line. */
+function isSpace(code: number): boolean {
+  return WHITESPACE.test(rawText(code));
+}
+
+/**
+ * Which characters leave the page text, and where a synthetic space stands.
+ * Spec 0014, AC-4.
+ *
+ * A run is a maximal stretch of off line glyphs on one line, whitespace
+ * between them allowed. It leaves when it holds at most `OFF_LINE_STRETCH_MAX`
+ * of them and touches a kept glyph on at least one side with no whitespace
+ * between; every other run stays as ordinary text, so a spaced value or an
+ * isolated word drawn small and shifted is never dropped from detection
+ * (INV-4). A run is maximal, so a glyph beside it on its line is either
+ * whitespace or a kept glyph. `spaced` marks the first character of a run that
+ * leaves with a character on its line on both sides; whether a space then
+ * stands is decided as the text is written.
+ */
+function leavingStretches(
+  characters: readonly Character[],
+  off: Uint8Array,
+): { readonly left: Uint8Array; readonly spaced: Uint8Array } {
+  const left = new Uint8Array(characters.length);
+  const spaced = new Uint8Array(characters.length);
+  const onLine = (at: number, line: number) =>
+    at >= 0 && at < characters.length && characters[at].line === line;
+
+  for (let first = 0; first < characters.length;) {
+    if (off[first] === 0) {
+      first += 1;
+      continue;
+    }
+    const { line } = characters[first];
+    let last = first;
+    let glyphs = 1;
+    for (let at = first + 1; onLine(at, line); at += 1) {
+      if (off[at] === 1) {
+        last = at;
+        glyphs += 1;
+      } else if (!isSpace(characters[at].code)) {
+        break;
+      }
+    }
+
+    const before = onLine(first - 1, line);
+    const after = onLine(last + 1, line);
+    const glued =
+      (before && !isSpace(characters[first - 1].code)) ||
+      (after && !isSpace(characters[last + 1].code));
+    if (glyphs <= OFF_LINE_STRETCH_MAX && glued) {
+      left.fill(1, first, last + 1);
+      if (before && after) spaced[first] = 1;
+    }
+    first = last + 1;
+  }
+  return { left, spaced };
 }
 
 /**
@@ -398,7 +586,7 @@ function candidate(
     characters,
     target: {
       page: pageIndex,
-      quads: lineQuads(characters),
+      quads: lineQuads(page, covered),
       start,
       end,
       kind: span.kind,
@@ -408,26 +596,38 @@ function candidate(
 }
 
 /**
- * One quad per line the match touches. Spec 0005, *Quads built from
- * characters*.
+ * One quad per run of the match's characters on each line. Spec 0005, *Quads
+ * built from characters*, as spec 0014, AC-7 parts it.
  *
- * On each line, every character is measured along the line's direction by its
- * quad's centre. The one furthest back gives the line quad's upper left and
- * lower left corners, the one furthest forward its upper right and lower
- * right. On left to right text that is the first character's left corners and
- * the last one's right corners, which is how `page.search()` builds its own
- * (AC-7); on text drawn against its extraction order it still covers the
- * match.
+ * `covered` is the match's characters, as indices into `page.characters` in
+ * extraction order, where each line's characters are consecutive. A run ends
+ * where the line changes or where an off line stretch that left the text lies
+ * between two of them, so no quad holds a marker or an ordinal's raised
+ * letters: a line quad over `27ᵗʰ September 2026` would hold the raised `th`,
+ * and target validation would block the row as unsound. With no stretch
+ * inside it, a match has one quad per line, as before.
+ *
+ * In each run, every character is measured along the line's direction by its
+ * quad's centre. The one furthest back gives the quad's upper left and lower
+ * left corners, the one furthest forward its upper right and lower right. On
+ * left to right text that is the first character's left corners and the last
+ * one's right corners, which is how `page.search()` builds its own (AC-7); on
+ * text drawn against its extraction order it still covers the match.
  */
-function lineQuads(characters: readonly Character[]): readonly Quad[] {
-  const lines = new Map<number, Character[]>();
-  for (const character of characters) {
-    const onLine = lines.get(character.line);
-    if (onLine) onLine.push(character);
-    else lines.set(character.line, [character]);
-  }
+function lineQuads(page: PageText, covered: readonly number[]): readonly Quad[] {
+  const runs: Character[][] = [];
+  covered.forEach((from, at) => {
+    const character = page.characters[from];
+    const previous = covered[at - 1];
+    const joins =
+      previous !== undefined &&
+      page.characters[previous].line === character.line &&
+      !page.left.subarray(previous + 1, from).includes(1);
+    if (joins) runs[runs.length - 1].push(character);
+    else runs.push([character]);
+  });
 
-  return [...lines.values()].map((onLine) => {
+  return runs.map((onLine) => {
     const [dx, dy] = onLine[0].direction;
     const along = (character: Character) => {
       const [x, y] = quadCentre(character.quad);

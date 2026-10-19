@@ -21,6 +21,7 @@ import {
   detectEmail,
   detectIban,
   detectMany,
+  detectMarkers,
   detectPhone,
   detectUkNino,
   detectUnicode,
@@ -465,6 +466,12 @@ const FIXTURES = [
     "detect-uk-nino.pdf",
     detectUkNino(),
     "National Insurance numbers, and prefixes never issued",
+  ],
+  // Spec 0014: the detector follow ups.
+  [
+    "detect-markers.pdf",
+    detectMarkers(),
+    "a raised footnote marker after a value of every kind, ordinals, a guard",
   ],
   [
     "sample-agreement.pdf",
