@@ -59,11 +59,14 @@ import type { DetectInput, Span } from "./types";
  * a mark set flush after a value as glued to it, so exactly one ASCII digit
  * right after a date whose year has four digits, with no digit after it, is a
  * marker and lies outside the row (`Born 12/05/1980¹`, `27 September 2026¹`).
- * A dotted date's own full stop followed by one is a sentence's end and its
- * mark (`geboren am 12.05.1980.¹`). Two or more digits, a digit in another
- * script, or one digit after a two digit year are a longer number, never a
- * date (`27 September 202612`, `05.12.80¹`), and so is a hyphen or a slash and
- * one digit, the shape of a build number (`2026-09-27-1`).
+ * So is one after a two digit year when the day and the month both have two
+ * digits (`Born 12/05/80¹`, spec 0014, AC-9). A dotted date's own full stop
+ * followed by one is a sentence's end and its mark (`geboren am 12.05.1980.¹`,
+ * `05.12.80.¹`). Two or more digits, a digit in another script, or one digit
+ * after a two digit year whose day or month has one digit are a longer
+ * number, never a date (`27 September 202612`, `5.12.80²`), and so is a
+ * hyphen or a slash and one digit, the shape of a build number
+ * (`2026-09-27-1`).
  *
  * Each rejection before a date has exemptions. A joiner (one hyphen or one
  * slash, never a dot) parts two full dates when only a time stands between it
@@ -421,9 +424,9 @@ function cutAtStart(
 }
 
 /**
- * Would a date ending at `end`, whose year has `yearDigits` digits, be read
- * out of a longer number? Yes with a digit glued to it, unless that digit is
- * a footnote marker (`27 September 20261`). For a numeric date, yes too with
+ * Would a date ending at `end`, after which a marker `fits` (`markerFits`), be
+ * read out of a longer number? Yes with a digit glued to it, unless that digit
+ * is a footnote marker (`27 September 20261`). For a numeric date, yes too with
  * its `own` separator and a digit after it (`2026-09-27-01`, `05.12.1980.17`),
  * unless that separator is a joiner with a full date beyond it
  * (`2026-09-01-2026-09-30`), or a dot followed by a marker, a sentence's full
@@ -436,36 +439,43 @@ function cutAtEnd(
   points: readonly string[],
   end: number,
   own: SeparatorClass | null,
-  yearDigits: number,
+  fits: boolean,
 ): boolean {
-  if (holds(points, end, DIGIT)) return !markerAt(points, end, yearDigits);
+  if (holds(points, end, DIGIT)) return !markerAt(points, end, fits);
   return (
     own !== null &&
     separatorClass(points[end]) === own &&
     holds(points, end + 1, DIGIT) &&
     !joinsDate(points, end) &&
-    !(own === "." && markerAt(points, end + 1, yearDigits))
+    !(own === "." && markerAt(points, end + 1, fits))
   );
 }
 
 /**
- * Is the code point at `at` a footnote marker after a date whose year has
- * `yearDigits` digits? Exactly one ASCII digit with no digit of any script
- * after it, after a four digit year: NFKC reads `¹` as `1`. After a two digit
- * year a digit is as likely a longer number's (`05.12.801`), so it is none.
+ * Is the code point at `at` a footnote marker after a date a marker `fits`
+ * after? Exactly one ASCII digit with no digit of any script after it: NFKC
+ * reads `¹` as `1`.
  */
-function markerAt(points: readonly string[], at: number, yearDigits: number): boolean {
-  return (
-    yearDigits === 4 && holds(points, at, ASCII_DIGIT) && !holds(points, at + 1, DIGIT)
-  );
+function markerAt(points: readonly string[], at: number, fits: boolean): boolean {
+  return fits && holds(points, at, ASCII_DIGIT) && !holds(points, at + 1, DIGIT);
 }
 
 /** A numeric date's year of four digits: before its first separator, or after its last. */
 const FOUR_DIGIT_YEAR = /^[0-9]{4}[^0-9]|[^0-9][0-9]{4}$/u;
+/** A numeric date of two digits each: day, month and year. */
+const TWO_DIGIT_PARTS = /^[0-9]{2}[^0-9][0-9]{2}[^0-9][0-9]{2}$/u;
 
-/** How many digits the year of a numeric date `isNumericDate` accepts has: 4 or 2. */
-function yearDigitsOf(text: string): number {
-  return FOUR_DIGIT_YEAR.test(text) ? 4 : 2;
+/**
+ * May a footnote marker follow this numeric date, which `isNumericDate`
+ * accepts? After a four digit year, yes. After a two digit year only when the
+ * day and the month both have two digits (spec 0014, AC-9): `12/05/80¹` is a
+ * date and its mark, while after `5.12.80` a digit is as likely a longer
+ * number's. So the tolerance lists an unticked date on about 6% of random
+ * `NN/NN/NNN` codes and on no `N.N.NNN` or `N.NN.NNN` one (spec 0014's
+ * `rationale.md`).
+ */
+function markerFits(text: string): boolean {
+  return FOUR_DIGIT_YEAR.test(text) || TWO_DIGIT_PARTS.test(text);
 }
 
 /**
@@ -494,8 +504,9 @@ function onlyTimeBetween(points: readonly string[], from: number, to: number): b
  * separators and calendar together, so both separators fall in the class of
  * the first. The last group is read one digit further, and when the whole is
  * no date, the text without that group's last digit is tried, for a footnote
- * marker stuck after a four digit year (`27/09/20261` reads `27/09/2026`,
- * `2026-09-271` reads `2026-09-27`); the row ends before the marker. With
+ * marker stuck after a year it fits after (`27/09/20261` reads `27/09/2026`,
+ * `2026-09-271` reads `2026-09-27`, `12/05/801` reads `12/05/80`); the row
+ * ends before the marker. With
  * `lastEnd`, where the last date listed ended, both edges are checked. With
  * `null`, as the far side of a joiner is read, neither is, so each joiner
  * costs one bounded read; the marker is read on either side.
@@ -530,11 +541,11 @@ function numericAt(
     if (lastGroup < 3) return null;
     end -= 1;
     text = points.slice(at, end).join("");
-    if (!isNumericDate(text) || !markerAt(points, end, yearDigitsOf(text))) return null;
+    if (!isNumericDate(text) || !markerAt(points, end, markerFits(text))) return null;
   }
   if (lastEnd === null) return { end };
   if (cutAtStart(points, at, own, lastEnd)) return null;
-  if (cutAtEnd(points, end, own, yearDigitsOf(text))) return null;
+  if (cutAtEnd(points, end, own, markerFits(text))) return null;
   return { end };
 }
 
@@ -583,6 +594,7 @@ function writtenAt(
   if (range !== null && !isRealDate(year, month, Number(range[1]))) return null;
 
   const end = at + codePoints(whole).length;
-  if (checkEnd && cutAtEnd(points, end, null, 4)) return null;
+  // A written date's year always has four digits, so a marker fits after it.
+  if (checkEnd && cutAtEnd(points, end, null, true)) return null;
   return { end };
 }

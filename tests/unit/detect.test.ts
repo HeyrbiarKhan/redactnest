@@ -378,6 +378,31 @@ describe("footnote markers through detect (AC-19, AC-20, AC-22)", () => {
     expect(withTicks(nfkc(text))).toEqual(expected);
   });
 
+  /**
+   * Spec 0014, AC-3: a date with a marker glued on as a plain digit lists as
+   * the date, and the digits beside it give no phone row, since the phone
+   * detector reads that unit as a date (INV-14).
+   */
+  it.each<[string, [DetectorKind, string, boolean][]]>([
+    ["DOB: 05.12.1980¹ 12 High Street", [["date", "05.12.1980", true]]],
+    ["John Smith 05.12.1980¹ 44 Engineer", [["date", "05.12.1980", false]]],
+    ["Born 05.12.1980¹ 44 years", [["date", "05.12.1980", true]]],
+    ["John Smith 1980-12-05¹ 44", [["date", "1980-12-05", false]]],
+    ["Page 3 05.12.1980¹", [["date", "05.12.1980", false]]],
+    ["27-09-2026¹ 5", [["date", "27-09-2026", false]]],
+    ["12-05-19801", [["date", "12-05-1980", false]]],
+    [
+      "2026-09-27 10:00-2026-09-28 11:00",
+      [
+        ["date", "2026-09-27", false],
+        ["date", "2026-09-28", false],
+      ],
+    ],
+    ["01-02-03-04-05", [["phone", "01-02-03-04-05", false]]],
+  ])("lists %s with no phone row holding a date (spec 0014, AC-3)", (text, expected) => {
+    expect(withTicks(nfkc(text))).toEqual(expected);
+  });
+
   it("leaves the marker after SSN 223-45-6789¹ as a ticked phone piece", () => {
     expect(withTicks(nfkc("SSN 223-45-6789¹"))).toEqual([
       ["us-ssn", "223-45-6789", false],

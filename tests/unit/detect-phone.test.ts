@@ -436,6 +436,39 @@ describe("what is not a phone number", () => {
   });
 });
 
+/**
+ * Spec 0014, AC-3, upholding INV-14 for text with no raised glyph, as an OCR
+ * layer hands a footnote marker over: a numeric date with one digit glued on
+ * is a date unit, and a year first date inside a hyphen glued unit is a unit
+ * of its own, so no window holds either. Each listed a phone row before.
+ */
+describe("dates inside a phone unit (spec 0014, AC-3)", () => {
+  it.each([
+    ["a dotted date with a marker", "DOB: 05.12.19801 12 High Street"],
+    ["a year first date with a marker", "John Smith 1980-12-051 44"],
+    ["a dotted date, a dot and a marker", "Born 12.05.1980.1 44 years"],
+    ["a dashed date with a marker before a digit", "27-09-20261 5"],
+    ["a dotted date with a marker after a page number", "Page 3 05.12.19801"],
+    // The two digit year, mirrored from the date detector's tolerance (AC-9).
+    ["a dashed date with a two digit year and a marker", "Born 05-12-801 2345 x"],
+    ["a dotted date with a two digit year, a dot and a marker", "Born 05.12.80.1 2345 x"],
+    // The year first date is cut out on both sides.
+    ["an ISO interval with plain times", "2026-09-27 10:00-2026-09-28 11:00"],
+    ["a year first date inside a hyphen glued code", "Ref 00-2026-09-28-11 here"],
+  ])("finds nothing in %s", (_what, text) => {
+    expect(found(text)).toEqual([]);
+  });
+
+  it.each<[string, [string, boolean][]]>([
+    // No four digit group, so nothing is cut.
+    ["01-02-03-04-05", [["01-02-03-04-05", false]]],
+    // The date opens its unit with nothing cut before it, so it keeps its row.
+    ["2026-09-27-01", [["2026-09-27-01", true]]],
+  ])("keeps the row in %s", (text, rows) => {
+    expect(found(text)).toEqual(rows);
+  });
+});
+
 /** *Detectors* step 4: the table, and the bounds it sets. */
 describe("PHONE_READINGS", () => {
   it("names only the regions in PHONE_REGIONS", () => {

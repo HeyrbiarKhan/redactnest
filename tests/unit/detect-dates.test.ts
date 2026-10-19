@@ -641,9 +641,10 @@ describe("the general date boundary rule (AC-19, INV-17)", () => {
 
   /**
    * Through `detect`, `phone` stands above `date`. A slashed interval leaves
-   * no phone row, while in an ISO one with plain times the phone detector
-   * reads `00-2026-09-28 11` and covers the second date: the phone
-   * Follow-up's case, pinned so a change there is noticed.
+   * no phone row, and since spec 0014's AC-3 an ISO one with plain times
+   * leaves none either: the phone detector cuts the year first date out of
+   * `00-2026-09-28` as a unit of its own, which no window holds (INV-14), so
+   * the second date lists where the phone row `00-2026-09-28 11` covered it.
    */
   it("gives the rows PRECEDENCE leaves through detect", () => {
     expect(detected("Shift 27/09/2026 10:00-28/09/2026 11:00 booked")).toEqual([
@@ -652,7 +653,7 @@ describe("the general date boundary rule (AC-19, INV-17)", () => {
     ]);
     expect(detected("Shift 2026-09-27 10:00-2026-09-28 11:00 booked")).toEqual([
       ["date", "2026-09-27", false],
-      ["phone", "00-2026-09-28 11", false],
+      ["date", "2026-09-28", false],
     ]);
   });
 });
@@ -897,6 +898,13 @@ describe("footnote markers and glued labels (AC-19, AC-10, INV-17)", () => {
     ["05.12.19800", "05.12.1980", false],
     ["on 1 May 20261 we", "1 May 2026", false],
     ["on 05.12.19801 we", "05.12.1980", false],
+    // Spec 0014, AC-9: after a two digit year when the day and the month both
+    // have two digits, glued or after the date's own dot.
+    ["Born 12/05/80¹", "12/05/80", true],
+    ["Born 05.12.80¹", "05.12.80", true],
+    ["Born 12-05-80¹", "12-05-80", true],
+    ["Born 05.12.80.¹", "05.12.80", true],
+    ["on 12/05/80¹ we", "12/05/80", false],
   ])("lists the date in %s, the marker outside", (text, date, ticked) => {
     expect(found(nfkc(text))).toEqual([[date, ticked]]);
     expect(found(plain(text))).toEqual([[date, ticked]]);
@@ -911,15 +919,18 @@ describe("footnote markers and glued labels (AC-19, AC-10, INV-17)", () => {
 
   /**
    * Two or more digits, a digit in another script, or one digit after a two
-   * digit year are a longer number; a hyphen or a slash and one digit are a
-   * build number; its own separator and two digits are a longer code.
+   * digit year whose day or month has one digit are a longer number; a hyphen
+   * or a slash and one digit are a build number; its own separator and two
+   * digits are a longer code. The pinned `05.12.80¹` flipped with spec 0014,
+   * AC-9, above.
    */
   it.each([
     ["two marker digits", "Born 12/05/1980¹²"],
     ["two plain digits", "Born 12/05/198012"],
     ["a digit in another script", "27 September 2026١"],
-    ["a marker after a two digit year", "05.12.80¹"],
+    ["a marker after a two digit year with a one digit day", "5.12.80²"],
     ["a dot and a digit after a two digit year", "1.2.26.1"],
+    ["two digits after a two digit year", "05.12.8012"],
     ["a hyphen and one digit", "2026-09-27-1"],
     ["a slash and one digit", "27/09/2026/1"],
     ["a hyphen and two digits", "2026-09-27-01"],

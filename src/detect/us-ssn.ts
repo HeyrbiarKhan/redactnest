@@ -11,13 +11,15 @@ import type { DetectInput, Span } from "./types";
  * SSN word ends within `KEYWORD_REACH` before it, because a bare nine digit
  * run is as often an order or account number. No digit touches its start.
  *
- * At its end, a separated number may have a footnote marker stuck after it
- * (spec 0005, third update of 2026-10-11): exactly one ASCII digit with no
- * digit of any script after it, which is how NFKC reads `¹` and how MuPDF
- * reads a mark set flush after a value. The number is listed with the digit
- * outside its row (`123-45-6789¹`, `123-45-67890`). Two digits give none, and
- * so does a bare run with any digit after it, since only an SSN word and its
- * length of nine say what a bare run is.
+ * At its end, a number may have a footnote marker stuck after it (spec 0005,
+ * third update of 2026-10-11): exactly one ASCII digit with no digit of any
+ * script after it, which is how NFKC reads `¹` and how MuPDF reads a mark set
+ * flush after a value. The number is listed with the digit outside its row
+ * (`123-45-6789¹`, `123-45-67890`). A bare run takes one too, after its SSN
+ * word (spec 0014, AC-9: `SSN 123456789¹`), at the cost spec 0005 already
+ * accepts for the separated shape, since a bare run is listed only after its
+ * word: 89% of random ten digit runs after `SSN ` list an unticked row. Two
+ * digits give none.
  *
  * A Social Security number starts ticked (AC-10), but one with a marker
  * starts unticked: the visitor judges a number the marker may belong to.
@@ -86,8 +88,9 @@ function ssnAt(points: readonly string[], at: number): Found | null {
  * The three parts starting at `at`, each parted from the next by `separator`
  * (a space or a hyphen, the same both times) or by nothing, or `null` when
  * they are not there, are followed by a digit, or name a number the SSA never
- * issues. Separated, one footnote marker may follow, outside the row and
- * leaving the number unticked.
+ * issues. One footnote marker may follow, outside the row and leaving the
+ * number unticked; a bare run with one is still listed only after its SSN
+ * word, as `ssnAt` asks.
  */
 function partsAt(
   points: readonly string[],
@@ -113,8 +116,7 @@ function partsAt(
   }
   if (!isIssuable(parts)) return null;
   if (!holds(points, end, ASCII_DIGIT)) return { end, ticked: true };
-  const marker = separator !== null && !holds(points, end + 1, DIGIT);
-  return marker ? { end, ticked: false } : null;
+  return holds(points, end + 1, DIGIT) ? null : { end, ticked: false };
 }
 
 /** The SSA's rules for a number it could issue. */

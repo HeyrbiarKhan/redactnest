@@ -14,7 +14,7 @@ Run the tool at `/tool` against a production build (`pnpm build && pnpm start`).
 - [ ] In `detect-markers.pdf`, read each row's context → the text after the value starts at the space or the word after the marker, never at the marker → AC-6
 - [ ] In `detect-markers.pdf`, tick every row, redact, download and paste the page's text → every value is gone, every marker glyph and every raised ordinal letter is still there, and the run did not refuse; the ordinal rows' boxes are drawn in two pieces with the raised letters between them → AC-7
 - [ ] In `detect-markers.pdf`, tick only the `27-09-2026` Dates row, redact → the run passes (today's phone row there refuses with the overreach message) → AC-7
-- [ ] Open `detect-date.pdf`, `detect-us-ssn.pdf` and `detect-uk-nino.pdf` → the new AC-9 lines list `12/05/80` (ticked, after its birth word), `123456789` (unticked) and `AB123456` (unticked), each with the plain digit outside the row; every row listed before is still there → AC-8, AC-9
+- [ ] Open `detect-date.pdf`, `detect-us-ssn.pdf` and `detect-uk-nino.pdf` → the new AC-9 lines list `12/05/82` (ticked, after its birth word), `141592653` (unticked) and `WL654321` (unticked), each with the plain digit outside the row; `detect-uk-nino.pdf`'s near miss `AB1234567` now lists `AB123456`, unticked; every row listed before is still there → AC-8, AC-9
 - [ ] Open the dense document `tests/e2e/cancel.spec.ts` builds, or `detect-dense.pdf` → the open completes within the speed project's line, with the same rows as before → AC-14
 
 ## Code and records

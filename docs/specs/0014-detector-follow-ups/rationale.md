@@ -466,6 +466,29 @@ Time, `timing.mjs`'s method on this machine, today against the built code: four 
 - `SUPERSCRIPT_CODE_POINTS` holds 114 code points: the 127 in AC-5's ranges less the 13 that NFKC folds to no letter or digit (U+207A to U+207E and U+208A to U+208E, the raised and lowered `+ − = ( )`) or that are unassigned (U+2072, U+2073, U+208F), which the pin of AC-5 would otherwise fail on.
 - Time: `findMatches` on `detect-dense.pdf` (50 pages, 2,200 matches), CPU on this machine, the median of ten: 782 ms and 797 ms before the boundary, 812 ms and 875 ms after, in two runs.
 
+### The text rules as built (2026-10-19, tasks 7 and 8)
+
+`corpus-units.mjs` reads the corpus (every string literal holding a digit in `tests/unit/detect*.test.ts` and `scripts/lib/detection-fixtures.mjs`, NFKC normalised, the build's extraction) through `detect`, before slice 3 and after; `measure-ac9.mjs` reads 20,000 seeded random codes per shape through each kind's own detector.
+
+- AC-3 alone, on 1,349 strings: 4 change, all the ISO interval with plain times (`2026-09-27 10:00-2026-09-28 11:00` and its kin), whose phone row `00-2026-09-28 11` goes and whose second date lists. With the two digit year mirror taken out the same 4 change, so the corpus cannot tell the mirror in from out; it stays, mirrored from AC-9, so that a two digit year date the date detector lists with its marker is never also a phone unit (`Born 05-12-801 2345 x` listed `05-12-801 2345` as a phone row before and lists `05-12-80`, ticked, after).
+- One cost: `00-2026-09-28 11` on its own, an expected row's text in a test rather than an input, and `Ref 00-2026-09-28-11 here` lose their unticked phone row, and the date detector does not read a date glued after `00-` either, so those digits now have no row. Nothing ticked is lost.
+- All of slice 3, on 1,388 strings: 31 change, every one intended: AC-3's eleven dates and intervals now list as dates where they were phone rows, AC-9's marked values list (dates ticked after a birth word, Social Security and National Insurance numbers unticked), the near miss `AB1234567` lists `AB123456` unticked, and `05.12.198` lists `05.12.19` unticked, a three digit year read as a two digit one and its marker, the random `NN.NN.NNN` shape below.
+
+| Kind | Shape | Listed before | Listed after | Ticked after |
+|---|---|---|---|---|
+| date | `NN/NN/NNN` | 0.0% | 6.1% | 0.0% |
+| date | `NN-NN-NNN` | 0.0% | 5.9% | 0.0% |
+| date | `NN.NN.NNN` | 0.0% | 5.7% | 0.0% |
+| date | `NN.NN.NN.N` | 0.0% | 5.7% | 0.0% |
+| date | `N.N.NNN`, `N.NN.NNN` | 0.0% | 0.0% | 0.0% |
+| date | `NN/NN/NNNN` (control) | 0.1% | 0.1% | 0.0% |
+| us-ssn | ten digits after `SSN ` | 0.0% | 89.0% | 0.0% |
+| us-ssn | eleven digits after `SSN `; ten with no word | 0.0% | 0.0% | 0.0% |
+| uk-nino | two letters, seven digits | 0.0% | 55.0% | 0.0% |
+| uk-nino | two letters, seven digits, a letter; tracking `AB123456789GB`; two letters, eight digits | 0.0% | 0.0% | 0.0% |
+
+Reading: the two digit year and the bare Social Security tolerances cost what the spec expected (6.4% to 6.7% and 89.1% before, on other seeds). The National Insurance one costs more than any other: every two letter, seven digit code whose prefix HMRC's rules allow, about 55% of random ones, now lists an unticked row, since one digit with nothing after it is exactly how NFKC reads `AB123456¹`. Nothing it adds is ticked, and two digits or anything alphanumeric after the seventh still list nothing. A bare Social Security run whose ten digits are also a valid US phone number (`SSN 3141592651`) lists the number unticked and, through `detect`, its marker as an unticked phone piece, the bare form of the separated case spec 0005 pins; before, the whole run was one unticked phone row.
+
 ### Carried from the fourth review (not remeasured here)
 
 The date plus one digit unit rule: 0 of 1,102 strings change; the four stolen examples become date rows; the phone side loses only a unit shaped like a real date plus one digit (about 0.1% of random `NN-NN-NNNNN` units). The two digit year tolerance with both leading groups of two digits: 6.4% to 6.7% unticked dates on random `NN?NN?NNN` codes, 0.0% on `N.N.NNN` and `N.NN.NNN`; 2 of 1,102 strings change, both pins. The bare Social Security tolerance: 3 of 1,102 strings change, all pins; 89.1% of random ten digit runs after `SSN ` list an unticked row. The real raised marker: glued at gaps up to 1.0 pt at 8 and 7 pt and 0.5 pt at 6.5 pt.
