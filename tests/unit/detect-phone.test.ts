@@ -31,6 +31,11 @@ function texts(text: string, joins: readonly number[] = []): string[] {
   return found(text, joins).map(([number]) => number);
 }
 
+/** Each character NFKC normalised on its own, as the find step hands text over. */
+function nfkc(text: string): string {
+  return Array.from(text, (point) => point.normalize("NFKC")).join("");
+}
+
 describe("numbers found and ticked (AC-2, AC-10)", () => {
   it.each([
     ["a UK national number", "Call 020 7946 0958 today", "020 7946 0958"],
@@ -446,7 +451,8 @@ describe("what is not a phone number", () => {
  * altogether. A drawn marker is off its line (AC-4) and never reaches here.
  * Each row is written out as the detector listed it before.
  */
-describe("a date with a digit glued on stays a phone unit (spec 0014, AC-9)", () => {
+// covers: AC-3, AC-9
+describe("a date with a digit glued on stays a phone unit (spec 0014, AC-3, AC-9)", () => {
   it.each<[string, [string, boolean][]]>([
     ["DOB: 05.12.19801 12 High Street", [["05.12.19801 12", false]]],
     ["Born 12.05.1980.1 44 years", [["12.05.1980.1 44", false]]],
@@ -466,6 +472,24 @@ describe("a date with a digit glued on stays a phone unit (spec 0014, AC-9)", ()
     ["2026-09-27-01", [["2026-09-27-01", true]]],
   ])("keeps the row listed before in %s", (text, rows) => {
     expect(found(text)).toEqual(rows);
+  });
+});
+
+/**
+ * Spec 0014, AC-3: the cases it lists on NFKC text that the table above does
+ * not hold, each with the rows main lists. The DOB line is written raw, marker
+ * and all, so the pin also holds that NFKC folds `¹` into a plain `1` that
+ * reads into the phone row, which is why a drawn marker must be off its line
+ * (AC-4) before it gets here.
+ */
+// covers: AC-3
+describe("AC-3's cases on NFKC text keep main's phone rows (spec 0014, AC-3)", () => {
+  it.each<[string, [string, boolean][]]>([
+    ["DOB: 05.12.1980¹ 12 High Street", [["05.12.19801 12", false]]],
+    ["2026-09-27 10:00-2026-09-28 11:00", [["00-2026-09-28 11", false]]],
+    ["01-02-03-04-05", [["01-02-03-04-05", false]]],
+  ])("lists main's rows in %s", (text, rows) => {
+    expect(found(nfkc(text))).toEqual(rows);
   });
 });
 

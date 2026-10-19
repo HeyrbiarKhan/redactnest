@@ -490,6 +490,28 @@ describe("a marker on OCR text beside other rows (spec 0014, AC-9)", () => {
   });
 });
 
+/**
+ * Spec 0014, AC-3: no unit is a date unless it is a full numeric date, and no
+ * unit is cut at one, as on main. These are its cases the table above does not
+ * hold (`22-04-20137 8`, the normalised DOB line, `Ref 78-1972-01-21 020 3114
+ * 8249` and the ISO interval are there), each with the rows main lists. The
+ * DOB line is written raw, marker and all, and read as the find step hands it
+ * over, so the pin holds the whole OCR path from `¹` to the phone row.
+ */
+// covers: AC-3
+describe("AC-3's cases on NFKC text keep main's rows (spec 0014, AC-3)", () => {
+  it.each<[string, [DetectorKind, string, boolean][]]>([
+    ["DOB: 05.12.1980¹ 12 High Street", [["phone", "05.12.19801 12", false]]],
+    ["Born 12.05.1980.1 44 years", [["phone", "12.05.1980.1 44", false]]],
+    ["John Smith 1980-12-051 44", [["phone", "1980-12-051 44", false]]],
+    ["Ref 00-2026-09-28-11 here", [["phone", "00-2026-09-28-11", false]]],
+    ["2026-09-27-01", [["phone", "2026-09-27-01", true]]],
+    ["01-02-03-04-05", [["phone", "01-02-03-04-05", false]]],
+  ])("lists main's rows in %s", (text, expected) => {
+    expect(withTicks(nfkc(text))).toEqual(expected);
+  });
+});
+
 describe("line joins", () => {
   it("reads a join inside an email as nothing, and inside anything else as a space", () => {
     expect(readsJoinAsNothing("email")).toBe(true);
