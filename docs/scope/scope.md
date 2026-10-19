@@ -289,11 +289,11 @@ The misses feature 12 and its four reviews left open in spec 0005's Follow-up, d
 **Also owed here:** spec 0005's smaller open items: a comment at each of the two INV-14 guards in `src/detect/phone.ts` naming the other, `covering` in `src/engine/find.ts` built only from ordinary matches' sound quads (the pattern detection review's Minor 1), and the phone budget measured on the CI runner. Also spec 0013's `/test` item from feature 12: pin the Finds columns as the Strips list's are pinned (AC-11).
 spec [0014](../specs/0014-detector-follow-ups/index.md) · code in `src/detect` (`phone.ts`, `date.ts`, `us-ssn.ts`, `uk-nino.ts`), `src/engine` (`find.ts`, the off line constants), `scripts/lib/detection-fixtures.mjs`, `scripts/make-fixture.mjs`, `.github/workflows/ci.yml`
 - [x] Design it (spec): `/architect detector follow ups`
-- [ ] Build it: `/develop detector follow ups`
+- [x] Build it: `/develop detector follow ups`
   - [x] The phone rescue: after both choosing passes, a stranded digit group a valid window covers is listed as a row of its own, unticked, every row listed today kept exactly as it is, and the group yields to a date in `detect`; `detect-phone.pdf` gains the four rescue lines · AC-1, AC-2, AC-14, AC-15
   - [x] The off line boundary in the find step: glyphs smaller and shifted off their line, or raised by code point, leave the text as a join and the target quads part round them; `detect-markers.pdf` with a real raised marker after every kind, and the engine tests that each row redacts with the marker left · AC-4 to AC-8
   - [x] The text rules: the two INV-14 unit rules in the phone detector, and the one digit tolerances for a two digit year, a bare Social Security number and a National Insurance number, each measured on random codes first · AC-3, AC-9, AC-10
-  - [ ] Bookkeeping: the `covering` comment, the CI step that prints the phone detector's time, the Finds columns pin, spec 0005's amendments and ticks · AC-10 to AC-13
+  - [x] Bookkeeping: the `covering` comment, the CI step that prints the phone detector's time, the Finds columns pin, spec 0005's amendments and ticks · AC-10 to AC-13
 - [ ] Verify it: `/check verify detector follow ups`
 - [x] Test it: `/test detector follow ups`
 - [ ] Review it (fresh model): `/check review detector follow ups`

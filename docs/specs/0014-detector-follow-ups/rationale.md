@@ -489,10 +489,29 @@ Time, `timing.mjs`'s method on this machine, today against the built code: four 
 
 Reading: the two digit year and the bare Social Security tolerances cost what the spec expected (6.4% to 6.7% and 89.1% before, on other seeds). The National Insurance one costs more than any other: every two letter, seven digit code whose prefix HMRC's rules allow, about 55% of random ones, now lists an unticked row, since one digit with nothing after it is exactly how NFKC reads `AB123456¹`. Nothing it adds is ticked, and two digits or anything alphanumeric after the seventh still list nothing. A bare Social Security run whose ten digits are also a valid US phone number (`SSN 3141592651`) lists the number unticked and, through `detect`, its marker as an unticked phone piece, the bare form of the separated case spec 0005 pins; before, the whole run was one unticked phone row.
 
+### The phone budget on the CI runner (2026-10-19, task 13)
+
+AC-11's step, the last in the `checks` job of `.github/workflows/ci.yml`, runs `tests/unit/detect-adversarial.test.ts` alone on one worker with Vitest's verbose reporter, which prints each test's wall time in the log.
+
+- Source: CI run #181 (https://github.com/HeyrbiarKhan/redactnest/actions/runs/39201379578), job "Lint, format, types, unit tests", on commit `bd30169`, runner `ubuntu-latest` (GitHub hosted), 2026-10-19. 1,248 of 1,248 tests passed, and the step took 143.73 s.
+- Why this run and not a pull request's: AC-11 asks for the pull request's own run, but `ci.yml` runs on push only (`on: push`), so a pull request never gets a run of its own. Run #181 is the run the pull request will show for this commit.
+- What the figure is: the wall time of one `finishes within its budget` test, which builds its 100,000 characters and calls the detector once, on one worker with nothing beside it. The test itself asserts CPU time against the budget, and it passed on every shape.
+
+| Phone shape | Wall time on the runner |
+|---|---|
+| random one and two digit groups | 946 ms |
+| random groups of one to three digits | 622 ms |
+| single digit groups | 291 ms |
+| single zeros | 252 ms |
+
+The worst `finishes within its budget` time of every other detector, each against its 1 s budget: date 98 ms, card 71 ms, iban 48 ms, us-ssn 37 ms, email 20 ms, uk-nino 13 ms.
+
+Reading: the Follow-up's line was 0.5 s, under which the 1 s phone budget would go back to `/architect`. The worst phone time is 946 ms, so the 2 s budget stands. On the runner the heaviest shape takes about half of the 2 s budget, and a 1 s budget would leave it 54 ms of room. It is also about 1.7 times the 547 ms this machine measured for the same shape (AC-14; 546 ms on the built code), so a budget read from this machine would be too tight for CI. The rescue is what brought it there: before it, the same shape took 266 ms on this machine. The same figure answers spec 0005's Follow-up item on the CI runner, since 946 ms is not well under 1 s.
+
 ### Carried from the fourth review (not remeasured here)
 
 The date plus one digit unit rule: 0 of 1,102 strings change; the four stolen examples become date rows; the phone side loses only a unit shaped like a real date plus one digit (about 0.1% of random `NN-NN-NNNNN` units). The two digit year tolerance with both leading groups of two digits: 6.4% to 6.7% unticked dates on random `NN?NN?NNN` codes, 0.0% on `N.N.NNN` and `N.NN.NNN`; 2 of 1,102 strings change, both pins. The bare Social Security tolerance: 3 of 1,102 strings change, all pins; 89.1% of random ten digit runs after `SSN ` list an unticked row. The real raised marker: glued at gaps up to 1.0 pt at 8 and 7 pt and 0.5 pt at 6.5 pt.
 
-### Still to measure in the build
+### Measured in the build
 
-The National Insurance tolerance on random codes (task 8); the year first cut rule against the side by side cases (task 7); the flag count and the corpus rerun on the built code (tasks 2, 6, 7); the CI figure (task 13).
+Nothing the build owed is left to measure. The National Insurance tolerance on random codes (task 8) is in *The text rules as built*, and so is the year first cut rule against the side by side cases (task 7): the corpus holds spec 0005's AC-27 cases, and AC-3 alone changes only the ISO intervals. The corpus rerun on the built code is in *The rescue as built* (task 2) and *The text rules as built* (task 7), the flag count in *The boundary as built* (task 6), and the CI figure in *The phone budget on the CI runner* (task 13).
