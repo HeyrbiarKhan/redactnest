@@ -4,7 +4,10 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   boxPass,
   EngineFailure,
+  EXTRACTION_OPTIONS,
   lineBox,
+  offLineGlyphs,
+  openDocumentWith,
   paddedArea,
   paddedPass,
   PIPELINE,
@@ -13,6 +16,8 @@ import {
   silenceEngineLog,
   sweepCarriers,
   textPass,
+  walkCharacters,
+  type Character,
   type Pass,
   type Pipeline,
   type Quad,
@@ -20,7 +25,7 @@ import {
 } from "@/engine";
 
 import { fixture } from "../support/bytes";
-import { mupdf } from "../support/mupdf";
+import { LIMITS, mupdf, pageCharacters } from "../support/mupdf";
 import { findTarget } from "../support/targets";
 
 /**
@@ -267,6 +272,84 @@ describe("text that is not on the match's line", () => {
     await expect(kindOf(bytes, [findTarget(bytes, 0, "SECRET-SUP")])).resolves.toBe(
       "redaction-overreach",
     );
+  });
+});
+
+/**
+ * Spec 0014, AC-7. Every row `detect-markers.pdf` lists sits beside a glyph
+ * off its line, a footnote marker or an ordinal's raised letters, and no
+ * target quad holds one. So each row redacts alone and with every other, the
+ * self check passes, and every marker and raised letter is still in the
+ * output, read with the test's own reader. Before spec 0014, a ticked phone
+ * row holding `27-09-2026¹ 5` refused the run with `redaction-overreach`.
+ * The refusal above, a glyph over the middle of a match on a line of its own,
+ * still holds.
+ */
+describe("a value beside a glyph off its line", () => {
+  const NAME = "detect-markers.pdf";
+  let targets: readonly RedactionTarget[] = [];
+  let markers: readonly Character[] = [];
+
+  beforeAll(async () => {
+    const doc = await openDocumentWith(mupdf, fixture(NAME), LIMITS);
+    try {
+      const found = await doc.findMatches({ contextChars: 0 });
+      targets = found.flatMap((match) => (match.target ? [match.target] : []));
+    } finally {
+      doc.close();
+    }
+
+    const source = mupdf.Document.openDocument(fixture(NAME), "application/pdf");
+    try {
+      const pdf: PDFDocument | null = source.asPDF();
+      if (!pdf) throw new Error("expected a PDF");
+      const page = pdf.loadPage(0);
+      const read: Character[] = [];
+      try {
+        walkCharacters(page, EXTRACTION_OPTIONS[0], (character) => read.push(character));
+      } finally {
+        page.destroy();
+      }
+      const off = offLineGlyphs(read);
+      markers = read.filter((_, at) => off[at] === 1);
+    } finally {
+      source.destroy();
+    }
+  });
+
+  /** Every marker is in the output, the same glyph at the same origin. */
+  function expectMarkersKept(output: ArrayBuffer) {
+    const kept = pageCharacters(output, 0);
+    for (const marker of markers) {
+      const [x, y] = marker.origin;
+      const char = String.fromCodePoint(marker.code);
+      expect(
+        kept.some(
+          (each) =>
+            each.char === char &&
+            Math.abs(each.x - x) < 0.01 &&
+            Math.abs(each.y - y) < 0.01,
+        ),
+        `${char} at ${x}, ${y}`,
+      ).toBe(true);
+    }
+  }
+
+  it("lists a target for every row, beside the fixture's markers", () => {
+    expect(targets).toHaveLength(24);
+    expect(markers).toHaveLength(25);
+  });
+
+  it("redacts each row alone and keeps every marker", async () => {
+    for (const target of targets) {
+      const { output } = await redactDocumentWith(mupdf, fixture(NAME), [target]);
+      expectMarkersKept(output);
+    }
+  }, 60_000);
+
+  it("redacts every row together and keeps every marker", async () => {
+    const { output } = await redactDocumentWith(mupdf, fixture(NAME), targets);
+    expectMarkersKept(output);
   });
 });
 

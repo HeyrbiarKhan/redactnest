@@ -1,20 +1,30 @@
+import { readdirSync } from "node:fs";
+
 import type { PDFDocument, PDFPage } from "mupdf";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
+  containsPoint,
   EXTRACTION_OPTIONS,
   EngineFailure,
   imageReachVerdicts,
   slantedTargets,
   unsoundTargets,
   findMatchesIn,
+  OFF_LINE_MIN_LINE_GLYPHS,
+  OFF_LINE_SHIFT_MIN,
+  OFF_LINE_SIZE_MAX,
+  OFF_LINE_STRETCH_MAX,
+  offLineGlyphs,
   openDocumentWith,
   POSITION_TOLERANCE,
   prepareDocument,
   redactDocumentWith,
   RunCancelled,
   silenceEngineLog,
+  SUPERSCRIPT_CODE_POINTS,
   walkCharacters,
+  type Character,
   type FoundMatch,
   type Quad,
   type RedactionTarget,
@@ -33,6 +43,7 @@ import {
   DETECT_STAMPED,
   DETECT_EMAIL,
   DETECT_MANY_COUNT,
+  DETECT_MARKERS,
   DETECT_PHONE,
   DETECT_PHONE_COLUMN,
   DETECT_PHONE_DATES,
@@ -79,16 +90,42 @@ async function find(name: string, contextChars = 40): Promise<readonly FoundMatc
  * inside a line, which MuPDF keeps as it is drawn.
  */
 function onePage(show: string): ArrayBuffer {
+  return pageDrawing(`BT /F1 12 Tf 72 700 Td ${show} ET\n`);
+}
+
+/**
+ * A one page PDF whose one line is drawn piece by piece in Helvetica, each
+ * piece its own text object placed where the one before ends, at its own
+ * size and rise, as `detect-markers.pdf` draws a marker. For the guards no
+ * committed fixture should carry.
+ */
+function piecesPage(
+  parts: readonly {
+    readonly text: string;
+    readonly size?: number;
+    readonly rise?: number;
+  }[],
+): ArrayBuffer {
+  const font = new mupdf.Font("Helvetica");
+  let x = 72;
+  let content = "";
+  for (const { text, size = 12, rise = 0 } of parts) {
+    content += `BT /F1 ${size} Tf 1 0 0 1 ${x} ${700 + rise} Tm (${text}) Tj ET\n`;
+    for (const character of text) {
+      x += font.advanceGlyph(font.encodeCharacter(character.codePointAt(0) ?? 0)) * size;
+    }
+  }
+  return pageDrawing(content);
+}
+
+function pageDrawing(content: string): ArrayBuffer {
   const pdf = new mupdf.PDFDocument();
   try {
     const fonts = pdf.newDictionary();
     fonts.put("F1", pdf.addSimpleFont(new mupdf.Font("Helvetica")));
     const resources = pdf.newDictionary();
     resources.put("Font", fonts);
-    pdf.insertPage(
-      -1,
-      pdf.addPage([0, 0, 612, 792], 0, resources, `BT /F1 12 Tf 72 700 Td ${show} ET\n`),
-    );
+    pdf.insertPage(-1, pdf.addPage([0, 0, 612, 792], 0, resources, content));
     const buffer = pdf.saveToBuffer("");
     try {
       return buffer.asUint8Array().slice().buffer;
@@ -906,6 +943,172 @@ describe("the third review's footnote markers and glued labels (AC-19, AC-20, AC
     },
     60_000,
   );
+});
+
+/** A page's characters as the find step reads them, from a prepared page. */
+function characters(bytes: ArrayBuffer, page: number, prepared = true): Character[] {
+  const doc = mupdf.Document.openDocument(bytes, "application/pdf");
+  try {
+    const pdf: PDFDocument | null = doc.asPDF();
+    if (!pdf) throw new Error("expected a PDF");
+    if (prepared) prepareDocument(mupdf, pdf);
+    const loaded = pdf.loadPage(page);
+    const read: Character[] = [];
+    try {
+      walkCharacters(loaded, EXTRACTION_OPTIONS[0], (character) => read.push(character));
+    } finally {
+      loaded.destroy();
+    }
+    return read;
+  } finally {
+    doc.destroy();
+  }
+}
+
+/** The centre of a quad, as the find step and the self check take it. */
+function centreOf([ulx, uly, urx, ury, llx, lly, lrx, lry]: Quad): [number, number] {
+  return [(ulx + urx + llx + lrx) / 4, (uly + ury + lly + lry) / 4];
+}
+
+/**
+ * Spec 0014, AC-4 to AC-6 and AC-8: a glyph off its line, by geometry or by
+ * code point, is not part of the text a detector reads. `detect-markers.pdf`
+ * draws a real raised marker after a value of every kind, as a word processor
+ * draws one, so the premise that MuPDF reads it glued to the value is held on
+ * a real glyph through the engine, not on NFKC text alone. An engine upgrade
+ * that reads raised glyphs another way fails here.
+ */
+describe("glyphs off their line (spec 0014, AC-4 to AC-6)", () => {
+  it("lists every marked value without its marker, with its kind's tick", async () => {
+    const found = await find("detect-markers.pdf");
+
+    expect(found.map((match) => [match.kind, match.text, match.tickedByDefault])).toEqual(
+      DETECT_MARKERS.map(([kind, text, ticked]) => [kind, text, ticked]),
+    );
+    expect(found.every((match) => match.blocked === null)).toBe(true);
+  });
+
+  it("starts the text after each value past its marker, never at it", async () => {
+    const found = await find("detect-markers.pdf");
+
+    found.forEach((match, at) => {
+      const begins = String(DETECT_MARKERS[at][3]);
+      expect(match.after.slice(0, begins.length), match.text).toBe(begins);
+    });
+  });
+
+  it("gives no target a quad holding an off line glyph's centre", async () => {
+    const found = await find("detect-markers.pdf");
+    const read = characters(fixture("detect-markers.pdf"), 0);
+    const off = offLineGlyphs(read);
+    const markers = read.filter((_, at) => off[at] === 1);
+
+    // Thirteen markers after values, two pairs of raised letters, a two glyph
+    // marker and the six single markers drawn other ways.
+    expect(markers).toHaveLength(25);
+    for (const quad of found.flatMap((match) => match.target?.quads ?? [])) {
+      for (const marker of markers) {
+        expect(containsPoint(quad, centreOf(marker.quad))).toBe(false);
+      }
+    }
+  });
+
+  /** AC-7: a quad over `27ᵗʰ` would hold the raised letters, so it is parted. */
+  it("parts an ordinal's row into one quad either side of its raised letters", async () => {
+    const found = await find("detect-markers.pdf");
+    const ordinals = found.filter(({ text }) => / of May | September /u.test(text));
+
+    expect(ordinals.map(({ text }) => text)).toEqual([
+      "27 September 2026",
+      "1 of May 2026",
+    ]);
+    for (const ordinal of ordinals) expect(ordinal.target?.quads).toHaveLength(2);
+  });
+
+  /**
+   * INV-4: a whole value drawn small and raised, after a space, is glued to no
+   * kept glyph, so it stays in the text and is still listed, though every
+   * digit of it is off its line.
+   */
+  it("keeps a spaced number drawn small and raised in the text", async () => {
+    const bytes = piecesPage([
+      { text: "Call the office on " },
+      { text: "020 7946 0958", size: 8, rise: 5 },
+      { text: " today please" },
+    ]);
+    const off = offLineGlyphs(characters(bytes, 0));
+
+    expect(off.filter((each) => each === 1)).toHaveLength(11);
+    const doc = await openDocumentWith(mupdf, bytes, LIMITS);
+    try {
+      const found = await doc.findMatches({ contextChars: 40 });
+      expect(
+        found.map((match) => [match.kind, match.text, match.tickedByDefault]),
+      ).toEqual([["phone", "020 7946 0958", true]]);
+    } finally {
+      doc.close();
+    }
+  });
+
+  /** INV-4: a glued run of more than `OFF_LINE_STRETCH_MAX` glyphs is text. */
+  it.each([
+    ["ABCDE", " refABCDE end"],
+    ["ABCD", " ref end"],
+  ])(
+    "keeps a glued run of %s in the text only past four glyphs",
+    async (raised, after) => {
+      const bytes = piecesPage([
+        { text: "Tel 020 7946 0958 ref" },
+        { text: raised, size: 8, rise: 5 },
+        { text: " end" },
+      ]);
+      const doc = await openDocumentWith(mupdf, bytes, LIMITS);
+      try {
+        const [match] = await doc.findMatches({ contextChars: 40 });
+        expect(match).toMatchObject({ text: "020 7946 0958", after });
+      } finally {
+        doc.close();
+      }
+    },
+  );
+
+  /** AC-4 and AC-8: the boundary meets nothing on any other page this suite reads. */
+  it("finds no glyph off its line in any other committed fixture", () => {
+    const names = readdirSync(new URL("../fixtures/", import.meta.url)).filter(
+      (name) => name.endsWith(".pdf") && name !== "detect-markers.pdf",
+    );
+
+    expect(names.length).toBeGreaterThan(70);
+    for (const name of names) {
+      const bytes = fixture(name);
+      const pages = inspect(bytes, (doc) => doc.countPages());
+      for (let page = 0; page < pages; page += 1) {
+        const off = offLineGlyphs(characters(bytes, page, false));
+        expect(off.includes(1), `${name}, page ${page + 1}`).toBe(false);
+      }
+    }
+  }, 60_000);
+
+  it("sets the boundary's constants as measured", () => {
+    expect([
+      OFF_LINE_SIZE_MAX,
+      OFF_LINE_SHIFT_MIN,
+      OFF_LINE_STRETCH_MAX,
+      OFF_LINE_MIN_LINE_GLYPHS,
+    ]).toEqual([0.9, 0.15, 4, 3]);
+  });
+
+  /** AC-5: every code point the set holds would otherwise read as a letter or digit. */
+  it("holds only code points NFKC folds to one letter or digit", () => {
+    for (const code of SUPERSCRIPT_CODE_POINTS) {
+      expect(String.fromCodePoint(code).normalize("NFKC"), code.toString(16)).toMatch(
+        /^[\p{L}\p{Nd}]$/u,
+      );
+    }
+    expect(SUPERSCRIPT_CODE_POINTS.size).toBe(114);
+    expect(SUPERSCRIPT_CODE_POINTS.has(0xb9)).toBe(true);
+    expect(SUPERSCRIPT_CODE_POINTS.has(0x1d57)).toBe(true);
+  });
 });
 
 /** AC-11 and AC-12: one page at a time, and a page that cannot be read fails. */

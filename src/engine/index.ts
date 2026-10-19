@@ -65,7 +65,12 @@ export {
   LINE_ANGLE_TOLERANCE,
   LINE_HEIGHT_MAX,
   LINE_HEIGHT_MIN,
+  OFF_LINE_MIN_LINE_GLYPHS,
+  OFF_LINE_SHIFT_MIN,
+  OFF_LINE_SIZE_MAX,
+  OFF_LINE_STRETCH_MAX,
   POSITION_TOLERANCE,
+  SUPERSCRIPT_CODE_POINTS,
   walkCharacters,
   type Character,
 } from "./characters";
@@ -84,7 +89,7 @@ export {
 } from "./device";
 export { hasPdfHeader, PDF_HEADER_WINDOW } from "./door";
 export { checkpoint, EngineFailure, RunCancelled } from "./failure";
-export { findMatchesIn } from "./find";
+export { findMatchesIn, offLineGlyphs } from "./find";
 export {
   blankedRegion,
   BOUNDS_REACH_RATIO,

@@ -728,6 +728,156 @@ export function detectUkNino() {
   ]);
 }
 
+/**
+ * Helvetica's advance widths for printable ASCII, from U+0020 to U+007E, in
+ * thousandths of an em: its AFM, which MuPDF's built in Helvetica matches.
+ */
+const HELVETICA_ASCII = Object.freeze([
+  278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556,
+  556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667,
+  667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722,
+  667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500,
+  556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278,
+  556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+]);
+
+/** How far `text`, in Helvetica at `size`, moves the pen. */
+function helveticaAdvance(text, size) {
+  return [...text].reduce(
+    (sum, character) =>
+      sum + (HELVETICA_ASCII[character.charCodeAt(0) - 32] * size) / 1000,
+    0,
+  );
+}
+
+/**
+ * One line drawn piece by piece, each piece its own text object placed with
+ * `Tm` where the one before it ends, as the fourth review drew a marker: a
+ * piece is `{ text, size, rise, gap }` in Helvetica, or `{ hex, advance,
+ * size, rise }` in the identity font.
+ */
+function pieces(y, parts) {
+  let x = 72;
+  let content = "";
+  for (const { text, hex, advance, size = 12, rise = 0, gap = 0 } of parts) {
+    x += gap;
+    const at = `1 0 0 1 ${num(Number(x.toFixed(3)))} ${num(y + rise)} Tm`;
+    content +=
+      hex === undefined
+        ? `BT /F1 ${size} Tf ${at} ${literal(text)} Tj ET\n`
+        : `BT /U ${size} Tf ${at} <${hex}> Tj ET\n`;
+    x += hex === undefined ? helveticaAdvance(text, size) : advance;
+  }
+  return content;
+}
+
+/** A footnote marker as word processors draw one: 8 pt, raised 5 pt, no gap. */
+const MARKER = Object.freeze({ text: "1", size: 8, rise: 5 });
+
+/**
+ * The lines of `detect-markers.pdf`, top to bottom, each a list of pieces in
+ * Helvetica 12 pt unless a piece says otherwise. Spec 0014, AC-6.
+ */
+const MARKER_LINES = Object.freeze([
+  [{ text: "Mail john@example.com" }, MARKER, { text: " today" }],
+  [{ text: "Tel 020 7946 0958" }, MARKER, { text: " today" }],
+  [{ text: "Call (212) 555-0123" }, MARKER, { text: " today" }],
+  [{ text: "Call +44 20 7946 0958" }, MARKER, { text: " today" }],
+  [{ text: "Born 12/05/1980" }, MARKER, { text: " on file" }],
+  [{ text: "Born 12/05/80" }, MARKER, { text: " on file" }],
+  [{ text: "SSN 123456789" }, MARKER, { text: " on file" }],
+  [{ text: "SSN 123-45-6789" }, MARKER, { text: " on file" }],
+  [{ text: "Card 4111 1111 1111 1111" }, MARKER, { text: " on file" }],
+  [{ text: "IBAN GB82 WEST 1234 5698 7654 32" }, MARKER, { text: " on file" }],
+  [{ text: "NI AB123456" }, MARKER, { text: " on file" }],
+  [{ text: "NI AB123456C" }, MARKER, { text: " on file" }],
+  [{ text: "DOB 27-09-2026" }, MARKER, { text: " 5 Street" }],
+  // An ordinal's letters raised as a word processor types them.
+  [{ text: "Signed 27" }, { ...MARKER, text: "th" }, { text: " September 2026 here" }],
+  [{ text: "On 1" }, { ...MARKER, text: "st" }, { text: " of May 2026 here" }],
+  // A subscript, lowered 2 pt.
+  [
+    { text: "Water H" },
+    { ...MARKER, text: "2", rise: -2 },
+    { text: "O then 020 7946 0958" },
+  ],
+  // A marker of two glyphs.
+  [{ text: "Born 12/05/1980" }, { ...MARKER, text: "10" }, { text: " on file" }],
+  // A marker in another script, the Arabic Indic one, through the identity font.
+  [
+    { text: "Born 12/05/1980" },
+    { hex: "0661", advance: (600 * 8) / 1000, size: 8, rise: 5 },
+    { text: " on file" },
+  ],
+  // MuPDF keeps a raised glyph glued up to a 1 pt gap; at 1.5 pt it reads a space.
+  [{ text: "Born 12/05/1980" }, { ...MARKER, gap: 1 }, { text: " on file" }],
+  [{ text: "Born 12/05/1980" }, { ...MARKER, gap: 1.5 }, { text: " on file" }],
+  // A full size `¹` through Helvetica's WinAnsi encoding, code 0xB9: off its
+  // line by its code point alone.
+  [{ text: "Born 12/05/1980¹ on file" }],
+  // Chromium's default superscript: 10 pt raised 4.2 pt after 12 pt text.
+  [{ text: "Born 12/05/1980" }, { ...MARKER, size: 10, rise: 4.2 }, { text: " on file" }],
+  // A whole line in small print, with a smaller marker still.
+  [
+    { text: "Born 12/05/1980", size: 8 },
+    { ...MARKER, size: 5.5, rise: 3 },
+    { text: " on file", size: 8 },
+  ],
+  // The guard: a whole value drawn small and raised, after a space, so it is
+  // glued to no kept glyph and stays in the text.
+  [{ text: "Tel: " }, { text: "020 7946 0958", size: 8, rise: 5 }],
+]);
+
+/**
+ * The values `detect-markers.pdf` holds, in reading order: kind, text, tick,
+ * and how the text after the value begins, which is never the marker. Spec
+ * 0014, AC-6.
+ */
+export const DETECT_MARKERS = Object.freeze([
+  ["email", "john@example.com", true, " today"],
+  ["phone", "020 7946 0958", true, " today"],
+  ["phone", "(212) 555-0123", true, " today"],
+  ["phone", "+44 20 7946 0958", true, " today"],
+  ["date", "12/05/1980", true, " on file"],
+  ["date", "12/05/80", true, " on file"],
+  ["us-ssn", "123456789", true, " on file"],
+  ["us-ssn", "123-45-6789", true, " on file"],
+  ["card", "4111 1111 1111 1111", true, " on file"],
+  ["iban", "GB82 WEST 1234 5698 7654 32", true, " on file"],
+  ["uk-nino", "AB123456", true, " on file"],
+  ["uk-nino", "AB123456C", true, " on file"],
+  ["date", "27-09-2026", true, " 5 Street"],
+  ["date", "27 September 2026", false, " here"],
+  ["date", "1 of May 2026", false, " here"],
+  ["phone", "020 7946 0958", true, " Born"],
+  ["date", "12/05/1980", true, " on file"],
+  ["date", "12/05/1980", true, " on file"],
+  ["date", "12/05/1980", true, " on file"],
+  ["date", "12/05/1980", true, " 1 on file"],
+  ["date", "12/05/1980", true, " on file"],
+  ["date", "12/05/1980", true, " on file"],
+  ["date", "12/05/1980", true, " on file"],
+  ["phone", "020 7946 0958", true, ""],
+]);
+
+/**
+ * Spec 0014, AC-4 to AC-8. A value of every kind with a real raised footnote
+ * marker after it, drawn as a second text object 8 pt and raised 5 pt with no
+ * gap, as a word processor draws one; raised ordinals and a lowered subscript;
+ * a marker of two glyphs, one in another script, one 1 pt and one 1.5 pt
+ * clear, a full size `¹` glyph, Chromium's shape and a line in small print;
+ * and a whole value drawn small and raised after a space, which stays in the
+ * text. One page, so the browser suite can open it.
+ */
+export function detectMarkers() {
+  return document(({ add }) => [
+    {
+      fonts: `/U ${identityFont(add)} 0 R`,
+      content: MARKER_LINES.map((parts, row) => pieces(750 - row * 26, parts)).join(""),
+    },
+  ]);
+}
+
 /** The addresses `detect-blocked.pdf` holds, by the reason each is blocked. */
 export const DETECT_BLOCKED = Object.freeze({
   slanted: "slanted@example.com",
