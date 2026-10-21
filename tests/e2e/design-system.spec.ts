@@ -1441,34 +1441,44 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     expect(findsBox?.height).toBe(stripsBox?.height);
     expect((findsBox?.x ?? 0) + (findsBox?.width ?? 0)).toBeLessThan(stripsBox?.x ?? 0);
 
-    // One list in two ruled columns, read down the first, then the second:
-    // Document info to Bookmarks, then JavaScript to Page thumbnails.
-    const list = strips.getByRole("list");
-    expect(await columnsOf(list)).toEqual({ count: "2", gap: "64px", rule: "solid" });
-    const items = strips.getByRole("listitem");
-    const [first, fourth, fifth] = [
-      await items.nth(0).boundingBox(),
-      await items.nth(3).boundingBox(),
-      await items.nth(4).boundingBox(),
-    ];
-    expect(fifth?.y).toBe(first?.y);
-    expect((fourth?.x ?? 0) + (fourth?.width ?? 0)).toBeLessThan(fifth?.x ?? 0);
-
-    // Feature 12: seven finds in two columns too, so the cards stay close in
+    // Feature 12: seven finds in two columns, so the cards stay close in
     // height. Read down the first column, then the second: Email addresses to
     // Card numbers, then the IBAN row to UK National Insurance numbers. The
     // rows are soft tiles, so the columns sit 12 pixels apart with no rule
     // between them (spec 0014, AC-12, the pin spec 0013's AC-11 owed).
-    const findsList = finds.getByRole("list");
-    expect(await columnsOf(findsList)).toEqual({ count: "2", gap: "12px", rule: "none" });
-    const rows = finds.getByRole("listitem");
-    const [firstRow, fourthRow, fifthRow] = [
-      await rows.nth(0).boundingBox(),
-      await rows.nth(3).boundingBox(),
-      await rows.nth(4).boundingBox(),
-    ];
-    expect(fifthRow?.y).toBe(firstRow?.y);
-    expect((fourthRow?.x ?? 0) + (fourthRow?.width ?? 0)).toBeLessThan(fifthRow?.x ?? 0);
+    // Feature 26: the seven strips sit on the same rows in the same columns,
+    // Document info to Bookmarks, then JavaScript to Page thumbnails.
+    for (const card of [finds, strips]) {
+      expect(await columnsOf(card.getByRole("list"))).toEqual({
+        count: "2",
+        gap: "12px",
+        rule: "none",
+      });
+      const rows = card.getByRole("listitem");
+      const [firstRow, fourthRow, fifthRow] = [
+        await rows.nth(0).boundingBox(),
+        await rows.nth(3).boundingBox(),
+        await rows.nth(4).boundingBox(),
+      ];
+      expect(fifthRow?.y).toBe(firstRow?.y);
+      expect((fourthRow?.x ?? 0) + (fourthRow?.width ?? 0)).toBeLessThan(
+        fifthRow?.x ?? 0,
+      );
+    }
+    // A strip's row is a find's row: the same height, fill and type.
+    const look = (row: Locator) =>
+      row.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          height: element.getBoundingClientRect().height,
+          fill: style.backgroundColor,
+          size: style.fontSize,
+          weight: style.fontWeight,
+        };
+      });
+    expect(await look(strips.getByRole("listitem").first())).toEqual(
+      await look(finds.getByRole("listitem").first()),
+    );
   });
 
   /**
@@ -1485,23 +1495,23 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     const finds = page.getByTestId("home-finds");
     const strips = page.getByTestId("home-strips");
     const list = strips.getByRole("list");
-    // The Finds rows fold at the same content width, and the cards are always
-    // the same width, so the two lists are always one column or two together.
-    // Wherever Finds has two, they sit 12 pixels apart with no rule at every
-    // width, since its gap never steps as the Strips gap does (spec 0014,
-    // AC-12).
+    // Both lists draw the same rows (feature 26) and fold at the same content
+    // width, and the cards are always the same width, so the two lists are
+    // always one column or two together, 12 pixels apart with no rule
+    // wherever they have two (spec 0014, AC-12).
     const findsColumns = () => columnsOf(finds.getByRole("list"));
     const findsCount = async () => (await findsColumns()).count;
-    const FINDS_TWO = { count: "2", gap: "12px", rule: "none" };
+    const TWO = { count: "2", gap: "12px", rule: "none" };
 
-    // Side by side, with room for two columns at the narrower gap.
+    // Side by side, with room for two columns.
     await page.setViewportSize({ width: 1080, height: 800 });
     await page.goto("/");
-    expect(await columnsOf(list)).toEqual({ count: "2", gap: "48px", rule: "solid" });
-    expect(await findsColumns()).toEqual(FINDS_TWO);
-    // No item wraps in the narrower columns.
+    expect(await columnsOf(list)).toEqual(TWO);
+    expect(await findsColumns()).toEqual(TWO);
+    // No strip wraps past two lines in the narrower columns, so every row
+    // keeps the 68 pixels of a find whose label fits on two.
     for (const item of await list.getByRole("listitem").all()) {
-      expect((await item.boundingBox())?.height).toBe(32);
+      expect((await item.boundingBox())?.height).toBe(68);
     }
 
     // Side by side and too narrow for two: one column, with no rule.
@@ -1513,10 +1523,10 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     expect(left?.height).toBe(right?.height);
     expect((left?.x ?? 0) + (left?.width ?? 0)).toBeLessThan(right?.x ?? 0);
 
-    // Stacked, so the card is wide again: two columns at the mockup's gap.
+    // Stacked, so the card is wide again: two columns.
     await page.setViewportSize({ width: 600, height: 900 });
-    expect(await columnsOf(list)).toEqual({ count: "2", gap: "64px", rule: "solid" });
-    expect(await findsColumns()).toEqual(FINDS_TWO);
+    expect(await columnsOf(list)).toEqual(TWO);
+    expect(await findsColumns()).toEqual(TWO);
     const [above, below] = [await finds.boundingBox(), await strips.boundingBox()];
     expect((above?.y ?? 0) + (above?.height ?? 0)).toBeLessThanOrEqual(below?.y ?? 0);
 
