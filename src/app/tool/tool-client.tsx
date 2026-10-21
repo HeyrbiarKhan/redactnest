@@ -763,14 +763,16 @@ export function ToolClient() {
         session.phase !== null
       ? phaseLine(session.phase, session.ticked.size)
       : null;
+  // Nothing worth hearing yet, so the polite region is hidden and takes no room.
+  const quiet = !reviewable && phaseText === null;
 
   /*
-   * Spec 0013, AC-14 to AC-17. One grid of three areas, always rendered in the
-   * same order with the same keys, so no live region remounts when a file is
-   * chosen and a phone reads them top to bottom: A, the document (the full
-   * drop zone, or the file bar); B, the rail; C, the found items, from
-   * `reviewing` on. Only the area template changes from `lg`: A beside B
-   * while nothing is open, then A across the top with C left of B.
+   * Spec 0013, AC-14 to AC-17, with feature 26's move of the phase line. One
+   * grid of four areas, always rendered in the same order with the same keys,
+   * so no live region remounts when a file is chosen and a phone reads them
+   * top to bottom: A, the document (the full drop zone, or the file bar); L,
+   * the polite region; B, the rail; C, the found items, from `reviewing` on.
+   * Only the area template changes from `lg` (`toolGridAreas`).
    *
    * `lg` here is a container query, 61rem of this column, which is a 1024
    * pixel window less the page's gutters at the default text size. A media
@@ -785,9 +787,7 @@ export function ToolClient() {
         data-testid="tool-grid"
         className={cx(
           "grid gap-6 @min-[61rem]:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]",
-          compact
-            ? "@min-[61rem]:[grid-template-areas:'a_a'_'c_b']"
-            : "@min-[61rem]:[grid-template-areas:'a_b']",
+          toolGridAreas(compact, reviewable, quiet),
         )}
       >
         <div
@@ -846,32 +846,39 @@ export function ToolClient() {
           )}
         </div>
 
-        <div
-          key="b"
-          data-testid="area-rail"
-          className="flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:b]"
-        >
-          {/*
+        {/*
           Spec 0003, AC-12, and spec 0007, AC-4. The polite region holds only
           what is worth hearing as it changes: the opened document card, heard
           once with the open and then left alone, and the one phase line while
           a document opens or a run works. A failure is an alert of its own
           and renders beside this, never inside it, or a screen reader would
-          announce it twice. First in the rail and in the page from the start,
-          so its first announcement is heard; visually hidden while it has
-          nothing to say, so it takes no room (spec 0013, AC-15 and AC-16).
-        */}
-          <div
-            aria-live="polite"
-            className={cx(
-              "flex flex-col gap-6",
-              !reviewable && phaseText === null && "sr-only",
-            )}
-          >
-            {reviewable && <OpenedDocument session={session} />}
-            {phaseText !== null && <StatusLine text={phaseText} />}
-          </div>
+          announce it twice. In the page from the start, so its first
+          announcement is heard; visually hidden while it has nothing to say,
+          so it takes no room (spec 0013, AC-15 and AC-16).
 
+          An area of its own, between the document and the rail, so the grid
+          can draw it where the list will be while a document opens, and at
+          the head of the rail once it holds the document card, without ever
+          remounting it or moving focus (feature 26).
+        */}
+        <div
+          key="l"
+          data-testid="area-live"
+          aria-live="polite"
+          className={cx(
+            "flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:l]",
+            quiet && "sr-only",
+          )}
+        >
+          {reviewable && <OpenedDocument session={session} />}
+          {phaseText !== null && <StatusLine text={phaseText} />}
+        </div>
+
+        <div
+          key="b"
+          data-testid="area-rail"
+          className="flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:b]"
+        >
           {/*
           Spec 0012, AC-5, as spec 0013 places it (AC-18): the plan card, after
           the drop zone and after the document card, and only on a build that
@@ -998,6 +1005,32 @@ export function ToolClient() {
       </div>
     </div>
   );
+}
+
+/**
+ * The tool grid's areas from `lg` (spec 0013, AC-14 to AC-16). While nothing
+ * is open, A sits beside B, with L over B only while it has something to say.
+ * With a document on the page, A runs across the top. Until there is a list
+ * to review (a file opening, or a lost worker), L takes the list's place left
+ * of B, so the spinner and the phase line fill the column the drop zone held
+ * rather than leaving it empty (feature 26). From `reviewing` on, C takes the
+ * left and L heads the rail column over B.
+ *
+ * A row L shares with A or C is sized to L alone (`auto`), and B's row takes
+ * the rest (`1fr`), so no space opens between L and B, and B still spans the
+ * full height beside the list for the sticky action panel (AC-17). A hidden L
+ * is out of the flow, so the template leaves it out rather than keep an empty
+ * row and its gap.
+ */
+function toolGridAreas(compact: boolean, reviewable: boolean, quiet: boolean): string {
+  if (!compact) {
+    return quiet
+      ? "@min-[61rem]:[grid-template-areas:'a_b']"
+      : "@min-[61rem]:grid-rows-[auto_1fr] @min-[61rem]:[grid-template-areas:'a_l'_'a_b']";
+  }
+  return reviewable
+    ? "@min-[61rem]:grid-rows-[auto_auto_1fr] @min-[61rem]:[grid-template-areas:'a_a'_'c_l'_'c_b']"
+    : "@min-[61rem]:[grid-template-areas:'a_a'_'l_b']";
 }
 
 /**

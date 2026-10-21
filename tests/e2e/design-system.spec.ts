@@ -694,8 +694,8 @@ test.describe("target sizes on the tool page (AC-7)", () => {
 });
 
 /**
- * Spec 0013, AC-14 to AC-17. The three areas as a wide window draws them, and
- * the action panel sticky beside the list only there.
+ * Spec 0013, AC-14 to AC-17. The areas as a wide window draws them, and the
+ * action panel sticky beside the list only there.
  */
 test.describe("the tool page's layout (spec 0013)", () => {
   const box = (page: Page, testId: string) =>
@@ -874,14 +874,45 @@ test.describe("the tool page's layout (spec 0013)", () => {
     await page.goto("/tool");
     await reviewBothGroups(page);
 
-    const [document, list, rail] = [
+    const [document, list, live, rail] = [
       await box(page, "area-document"),
       await box(page, "area-found"),
+      await box(page, "area-live"),
       await box(page, "area-rail"),
     ];
     expect(document.left).toBe(list.left);
     expect(document.right).toBe(rail.right);
     expect(document.top).toBeLessThan(Math.min(list.top, rail.top));
+    // The polite region, holding the document card, heads the rail column.
+    expect(live.left).toBe(rail.left);
+    expect(live.right).toBe(rail.right);
+    expect(live.top).toBe(list.top);
+    expect(live.top).toBeLessThan(rail.top);
+  });
+
+  /**
+   * AC-16, as feature 26 changes it: while a file opens, the spinner and the
+   * phase line sit in the left column under the file bar, where the list will
+   * be, beside the rail rather than in it over an empty column.
+   */
+  test("draws the phase line left of the rail while a document opens", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/tool");
+    await planAnswered(page);
+    await openingHeld(page);
+
+    const [document, live, rail] = [
+      await box(page, "area-document"),
+      await box(page, "area-live"),
+      await box(page, "area-rail"),
+    ];
+    await expect(page.getByTestId("area-live").getByTestId("progress")).toBeVisible();
+    expect(live.left).toBe(document.left);
+    expect(live.right).toBeLessThanOrEqual(rail.left);
+    expect(live.top).toBe(rail.top);
+    expect(document.top).toBeLessThan(live.top);
   });
 
   /**
@@ -902,14 +933,17 @@ test.describe("the tool page's layout (spec 0013)", () => {
       }
       await reviewBothGroups(page);
 
-      const [document, rail, list] = [
+      const [document, live, rail, list] = [
         await box(page, "area-document"),
+        await box(page, "area-live"),
         await box(page, "area-rail"),
         await box(page, "area-found"),
       ];
+      expect(live.left).toBe(document.left);
       expect(rail.left).toBe(document.left);
       expect(list.left).toBe(document.left);
-      expect(document.top).toBeLessThan(rail.top);
+      expect(document.top).toBeLessThan(live.top);
+      expect(live.top).toBeLessThan(rail.top);
       expect(rail.top).toBeLessThan(list.top);
     });
   }
