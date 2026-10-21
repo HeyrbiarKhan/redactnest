@@ -282,6 +282,25 @@ So at 1280 one Finds column would hold the pair at 767 pixels, the height both c
 - **A row grows rather than cutting its label short**, so every label reads whole. AC-11's 68 pixels was your mockup's row with its label on one line; two lines fit the same height beside the 48 pixel tile, and a third takes the row to 92.
 - **Not pinned by a test yet**: the e2e check reads only the Finds list's column count. Its 12 pixel gap, no rule, the rows' `break-inside-avoid` and the card's `@container` are held by no test, where the Strips list's are (a Follow-up in `index.md`).
 
+### Recorded after feature 26's build
+
+Feature 26 (UI polish) made two visual fixes you called on 2026-10-11, with no new design, built on `feat/ui-polish` (commits `e529df3` and `d496f89`) and recorded here on 2026-10-21, before `/check verify`. The figures are the build's own, from the tests it changed and its scope milestones.
+
+**The Strips rows.** The Strips items were 32 pixel check circles beside regular `ink` words, 8 pixels apart in ruled columns, next to Finds rows on soft `canvas` tiles: two looks side by side. Both lists are now drawn by one `BandRows` in `src/app/page.tsx`, so a stripped kind sits on a Finds row with a `Check` on its tile, in the Finds columns (two from 26rem of content, 12 pixels apart, no rule). The column rule and the 48 to 64 pixel gap step went with it, so the 29rem threshold no longer exists. The two cards stand 539 pixels tall at 1280, where they were 527, still equal. At 1080 pixels, the narrowest two columns the checks probe, every Strips row is 68 pixels.
+
+- **A second list styled like Finds** (runner up): the same classes copied onto the Strips list. It matches today, but two lists that must look alike drift the first time one changes.
+- **Keep the circles and match only the words** (runner up): semibold words and the Finds spacing beside the circles. A smaller change, but the two cards still read as two designs, which was the complaint.
+
+**The phase line while a document opens.** The polite region sat first in the rail, so while a document opened, the spinner and its phase line sat at the top of the right column with nothing on the left, where the drop zone had been and the list would be. The region is now an area of its own, L, between A and B in the page, and `toolGridAreas(compact, reviewable, quiet)` places it: left of B under the file bar while there is no list (`"a a" "l b"`), and at the head of the rail column from `reviewing` on (`"a a" "c l" "c b"`, rows `auto auto 1fr`, so B's row takes the rest and the sticky action panel keeps its travel). At idle it sits over B only while it speaks (`"a l" "a b"`); silent, it is `sr-only` and out of the flow, so the template leaves it out rather than keep an empty row and its 24 pixel gap. It is the same node from the first render, so its first announcement is heard and nothing remounts, and focus stays on Choose another PDF.
+
+- **Move the region into A while a document opens** (runner up): it would then have to leave A for the rail once the review opens, which remounts a live region (often not announced), or leave the document card under the file bar across both columns.
+- **A second, visual only spinner on the left** (runner up), the region staying in the rail: two spinners, or one heard and another seen, so what a sighted visitor sees and what a screen reader hears part ways.
+- **Render the Found items card early, empty** (runner up): new design, and a card titled Found items with nothing in it claims a list before detection has run.
+
+**The brand pictures.** The product shot is the reviewing state, where L heads the rail column just where the region sat before, the grid's 24 pixel gap above the plan card in place of the rail's own, so the build left `scripts/make-brand.mjs` alone (the scope's milestone). The home page's cards are in no brand picture.
+
+**Left over.** `IconCircle`'s `sm` size (the 32 pixel circle) had one caller, the Strips circles, and now has none (a Follow-up in `index.md`).
+
 ### What each reference gave, and what stayed out
 
 | Reference | Kept | Left out, and why |
@@ -314,6 +333,7 @@ Three mark directions and three wordmark styles were drawn at 128, 64, 32 and 16
 - `@clerk/react` 6.17.5 (under `@clerk/nextjs` 7.9.10): `dist/hooks-*.mjs` (`useSignIn()` and `useSignUp()` are signal hooks) and `dist/ClerkProvider-*.mjs` (the state proxy's statuses before Clerk loads); Clerk's `clerk/javascript` repository, `packages/clerk-js` (`Base.ts`, `Client.ts`, `SignIn.ts`, `clerk.ts`: when the sign in signal and `setActive`'s steps run), read 2026-10-06 (AC-32, after slice 6)
 - `src/app/(account)/sign-out.tsx` (the spinner and status line pattern the signing in line follows), `tests/unit/engine-wall.test.ts` (where every zone's class patterns are proved)
 - `src/app/(account)/sign-out.tsx` and `delete-account.tsx` (today's status lines, their focus moves and their words), `src/ui/button.tsx`, `src/ui/spinner.tsx` and `src/ui/icon-circle.tsx` (the shapes the new variants, tone and sizes extend), `tests/unit/contrast.test.ts` (the contract the new pairs join), and the fresh model review `docs/reviews/2026-10-04-feat-billing-paid-plan.md` (its suggestion of `aria-disabled` to keep focus), read 2026-10-06 (AC-11, AC-34, AC-35, after task 32)
+- `src/app/page.tsx` (`BandRows`), `src/app/tool/tool-client.tsx` (`toolGridAreas`, the `area-live` region) and the tests feature 26 changed (`tests/component/app/home-page.test.tsx`, `tests/component/tool-client.test.tsx`, `tests/e2e/design-system.spec.ts`), on `feat/ui-polish`, read 2026-10-21 (AC-11, AC-14 to AC-16, after feature 26)
 
 **Practices and standards**:
 - WCAG 2.2: 1.3.2 meaningful sequence and 2.4.3 focus order (the rail first), 1.4.1 use of colour (nav items), 1.4.10 reflow, 2.4.11 focus not obscured (the sticky panel and the sticky section list), 1.4.11 non text contrast (Clerk's field edges, the step line), 4.1.3 status messages (the signing in line, and the hidden regions on `/account`), 2.5.3 label in name and 2.4.7 focus visible (the busy button keeps its visible words as its name, and keeps focus), 1.4.3 contrast (the red buttons, held at 4.5:1 throughout by your call)

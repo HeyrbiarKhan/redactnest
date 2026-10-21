@@ -307,6 +307,8 @@ spec [0013](../specs/0013-brand-ui-refresh/index.md) · code in `src/app/page.ts
 - [x] Build it: `/develop UI polish`
   - [x] The Strips rows: both cards' lists drawn by one `BandRows`, so each stripped kind sits on a Finds row (the `canvas` fill, the 48 pixel square tile holding a `Check`, semibold `ink`, 68 pixels tall) in the Finds columns (12 pixels apart, no rule); the column rule and the 48 to 64 pixel gap step gone; both cards 539 pixels tall at 1280 · AC-11
   - [x] The opening phase line: the polite region an area of its own (`area-live`, grid area `l`) between A and B, drawn left of the rail under the file bar while a document opens or the worker is lost, and at the head of the rail column over B otherwise, the same node throughout and no focus moved; the component and browser layout checks moved with it; the product shot unchanged, so no `make-brand.mjs` rerun · AC-14, AC-16, AC-20
+- [ ] Verify it: `/check verify UI polish`
+- [ ] Test it: `/test UI polish`
 
 ### 25. More date forms · needs a decision · Beta + review · from spec 0005
 Date forms the date detector has no pattern for, so a date written that way gets no row whatever stands beside it: a written month with separators (`05-Jan-2026`, `27/Sep/2026`), year first with dots or one digit parts (`2026.09.27`, `2026/9/7`), unseparated (`20260927`), a written date with a two digit year (`27 Sep 26`), spaced separators, the legal formula (`27th day of September 2026`), German style ordinals and odd commas. Exports, UK documents, deeds and contracts write these.
