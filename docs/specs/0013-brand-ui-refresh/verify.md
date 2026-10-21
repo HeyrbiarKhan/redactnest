@@ -60,17 +60,17 @@ _Steps derived from spec 0013 acceptance criteria. `/check verify` runs these; `
 _From the scope's Done when for feature 26; AC-11, AC-14 and AC-16 describe it as built since 2026-10-21. Where an earlier step above gives the Strips list a 48 or 64 pixel gap, a rule, or 32 pixel items, these steps replace it._
 
 ### UI / manual
-- [ ] `/` at 1280 px → each Strips item is a soft `canvas` row with a 48 px square teal tile holding a check, its words semibold, as tall as a Finds row (68 px); both lists sit in two columns 12 px apart with no rule; the two cards are the same height → AC-11
-- [ ] `/` at 960 px → both lists are one column, the cards side by side at equal height; at 600 px the cards stack and each list is two columns again → AC-11
-- [ ] `/` with a screen reader → the Strips card is one list of seven items, as Finds is one list of seven → AC-11
-- [ ] `/tool` at 1280 px with the network throttled in DevTools, choose a PDF → the spinner and the phase line ("Loading the PDF engine…", then "Looking for …") sit under the file bar in the left column, level with the plan card, which stays in the rail with the lock line under it → AC-16
-- [ ] The same open with a screen reader → each phase is heard once, and focus stays on Choose another PDF throughout → AC-16, AC-20
-- [ ] Once the document opens → the document card heads the rail column, the Found items card is on the left, and Redact stays in view as the list scrolls → AC-16, AC-17
-- [ ] `/tool` at 900 px during an open → the file bar, the phase line, the plan card and the lock line in one column, in that order → AC-14
+- [x] `/` at 1280 px → each Strips item is a soft `canvas` row with a 48 px square teal tile holding a check, its words semibold, as tall as a Finds row (68 px); both lists sit in two columns 12 px apart with no rule; the two cards are the same height → AC-11
+- [x] `/` at 960 px → both lists are one column, the cards side by side at equal height; at 600 px the cards stack and each list is two columns again → AC-11
+- [x] `/` with a screen reader → the Strips card is one list of seven items, as Finds is one list of seven → AC-11 (read in Chromium's accessibility tree)
+- [x] `/tool` at 1280 px with the network throttled in DevTools, choose a PDF → the spinner and the phase line ("Loading the PDF engine…", then "Looking for …") sit under the file bar in the left column, level with the plan card, which stays in the rail with the lock line under it → AC-16
+- [x] The same open with a screen reader → each phase is heard once, and focus stays on Choose another PDF throughout → AC-16, AC-20 (heard in Narrator on `sample-agreement.pdf` at Slow 4G)
+- [x] Once the document opens → the document card heads the rail column, the Found items card is on the left, and Redact stays in view as the list scrolls → AC-16, AC-17
+- [x] `/tool` at 900 px during an open → the file bar, the phase line, the plan card and the lock line in one column, in that order → AC-14
 
 ### Commands
-- [ ] `pnpm exec vitest run tests/component/app/home-page.test.tsx tests/component/tool-client.test.tsx` → pass, the Strips rows held to the Finds rows' classes and the polite region (`area-live`) the same node through an open → AC-11, AC-14, AC-16, AC-20
-- [ ] `pnpm exec playwright test tests/e2e/design-system.spec.ts` → pass, including the phase line left of the rail while a document opens, and both lists' columns at 1280, 1080, 960, 600 and 320 px → AC-11, AC-14, AC-16
+- [x] `pnpm exec vitest run tests/component/app/home-page.test.tsx tests/component/tool-client.test.tsx` → pass, the Strips rows held to the Finds rows' classes and the polite region (`area-live`) the same node through an open → AC-11, AC-14, AC-16, AC-20
+- [x] `pnpm exec playwright test tests/e2e/design-system.spec.ts` → pass, including the phase line left of the rail while a document opens, and both lists' columns at 1280, 1080, 960, 600 and 320 px → AC-11, AC-14, AC-16
 
 ### Acceptance-criteria coverage
 - AC-11: the three `/` steps, the home page component test and the band's browser tests · AC-14: the 900 px step and the stacked layout browser test · AC-16: the 1280 px open, the opened layout step and the tool layout tests · AC-17: the sticky step and the existing sticky tests · AC-20: the screen reader step and the same node component test
