@@ -266,7 +266,12 @@ describe("the trio and the band (AC-10, AC-11)", () => {
     }
   });
 
-  it("ticks every claimed kind in one Strips list, set in ruled columns", () => {
+  /**
+   * Feature 26: each claimed kind on the Finds card's own row, its check on
+   * the same square tile, and the list in the same unruled columns, so the
+   * two cards read as one pair.
+   */
+  it("ticks every claimed kind in one Strips list, each on the Finds card's row", () => {
     render(<HomePage />);
 
     const strips = screen.getByTestId("home-strips");
@@ -277,14 +282,16 @@ describe("the trio and the band (AC-10, AC-11)", () => {
     expect(items.map((item) => item.textContent)).toEqual([...strippedItems()]);
     // Two columns once the card has room, decided by the card's own width.
     expect(strips).toHaveClass("@container");
-    expect(list).toHaveClass("@min-[26rem]:columns-2");
+    const findsList = within(screen.getByTestId("home-finds")).getByRole("list");
+    const findsRow = within(findsList).getAllByRole("listitem")[0];
+    expect(list.className).toBe(findsList.className);
+    expect(list.className).not.toMatch(/column-rule/u);
     for (const item of items) {
-      expect(item).toHaveClass("break-inside-avoid");
-      expect(item.firstElementChild).toHaveClass(
-        "size-8",
-        "rounded-full",
-        "bg-accent-soft",
+      expect(item.className).toBe(findsRow?.className);
+      expect(item.firstElementChild?.className).toBe(
+        findsRow?.firstElementChild?.className,
       );
+      expect(item.querySelectorAll("svg")).toHaveLength(1);
       expect(item.querySelector("svg")).toHaveClass("lucide-check");
     }
   });

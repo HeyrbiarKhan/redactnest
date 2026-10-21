@@ -108,36 +108,7 @@ export default function HomePage() {
                   title={HOME_TEXT.band.finds.title}
                   subtitle={HOME_TEXT.band.finds.subtitle}
                 />
-                {/*
-                  Each detector in its own soft row. Nothing here acts: no
-                  chevron, no link, no tab stop and no hover change, so the
-                  cursor rule leaves it the arrow (AC-33). `canvas`, not
-                  `subtle`, which is the checklist's hover tint and would make
-                  a row look pressable.
-
-                  With seven detectors (feature 12) one column of rows stood
-                  twice as tall as Strips, so the rows take two columns at the
-                  same 26rem of card content as the Strips list, 12 pixels
-                  apart like the rows. The two cards are always the same width,
-                  so both fold together and stay close in height. Still one
-                  list, read down the first column, then the second; a row
-                  never splits across the columns, and at 200% text the list
-                  stays one column.
-                */}
-                <ul
-                  role="list"
-                  className="flex flex-col gap-3 @min-[26rem]:block @min-[26rem]:columns-2 @min-[26rem]:gap-x-3"
-                >
-                  {findsItems().map(({ icon, label }) => (
-                    <li
-                      key={label}
-                      className="flex break-inside-avoid items-center gap-5 rounded-xl bg-canvas px-3 py-2.5 font-semibold text-ink @min-[26rem]:not-last:mb-3"
-                    >
-                      <IconCircle icon={icon} tone="accent" shape="square" />
-                      {label}
-                    </li>
-                  ))}
-                </ul>
+                <BandRows items={findsItems()} />
                 <BandCardClose>{HOME_TEXT.band.finds.line}</BandCardClose>
               </Card>
 
@@ -148,33 +119,10 @@ export default function HomePage() {
                   title={HOME_TEXT.band.strips.title}
                   subtitle={HOME_TEXT.band.strips.subtitle}
                 />
-                {/*
-                  One list of seven, so a screen reader hears them together,
-                  set in CSS columns once the card has room for two: down the
-                  first column, then the second, with a `border` rule between
-                  them. The card's own content width decides, never the
-                  window's, because from `md` to about 1020 pixels the card
-                  sits beside Finds and is too narrow for two columns. Two
-                  start at 26rem of content, about the narrowest that holds
-                  "Page thumbnails" beside its circle at a 48 pixel gap, and
-                  take the mockup's 64 pixel gap from 29rem. In rem, so at
-                  200% text it stays one column. An item never splits across
-                  the columns.
-                */}
-                <ul
-                  role="list"
-                  className="@min-[26rem]:columns-2 @min-[26rem]:gap-x-12 @min-[26rem]:[column-rule:1px_solid_var(--color-border)] @min-[29rem]:gap-x-16"
-                >
-                  {strippedItems().map((item) => (
-                    <li
-                      key={item}
-                      className="flex break-inside-avoid items-center gap-5 text-ink not-last:mb-2"
-                    >
-                      <IconCircle icon={Check} tone="accent" size="sm" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
+                {/* Each stripped kind on the same row as a detector, a check on its tile. */}
+                <BandRows
+                  items={strippedItems().map((label) => ({ icon: Check, label }))}
+                />
                 <BandCardClose>{HOME_TEXT.band.strips.note}</BandCardClose>
               </Card>
             </div>
@@ -210,6 +158,46 @@ function BandCardHeader({
         <p className="text-small text-ink-muted">{subtitle}</p>
       </div>
     </div>
+  );
+}
+
+/**
+ * A band card's list: each item in its own soft row, its icon on a square
+ * tile beside its words. Finds and Strips draw the same row (feature 26), so
+ * the two cards read as one pair and, with seven items each, stand the same
+ * height. Nothing here acts: no chevron, no link, no tab stop and no hover
+ * change, so the cursor rule leaves it the arrow (AC-33). `canvas`, not
+ * `subtle`, which is the checklist's hover tint and would make a row look
+ * pressable.
+ *
+ * One list, so a screen reader hears the seven together. Once the card's own
+ * content is 26rem wide the rows take two columns 12 pixels apart, the rows'
+ * own spacing, read down the first, then the second. The card is the query
+ * container, never the window, because from `md` to about 1020 pixels it sits
+ * beside the other card and is too narrow for two. The two cards are always
+ * the same width, so both lists fold together. A row never splits across the
+ * columns, and in rem, so at 200% text the list stays one column.
+ */
+function BandRows({
+  items,
+}: {
+  readonly items: readonly { readonly icon: LucideIcon; readonly label: string }[];
+}) {
+  return (
+    <ul
+      role="list"
+      className="flex flex-col gap-3 @min-[26rem]:block @min-[26rem]:columns-2 @min-[26rem]:gap-x-3"
+    >
+      {items.map(({ icon, label }) => (
+        <li
+          key={label}
+          className="flex break-inside-avoid items-center gap-5 rounded-xl bg-canvas px-3 py-2.5 font-semibold text-ink @min-[26rem]:not-last:mb-3"
+        >
+          <IconCircle icon={icon} tone="accent" shape="square" />
+          {label}
+        </li>
+      ))}
+    </ul>
   );
 }
 

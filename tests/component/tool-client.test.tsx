@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToolClient } from "@/app/tool/tool-client";
 import { config } from "@/config";
-import { IDLE_STEPS } from "@/lib/flow-text";
+import { IDLE_STEPS, PHASE_TEXT } from "@/lib/flow-text";
 import {
   asMatchId,
   EngineError,
@@ -2465,11 +2465,13 @@ describe("the redact flow (spec 0007)", () => {
     });
 
     /**
-     * Spec 0013, AC-14 and AC-20 (INV-5). The three areas keep their order
-     * and their elements in every step, so neither polite region remounts as
-     * a file is chosen and its first announcement is heard.
+     * Spec 0013, AC-14 and AC-20 (INV-5). The areas keep their order and
+     * their elements in every step, so neither polite region remounts as a
+     * file is chosen and its first announcement is heard. Feature 26 gives the
+     * phase line's region an area of its own, between the document and the
+     * rail, so the grid can move it without remounting it.
      */
-    it("keeps the three areas in page order, and both polite regions the same nodes, as a file opens", async () => {
+    it("keeps the areas in page order, and both polite regions the same nodes, as a file opens", async () => {
       mocks.billingEnabled = true;
       const run = controllable();
       mocks.openSession.mockResolvedValue(run.session);
@@ -2479,27 +2481,32 @@ describe("the redact flow (spec 0007)", () => {
       const areas = () =>
         [...grid.children].map((area) => area.getAttribute("data-testid"));
       const documentArea = screen.getByTestId("area-document");
+      const polite = screen.getByTestId("area-live");
       const rail = screen.getByTestId("area-rail");
-      const polite = rail.querySelector('[aria-live="polite"]');
       const plan = screen.getByRole("status");
-      expect(areas()).toEqual(["area-document", "area-rail"]);
-      expect(rail.firstElementChild).toBe(polite);
+      expect(areas()).toEqual(["area-document", "area-live", "area-rail"]);
+      expect(polite).toHaveAttribute("aria-live", "polite");
+      expect(grid.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
 
       await chooseFile(pdfFile());
       await screen.findByTestId("review");
 
-      expect(areas()).toEqual(["area-document", "area-rail", "area-found"]);
+      expect(areas()).toEqual(["area-document", "area-live", "area-rail", "area-found"]);
       expect(screen.getByTestId("area-document")).toBe(documentArea);
+      expect(screen.getByTestId("area-live")).toBe(polite);
       expect(screen.getByTestId("area-rail")).toBe(rail);
-      expect(rail.querySelector('[aria-live="polite"]')).toBe(polite);
       expect(screen.getByRole("status")).toBe(plan);
       expect(screen.getByTestId("area-found")).toContainElement(
         screen.getByTestId("checklist"),
       );
     });
 
-    /** AC-14 and AC-16: one template while nothing is open, the other with a file. */
-    it("lays A beside B while nothing is open, then A across the top with C left of B", async () => {
+    /**
+     * AC-14 and AC-16: one template while nothing is open, another with a
+     * file. From `reviewing` on, the polite region heads the rail column over
+     * B, and B's row takes the rest of the list's height.
+     */
+    it("lays A beside B while nothing is open, then A across the top with C left of the region and B", async () => {
       const run = controllable();
       mocks.openSession.mockResolvedValue(run.session);
       render(<ToolClient />);
@@ -2511,8 +2518,15 @@ describe("the redact flow (spec 0007)", () => {
 
       await chooseFile(pdfFile());
       await screen.findByTestId("review");
-      expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_a'_'c_b']");
+      expect(grid).toHaveClass(
+        "@min-[61rem]:[grid-template-areas:'a_a'_'c_l'_'c_b']",
+        "@min-[61rem]:grid-rows-[auto_auto_1fr]",
+      );
       expect(grid).not.toHaveClass("@min-[61rem]:[grid-template-areas:'a_b']");
+      expect(screen.getByTestId("area-live")).toHaveClass("@min-[61rem]:[grid-area:l]");
+      expect(screen.getByTestId("area-live")).toContainElement(
+        screen.getByRole("region", { name: "Document opened" }),
+      );
     });
 
     /** AC-15: the idle rail, in order. */
@@ -2529,7 +2543,7 @@ describe("the redact flow (spec 0007)", () => {
           .map((item) => item.textContent),
       ).toEqual(["1Open a PDF", "2Tick what to remove", "3Download your new file"]);
       const order = [
-        rail.querySelector('[aria-live="polite"]'),
+        screen.getByTestId("area-live"),
         screen.getByTestId("plan-card"),
         steps,
         screen.getByTestId("lock-line"),
@@ -2543,8 +2557,13 @@ describe("the redact flow (spec 0007)", () => {
       expect(rail.lastElementChild).toBe(screen.getByTestId("lock-line"));
     });
 
-    /** AC-15: "Checking your plan" in the rail's polite region, as today. */
-    it("says it is checking the plan in the rail's polite region while a chosen file waits", async () => {
+    /**
+     * AC-15: "Checking your plan" in the polite region at the head of the
+     * rail, as today. The file is not chosen until the answer comes, so the
+     * page is still laid out as idle, with the region over B only while it
+     * speaks.
+     */
+    it("says it is checking the plan in the polite region over the rail while a chosen file waits", async () => {
       mocks.getEntitlement.mockImplementation(
         ({ onWaiting }: { onWaiting?: () => void }) => {
           onWaiting?.();
@@ -2552,15 +2571,19 @@ describe("the redact flow (spec 0007)", () => {
         },
       );
       render(<ToolClient />);
-      const polite = screen
-        .getByTestId("area-rail")
-        .querySelector('[aria-live="polite"]');
+      const grid = screen.getByTestId("tool-grid");
+      const polite = screen.getByTestId("area-live");
       expect(polite).toHaveClass("sr-only");
+      expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_b']");
 
       await chooseFile(pdfFile());
 
       expect(polite).toHaveTextContent("Checking your plan…");
       expect(polite).not.toHaveClass("sr-only");
+      expect(grid).toHaveClass(
+        "@min-[61rem]:[grid-template-areas:'a_l'_'a_b']",
+        "@min-[61rem]:grid-rows-[auto_1fr]",
+      );
     });
 
     /**
@@ -2626,8 +2649,10 @@ describe("the redact flow (spec 0007)", () => {
       }
       const [fileBar, document, plan, refusal, panel, list] = order;
       expect(screen.getByTestId("area-document")).toContainElement(fileBar);
+      // The document card in the polite region, which heads the rail column.
+      expect(screen.getByTestId("area-live")).toContainElement(document);
       const rail = screen.getByTestId("area-rail");
-      for (const block of [document, plan, refusal, panel]) {
+      for (const block of [plan, refusal, panel]) {
         expect(rail).toContainElement(block);
       }
       expect(rail.lastElementChild).toBe(panel);
@@ -2668,6 +2693,7 @@ describe("the redact flow (spec 0007)", () => {
       expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_b']");
       expect([...grid.children].map((area) => area.getAttribute("data-testid"))).toEqual([
         "area-document",
+        "area-live",
         "area-rail",
       ]);
       expect(screen.getByTestId("area-document")).toContainElement(error);
@@ -2676,20 +2702,153 @@ describe("the redact flow (spec 0007)", () => {
       expect(rail.lastElementChild).toBe(screen.getByTestId("lock-line"));
     });
 
-    /** AC-16: while a file opens, the file bar takes A and the list is not there yet. */
-    it("lays the page out for a document while it opens, with no list yet (AC-16)", async () => {
+    /**
+     * AC-16, as feature 26 changes it: while a file opens, the file bar takes
+     * A, the list is not there yet, and the spinner and the phase line sit in
+     * the left column, in the polite region, rather than in the rail beside an
+     * empty column.
+     */
+    it("lays the page out for a document while it opens, the phase line left of the rail (AC-16)", async () => {
       mocks.openSession.mockImplementation(hangsAt("opening"));
       render(<ToolClient />);
       await chooseFile(pdfFile());
-      await screen.findByTestId("progress");
+      const progress = await screen.findByTestId("progress");
 
       const grid = screen.getByTestId("tool-grid");
-      expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_a'_'c_b']");
+      expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_a'_'l_b']");
       expect(screen.getByTestId("area-document")).toContainElement(
         screen.getByTestId("file-bar"),
       );
+      const polite = screen.getByTestId("area-live");
+      expect(polite).toContainElement(progress);
+      expect(polite).not.toHaveClass("sr-only");
+      expect(screen.getByTestId("area-rail")).not.toContainElement(progress);
       expect(screen.queryByTestId("area-found")).not.toBeInTheDocument();
       expect(within(screen.getByTestId("area-rail")).queryByRole("list")).toBeNull();
+    });
+
+    /**
+     * AC-16 and AC-20, as feature 26 moves the phase line: every phase of an
+     * open is one line in the one polite region, which replaces the last
+     * rather than adding to it, so each is heard once. The region is the same
+     * node from the first phase to the document card, and focus stays on the
+     * file bar's button while the line changes beside it.
+     */
+    it("says each phase of an open once, in the same region left of the rail, with focus left on the file bar (AC-16, AC-20)", async () => {
+      let report: ((phase: ProgressPhase) => void) | undefined;
+      let land: (session: OpenedSession) => void = () => {};
+      mocks.openSession.mockImplementation(
+        ({ onProgress }: { onProgress?: (phase: ProgressPhase) => void }) => {
+          report = onProgress;
+          return new Promise<OpenedSession>((resolve) => {
+            land = resolve;
+          });
+        },
+      );
+      render(<ToolClient />);
+      const grid = screen.getByTestId("tool-grid");
+      const polite = screen.getByTestId("area-live");
+      const chooseAnother = () =>
+        within(screen.getByTestId("file-bar")).getByRole("button", {
+          name: "Choose another PDF",
+        });
+
+      await chooseFile(pdfFile());
+
+      for (const phase of [
+        "loading-engine",
+        "opening",
+        "inspecting",
+        "detecting",
+      ] as const) {
+        await act(async () => report?.(phase));
+        expect(screen.getByTestId("area-live")).toBe(polite);
+        expect(polite.textContent).toBe(`${PHASE_TEXT[phase]}…`);
+        expect(screen.getAllByTestId("progress")).toHaveLength(1);
+        expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_a'_'l_b']");
+        expect(chooseAnother()).toHaveFocus();
+      }
+
+      await act(async () => land(controllable().session));
+
+      expect(screen.getByTestId("area-live")).toBe(polite);
+      expect(screen.queryByTestId("progress")).not.toBeInTheDocument();
+      expect(polite).toContainElement(
+        screen.getByRole("region", { name: "Document opened" }),
+      );
+      expect(chooseAnother()).toHaveFocus();
+    });
+
+    /**
+     * AC-16 and AC-20: a worker lost while a file opens leaves the open's
+     * template, the lost callout in the rail, and the polite region silent and
+     * hidden, since it has nothing to say. Try again speaks in that same
+     * region, never a new one, so the next phase is heard.
+     */
+    it("keeps the open's areas when the worker is lost, the region hidden and the same node through Try again (AC-16, AC-20)", async () => {
+      mocks.openSession.mockImplementation(hangsAt("opening"));
+      render(<ToolClient />);
+      const grid = screen.getByTestId("tool-grid");
+      const polite = screen.getByTestId("area-live");
+      await chooseFile(pdfFile());
+      await screen.findByTestId("progress");
+
+      await fireEngineLost();
+
+      const lost = await screen.findByTestId("lost");
+      expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_a'_'l_b']");
+      expect(screen.getByTestId("area-rail")).toContainElement(lost);
+      expect(screen.getByTestId("area-live")).toBe(polite);
+      expect(polite).toBeEmptyDOMElement();
+      expect(polite).toHaveClass("sr-only");
+
+      await userEvent.setup().click(screen.getByTestId("retry"));
+
+      const progress = await screen.findByTestId("progress");
+      expect(screen.getByTestId("area-live")).toBe(polite);
+      expect(polite).toContainElement(progress);
+      expect(polite).not.toHaveClass("sr-only");
+      expect(screen.queryByTestId("lost")).not.toBeInTheDocument();
+    });
+
+    /**
+     * AC-16, AC-17 and AC-20: through a run the grid keeps the review
+     * template, and the phase line joins the document card at the head of the
+     * rail column, after it, in the same region. Back at idle the region
+     * empties and hides, and is still the node it was.
+     */
+    it("keeps the region at the head of the rail through a run, then hides it at idle, the same node throughout (AC-16, AC-20)", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      const grid = screen.getByTestId("tool-grid");
+      const polite = screen.getByTestId("area-live");
+      const documentCard = screen.getByRole("region", { name: "Document opened" });
+      const REVIEW = "@min-[61rem]:[grid-template-areas:'a_a'_'c_l'_'c_b']";
+      const user = userEvent.setup();
+
+      await user.click(screen.getByTestId("redact"));
+      await run.progress("redacting");
+
+      const progress = screen.getByTestId("progress");
+      expect(grid).toHaveClass(REVIEW);
+      expect(screen.getByTestId("area-live")).toBe(polite);
+      expect(polite).toContainElement(progress);
+      expect(screen.getByRole("region", { name: "Document opened" })).toBe(documentCard);
+      expect(before(documentCard, progress)).toBe(true);
+      expect(screen.getAllByTestId("progress")).toHaveLength(1);
+
+      await run.finish();
+      expect(grid).toHaveClass(REVIEW);
+      expect(screen.getByTestId("area-live")).toBe(polite);
+      expect(screen.queryByTestId("progress")).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId("download"));
+      await user.click(screen.getByTestId("redact-another"));
+
+      expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_b']");
+      expect(screen.getByTestId("area-live")).toBe(polite);
+      expect(polite).toBeEmptyDOMElement();
+      expect(polite).toHaveClass("sr-only");
     });
 
     /**
