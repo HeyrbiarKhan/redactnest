@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToolClient } from "@/app/tool/tool-client";
 import { config } from "@/config";
-import { IDLE_STEPS } from "@/lib/flow-text";
+import { IDLE_STEPS, PHASE_TEXT } from "@/lib/flow-text";
 import {
   asMatchId,
   EngineError,
@@ -2725,6 +2725,130 @@ describe("the redact flow (spec 0007)", () => {
       expect(screen.getByTestId("area-rail")).not.toContainElement(progress);
       expect(screen.queryByTestId("area-found")).not.toBeInTheDocument();
       expect(within(screen.getByTestId("area-rail")).queryByRole("list")).toBeNull();
+    });
+
+    /**
+     * AC-16 and AC-20, as feature 26 moves the phase line: every phase of an
+     * open is one line in the one polite region, which replaces the last
+     * rather than adding to it, so each is heard once. The region is the same
+     * node from the first phase to the document card, and focus stays on the
+     * file bar's button while the line changes beside it.
+     */
+    it("says each phase of an open once, in the same region left of the rail, with focus left on the file bar (AC-16, AC-20)", async () => {
+      let report: ((phase: ProgressPhase) => void) | undefined;
+      let land: (session: OpenedSession) => void = () => {};
+      mocks.openSession.mockImplementation(
+        ({ onProgress }: { onProgress?: (phase: ProgressPhase) => void }) => {
+          report = onProgress;
+          return new Promise<OpenedSession>((resolve) => {
+            land = resolve;
+          });
+        },
+      );
+      render(<ToolClient />);
+      const grid = screen.getByTestId("tool-grid");
+      const polite = screen.getByTestId("area-live");
+      const chooseAnother = () =>
+        within(screen.getByTestId("file-bar")).getByRole("button", {
+          name: "Choose another PDF",
+        });
+
+      await chooseFile(pdfFile());
+
+      for (const phase of [
+        "loading-engine",
+        "opening",
+        "inspecting",
+        "detecting",
+      ] as const) {
+        await act(async () => report?.(phase));
+        expect(screen.getByTestId("area-live")).toBe(polite);
+        expect(polite.textContent).toBe(`${PHASE_TEXT[phase]}…`);
+        expect(screen.getAllByTestId("progress")).toHaveLength(1);
+        expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_a'_'l_b']");
+        expect(chooseAnother()).toHaveFocus();
+      }
+
+      await act(async () => land(controllable().session));
+
+      expect(screen.getByTestId("area-live")).toBe(polite);
+      expect(screen.queryByTestId("progress")).not.toBeInTheDocument();
+      expect(polite).toContainElement(
+        screen.getByRole("region", { name: "Document opened" }),
+      );
+      expect(chooseAnother()).toHaveFocus();
+    });
+
+    /**
+     * AC-16 and AC-20: a worker lost while a file opens leaves the open's
+     * template, the lost callout in the rail, and the polite region silent and
+     * hidden, since it has nothing to say. Try again speaks in that same
+     * region, never a new one, so the next phase is heard.
+     */
+    it("keeps the open's areas when the worker is lost, the region hidden and the same node through Try again (AC-16, AC-20)", async () => {
+      mocks.openSession.mockImplementation(hangsAt("opening"));
+      render(<ToolClient />);
+      const grid = screen.getByTestId("tool-grid");
+      const polite = screen.getByTestId("area-live");
+      await chooseFile(pdfFile());
+      await screen.findByTestId("progress");
+
+      await fireEngineLost();
+
+      const lost = await screen.findByTestId("lost");
+      expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_a'_'l_b']");
+      expect(screen.getByTestId("area-rail")).toContainElement(lost);
+      expect(screen.getByTestId("area-live")).toBe(polite);
+      expect(polite).toBeEmptyDOMElement();
+      expect(polite).toHaveClass("sr-only");
+
+      await userEvent.setup().click(screen.getByTestId("retry"));
+
+      const progress = await screen.findByTestId("progress");
+      expect(screen.getByTestId("area-live")).toBe(polite);
+      expect(polite).toContainElement(progress);
+      expect(polite).not.toHaveClass("sr-only");
+      expect(screen.queryByTestId("lost")).not.toBeInTheDocument();
+    });
+
+    /**
+     * AC-16, AC-17 and AC-20: through a run the grid keeps the review
+     * template, and the phase line joins the document card at the head of the
+     * rail column, after it, in the same region. Back at idle the region
+     * empties and hides, and is still the node it was.
+     */
+    it("keeps the region at the head of the rail through a run, then hides it at idle, the same node throughout (AC-16, AC-20)", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      const grid = screen.getByTestId("tool-grid");
+      const polite = screen.getByTestId("area-live");
+      const documentCard = screen.getByRole("region", { name: "Document opened" });
+      const REVIEW = "@min-[61rem]:[grid-template-areas:'a_a'_'c_l'_'c_b']";
+      const user = userEvent.setup();
+
+      await user.click(screen.getByTestId("redact"));
+      await run.progress("redacting");
+
+      const progress = screen.getByTestId("progress");
+      expect(grid).toHaveClass(REVIEW);
+      expect(screen.getByTestId("area-live")).toBe(polite);
+      expect(polite).toContainElement(progress);
+      expect(screen.getByRole("region", { name: "Document opened" })).toBe(documentCard);
+      expect(before(documentCard, progress)).toBe(true);
+      expect(screen.getAllByTestId("progress")).toHaveLength(1);
+
+      await run.finish();
+      expect(grid).toHaveClass(REVIEW);
+      expect(screen.getByTestId("area-live")).toBe(polite);
+      expect(screen.queryByTestId("progress")).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId("download"));
+      await user.click(screen.getByTestId("redact-another"));
+
+      expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_b']");
+      expect(screen.getByTestId("area-live")).toBe(polite);
+      expect(polite).toBeEmptyDOMElement();
+      expect(polite).toHaveClass("sr-only");
     });
 
     /**

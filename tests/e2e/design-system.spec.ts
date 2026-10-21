@@ -701,10 +701,20 @@ test.describe("the tool page's layout (spec 0013)", () => {
   const box = (page: Page, testId: string) =>
     page.getByTestId(testId).evaluate((element) => {
       const rect = element.getBoundingClientRect();
-      return { left: rect.left, right: rect.right, top: rect.top };
+      return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
     });
   const position = (page: Page, testId: string) =>
     page.getByTestId(testId).evaluate((element) => getComputedStyle(element).position);
+  const rowGap = (page: Page) =>
+    page
+      .getByTestId("tool-grid")
+      .evaluate((element) => parseFloat(getComputedStyle(element).rowGap));
+  // An area stretches to fill its grid row, so where its row really ends shows
+  // only in where its last block ends.
+  const contentBottom = (page: Page, testId: string) =>
+    page
+      .getByTestId(testId)
+      .evaluate((element) => element.lastElementChild?.getBoundingClientRect().bottom);
 
   test("sets the drop zone left of the rail while nothing is open, and first in the page", async ({
     page,
@@ -916,6 +926,67 @@ test.describe("the tool page's layout (spec 0013)", () => {
   });
 
   /**
+   * AC-15 and AC-16, as feature 26 lays them out: while a chosen file waits
+   * for the plan, the page is still idle, so the full drop zone stays left and
+   * "Checking your plan" heads the right column, level with the zone. The
+   * region's row is its own height, so the rail starts one grid gap under it
+   * however tall the zone beside them is. The entitlement request is held, so
+   * the line stays up for the wait budget rather than flashing past.
+   */
+  test("heads the rail with the plan check, beside the drop zone, while a chosen file waits", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.route("/api/entitlement", () => new Promise(() => {}));
+    await page.goto("/tool");
+    await page.getByTestId("file-input").setInputFiles(FIXTURE);
+    await expect(page.getByTestId("area-live").getByTestId("progress")).toHaveText(
+      "Checking your plan…",
+    );
+
+    const [document, live, rail] = [
+      await box(page, "area-document"),
+      await box(page, "area-live"),
+      await box(page, "area-rail"),
+    ];
+    await expect(page.getByTestId("drop-area")).toBeVisible();
+    expect(document.right).toBeLessThanOrEqual(live.left);
+    expect(live.left).toBe(rail.left);
+    expect(live.right).toBe(rail.right);
+    expect(live.top).toBe(document.top);
+    expect(rail.top - ((await contentBottom(page, "area-live")) ?? 0)).toBe(
+      await rowGap(page),
+    );
+  });
+
+  /**
+   * AC-16 and AC-17, as feature 26 lays them out: beside a list taller than
+   * the window, the document card's row is its own height and the rail's row
+   * takes the rest, so the rail starts one grid gap under the card rather than
+   * where a share of the list's height would push it, and still runs down
+   * beside the whole list for the sticky action panel.
+   */
+  test("starts the rail one gap under the document card beside a long list", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/tool");
+    await reviewManyRows(page);
+
+    const [list, live, rail] = [
+      await box(page, "area-found"),
+      await box(page, "area-live"),
+      await box(page, "area-rail"),
+    ];
+    expect(list.bottom - list.top).toBeGreaterThan(720);
+    expect(live.top).toBe(list.top);
+    expect(rail.top - ((await contentBottom(page, "area-live")) ?? 0)).toBe(
+      await rowGap(page),
+    );
+    expect(rail.bottom).toBe(list.bottom);
+  });
+
+  /**
    * AC-14 and AC-16: below lg, and at 200% text in a wide window, one column
    * in page order, so a phone reads the file bar, then the rail, then the list.
    */
@@ -945,6 +1016,37 @@ test.describe("the tool page's layout (spec 0013)", () => {
       expect(document.top).toBeLessThan(live.top);
       expect(live.top).toBeLessThan(rail.top);
       expect(rail.top).toBeLessThan(list.top);
+    });
+
+    /**
+     * AC-14, with feature 26's phase line: while a file opens in one column,
+     * the file bar, the phase line, then the rail with the plan card and the
+     * lock line, in page order.
+     */
+    test(`stacks the file bar, the phase line and the rail in one column while a document opens ${label}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/tool");
+      if (doubled) {
+        await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+      }
+      await planAnswered(page);
+      await openingHeld(page);
+
+      const [document, live, rail] = [
+        await box(page, "area-document"),
+        await box(page, "area-live"),
+        await box(page, "area-rail"),
+      ];
+      await expect(page.getByTestId("area-live").getByTestId("progress")).toBeVisible();
+      expect(live.left).toBe(document.left);
+      expect(rail.left).toBe(document.left);
+      expect(document.top).toBeLessThan(live.top);
+      expect(live.top).toBeLessThan(rail.top);
+      const railArea = page.getByTestId("area-rail");
+      await expect(railArea.getByTestId("plan-card")).toBeVisible();
+      await expect(railArea.getByTestId("lock-line")).toBeVisible();
     });
   }
 });
