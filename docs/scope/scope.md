@@ -36,7 +36,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 23 | Legal review | Release 6 | planned |
 | 24 | Detector follow ups | Release 3 | done |
 | 25 | More date forms | Release 3 | planned |
-| 26 | UI polish | Release 3 | in-progress |
+| 26 | UI polish | Release 3 | done |
 
 ## Foundations
 
@@ -299,7 +299,7 @@ spec [0014](../specs/0014-detector-follow-ups/index.md) · code in `src/detect` 
 - [x] Test it: `/test detector follow ups`
 - [x] Review it (fresh model): `/check review detector follow ups` (first review done, [2026-10-19](../reviews/2026-10-19-feat-detector-followups.md); for the first review's fix, [second review](../reviews/2026-10-19-feat-detector-followups-second.md))
 
-### 26. UI polish · in-progress · from spec 0013
+### 26. UI polish · done · from spec 0013
 Two visual fixes, no new design (your call, 2026-10-11). On the home page, the Strips card's items look different from the Finds rows beside them. On `/tool`, while a document opens, the spinner and its phase line ("Looking for …") sit in the right rail beside an empty left column.
 **Done when:** each Strips item on the home page is a row with the Finds rows' style and text size, the two cards still sit side by side at equal height from `md`, and each list is still one list to a screen reader; and on `/tool`, while a document opens, the spinner and phase line show in the left column in the drop zone's place, with the polite region still announcing each phase once, never remounting, and focus never moved (spec 0013, AC-14, AC-16, AC-20).
 **Also owed here:** spec 0013's AC-11 (the Strips items) and AC-16 (the opening state's layout) amended as built, and `scripts/make-brand.mjs` rerun if either change shows in a brand picture.
