@@ -36,7 +36,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 23 | Legal review | Release 6 | planned |
 | 24 | Detector follow ups | Release 3 | done |
 | 25 | More date forms | Release 3 | planned |
-| 26 | UI polish | Release 3 | planned |
+| 26 | UI polish | Release 3 | in-progress |
 
 ## Foundations
 
@@ -299,11 +299,14 @@ spec [0014](../specs/0014-detector-follow-ups/index.md) · code in `src/detect` 
 - [x] Test it: `/test detector follow ups`
 - [x] Review it (fresh model): `/check review detector follow ups` (first review done, [2026-10-19](../reviews/2026-10-19-feat-detector-followups.md); for the first review's fix, [second review](../reviews/2026-10-19-feat-detector-followups-second.md))
 
-### 26. UI polish · from spec 0013
+### 26. UI polish · in-progress · from spec 0013
 Two visual fixes, no new design (your call, 2026-10-11). On the home page, the Strips card's items look different from the Finds rows beside them. On `/tool`, while a document opens, the spinner and its phase line ("Looking for …") sit in the right rail beside an empty left column.
 **Done when:** each Strips item on the home page is a row with the Finds rows' style and text size, the two cards still sit side by side at equal height from `md`, and each list is still one list to a screen reader; and on `/tool`, while a document opens, the spinner and phase line show in the left column in the drop zone's place, with the polite region still announcing each phase once, never remounting, and focus never moved (spec 0013, AC-14, AC-16, AC-20).
 **Also owed here:** spec 0013's AC-11 (the Strips items) and AC-16 (the opening state's layout) amended as built, and `scripts/make-brand.mjs` rerun if either change shows in a brand picture.
-- [ ] Build it: `/develop UI polish`
+spec [0013](../specs/0013-brand-ui-refresh/index.md) · code in `src/app/page.tsx` (`BandRows`), `src/app/tool/tool-client.tsx` (`toolGridAreas`, the `area-live` region)
+- [x] Build it: `/develop UI polish`
+  - [x] The Strips rows: both cards' lists drawn by one `BandRows`, so each stripped kind sits on a Finds row (the `canvas` fill, the 48 pixel square tile holding a `Check`, semibold `ink`, 68 pixels tall) in the Finds columns (12 pixels apart, no rule); the column rule and the 48 to 64 pixel gap step gone; both cards 539 pixels tall at 1280 · AC-11
+  - [x] The opening phase line: the polite region an area of its own (`area-live`, grid area `l`) between A and B, drawn left of the rail under the file bar while a document opens or the worker is lost, and at the head of the rail column over B otherwise, the same node throughout and no focus moved; the component and browser layout checks moved with it; the product shot unchanged, so no `make-brand.mjs` rerun · AC-14, AC-16, AC-20
 
 ### 25. More date forms · needs a decision · Beta + review · from spec 0005
 Date forms the date detector has no pattern for, so a date written that way gets no row whatever stands beside it: a written month with separators (`05-Jan-2026`, `27/Sep/2026`), year first with dots or one digit parts (`2026.09.27`, `2026/9/7`), unseparated (`20260927`), a written date with a two digit year (`27 Sep 26`), spaced separators, the legal formula (`27th day of September 2026`), German style ordinals and odd commas. Exports, UK documents, deeds and contracts write these.
