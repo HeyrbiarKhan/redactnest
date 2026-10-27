@@ -984,6 +984,7 @@ function writtenAt(
   rules: DatePassRules,
 ): Found | null {
   const digitFirst = holds(points, at, ASCII_DIGIT);
+  if (!writtenCouldStart(points, at, digitFirst)) return null;
   const window = points.slice(at, at + WRITTEN_LONGEST).join("");
   // `of` is two letters, too short to read as a month, so at most one of the
   // day first patterns can match.
@@ -1019,7 +1020,9 @@ function addedWrittenAt(
   checkEnd: boolean,
   rules: DatePassRules,
 ): Found | null {
-  const patterns = holds(points, at, ASCII_DIGIT) ? ADDED_FROM_DIGIT : ADDED_FROM_LETTER;
+  const digitFirst = holds(points, at, ASCII_DIGIT);
+  if (!writtenCouldStart(points, at, digitFirst)) return null;
+  const patterns = digitFirst ? ADDED_FROM_DIGIT : ADDED_FROM_LETTER;
   const window = points.slice(at, at + ADDED_WRITTEN_LONGEST).join("");
   for (const pattern of patterns) {
     const parts = pattern.exec(window);
@@ -1028,6 +1031,42 @@ function addedWrittenAt(
     if (end !== null) return { end };
   }
   return null;
+}
+
+/**
+ * How far past a digit start the first letter or whitespace a written pattern
+ * needs may lie: a year first flush date's month starts there
+ * (`2026-Sep-27`), and a day range's gap (`12-15 May 2026`). Every other day
+ * first form needs one sooner: an ordinal's letter, the gap after the day, or
+ * the month after a flush separator. A rule about the patterns.
+ */
+const WORD_REACH = 5;
+
+const LETTER_OR_SPACE = /^[\p{L}\s]$/u;
+
+/** The first letters of the ways a month may be written, in lower case. */
+const MONTH_INITIALS: ReadonlySet<string> = new Set(
+  [...MONTHS.keys()].map((name) => name.charAt(0)),
+);
+
+/**
+ * Could a written date, today's or one spec 0015 adds, start at `at`? From a
+ * digit, only with a letter or whitespace within `WORD_REACH` code points;
+ * from a letter, only where a month starts, since `MONTHS` is looked up in
+ * lower case. An exact test, so no result changes: it spares the window a
+ * start no written pattern can read, which in a run of digits and separators
+ * is nearly every start, in both scans (spec 0015, AC-16).
+ */
+function writtenCouldStart(
+  points: readonly string[],
+  at: number,
+  digitFirst: boolean,
+): boolean {
+  if (!digitFirst) return MONTH_INITIALS.has((points[at] ?? "").toLowerCase());
+  for (let next = at + 1; next <= at + WORD_REACH; next += 1) {
+    if (holds(points, next, LETTER_OR_SPACE)) return true;
+  }
+  return false;
 }
 
 /**

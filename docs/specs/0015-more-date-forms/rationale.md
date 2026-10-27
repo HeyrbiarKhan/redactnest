@@ -183,4 +183,74 @@ At 200,000, 400,000 and 800,000 characters the two slowest shapes take 562, 1,12
 
 ### Measured in the build
 
-`/develop` records here the rerun of the table above on the built code (task 11), the corpus check and the built timings.
+Recorded by `/develop` on 2026-10-27 (task 11), with the scripts above in the build session's scratchpad: main's `src/detect` copied from git at `d42464b`, and the built code read from the repository itself.
+
+**The layouts, per slice.** Each slice was rerun as it landed, the whole harness at 2,000 per form and family (460,000 strings), and each read 0 lost, 0 ticks lost and 0 rows changed before its commit: the two scans and the written forms (`3016569`), the numeric forms (`1caaaf5`), two digit years (`5be3df6`), and the labels and other scripts (`e2e08c8`).
+
+**The layouts, on the whole build** (`e2e08c8`, seed 20261027, through `detect`, 2,000 per form and family, 460,000 strings, 260 s; rerun with `writtenCouldStart` below added, every cell the same):
+
+| Form | Lost | Ticks lost | Rows changed | Found | Found, glued digit |
+|---|---|---|---|---|---|
+| `d-Mon-yyyy` (`-`, `/`, `.`) | 0 | 0 | 0 | 100.0% | 100.0% |
+| `dd-MON-yy` | 0 | 0 | 0 | 49.9% | 0.0% |
+| `Mon-d-yyyy` | 0 | 0 | 0 | 99.9% | 99.9% |
+| `yyyy-Mon-dd` | 0 | 0 | 0 | 99.7% | 99.9% |
+| `yyyy.mm.dd` | 0 | 0 | 0 | 95.3% | 96.1% |
+| `yyyy/m/d` | 0 | 0 | 0 | 76.3% | 64.4% |
+| `yyyy-m-d` | 0 | 0 | 0 | 75.7% | 64.7% |
+| `yyyymmdd` | 0 | 0 | 0 | 41.9% | 0.0% |
+| `d Mon yy` | 0 | 0 | 0 | 48.3% | 0.0% |
+| `Mon d, yy` | 0 | 0 | 0 | 49.9% | 0.2% |
+| `d Mon 'yy` | 0 | 0 | 0 | 49.0% | 0.0% |
+| `d Month,yyyy` | 0 | 0 | 0 | 96.3% | 96.2% |
+| `Month d,yyyy` | 0 | 0 | 0 | 100.0% | 100.0% |
+| `dd / mm / yyyy` | 0 | 0 | 0 | 96.4% | 96.4% |
+| `yyyy - mm - dd` | 0 | 0 | 0 | 96.4% | 96.7% |
+| `dth day of Month yyyy` | 0 | 0 | 0 | 100.0% | 100.0% |
+| `d. Month yyyy` | 0 | 0 | 0 | 96.3% | 96.4% |
+| `Month, d yyyy` | 0 | 0 | 0 | 99.7% | 99.7% |
+| `Mon.d, yyyy` | 0 | 0 | 0 | 100.0% | 100.0% |
+| a label word glued (`Due-27/09/2026`) | 0 | 0 | 0 | 96.4% | 97.8% |
+| a marker then another script's digit | 0 | 0 | 0 | 84.3% | 82.8% |
+| another script's digit after the date | 0 | 0 | 0 | 87.2% | 79.9% |
+| a Social Security number, marker, script digit (rule unchanged) | 0 | 0 | 0 | 0.0% | 0.0% |
+
+Every figure is the prototype's but `Mon d, yy` with a glued digit (0.2% against 0.1%). That is not a difference in behaviour: on 230,000 further layouts (every form, 1,000 per family, seed 7), the build and the prototype list exactly the same rows, kinds and ticks in every string.
+
+**AC-7's marker, as built.** AC-7 says a marker digit counts "after a four digit last group", and also "read as for numeric dates", which read one after a year first date's day too (`2026-09-271` lists `2026-09-27`, as AC-3's `2026.09.271` does). Built first to the first phrase, `yyyy - mm - dd` with a glued digit was found in 0.0% of strings (48.0% of all), still 0, 0 and 0. The owner chose the numeric date reading on 2026-10-27, which the prototype measured: `2026 - 09 - 271` lists `2026 - 09 - 27`, and the table above holds it. AC-7's wording owes `/architect` a one line fix to match.
+
+**Noise** (`noise.mjs` against the build, seed 99, 4,000 per shape, and 40,000 strings of token soup): every shape gives the figure in the *Noise* table above, to the decimal, and token soup gains a row in 0.53% of strings (213 rows).
+
+**The corpus** (every string literal holding a digit in main's `tests/unit/detect*.test.ts`, `tests/unit/detection.test.ts` and `scripts/lib/detection-fixtures.mjs`, read from git so the build's own new tests are not counted, NFKC normalised: 1,346 distinct strings). Exactly the nine strings the *Noise* section names gain a date row and nothing else changes: `2026.09.27`, `2026-9-27`, `on 1 May 26 we`, `05.12.1980١`, `27 September 2026١`, `Updated27/09/2026`, `27/09/20261١`, `27 September 20261١` and `12.05.1980.1١`. Each slice added its own: none for the written forms, the first two for the numeric forms, the third for two digit years, the last six for the labels and other scripts.
+
+**A cheaper written reader.** The full suite run in parallel on this machine first failed the date detector's budget on today's shape `digits split by slashes` (1,157 ms against 1,000), beside the stopwatch failures it shows on main (the phone budgets and `cost.test.ts`). Alone in vitest the date detector's worst shape took 647 ms, and the profile put today's `writtenAt` first: it joins a 41 code point window at every start, and the second scan runs it again. So `writtenAt` and `addedWrittenAt` now first ask `writtenCouldStart`, an exact test: from a digit, a written pattern needs a letter or whitespace within 5 code points (a year first flush date's month, a day range's gap), and from a letter, a month's first letter. No result changes (the layouts above, the 230,000 strings against the prototype and the corpus are as before), and alone in vitest the worst date shape fell to 367 ms, `12/34/56/78/90/` from 647 to 229 ms and `1-2-3-4-5-6-7-8-9-0-` from 640 to 171 ms. The same test on `addedWrittenAt` alone saved nothing measurable, since today's reader was the cost. For scale, the phone detector's worst shape took 1,337 ms alone in vitest this session against 547 ms when spec 0014 measured it, so this machine ran about 2.4 times slower than then, and spec 0014's CI run read about 1.7 times its local figure.
+
+**Linear time** (`timing2.mjs` on the final code, thread CPU ms, as `detect-adversarial.test.ts` reads it, best of five, main and the build timed alternately on each shape so both run under the same conditions; through the scratch loader, `jiti`, whose module getters add to every call, so these read higher than vitest's figures, and noisier, with Windows counting thread time in 15.6 ms steps):
+
+| Shape | Main, 100k | Built, 100k | Main, 400k | Built, 400k |
+|---|---|---|---|---|
+| `27-Sep-` repeated | 62 | 156 | 422 | 922 |
+| `05-Jan-2026 ` repeated | 109 | 156 | 437 | 781 |
+| `27-SEP-26` glued | 109 | 296 | 422 | 1,265 |
+| `Sep 27, '26 ` repeated | 78 | 156 | 344 | 530 |
+| `27 Sep 10:` repeated | 93 | 281 | 406 | 1,422 |
+| `2026.9.` repeated | 140 | 328 | 578 | 1,547 |
+| `2026.9.7 ` repeated | 110 | 203 | 438 | 734 |
+| `20260927 ` repeated | 93 | 173 | 453 | 687 |
+| `20260927` glued | 125 | 235 | 407 | 953 |
+| `1 / 2 / ` repeated | 47 | 188 | 203 | 875 |
+| `27 / 09 / 2026 ` repeated | 63 | 125 | 407 | 687 |
+| `27th day of ` repeated | 78 | 297 | 438 | 1,140 |
+| `27th day of September, 2026 ` repeated | 94 | 140 | 453 | 594 |
+| `1. May ` repeated | 47 | 234 | 313 | 1,079 |
+| `Sep.27.` repeated | 78 | 188 | 407 | 921 |
+| `September, 27 ` repeated | 94 | 187 | 437 | 812 |
+| `5 may 26 ` repeated | 94 | 188 | 343 | 844 |
+| `15 March,` repeated | 79 | 202 | 344 | 860 |
+| `Updated27/09/` repeated | 109 | 297 | 422 | 1,110 |
+| `27/09/20261١ ` repeated | 125 | 187 | 531 | 734 |
+| `12/05/` repeated (today's shape) | 62 | 78 | 266 | 297 |
+| random digits and separators | 93 | 281 | 344 | 1,078 |
+| random soup of date tokens | 62 | 234 | 390 | 969 |
+
+At most 328 ms at 100,000 characters (`2026.9.`), within the date detector's 1 second budget, and alone in vitest the worst of every adversarial shape is 367 ms. At 100,000, 200,000, 400,000 and 800,000 characters the slowest shapes take 312, 812, 1,609 and 3,000 ms (`2026.9.`), 219, 515, 923 and 1,985 ms (`27th day of `), 219, 453, 922 and 1,985 ms (`1. May `) and 282, 562, 1,140 and 2,125 ms (`Updated27/09/`): doubling the input about doubles the time, and main's own figures grow the same way on the same run. `detect-adversarial.test.ts` holds the budget on every new shape, each detector reading each one: run alone on the final code, all 1,563 of its tests pass.

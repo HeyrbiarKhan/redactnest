@@ -316,12 +316,12 @@ Date forms the date detector has no pattern for, so a date written that way gets
 **Also owed here:** the fourth review's nits on feature 12: the card marker followed by a digit in another script (pinned as listed unticked; dates now list that case, Social Security numbers do not, measured), the `DATE_LABELS` words, and the `cutAtEnd` asymmetry pin. chrono-node was measured as a second reader and declined (spec 0015).
 spec [0015](../specs/0015-more-date-forms/index.md) · code in `src/detect` (`date.ts`, `dates.ts`, `index.ts`), `scripts/lib/detection-fixtures.mjs`, `scripts/make-fixture.mjs`
 - [x] Design it (spec): `/architect more date forms`
-- [ ] Build it: `/develop more date forms`
+- [x] Build it: `/develop more date forms`
   - [x] The two scans and the written forms: `datePasses` with today's scan untouched as its first, the second scan that only adds, the flush written forms and the new joints with four digit years, `detect` yielding rescued stretches to the first scan only, and `detect-date-forms.pdf` begun · AC-1, AC-2, AC-6, AC-12, AC-14, AC-16, AC-17
   - [x] The numeric forms: `isYearFirstDate` and `isUnseparatedDate` read by the date detector alone, the spaced separators, `isNumericDate` and the phone detector untouched · AC-3, AC-4, AC-7, AC-13, AC-16, AC-17
   - [x] Two digit years: in the written and flush forms, the apostrophe, the narrow end rule · AC-5, AC-16, AC-17, AC-18
   - [x] The edge rules and the nits: `ADDED_DATE_LABELS`, another script's digit in the second scan, the card, Social Security and `cutAtEnd` pins, the flipped pins · AC-8 to AC-11, AC-18
-  - [ ] Measured and recorded: the layouts through `detect` against main on the built code (0 lost, 0 ticks, 0 rows changed), the corpus and the timings in `rationale.md`; specs 0005 and 0014 amended · AC-15, AC-16, AC-18
+  - [x] Measured and recorded: the layouts through `detect` against main on the built code (0 lost, 0 ticks, 0 rows changed), the corpus and the timings in `rationale.md`; specs 0005 and 0014 amended · AC-15, AC-16, AC-18
 - [ ] Verify it: `/check verify more date forms`
 - [ ] Test it: `/test more date forms`
 - [ ] Review it (fresh model): `/check review more date forms`
