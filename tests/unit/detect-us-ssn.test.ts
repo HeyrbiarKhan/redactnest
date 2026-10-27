@@ -137,6 +137,14 @@ describe("a footnote marker after a Social Security number (AC-22, AC-10)", () =
     expect(found(nfkc(text))).toEqual([[ssn, false]]);
   });
 
+  /**
+   * A marker then a digit in another script gives none, unlike a card or a
+   * date (spec 0015, AC-10). On main the phone detector, which reads digits
+   * of any script, lists `123-45-67891١` as a ticked row, and listing the
+   * Social Security number instead turned its digits unticked in 5.8% of
+   * strings measured (spec 0015's `rationale.md`), so the rule stays.
+   * `detect.test.ts` holds the ticked phone row through `detect`.
+   */
   it.each([
     ["two marker digits", "SSN 123-45-6789¹²"],
     ["a marker then a digit in another script", "SSN 123-45-67891١"],

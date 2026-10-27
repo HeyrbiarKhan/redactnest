@@ -113,6 +113,16 @@ import type { DetectInput, Span } from "./types";
  * forms are never read through `isNumericDate`, which the phone detector
  * shares, so every phone row stays as it was (spec 0015, AC-13).
  *
+ * The second scan reads today's forms too, wherever the first left them, with
+ * two rules of its own. A word in `ADDED_DATE_LABELS` glued to a date lists
+ * it unticked, as one in `DATE_LABELS` does (`Updated27/09/2026`, AC-8). And
+ * a digit in another script right after a date, or after its footnote
+ * marker, ends the row there rather than making the date part of a longer
+ * number (`27 September 2026١`, `Born 12/05/1980¹١`, AC-9); two ASCII digits
+ * still do, and so does a digit of any script before a date. The phone, card
+ * and Social Security detectors read such a digit as before. Every new date
+ * starts unticked unless a birth word stands before it (AC-14).
+ *
  * Why it is linear (INV-7): each start reads a bounded stretch, at most three
  * groups of at most four digits for the numeric forms (the last read one digit
  * further, for a marker) and `WRITTEN_LONGEST` code points for the written
@@ -165,6 +175,28 @@ export const DATE_LABELS: readonly string[] = Object.freeze([
   "signed",
 ]);
 
+/**
+ * More words that label a value as a date (spec 0015, AC-8), read with
+ * `DATE_LABELS` in the second scan only, exactly as `DATE_LABELS` is read:
+ * one glued to a date, directly or through one separator
+ * (`Updated27/09/2026`, `Due-27/09/2026`), lists it unticked. Kept apart so
+ * the first scan, and every row it lists, stays as it was. A rule about how a
+ * value is labelled, not a cap on the visitor.
+ */
+export const ADDED_DATE_LABELS: readonly string[] = Object.freeze([
+  "created",
+  "updated",
+  "modified",
+  "printed",
+  "due",
+  "deadline",
+  "start",
+  "starts",
+  "end",
+  "ends",
+  "issue",
+]);
+
 const BIRTH_WORD_LIST = wordList(BIRTH_WORDS);
 
 /**
@@ -212,10 +244,14 @@ const FIRST_PASS: DatePassRules = Object.freeze({
   newFormsBeyondJoiner: false,
 });
 
-/** The second scan, which only adds rows where the first listed none. */
+/**
+ * The second scan, which only adds rows where the first listed none: both
+ * label lists, a digit in another script as the end of a row, and the new
+ * forms beyond a joiner.
+ */
 const SECOND_PASS: DatePassRules = Object.freeze({
-  labels: DATE_LABEL_AT_END,
-  scriptDigitEndsRow: false,
+  labels: atEnd(wordList([...DATE_LABELS, ...ADDED_DATE_LABELS])),
+  scriptDigitEndsRow: true,
   newFormsBeyondJoiner: true,
 });
 

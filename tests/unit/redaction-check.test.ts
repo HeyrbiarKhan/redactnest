@@ -361,7 +361,8 @@ describe("a value beside a glyph off its line", () => {
  * Spec 0015, AC-17. Every date `detect-date-forms.pdf` lists, each a form the
  * date detector's second scan adds, redacts alone and with every other: the
  * self check passes, the date is gone, and every neighbour of another kind,
- * and the words before the legal formula, are still in the output.
+ * the words before the legal formula and the label glued to a date are still
+ * in the output.
  */
 describe("the date forms spec 0015 adds", () => {
   const NAME = "detect-date-forms.pdf";
@@ -400,7 +401,7 @@ describe("the date forms spec 0015 adds", () => {
    * Each of `removed` is gone: the page holds its text once fewer for each
    * removed target whose text holds it, since a glued label's date and a
    * spaced date read the same with whitespace removed. Every neighbour of
-   * another kind, and `Dated this`, are still there.
+   * another kind, `Dated this` and the glued label `Created` are still there.
    */
   function expectRemoved(output: ArrayBuffer, removed: readonly RedactionTarget[]) {
     const before = pageOf(fixture(NAME));
@@ -415,7 +416,7 @@ describe("the date forms spec 0015 adds", () => {
         occurrences(before, text) - named,
       );
     }
-    for (const kept of [...neighbours, "Dated this"]) {
+    for (const kept of [...neighbours, "Dated this", "Created"]) {
       expect(after).toContain(packed(kept));
     }
   }

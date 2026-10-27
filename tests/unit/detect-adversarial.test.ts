@@ -297,6 +297,9 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["two digit years after an apostrophe", "Sep 27, '26 "],
   ["two digit years before a time", "27 Sep 10:"],
   ["flush two digit years glued end to end", "27-SEP-26"],
+  ["added labels glued to dates", "Updated27/09/2026 Due-27/09/2026 "],
+  ["added labels glued to dates cut short", "Updated27/09/"],
+  ["a marker then a digit in another script", "27/09/20261١ "],
 ];
 
 /**

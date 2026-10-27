@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ADDED_DATE_LABELS,
   BIRTH_WORDS,
   DATE_LABELS,
   detect,
@@ -830,13 +831,23 @@ describe("the general date boundary rule's edges (AC-19, AC-10, INV-7, INV-17)",
     expect(texts(`Leave ${text} approved`)).toEqual(dates);
   });
 
-  /** A digit in any script glued to either end makes a longer number, never a date. */
-  it.each(["05.12.1980١", "27 September 2026١", "١05.12.1980"])(
-    "finds nothing with a digit in another script glued: %s",
-    (text) => {
-      expect(found(`Ref ${text} here`)).toEqual([]);
-    },
-  );
+  /** A digit in any script glued before a date makes a longer number, never a date. */
+  it("finds nothing with a digit in another script glued before: ١05.12.1980", () => {
+    expect(found("Ref ١05.12.1980 here")).toEqual([]);
+  });
+
+  /**
+   * Flipped by spec 0015, AC-9 and AC-18: a digit in another script after a
+   * date ends its row in the second scan, which lists the date, unticked.
+   * Today's scan still drops it, so the date is the second scan's.
+   */
+  it.each([
+    ["05.12.1980١", "05.12.1980"],
+    ["27 September 2026١", "27 September 2026"],
+  ])("lists the date before a digit in another script glued after: %s", (text, date) => {
+    expect(found(`Ref ${text} here`)).toEqual([[date, false]]);
+    expect(scans(`Ref ${text} here`).first).toEqual([]);
+  });
 
   /**
    * Month first, the range's dash takes 0 to 3 (`MAX_GAP`) whitespace on each
@@ -919,14 +930,15 @@ describe("footnote markers and glued labels (AC-19, AC-10, INV-17)", () => {
   });
 
   /**
-   * Two or more digits, a digit in another script, or one digit after a two
-   * digit year are a longer number; a hyphen or a slash and one digit are a
-   * build number; its own separator and two digits are a longer code.
+   * Two or more digits, or one digit after a two digit year, are a longer
+   * number; a hyphen or a slash and one digit are a build number; its own
+   * separator and two digits are a longer code. A digit in another script
+   * after a date left this list with spec 0015's AC-9: the second scan lists
+   * the date before it.
    */
   it.each([
     ["two marker digits", "Born 12/05/1980¹²"],
     ["two plain digits", "Born 12/05/198012"],
-    ["a digit in another script", "27 September 2026١"],
     ["a marker after a two digit year", "05.12.80¹"],
     ["a dot and a digit after a two digit year", "1.2.26.1"],
     ["a hyphen and one digit", "2026-09-27-1"],
@@ -963,18 +975,27 @@ describe("footnote markers and glued labels (AC-19, AC-10, INV-17)", () => {
   });
 
   /**
-   * A word not in the list, or a label with a letter before it, is no label:
-   * the letter glued, or before a hyphen, still cuts.
+   * A word not in either list, or a label with a letter before it, is no
+   * label: the letter glued, or before a hyphen, still cuts.
    */
   it.each([
     "Toronto27/09/2026",
     "photo-27/09/2026",
-    "Updated27/09/2026",
     "M-12/05/1980",
     "Monday-28/09/2026",
     "Reborn27/09/1980",
   ])("finds no date in %s", (text) => {
     expect(found(`Seen ${text} here`)).toEqual([]);
+  });
+
+  /**
+   * Flipped by spec 0015, AC-8 and AC-18: `updated` is one of
+   * `ADDED_DATE_LABELS`, which the second scan reads, so the date is listed,
+   * unticked. Today's scan, reading `DATE_LABELS` alone, still drops it.
+   */
+  it("lists the date glued to Updated, unticked, in the second scan", () => {
+    expect(found("Seen Updated27/09/2026 here")).toEqual([["27/09/2026", false]]);
+    expect(scans("Seen Updated27/09/2026 here").first).toEqual([]);
   });
 
   /**
@@ -1029,6 +1050,59 @@ describe("footnote markers and glued labels (AC-19, AC-10, INV-17)", () => {
       ["27 September 2026", false],
     ]);
   });
+
+  /** Spec 0015, AC-8: the second scan's labels, read with `DATE_LABELS`. */
+  it("pins the added date labels spec 0015 gives", () => {
+    expect(ADDED_DATE_LABELS).toEqual([
+      "created",
+      "updated",
+      "modified",
+      "printed",
+      "due",
+      "deadline",
+      "start",
+      "starts",
+      "end",
+      "ends",
+      "issue",
+    ]);
+  });
+
+  it.each(ADDED_DATE_LABELS)(
+    "lists a date glued to %s, in any case, unticked, in the second scan only",
+    (label) => {
+      const upper = label.toUpperCase();
+      expect(found(`Seen ${label}27/09/2026 here`)).toEqual([["27/09/2026", false]]);
+      expect(found(`Seen ${upper}-27/09/2026 here`)).toEqual([["27/09/2026", false]]);
+      expect(found(`Seen ${upper}27 September 2026 here`)).toEqual([
+        ["27 September 2026", false],
+      ]);
+      expect(scans(`Seen ${label}27/09/2026 here`).first).toEqual([]);
+    },
+  );
+
+  it.each([
+    ["Created27/09/2026", "27/09/2026"],
+    ["Due-27/09/2026", "27/09/2026"],
+    ["Date of issue27/09/2026", "27/09/2026"],
+    ["Deadline.31.12.2026", "31.12.2026"],
+    ["Updated2026.9.7", "2026.9.7"],
+    ["Ends-20260927", "20260927"],
+  ])("lists the date glued to an added label in %s, unticked", (text, date) => {
+    expect(found(`Seen ${text} here`)).toEqual([[date, false]]);
+  });
+
+  it("still ticks a date after a birth word with an added label glued", () => {
+    expect(found("Born, updated27/09/1980")).toEqual([["27/09/1980", true]]);
+  });
+
+  /** An added label is a whole word too: `Weekend` only ends like `end`. */
+  it.each(["Weekend27/09/2026", "Overdue27/09/2026", "xstart-27/09/2026"])(
+    "finds no date in %s",
+    (text) => {
+      expect(found(`Seen ${text} here`)).toEqual([]);
+    },
+  );
 });
 
 /**
@@ -1039,16 +1113,26 @@ describe("footnote markers and glued labels (AC-19, AC-10, INV-17)", () => {
  * step does.
  */
 describe("footnote markers and glued labels, at their edges (AC-19, AC-10, INV-17)", () => {
-  // covers: AC-19, INV-17 (a marker has no digit of any script after it)
+  // covers: AC-19, INV-17 (a marker has no ASCII digit after it)
+  it("finds no date when another digit follows the marker after an ISO date, as two digits", () => {
+    expect(found(nfkc("Ref 2026-09-27¹² here"))).toEqual([]);
+  });
+
+  /**
+   * Flipped by spec 0015, AC-9 and AC-18: in the second scan a digit in
+   * another script after a marker is where the row ends, so the date is
+   * listed and the marker and that digit are both outside it. Today's scan
+   * still drops each.
+   */
   it.each([
-    ["a numeric date", "27/09/2026¹١"],
-    ["a written date", "27 September 2026¹١"],
-    ["a dotted date's stop", "12.05.1980.¹١"],
-    ["an ISO date, as two digits", "2026-09-27¹²"],
+    ["a numeric date", "27/09/2026¹١", "27/09/2026"],
+    ["a written date", "27 September 2026¹١", "27 September 2026"],
+    ["a dotted date's stop", "12.05.1980.¹١", "12.05.1980"],
   ])(
-    "finds no date when another digit follows the marker after %s: %s",
-    (_what, text) => {
-      expect(found(nfkc(`Ref ${text} here`))).toEqual([]);
+    "lists the date when another script's digit follows the marker after %s: %s",
+    (_what, text, date) => {
+      expect(found(nfkc(`Ref ${text} here`))).toEqual([[date, false]]);
+      expect(scans(nfkc(`Ref ${text} here`)).first).toEqual([]);
     },
   );
 
@@ -1618,6 +1702,66 @@ describe("two digit years in written dates (spec 0015, AC-5)", () => {
 
   it("ticks a two digit year after a birth word", () => {
     expect(found("DOB 5 Jan 80")).toEqual([["5 Jan 80", true]]);
+  });
+});
+
+/**
+ * Spec 0015, AC-9: in the second scan a digit in another script right after a
+ * date, or after its footnote marker, is where the row ends, for every reader
+ * whose end goes through today's end check. Two ASCII digits still drop a
+ * date, and so does a digit of any script before it, and the unseparated and
+ * spaced readers drop a date with a digit of any script after it. Each case
+ * goes through NFKC first, as the find step does.
+ */
+describe("a digit in another script after a date (spec 0015, AC-9)", () => {
+  it.each([
+    ["Born 12/05/1980¹١", "12/05/1980", true],
+    ["27 September 2026١", "27 September 2026", false],
+    ["05.12.1980١", "05.12.1980", false],
+    ["27/09/2026¹١", "27/09/2026", false],
+    ["12.05.1980.¹١", "12.05.1980", false],
+    ["2026.9.7١", "2026.9.7", false],
+    ["27 Sep 26١", "27 Sep 26", false],
+    ["05-Jan-2026१", "05-Jan-2026", false],
+    ["2026-09-27١ later", "2026-09-27", false],
+  ])("lists the date in %s", (text, date, ticked) => {
+    expect(found(nfkc(`Ref ${text}`))).toEqual([[date, ticked]]);
+  });
+
+  it("leaves both the marker and the other digit outside the row in 27/09/20261١", () => {
+    const text = "Ref 27/09/20261١ here";
+    expect(
+      DETECTORS.date({ text, joins: [] }).map((span) => [span.start, span.end]),
+    ).toEqual([[4, 14]]);
+  });
+
+  it.each([
+    ["two ASCII digits", "2026-09-27¹²"],
+    ["a digit in another script before", "١05.12.1980"],
+    ["an unseparated date", "20260927١"],
+    ["a spaced date", "27 / 09 / 2026١"],
+    ["a marker, then a digit in another script, after a spaced date", "27 / 09 / 20261١"],
+  ])("finds no date with %s: %s", (_what, text) => {
+    expect(found(nfkc(`Ref ${text} here`))).toEqual([]);
+  });
+});
+
+/**
+ * Spec 0015, AC-11: the `cutAtEnd` asymmetry of the fourth review, pinned as
+ * it stands. A hyphen or a slash and one digit after a date is a build number
+ * (`2026-09-27-1`), but after a marker it is not looked at, so the date
+ * detector alone lists each date here without its marker. Through `detect`
+ * (`detect.test.ts`) the first two are ticked phone rows on main, so dropping
+ * the date would take nothing, and the third a date main lists, so dropping it
+ * would take a row.
+ */
+describe("a marker, then a separator and a digit (spec 0015, AC-11)", () => {
+  it.each([
+    ["27-09-20261-5", "27-09-2026"],
+    ["2026-09-271-5", "2026-09-27"],
+    ["27/09/20261/5", "27/09/2026"],
+  ])("lists %s as the date without the marker", (text, date) => {
+    expect(found(`Ref ${text} here`)).toEqual([[date, false]]);
   });
 });
 

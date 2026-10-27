@@ -640,6 +640,7 @@ export const DETECT_DATE_FORMS = Object.freeze([
   ["September, 27 2026", false],
   ["Sept.27, 2026", false],
   ["1980.05.12", true],
+  ["27/09/2026", false],
   ["2nd day of June, 2026", false],
 ]);
 
@@ -653,6 +654,7 @@ export const DETECT_DATE_FORMS_OTHERS = Object.freeze([
   ["card", "4111 1111 1111 1111", true],
   ["us-ssn", "123-45-6789", true],
   ["uk-nino", "AB 12 34 56 C", true],
+  ["phone", "212 555 0123", true],
 ]);
 
 /** The lines of `detect-date-forms.pdf` above the wrapped one, in AC-17's order. */
@@ -668,6 +670,7 @@ const DATE_FORMS_LINES = Object.freeze([
   "Am 27. September 2026 in Leeds",
   "On 15 March,2026, September, 27 2026 and Sept.27, 2026",
   "Born 1980.05.12 NI AB 12 34 56 C",
+  "Created27/09/2026 by 212 555 0123",
 ]);
 
 /**
@@ -677,12 +680,13 @@ const DATE_FORMS_LINES = Object.freeze([
  * first beside a phone number, after a birth word beside a card, month first
  * and year first; year first with any separator and one digit parts;
  * unseparated beside a Social Security number; two digit years, spaced, flush
- * and after an apostrophe; spaced separators; the legal
- * formula, with `Dated this` outside its row; a full stop after the day; a
- * comma with no space before the year, a comma after the month, and a day
- * glued to an abbreviation's full stop; year first after a birth word beside
- * a National Insurance number; and the legal formula wrapped after `of`,
- * which the line join reads as one space.
+ * and after an apostrophe; spaced separators; the legal formula, with
+ * `Dated this` outside its row; a full stop after the day; a comma with no
+ * space before the year, a comma after the month, and a day glued to an
+ * abbreviation's full stop; year first after a birth word beside a National
+ * Insurance number; a date glued to a label only the second scan reads,
+ * beside a phone number; and the legal formula wrapped after `of`, which the
+ * line join reads as one space.
  */
 export function detectDateForms() {
   const wrapped = 740 - DATE_FORMS_LINES.length * 20;

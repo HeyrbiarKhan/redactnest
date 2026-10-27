@@ -599,6 +599,27 @@ describe("new numeric dates inside phone rows (spec 0015, AC-13)", () => {
   });
 });
 
+/**
+ * Spec 0015, AC-10 and AC-11: the fourth review's nits, pinned through
+ * `detect` with main's rows. The Social Security detector finds nothing in
+ * `SSN 123-45-67891١`, and the phone detector, which reads digits of any
+ * script, lists it whole and ticked; listing the Social Security number there
+ * turned its digits unticked in 5.8% of strings. After a marker, a separator
+ * and a digit leave the first two strings ticked phone rows and the third an
+ * unticked date, as on main.
+ */
+describe("the fourth review's nits, through detect (spec 0015, AC-10, AC-11)", () => {
+  it.each<[string, [DetectorKind, string, boolean][]]>([
+    ["SSN 123-45-67891١", [["phone", "123-45-67891١", true]]],
+    ["Card 4111 1111 1111 11111١", [["card", "4111 1111 1111 1111", false]]],
+    ["27-09-20261-5", [["phone", "27-09-20261-5", true]]],
+    ["2026-09-271-5", [["phone", "2026-09-271-5", true]]],
+    ["27/09/20261/5", [["date", "27/09/2026", false]]],
+  ])("lists main's rows in %s", (text, expected) => {
+    expect(withTicks(text)).toEqual(expected);
+  });
+});
+
 describe("line joins", () => {
   it("reads a join inside an email as nothing, and inside anything else as a space", () => {
     expect(readsJoinAsNothing("email")).toBe(true);

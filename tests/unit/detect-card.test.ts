@@ -178,6 +178,16 @@ describe("a card number is never cut from a unit, but is read out of a run", () 
     expect(found("41111111111111110")).toEqual([["4111111111111111", false]]);
   });
 
+  /**
+   * Spec 0015, AC-10, the fourth review's card nit, pinned as it stands: a
+   * marker followed by a digit in another script is outside the row too, so
+   * the card is listed unticked. Dates now list the same case (spec 0015,
+   * AC-9); Social Security numbers do not (`detect-us-ssn.test.ts`).
+   */
+  it("finds the card alone, unticked, with a marker and a digit in another script after", () => {
+    expect(found("Card 4111 1111 1111 11111١")).toEqual([["4111 1111 1111 1111", false]]);
+  });
+
   it.each([
     ["a spaced group before", "12 4111 1111 1111 1111", "4111 1111 1111 1111"],
     ["a spaced group after", "4111 1111 1111 1111 12", "4111 1111 1111 1111"],
