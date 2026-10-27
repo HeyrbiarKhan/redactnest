@@ -293,6 +293,10 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["unseparated dates glued end to end", "20260927"],
   ["spaced dates side by side", "27 / 09 / 2026 "],
   ["spaced separators cut short", "1 / 2 / "],
+  ["two digit years side by side", "5 may 26 "],
+  ["two digit years after an apostrophe", "Sep 27, '26 "],
+  ["two digit years before a time", "27 Sep 10:"],
+  ["flush two digit years glued end to end", "27-SEP-26"],
 ];
 
 /**

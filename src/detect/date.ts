@@ -103,7 +103,11 @@ import type { DetectInput, Span } from "./types";
  *    above;
  *  - eight digits unseparated (`20260927`), judged by `isUnseparatedDate`,
  *    which a digit of any script glued after drops with no marker reading;
- *  - spaced numeric separators with a four digit year (`27 / 09 / 2026`).
+ *  - spaced numeric separators with a four digit year (`27 / 09 / 2026`);
+ *  - two digit years in the day first and month first written forms, flush
+ *    or spaced, the spaced ones with an apostrophe or none (`27 Sep 26`,
+ *    `27-SEP-26`, `Sep 27, '26`), which a letter or a time after drops
+ *    (`Sep 27 10am`).
  *
  * The written forms' edges follow the written date rule above. The numeric
  * forms are never read through `isNumericDate`, which the phone detector
@@ -335,17 +339,33 @@ const WRITTEN_LONGEST =
 const FLUSH = "[-\\u2010-\\u2015\\u2212/.]";
 
 /**
- * `05-Jan-2026`, `27/Sep/2026`, `27.Sep.2026`: the same code point both times,
- * so `27-Sep–2026` is not read (AC-2).
+ * The year of a day first or month first written date: four digits, or two
+ * (AC-5). Where four follow, they are the year and are never read again as
+ * two, since the first alternative that holds is the one read.
+ */
+const YEAR = "(?<year>[0-9]{4}|[0-9]{2})";
+
+/**
+ * The same after a gap or a comma, where two digits may also follow an
+ * apostrophe, `'` or U+2019, with no gap (`27 Sep '26`). `judged` drops it.
+ */
+const SPACED_YEAR = "(?<year>[0-9]{4}|['\\u2019]?[0-9]{2})";
+
+/** An apostrophe before a two digit year, as `SPACED_YEAR` reads one. */
+const APOSTROPHE = /^['’]/u;
+
+/**
+ * `05-Jan-2026`, `27/Sep/2026`, `27.Sep.2026`, `27-SEP-26`: the same code
+ * point both times, so `27-Sep–2026` is not read (AC-2).
  */
 const FLUSH_DAY_FIRST = new RegExp(
-  `^(?<day>[0-9]{1,2})(?<separator>${FLUSH})(?<month>[a-z]{3,9})\\k<separator>(?<year>[0-9]{4})`,
+  `^(?<day>[0-9]{1,2})(?<separator>${FLUSH})(?<month>[a-z]{3,9})\\k<separator>${YEAR}`,
   "iu",
 );
 
-/** `Sep-27-2026`, `Sep.27.2026` (AC-2). */
+/** `Sep-27-2026`, `Sep.27.2026`, `SEP-27-26` (AC-2). */
 const FLUSH_MONTH_FIRST = new RegExp(
-  `^(?<month>[a-z]{3,9})(?<separator>${FLUSH})(?<day>[0-9]{1,2})\\k<separator>(?<year>[0-9]{4})`,
+  `^(?<month>[a-z]{3,9})(?<separator>${FLUSH})(?<day>[0-9]{1,2})\\k<separator>${YEAR}`,
   "iu",
 );
 
@@ -364,13 +384,14 @@ const YEAR_JOINT = `(?:,\\s{0,${MAX_GAP}}|${GAP})`;
 /**
  * Day first with the new joints (AC-6): a full stop after the day
  * (`27. September 2026`), `day of` after an ordinal day
- * (`27th day of September 2026`), and the comma of `YEAR_JOINT`. No day
+ * (`27th day of September 2026`), and the comma of `YEAR_JOINT`; and with any
+ * joint, today's included, a two digit year (`27 Sep 26`, AC-5). No day
  * range, which only today's form reads.
  */
 const DAY_FIRST_JOINTS = new RegExp(
   `^(?<day>[0-9]{1,2})(?<ordinal>st|nd|rd|th)?(?<dayStop>\\.)?${GAP}` +
     `(?:(?<legal>day)${GAP}of${GAP}|of${GAP})?` +
-    `(?<month>[a-z]{3,9})(?<monthStop>\\.?)${YEAR_JOINT}(?<year>[0-9]{4})`,
+    `(?<month>[a-z]{3,9})(?<monthStop>\\.?)${YEAR_JOINT}${SPACED_YEAR}`,
   "iu",
 );
 
@@ -378,11 +399,12 @@ const DAY_FIRST_JOINTS = new RegExp(
  * Month first with the new joints (AC-6): a comma after the month
  * (`September, 27 2026`), a day glued to an abbreviation's full stop
  * (`Sept.27, 2026`, `judged` holds a glued day to that), and the comma of
- * `YEAR_JOINT` (`March 15,2026`).
+ * `YEAR_JOINT` (`March 15,2026`); and with any joint, a two digit year
+ * (`Sep 27, '26`, AC-5).
  */
 const MONTH_FIRST_JOINTS = new RegExp(
   `^(?<month>[a-z]{3,9})(?<monthStop>\\.?)(?<monthJoint>,${GAP}|${GAP}|)` +
-    `(?<day>[0-9]{1,2})${ORDINAL}${YEAR_JOINT}(?<year>[0-9]{4})`,
+    `(?<day>[0-9]{1,2})${ORDINAL}${YEAR_JOINT}${SPACED_YEAR}`,
   "iu",
 );
 
@@ -976,7 +998,9 @@ function addedWrittenAt(
  * Where a match of an added written pattern ends, or `null` when it is no
  * date: a month `MONTHS` knows, a full stop only after an abbreviation,
  * `day of` only after an ordinal, a day glued to the month only after an
- * abbreviation's full stop (AC-6), and a real day of that month (AC-2).
+ * abbreviation's full stop (AC-6), and a real day of that month (AC-2), a two
+ * digit year real in either century (AC-5). With `checkEnd`, its end follows
+ * today's written date rule, and after a two digit year `shortYearRunsOn`'s.
  */
 function judged(
   points: readonly string[],
@@ -992,10 +1016,31 @@ function judged(
   if (parts.monthStop === "." && !ABBREVIATIONS.has(name)) return null;
   if (parts.legal !== undefined && parts.ordinal === undefined) return null;
   if (parts.monthJoint === "" && parts.monthStop !== ".") return null;
-  const year = parts.year ?? "";
+  const year = (parts.year ?? "").replace(APOSTROPHE, "");
   if (!isRealDate(year, month, Number(parts.day))) return null;
 
   const end = at + codePoints(whole).length;
-  if (checkEnd && cutAtEnd(points, end, null, year.length, rules)) return null;
-  return end;
+  if (!checkEnd) return end;
+  if (cutAtEnd(points, end, null, year.length, rules)) return null;
+  return year.length === 2 && shortYearRunsOn(points, end) ? null : end;
+}
+
+/** What makes a two digit year a time or a longer number, with a digit after it. */
+const RUNS_ON = /^[:.,]$/u;
+
+/**
+ * Does what follows a two digit year ending at `end` make it no year (AC-5)?
+ * A letter makes it part of a word or a time (`Sep 27 10am`), and a `:`, `.`
+ * or `,` with a digit after it a time, a longer number, or the start of a
+ * year beyond (`Mon 27 Sep 10:00`, `27 Sep 10.30`, `Sep 27, 26,000`,
+ * `29 JUL 11,1984`). A digit glued to it is `cutAtEnd`'s, and never a marker
+ * after two digits. Anything else leaves it listed, a slash or a hyphen and a
+ * digit included (`06-MAR-23/07700 859 471`): a broader rule missed such
+ * dates in the measurement.
+ */
+function shortYearRunsOn(points: readonly string[], end: number): boolean {
+  return (
+    holds(points, end, LETTER) ||
+    (holds(points, end, RUNS_ON) && holds(points, end + 1, DIGIT))
+  );
 }

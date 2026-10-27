@@ -629,6 +629,9 @@ export const DETECT_DATE_FORMS = Object.freeze([
   ["2026/9/7", false],
   ["2026-9-7", false],
   ["20260927", false],
+  ["27 Sep 26", false],
+  ["27-SEP-26", false],
+  ["Sep 27, '26", false],
   ["27 / 09 / 2026", false],
   ["2026 - 09 - 27", false],
   ["1st day of May, 2026", false],
@@ -659,6 +662,7 @@ const DATE_FORMS_LINES = Object.freeze([
   "Due Sep-27-2026 or 2026-Sep-27 at the latest",
   "Export 2026.09.27, 2026/9/7 and 2026-9-7 done",
   "Batch 20260927 SSN 123-45-6789 on file",
+  "Seen 27 Sep 26, 27-SEP-26 and Sep 27, '26 here",
   "Spaced 27 / 09 / 2026 and 2026 - 09 - 27 here",
   "Dated this 1st day of May, 2026 at noon",
   "Am 27. September 2026 in Leeds",
@@ -672,7 +676,8 @@ const DATE_FORMS_LINES = Object.freeze([
  * date and leave the neighbour: a written month with flush separators, day
  * first beside a phone number, after a birth word beside a card, month first
  * and year first; year first with any separator and one digit parts;
- * unseparated beside a Social Security number; spaced separators; the legal
+ * unseparated beside a Social Security number; two digit years, spaced, flush
+ * and after an apostrophe; spaced separators; the legal
  * formula, with `Dated this` outside its row; a full stop after the day; a
  * comma with no space before the year, a comma after the month, and a day
  * glued to an abbreviation's full stop; year first after a birth word beside

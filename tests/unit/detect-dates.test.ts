@@ -164,7 +164,6 @@ describe("what the date detector does not read as a date (AC-19)", () => {
     ["a leap day in a common year", "on 29 February 2023 we"],
     ["a year before 1900, written", "on 1 May 1899 we"],
     ["a year after 2099, written", "on 1 May 2100 we"],
-    ["a two digit year, written", "on 1 May 26 we"],
     ["a full stop after a full month name", "on 1 September. 2026 we"],
     ["a word that only starts like a month", "on 1 Mayday 2026 we"],
     ["a word that is not a month", "on 1 Smarch 2026 we"],
@@ -190,6 +189,15 @@ describe("what the date detector does not read as a date (AC-19)", () => {
     ["a numeric date", "on 05.12.19801 we", "05.12.1980"],
   ])("finds %s before one glued digit, without it", (_what, text, date) => {
     expect(found(text)).toEqual([[date, false]]);
+  });
+
+  /**
+   * Flipped by spec 0015, AC-5 and AC-18: a written date with a two digit
+   * year is now read, in the second scan, so this pin moved out of the list
+   * above.
+   */
+  it("finds a two digit year, written, unticked", () => {
+    expect(found("on 1 May 26 we")).toEqual([["1 May 26", false]]);
   });
 });
 
@@ -1550,6 +1558,66 @@ describe("new joints in the written forms (spec 0015, AC-6)", () => {
 
   it("finds no date with two digits glued after the year", () => {
     expect(found("Ref 27. September 202612 here")).toEqual([]);
+  });
+});
+
+/**
+ * Spec 0015, AC-5: a two digit year in the day first and month first written
+ * forms, flush or spaced, and after an apostrophe in the spaced ones, real in
+ * either century. A glued digit is never a marker after two digits, and a
+ * letter, or a `:`, `.` or `,` with a digit after it, drops the date.
+ */
+describe("two digit years in written dates (spec 0015, AC-5)", () => {
+  it.each([
+    "27 Sep 26",
+    "27 September 26",
+    "27th of Sep, 26",
+    "27. September 26",
+    "27th day of September 26",
+    "15 March,26",
+    "Sep 27, 26",
+    "Sep 27 26",
+    "27-SEP-26",
+    "SEP-27-26",
+    "27 Sep '26",
+    "Sept 27th, ’26",
+    "29 Feb 24",
+    "1 Jan 00",
+  ])("finds %s", (date) => {
+    expect(found(`Seen ${date} here`)).toEqual([[date, false]]);
+  });
+
+  it.each([
+    ["four digits after the month, read as the year only", "27 September 202612"],
+    ["a letter after the year", "Sep 27 10am"],
+    ["a clock time", "Mon 27 Sep 10:00"],
+    ["a time with a full stop", "27 Sep 10.30"],
+    ["a longer number", "Sep 27, 26,000"],
+    ["a glued ASCII digit", "27 Sep 261"],
+    ["an apostrophe before four digits", "27 Sep '2026"],
+    ["a leap day in a year no century makes leap", "29 Feb 23"],
+    ["an apostrophe in a flush form", "27-SEP-'26"],
+    ["a space between the apostrophe and the year", "27 Sep ' 26"],
+  ])("finds no date with %s: %s", (_what, text) => {
+    expect(found(`Ref ${text} here`)).toEqual([]);
+  });
+
+  it.each([
+    ["29 JUL 11,1984", ["JUL 11,1984"]],
+    ["06-MAR-23/07700 859 471", ["06-MAR-23"]],
+    ["Jul 20, 59: 617 822 7505", ["Jul 20, 59"]],
+    ["27 Sep 26, then", ["27 Sep 26"]],
+  ])("reads what follows a two digit year in %s", (text, dates) => {
+    expect(texts(`Ref ${text} here`)).toEqual(dates);
+  });
+
+  /** The owner's decision: the lower case word `may` reads as a month like any other. */
+  it("lists Rule 8 may 42 apply's 8 may 42, unticked", () => {
+    expect(found("Rule 8 may 42 apply")).toEqual([["8 may 42", false]]);
+  });
+
+  it("ticks a two digit year after a birth word", () => {
+    expect(found("DOB 5 Jan 80")).toEqual([["5 Jan 80", true]]);
   });
 });
 
