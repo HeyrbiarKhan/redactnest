@@ -25,5 +25,5 @@ Run the tool at `/tool` against a production build (`pnpm build && pnpm start`).
 
 ## Added by the build (2026-10-27)
 
-- [ ] `tests/unit/detect-dates.test.ts` lists `Ref 2026 - 09 - 271 here` as `2026 - 09 - 27` and finds nothing in `Ref 2026 - 9 - 71 here`: AC-7's marker read as for numeric dates, the owner's choice during the build; AC-7's wording ("after a four digit last group") still owes `/architect` a one line fix to match → AC-7
+- [ ] `tests/unit/detect-dates.test.ts` lists `Ref 2026 - 09 - 271 here` as `2026 - 09 - 27` and finds nothing in `Ref 2026 - 9 - 71 here`: AC-7's marker read as for numeric dates, the owner's choice during the build → AC-7
 - [ ] `writtenCouldStart` in `src/detect/date.ts` changes no row: `rationale.md`'s *Measured in the build* records the layouts unchanged and 0 of 230,000 strings differing from the prototype; `pnpm exec vitest run --project unit --maxWorkers=1 --reporter=verbose tests/unit/detect-adversarial.test.ts` alone shows the date detector's worst shape well under 1 s → AC-1, AC-16
