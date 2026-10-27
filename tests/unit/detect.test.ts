@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { detect, DETECTORS, PRECEDENCE, readsJoinAsNothing } from "@/detect";
+import { datePasses } from "@/detect/date";
 import { DETECTOR_KINDS, type DetectorKind } from "@/worker/protocol";
 
 /**
@@ -509,6 +510,59 @@ describe("AC-3's cases on NFKC text keep main's rows (spec 0014, AC-3)", () => {
     ["01-02-03-04-05", [["phone", "01-02-03-04-05", false]]],
   ])("lists main's rows in %s", (text, expected) => {
     expect(withTicks(nfkc(text))).toEqual(expected);
+  });
+});
+
+/** The text of each span, read from `text`. */
+function spanTexts(
+  text: string,
+  spans: readonly { start: number; end: number }[],
+): string[] {
+  const points = Array.from(text);
+  return spans.map((span) => points.slice(span.start, span.end).join(""));
+}
+
+/**
+ * Spec 0015, AC-12 and AC-14, through `detect`: a rescued phone stretch
+ * yields only to the dates the date detector's first scan lists, today's, so
+ * it keeps exactly today's extent beside a date only the second scan reads,
+ * and that date keeps its free pieces under precedence (spec 0005, INV-16).
+ * Each case's rows are main's, written out, plus the new date.
+ */
+describe("dates only the second scan lists, through detect (spec 0015, AC-12)", () => {
+  it("keeps a rescued stretch at today's extent beside a new form", () => {
+    const text = "212 918 8665 1119 21. June 2014";
+    expect(withTicks(text)).toEqual([
+      ["phone", "212 918 8665", true],
+      ["phone", "1119 21", false],
+      ["date", ". June 2014", false],
+    ]);
+    // The phone detector alone lists the stretch whole, and the date is the
+    // second scan's, so the stretch has no first scan date to yield to.
+    expect(spanTexts(text, DETECTORS.phone({ text, joins: [] }))).toEqual([
+      "212 918 8665",
+      "1119 21",
+    ]);
+    const { first, added } = datePasses({ text, joins: [] });
+    expect(spanTexts(text, first)).toEqual([]);
+    expect(spanTexts(text, added)).toEqual(["21. June 2014"]);
+  });
+
+  it("returns spans holding only kind, start, end and tick", () => {
+    expect(
+      detect({ text: "Tel 020 7946 0958 DOB 27-Sep-1980", joins: [] }),
+    ).toStrictEqual([
+      { kind: "phone", start: 4, end: 17, tickedByDefault: true },
+      { kind: "date", start: 22, end: 33, tickedByDefault: true },
+    ]);
+  });
+
+  it("lists a new form beside a phone row and a stranded group, each as main lists them", () => {
+    expect(withTicks("9346 212 555 0123 05-Jan-2026")).toEqual([
+      ["phone", "9346 212 555", true],
+      ["phone", "0123", false],
+      ["date", "05-Jan-2026", false],
+    ]);
   });
 });
 

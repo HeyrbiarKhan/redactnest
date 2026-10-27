@@ -1,7 +1,7 @@
 # 0015. More date forms
 
 **Date**: 2026-10-27
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 

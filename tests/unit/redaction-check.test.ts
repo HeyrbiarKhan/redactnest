@@ -25,7 +25,7 @@ import {
 } from "@/engine";
 
 import { fixture } from "../support/bytes";
-import { LIMITS, mupdf, pageCharacters } from "../support/mupdf";
+import { inspect, LIMITS, mupdf, pageCharacters, pageText } from "../support/mupdf";
 import { findTarget } from "../support/targets";
 
 /**
@@ -350,6 +350,66 @@ describe("a value beside a glyph off its line", () => {
   it("redacts every row together and keeps every marker", async () => {
     const { output } = await redactDocumentWith(mupdf, fixture(NAME), targets);
     expectMarkersKept(output);
+  });
+});
+
+/**
+ * Spec 0015, AC-17. Every date `detect-date-forms.pdf` lists, each a form the
+ * date detector's second scan adds, redacts alone and with every other: the
+ * self check passes, the date is gone, and every neighbour of another kind,
+ * and the words before the legal formula, are still in the output.
+ */
+describe("the date forms spec 0015 adds", () => {
+  const NAME = "detect-date-forms.pdf";
+  let dates: readonly RedactionTarget[] = [];
+  let neighbours: readonly string[] = [];
+
+  beforeAll(async () => {
+    const doc = await openDocumentWith(mupdf, fixture(NAME), LIMITS);
+    try {
+      const found = await doc.findMatches({ contextChars: 0 });
+      dates = found.flatMap((match) =>
+        match.kind === "date" && match.target ? [match.target] : [],
+      );
+      neighbours = found
+        .filter((match) => match.kind !== "date")
+        .map((match) => match.text);
+    } finally {
+      doc.close();
+    }
+  });
+
+  /** The page's text with whitespace removed, so the wrapped date reads as one. */
+  function packed(bytes: ArrayBuffer): string {
+    return inspect(bytes, (doc) => pageText(doc, 0)).replace(/\s/gu, "");
+  }
+
+  function expectNeighboursKept(text: string) {
+    for (const kept of [...neighbours, "Dated this"]) {
+      expect(text).toContain(kept.replace(/\s/gu, ""));
+    }
+  }
+
+  it("lists a target for every date, and its neighbours as other kinds", () => {
+    expect(dates).toHaveLength(10);
+    expect(neighbours).toEqual(["020 7946 0958", "4111 1111 1111 1111"]);
+  });
+
+  it("redacts each date alone and keeps every neighbour", async () => {
+    for (const target of dates) {
+      const { output } = await redactDocumentWith(mupdf, fixture(NAME), [target]);
+      const text = packed(output);
+      expect(text).not.toContain(target.text.replace(/\s/gu, ""));
+      expectNeighboursKept(text);
+    }
+  }, 60_000);
+
+  it("redacts every date together and keeps every neighbour", async () => {
+    const { output } = await redactDocumentWith(mupdf, fixture(NAME), dates);
+    const text = packed(output);
+    for (const target of dates)
+      expect(text).not.toContain(target.text.replace(/\s/gu, ""));
+    expectNeighboursKept(text);
   });
 });
 
