@@ -35,7 +35,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 22 | Brand & UI refresh | Release 2 | done |
 | 23 | Legal review | Release 6 | planned |
 | 24 | Detector follow ups | Release 3 | done |
-| 25 | More date forms | Release 3 | planned |
+| 25 | More date forms | Release 3 | in-progress |
 | 26 | UI polish | Release 3 | done |
 
 ## Foundations
@@ -310,10 +310,21 @@ spec [0013](../specs/0013-brand-ui-refresh/index.md) · code in `src/app/page.ts
 - [x] Verify it: `/check verify UI polish`
 - [x] Test it: `/test UI polish`
 
-### 25. More date forms · needs a decision · Beta + review · from spec 0005
+### 25. More date forms · in-progress · Beta + review · from spec 0005
 Date forms the date detector has no pattern for, so a date written that way gets no row whatever stands beside it: a written month with separators (`05-Jan-2026`, `27/Sep/2026`), year first with dots or one digit parts (`2026.09.27`, `2026/9/7`), unseparated (`20260927`), a written date with a two digit year (`27 Sep 26`), spaced separators, the legal formula (`27th day of September 2026`), German style ordinals and odd commas. Exports, UK documents, deeds and contracts write these.
 **Done when:** each listed form is either found, with its own near misses measured, or recorded as a miss with its reason; a change to `isNumericDate` reruns the phone look alike cases, since the phone detector shares it (INV-14); and every form found redacts through the real engine from a fixture.
-- [ ] Design it (spec): `/architect more date forms`
+**Also owed here:** the fourth review's nits on feature 12: the card marker followed by a digit in another script (pinned as listed unticked; dates now list that case, Social Security numbers do not, measured), the `DATE_LABELS` words, and the `cutAtEnd` asymmetry pin. chrono-node was measured as a second reader and declined (spec 0015).
+spec [0015](../specs/0015-more-date-forms/index.md) · code in `src/detect` (`date.ts`, `dates.ts`, `index.ts`), `scripts/lib/detection-fixtures.mjs`, `scripts/make-fixture.mjs`
+- [x] Design it (spec): `/architect more date forms`
+- [ ] Build it: `/develop more date forms`
+  - [ ] The two scans and the written forms: `datePasses` with today's scan untouched as its first, the second scan that only adds, the flush written forms and the new joints with four digit years, `detect` yielding rescued stretches to the first scan only, and `detect-date-forms.pdf` begun · AC-1, AC-2, AC-6, AC-12, AC-14, AC-16, AC-17
+  - [ ] The numeric forms: `isYearFirstDate` and `isUnseparatedDate` read by the date detector alone, the spaced separators, `isNumericDate` and the phone detector untouched · AC-3, AC-4, AC-7, AC-13, AC-16, AC-17
+  - [ ] Two digit years: in the written and flush forms, the apostrophe, the narrow end rule · AC-5, AC-16, AC-17, AC-18
+  - [ ] The edge rules and the nits: `ADDED_DATE_LABELS`, another script's digit in the second scan, the card, Social Security and `cutAtEnd` pins, the flipped pins · AC-8 to AC-11, AC-18
+  - [ ] Measured and recorded: the layouts through `detect` against main on the built code (0 lost, 0 ticks, 0 rows changed), the corpus and the timings in `rationale.md`; specs 0005 and 0014 amended · AC-15, AC-16, AC-18
+- [ ] Verify it: `/check verify more date forms`
+- [ ] Test it: `/test more date forms`
+- [ ] Review it (fresh model): `/check review more date forms`
 
 ### 11. Telemetry & error monitoring · needs a decision
 Enough numbers to know whether the funnel works and whether anything is failing silently, without ever touching document content.
@@ -389,6 +400,8 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **Polar checkout's blocked background fetch**: after sign up, Next.js tries to fetch Polar's checkout in the background. The standard policy blocks it and a full page load follows, so checkout opens as it should, with a policy error in the console. If that error matters, make the landing a full page load from the start, and never add a Polar origin to the policy (spec 0012, AC-21 and claim C13) · optional · from spec 0012
 - **Codes after a date list extra unticked dates**: the date detector's time stretch judges characters, not meaning, so a date shortly before a code that holds a date lifts the code's own separator rule. `Paid 27/09/2026 ref 1/05/12/1980` lists `05/12/1980`, and `Leave 2026-09-01-2026-09-30-01` lists `09-30-01`, each an unticked row read out of a code that was never a date (spec 0005, *Consequences*). Nothing is lost and each row costs a glance, but no natural text corpus was measured. Revisit if real documents show many, measured before any rule narrows, since a narrower stretch could drop a real date · needs a decision · from spec 0005
 - **A check that committed fixtures match their script**: `node scripts/make-fixture.mjs` writes every PDF in `tests/fixtures` from code and the tests read the committed files, but nothing in `pnpm test` or CI fails when a committed PDF differs from what the script writes today. So a fixture can drift from the code that names its rows, and each review checks it by hand (spec 0004's `verify.md`, the sparse OCR review, the third and fourth reviews of feature 12). A unit test that builds each fixture in memory and compares bytes, or a CI step that runs the script and fails on a changed `tests/fixtures`, would hold it for every feature · from the fourth review of feature 12
+- **Date variants still missed after feature 25**: `A.D.` or `in the year` before a year, number words (`twenty-seventh day`), a day range in a new form (`3-5 Jan-2026`), a written year first date with spaces (`2026 Sep 27`), uneven spacing round a separator, an ordinal or mixed dashes in a flush form, a space before a comma, and a number right before a month first date read as a two digit year (`19 December, 16 2015`). Bring one to `/architect` when a review or a visitor meets it, measured through `detect` against main · needs a decision · from spec 0015
+- **A natural text corpus for detector noise**: spec 0015's noise figures come from synthetic shapes and token soup; a corpus of made up but natural documents would tighten them, the two digit year and numbered list figures first · needs a decision · from spec 0015
 - **Cookie consent banner**: deliberately not built. The only cookies are the strictly necessary auth ones and analytics is cookieless, so no consent is required. Kept here so it does not get added later out of habit.
 
 ## Legend
