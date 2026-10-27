@@ -318,7 +318,7 @@ spec [0015](../specs/0015-more-date-forms/index.md) · code in `src/detect` (`da
 - [x] Design it (spec): `/architect more date forms`
 - [ ] Build it: `/develop more date forms`
   - [x] The two scans and the written forms: `datePasses` with today's scan untouched as its first, the second scan that only adds, the flush written forms and the new joints with four digit years, `detect` yielding rescued stretches to the first scan only, and `detect-date-forms.pdf` begun · AC-1, AC-2, AC-6, AC-12, AC-14, AC-16, AC-17
-  - [ ] The numeric forms: `isYearFirstDate` and `isUnseparatedDate` read by the date detector alone, the spaced separators, `isNumericDate` and the phone detector untouched · AC-3, AC-4, AC-7, AC-13, AC-16, AC-17
+  - [x] The numeric forms: `isYearFirstDate` and `isUnseparatedDate` read by the date detector alone, the spaced separators, `isNumericDate` and the phone detector untouched · AC-3, AC-4, AC-7, AC-13, AC-16, AC-17
   - [ ] Two digit years: in the written and flush forms, the apostrophe, the narrow end rule · AC-5, AC-16, AC-17, AC-18
   - [ ] The edge rules and the nits: `ADDED_DATE_LABELS`, another script's digit in the second scan, the card, Social Security and `cutAtEnd` pins, the flipped pins · AC-8 to AC-11, AC-18
   - [ ] Measured and recorded: the layouts through `detect` against main on the built code (0 lost, 0 ticks, 0 rows changed), the corpus and the timings in `rationale.md`; specs 0005 and 0014 amended · AC-15, AC-16, AC-18

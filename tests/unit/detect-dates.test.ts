@@ -9,7 +9,7 @@ import {
   MONTHS,
 } from "@/detect";
 import { datePasses } from "@/detect/date";
-import { isNumericDate } from "@/detect/dates";
+import { isNumericDate, isUnseparatedDate, isYearFirstDate } from "@/detect/dates";
 
 /**
  * Dates. Spec 0005, AC-19, AC-10 and INV-14, *Detectors* (`date`).
@@ -1264,6 +1264,194 @@ describe("the date detector's two scans (spec 0015, AC-1)", () => {
         ["05-Jan-2026", false],
       ],
     });
+    expect(scans("Leave 2026-09-01-2026-9-30 ok")).toEqual({
+      first: [],
+      added: [
+        ["2026-09-01", false],
+        ["2026-9-30", false],
+      ],
+    });
+  });
+
+  /**
+   * The joiner rule's last listed end is the last row either scan listed, so
+   * a first scan row with only a time after it lifts the start rejection of a
+   * new form beyond the joiner.
+   */
+  it("parts a first scan row from a new form across a time", () => {
+    expect(scans("Leave 2026-09-27 10:00-2026-9-28 ok")).toEqual({
+      first: [["2026-09-27", false]],
+      added: [["2026-9-28", false]],
+    });
+  });
+});
+
+/**
+ * Spec 0015, AC-3, AC-4 and AC-13: the two predicates for the numeric forms
+ * spec 0015 adds, which only the date detector reads, and `isNumericDate`,
+ * which the phone detector shares, reading neither.
+ */
+describe("isYearFirstDate and isUnseparatedDate (spec 0015, AC-3, AC-4, AC-13)", () => {
+  it.each([
+    "2026.09.27",
+    "2026/9/7",
+    "2026-9-7",
+    "2026.9.7",
+    "2026-09-27",
+    "2026–9–7",
+    "2024.2.29",
+  ])("reads %s as year first", (text) => {
+    expect(isYearFirstDate(text)).toBe(true);
+  });
+
+  it.each([
+    "2026.9-7",
+    "2026.02.30",
+    "2023.2.29",
+    "1899.1.1",
+    "2100.1.1",
+    "2026.13.1",
+    "2026.123.1",
+    "26.9.7",
+    "27.09.2026",
+    "2026.09.27.",
+  ])("does not read %s as year first", (text) => {
+    expect(isYearFirstDate(text)).toBe(false);
+  });
+
+  it.each(["20260927", "19800512", "19000101", "20991231", "20240229"])(
+    "reads %s as unseparated",
+    (text) => {
+      expect(isUnseparatedDate(text)).toBe(true);
+    },
+  );
+
+  it.each([
+    "27092026",
+    "09272026",
+    "20261327",
+    "20260230",
+    "18991231",
+    "2026092",
+    "202609271",
+  ])("does not read %s as unseparated", (text) => {
+    expect(isUnseparatedDate(text)).toBe(false);
+  });
+
+  it.each(["2026.09.27", "2026/9/7", "2026-9-7", "20260927"])(
+    "leaves isNumericDate rejecting %s",
+    (text) => {
+      expect(isNumericDate(text)).toBe(false);
+    },
+  );
+});
+
+/** Spec 0015, AC-3: year first with any separator, read with today's numeric edges. */
+describe("year first dates with any separator (spec 0015, AC-3)", () => {
+  it.each(["2026.09.27", "2026/9/7", "2026-9-7", "2026.9.7", "2026–9–7", "1980.5.12"])(
+    "finds %s",
+    (date) => {
+      expect(found(`Signed ${date} here`)).toEqual([[date, false]]);
+    },
+  );
+
+  it.each([
+    ["a letter before a hyphen", "Lot-2026-9-7"],
+    ["its own separator with a digit before", "801-666-2504/2035/6/24"],
+    ["a letter glued", "v2024.1.3"],
+    ["two different separators", "2026.9-7"],
+    ["an impossible day", "2026.02.30"],
+    ["its own separator and digits after", "2026.9.7.12"],
+    ["a day read as two digits with a glued digit", "2026.9.71"],
+  ])("finds no date with %s: %s", (_what, text) => {
+    expect(found(`Ref ${text} here`)).toEqual([]);
+  });
+
+  it.each([
+    ["Rev.2026.9.7", "2026.9.7"],
+    ["2026.09.271", "2026.09.27"],
+    ["2026/9/7, then", "2026/9/7"],
+  ])("lists the date in %s", (text, date) => {
+    expect(found(`Ref ${text} here`)).toEqual([[date, false]]);
+  });
+});
+
+/** Spec 0015, AC-4: eight digits read as year, month and day. */
+describe("unseparated dates (spec 0015, AC-4)", () => {
+  it.each(["20260927", "19800512"])("finds %s", (date) => {
+    expect(found(`Batch ${date} here`)).toEqual([[date, false]]);
+  });
+
+  it.each([
+    ["day first", "27092026"],
+    ["month first", "09272026"],
+    ["a ninth digit", "202609271"],
+    ["a digit in another script after", "20260927١"],
+    ["a letter then a hyphen before", "INV-20260927"],
+    ["a digit then a hyphen before", "12-20260927"],
+    ["a digit then a dot before", "1.20260927"],
+    ["a separator and digits after", "20260927-001"],
+    ["a joiner and another unseparated date after", "20260901-20260930"],
+    ["an impossible day", "20260230"],
+  ])("finds no date with %s: %s", (_what, text) => {
+    expect(found(`Ref ${text} here`)).toEqual([]);
+  });
+
+  it.each([
+    ["20260927T101500Z", "20260927"],
+    ["Date-20260927", "20260927"],
+    ["20260927-27/09/2026", "20260927"],
+  ])("lists the date in %s", (text, date) => {
+    expect(texts(`Ref ${text} here`)[0]).toBe(date);
+  });
+});
+
+/** Spec 0015, AC-7: spaced numeric separators with a four digit year. */
+describe("spaced numeric separators (spec 0015, AC-7)", () => {
+  it.each([
+    "27 / 09 / 2026",
+    "27 . 09 . 2026",
+    "27 - 09 - 2026",
+    "09 / 27 / 2026",
+    "2026 - 09 - 27",
+    "2026 / 9 / 7",
+    "27   /   09   /   2026",
+    "27 – 09 - 2026",
+  ])("finds %s", (date) => {
+    expect(found(`Spaced ${date} here`)).toEqual([[date, false]]);
+  });
+
+  it.each([
+    ["a two digit year, a score", "won 6 - 7 - 77"],
+    ["two separator classes", "27 / 09 - 2026"],
+    ["no space after a separator, a recorded miss", "27 /09 / 2026"],
+    ["four spaces before a separator", "27    / 09 / 2026"],
+    ["a digit in another script after", "27 / 09 / 2026١"],
+    ["two digits after", "27 / 09 / 202612"],
+    ["an impossible day", "31 / 02 / 2026"],
+  ])("finds no date with %s: %s", (_what, text) => {
+    expect(found(`Ref ${text} here`)).toEqual([]);
+  });
+
+  /**
+   * A marker digit is read as for numeric dates: after a four digit year,
+   * last or first, with the day then read as three digits. A day of one
+   * digit with one glued reads as two, and is no date.
+   */
+  it.each([
+    ["27 / 09 / 20261", "27 / 09 / 2026"],
+    ["2026 - 09 - 271", "2026 - 09 - 27"],
+  ])("lists the date in %s, the marker outside", (text, date) => {
+    expect(found(`Ref ${text} here`)).toEqual([[date, false]]);
+  });
+
+  it("finds no date in 2026 - 9 - 71", () => {
+    expect(found("Ref 2026 - 9 - 71 here")).toEqual([]);
+  });
+
+  /** Recorded under spec 0015's *Consequences*: a spaced code lists its last three groups. */
+  it("lists the last three groups of a spaced code, unticked", () => {
+    expect(found("Ref 1 / 27 / 09 / 2026 here")).toEqual([["27 / 09 / 2026", false]]);
   });
 });
 
@@ -1372,6 +1560,10 @@ describe("the tick on a date the second scan lists (spec 0015, AC-14)", () => {
     ["born on the 1st day of May, 1980", "1st day of May, 1980"],
     ["Date of birth: 12. May 1980", "12. May 1980"],
     ["DOB27/Sep/1980", "27/Sep/1980"],
+    ["Born 1980.05.12", "1980.05.12"],
+    ["DOB 19800512", "19800512"],
+    ["DOB-19800512", "19800512"],
+    ["Born 12 / 05 / 1980", "12 / 05 / 1980"],
   ])("ticks the date in %s", (text, date) => {
     expect(found(text)).toEqual([[date, true]]);
   });

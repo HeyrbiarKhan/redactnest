@@ -1,4 +1,4 @@
-import { isNumericDate, isRealDate } from "./dates";
+import { isNumericDate, isRealDate, isUnseparatedDate, isYearFirstDate } from "./dates";
 import {
   ALPHANUMERIC,
   ASCII_DIGIT,
@@ -97,9 +97,17 @@ import type { DetectInput, Span } from "./types";
  *    (`15 March,2026`), `day of` after an ordinal day
  *    (`27th day of September 2026`), a full stop after the day
  *    (`27. September 2026`), a comma after the month (`September, 27 2026`),
- *    and a day glued to an abbreviation's full stop (`Sept.27, 2026`).
+ *    and a day glued to an abbreviation's full stop (`Sept.27, 2026`);
+ *  - year first with any separator and one or two digit parts (`2026.09.27`,
+ *    `2026/9/7`), judged by `isYearFirstDate` and read with the numeric edges
+ *    above;
+ *  - eight digits unseparated (`20260927`), judged by `isUnseparatedDate`,
+ *    which a digit of any script glued after drops with no marker reading;
+ *  - spaced numeric separators with a four digit year (`27 / 09 / 2026`).
  *
- * Their edges follow the written date rule above.
+ * The written forms' edges follow the written date rule above. The numeric
+ * forms are never read through `isNumericDate`, which the phone detector
+ * shares, so every phone row stays as it was (spec 0015, AC-13).
  *
  * Why it is linear (INV-7): each start reads a bounded stretch, at most three
  * groups of at most four digits for the numeric forms (the last read one digit
@@ -452,7 +460,11 @@ const readToday: Reader = (points, at, lastEnd, rules) =>
  * reads is read as today reads it wherever the first scan left it free.
  */
 const readAll: Reader = (points, at, lastEnd, rules) =>
-  readToday(points, at, lastEnd, rules) ?? addedWrittenAt(points, at, true, rules);
+  readToday(points, at, lastEnd, rules) ??
+  numericAt(points, at, lastEnd, rules, isYearFirstDate) ??
+  unseparatedAt(points, at, lastEnd, rules) ??
+  spacedAt(points, at, rules) ??
+  addedWrittenAt(points, at, true, rules);
 
 /** The date detector's two scans. Spec 0015, AC-1. */
 export interface DatePasses {
@@ -609,13 +621,25 @@ function cutAtStart(
   lastEnd: number,
   rules: DatePassRules,
 ): boolean {
-  const joiner = isJoiner(points[at - 1]);
   const cut =
-    (joiner && holds(points, at - 2, LETTER)) ||
+    (isJoiner(points[at - 1]) && holds(points, at - 2, LETTER)) ||
     (separatorClass(points[at - 1]) === own && holds(points, at - 2, DIGIT));
-  if (!cut) return false;
-  if (joiner && onlyTimeBetween(points, lastEnd, at - 1)) return false;
-  return !birthGluedTo(points, at) && !labelGluedTo(points, at, rules);
+  return cut && !startExempt(points, at, lastEnd, rules);
+}
+
+/**
+ * Is a date starting at `at` exempt from a start rejection? Yes when the
+ * separator before it is a joiner with only a time back to the last date
+ * listed, or when a birth word or one of the scan's labels is what is glued.
+ */
+function startExempt(
+  points: readonly string[],
+  at: number,
+  lastEnd: number,
+  rules: DatePassRules,
+): boolean {
+  if (isJoiner(points[at - 1]) && onlyTimeBetween(points, lastEnd, at - 1)) return true;
+  return birthGluedTo(points, at) || labelGluedTo(points, at, rules);
 }
 
 /**
@@ -771,8 +795,120 @@ function joinsDate(points: readonly string[], at: number, rules: DatePassRules):
   return (
     numericAt(points, at + 1, null, rules, isNumericDate) !== null ||
     writtenAt(points, at + 1, false, rules) !== null ||
-    (rules.newFormsBeyondJoiner && addedWrittenAt(points, at + 1, false, rules) !== null)
+    (rules.newFormsBeyondJoiner &&
+      (numericAt(points, at + 1, null, rules, isYearFirstDate) !== null ||
+        addedWrittenAt(points, at + 1, false, rules) !== null))
   );
+}
+
+/** How many digits an unseparated date holds: `yyyymmdd`. A rule about the form. */
+const UNSEPARATED_DIGITS = 8;
+
+/**
+ * An unseparated date starting at `at`, or `null`: exactly eight ASCII digits
+ * that `isUnseparatedDate` reads (spec 0015, AC-4). A digit of any script
+ * glued after it drops it, with no marker reading, since a ninth digit is as
+ * likely a longer number's. Before it, a letter then a joiner, or any
+ * separator with a digit before it, drops it (`INV-20260927`, `12-20260927`,
+ * `1.20260927`), with `startExempt`'s exemptions. After it, a separator with
+ * a digit after it drops it (`20260927-001`), unless it is a joiner with a
+ * full date beyond it. A letter after it does not (`20260927T101500Z`).
+ */
+function unseparatedAt(
+  points: readonly string[],
+  at: number,
+  lastEnd: number,
+  rules: DatePassRules,
+): Found | null {
+  let end = at;
+  while (end - at <= UNSEPARATED_DIGITS && holds(points, end, ASCII_DIGIT)) end += 1;
+  if (end - at !== UNSEPARATED_DIGITS || holds(points, end, DIGIT)) return null;
+  if (!isUnseparatedDate(points.slice(at, end).join(""))) return null;
+
+  const cutBefore =
+    (isJoiner(points[at - 1]) && holds(points, at - 2, LETTER)) ||
+    (separatorClass(points[at - 1]) !== null && holds(points, at - 2, DIGIT));
+  if (cutBefore && !startExempt(points, at, lastEnd, rules)) return null;
+  const cutAfter =
+    separatorClass(points[end]) !== null &&
+    holds(points, end + 1, DIGIT) &&
+    !joinsDate(points, end, rules);
+  return cutAfter ? null : { end };
+}
+
+const WHITESPACE = /^\s$/u;
+
+/**
+ * A date with spaced separators starting at `at`, or `null` (spec 0015,
+ * AC-7): three groups of ASCII digits, each separator one `/`, `.` or hyphen
+ * with 1 to `MAX_GAP` whitespace on each side, the same class both times,
+ * where the first or the last group has four digits and the groups closed up
+ * round the first separator are a date under `isNumericDate` or
+ * `isYearFirstDate` (`27 / 09 / 2026`, `2026 - 09 - 27`). No two digit years:
+ * a score reads as one (`won 6 - 7 - 77`). A digit of any script after it
+ * drops it, but for one marker digit after it, read as for numeric dates and
+ * outside the row (`27 / 09 / 20261`, `2026 - 09 - 271`). Nothing before it
+ * is checked beyond the start test every date passes, so a spaced code lists
+ * its last three groups.
+ */
+function spacedAt(
+  points: readonly string[],
+  at: number,
+  rules: DatePassRules,
+): Found | null {
+  const groups: string[] = [];
+  let own: SeparatorClass | null = null;
+  let closer = "";
+  let end = at;
+  for (let group = 0; group < 3; group += 1) {
+    if (group > 0) {
+      const separator = gapEnd(points, end);
+      const kind = separatorClass(points[separator]);
+      if (separator === end || kind === null || (own !== null && kind !== own))
+        return null;
+      own ??= kind;
+      closer ||= points[separator];
+      end = gapEnd(points, separator + 1);
+      if (end === separator + 1) return null;
+    }
+    const from = end;
+    const most = group === 2 ? MAX_GROUP_DIGITS + 1 : MAX_GROUP_DIGITS;
+    while (end - from <= most && holds(points, end, ASCII_DIGIT)) end += 1;
+    if (end === from || end - from > most) return null;
+    groups.push(points.slice(from, end).join(""));
+  }
+  if (holds(points, end, DIGIT)) return null;
+
+  const [first, second, last] = groups;
+  if (spacedDate(first, second, last, closer)) return { end };
+  // A footnote marker, read as for numeric dates: only a last group of three
+  // or more less its last digit can leave a year of four, or a day of two,
+  // and `spacedDate` holds that the year has four.
+  if (last.length < 3 || !spacedDate(first, second, last.slice(0, -1), closer))
+    return null;
+  return markerAt(points, end - 1, 4, rules) ? { end: end - 1 } : null;
+}
+
+/** Is a spaced date's three groups, closed up round `closer`, a date with a four digit year? */
+function spacedDate(
+  first: string,
+  second: string,
+  last: string,
+  closer: string,
+): boolean {
+  if (first.length !== MAX_GROUP_DIGITS && last.length !== MAX_GROUP_DIGITS) return false;
+  const text = [first, second, last].join(closer);
+  return isNumericDate(text) || isYearFirstDate(text);
+}
+
+/**
+ * Where a run of 1 to `MAX_GAP` whitespace starting at `at` ends, or `at`
+ * itself when there is none or too much, so the caller's next test fails.
+ */
+function gapEnd(points: readonly string[], at: number): number {
+  let end = at;
+  while (end - at <= MAX_GAP && holds(points, end, WHITESPACE)) end += 1;
+  return end - at > MAX_GAP ? at : end;
 }
 
 /**

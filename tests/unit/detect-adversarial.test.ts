@@ -287,6 +287,12 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["days with a full stop cut short", "1. May "],
   ["months with a comma cut short", "September, 27 "],
   ["years after a comma cut short", "15 March,"],
+  ["year first dates side by side", "2026.9.7 "],
+  ["year first dates cut short", "2026.9."],
+  ["unseparated dates side by side", "20260927 "],
+  ["unseparated dates glued end to end", "20260927"],
+  ["spaced dates side by side", "27 / 09 / 2026 "],
+  ["spaced separators cut short", "1 / 2 / "],
 ];
 
 /**

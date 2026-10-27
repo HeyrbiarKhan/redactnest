@@ -625,11 +625,18 @@ export const DETECT_DATE_FORMS = Object.freeze([
   ["27/Sep/1980", true],
   ["Sep-27-2026", false],
   ["2026-Sep-27", false],
+  ["2026.09.27", false],
+  ["2026/9/7", false],
+  ["2026-9-7", false],
+  ["20260927", false],
+  ["27 / 09 / 2026", false],
+  ["2026 - 09 - 27", false],
   ["1st day of May, 2026", false],
   ["27. September 2026", false],
   ["15 March,2026", false],
   ["September, 27 2026", false],
   ["Sept.27, 2026", false],
+  ["1980.05.12", true],
   ["2nd day of June, 2026", false],
 ]);
 
@@ -641,6 +648,8 @@ export const DETECT_DATE_FORMS = Object.freeze([
 export const DETECT_DATE_FORMS_OTHERS = Object.freeze([
   ["phone", "020 7946 0958", true],
   ["card", "4111 1111 1111 1111", true],
+  ["us-ssn", "123-45-6789", true],
+  ["uk-nino", "AB 12 34 56 C", true],
 ]);
 
 /** The lines of `detect-date-forms.pdf` above the wrapped one, in AC-17's order. */
@@ -648,9 +657,13 @@ const DATE_FORMS_LINES = Object.freeze([
   "Signed 05-Jan-2026 at 020 7946 0958 today",
   "DOB 27/Sep/1980 card 4111 1111 1111 1111",
   "Due Sep-27-2026 or 2026-Sep-27 at the latest",
+  "Export 2026.09.27, 2026/9/7 and 2026-9-7 done",
+  "Batch 20260927 SSN 123-45-6789 on file",
+  "Spaced 27 / 09 / 2026 and 2026 - 09 - 27 here",
   "Dated this 1st day of May, 2026 at noon",
   "Am 27. September 2026 in Leeds",
   "On 15 March,2026, September, 27 2026 and Sept.27, 2026",
+  "Born 1980.05.12 NI AB 12 34 56 C",
 ]);
 
 /**
@@ -658,10 +671,13 @@ const DATE_FORMS_LINES = Object.freeze([
  * adds, with a neighbour of another kind on some, so a run can redact each
  * date and leave the neighbour: a written month with flush separators, day
  * first beside a phone number, after a birth word beside a card, month first
- * and year first; the legal formula, with `Dated this` outside its row; a
- * full stop after the day; a comma with no space before the year, a comma
- * after the month, and a day glued to an abbreviation's full stop; and the
- * legal formula wrapped after `of`, which the line join reads as one space.
+ * and year first; year first with any separator and one digit parts;
+ * unseparated beside a Social Security number; spaced separators; the legal
+ * formula, with `Dated this` outside its row; a full stop after the day; a
+ * comma with no space before the year, a comma after the month, and a day
+ * glued to an abbreviation's full stop; year first after a birth word beside
+ * a National Insurance number; and the legal formula wrapped after `of`,
+ * which the line join reads as one space.
  */
 export function detectDateForms() {
   const wrapped = 740 - DATE_FORMS_LINES.length * 20;

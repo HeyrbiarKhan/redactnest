@@ -564,6 +564,39 @@ describe("dates only the second scan lists, through detect (spec 0015, AC-12)", 
       ["date", "05-Jan-2026", false],
     ]);
   });
+
+  /**
+   * Main lists `1987.12.278` as an unticked rescued phone row. With the yield
+   * over the second scan's dates too, the stretch was cut at `1987.12.27` and
+   * its last digit was left with no row; yielding to the first scan only
+   * keeps main's row, and the date inside it gives no piece.
+   */
+  it("keeps main's rescued row over a new numeric date", () => {
+    const text = "Ref 23 60915 488, 9145 36006 2 1987.12.278";
+    expect(withTicks(text)).toEqual([
+      ["phone", "23 60915 488", false],
+      ["phone", "9145 36006 2", true],
+      ["phone", "1987.12.278", false],
+    ]);
+    const { first, added } = datePasses({ text, joins: [] });
+    expect(spanTexts(text, first)).toEqual([]);
+    expect(spanTexts(text, added)).toEqual(["1987.12.27"]);
+  });
+});
+
+/**
+ * Spec 0015, AC-13: `isNumericDate` and the phone detector are unchanged, so
+ * a new numeric date a phone row holds stays in that row, as on main. Adding
+ * the new forms to `isNumericDate` made `2026-9-7` a date unit in the phone
+ * run and left `0123` with no row.
+ */
+describe("new numeric dates inside phone rows (spec 0015, AC-13)", () => {
+  it.each<[string, [DetectorKind, string, boolean][]]>([
+    ["Tel 2026-9-7 0123 ok", [["phone", "2026-9-7 0123", true]]],
+    ["Ref 20260927 12 x", [["phone", "20260927 12", true]]],
+  ])("lists main's phone row in %s", (text, expected) => {
+    expect(withTicks(text)).toEqual(expected);
+  });
 });
 
 describe("line joins", () => {
