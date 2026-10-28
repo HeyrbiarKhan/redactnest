@@ -1376,6 +1376,19 @@ describe("the date detector's two scans (spec 0015, AC-1)", () => {
       added: [["2026-9-28", false]],
     });
   });
+
+  /**
+   * A joiner sees today's forms, year first and the new written patterns
+   * beyond it, never a spaced date (AC-1), so the own separator rule still
+   * cuts the date before it in both scans. The spaced date is listed alone,
+   * since nothing before it is checked beyond the start test (AC-7).
+   */
+  it("does not part a date from a spaced date beyond a joiner", () => {
+    expect(scans("Leave 05-12-1980-27 / 09 / 2026 ok")).toEqual({
+      first: [],
+      added: [["27 / 09 / 2026", false]],
+    });
+  });
 });
 
 /**
@@ -1436,6 +1449,21 @@ describe("isYearFirstDate and isUnseparatedDate (spec 0015, AC-3, AC-4, AC-13)",
       expect(isNumericDate(text)).toBe(false);
     },
   );
+
+  /** Every dash reads as `-`, as `isNumericDate` reads them (AC-3). */
+  it.each(["2026–9-7", "2026−09−27", "2026‐9‐7"])(
+    "reads %s as year first, its dashes as one class",
+    (text) => {
+      expect(isYearFirstDate(text)).toBe(true);
+    },
+  );
+
+  it.each([
+    ["a year after 2099", "21000101"],
+    ["a leap day in a common year", "20230229"],
+  ])("does not read %s as unseparated: %s", (_what, text) => {
+    expect(isUnseparatedDate(text)).toBe(false);
+  });
 });
 
 /** Spec 0015, AC-3: year first with any separator, read with today's numeric edges. */
@@ -1466,6 +1494,20 @@ describe("year first dates with any separator (spec 0015, AC-3)", () => {
   ])("lists the date in %s", (text, date) => {
     expect(found(`Ref ${text} here`)).toEqual([[date, false]]);
   });
+
+  /**
+   * Today's numeric edges, read with `isYearFirstDate` (AC-3): a different
+   * separator and digits after a date never cut it (INV-17), a dotted date's
+   * own full stop then a marker is a sentence's end and its mark, and mixed
+   * dashes are one class.
+   */
+  it.each([
+    ["2026.9.7-17", "2026.9.7"],
+    ["2026.9.7.¹", "2026.9.7"],
+    ["2026–9-7", "2026–9-7"],
+  ])("lists the date in %s, as a numeric date's edges read it", (text, date) => {
+    expect(found(nfkc(`Ref ${text} here`))).toEqual([[date, false]]);
+  });
 });
 
 /** Spec 0015, AC-4: eight digits read as year, month and day. */
@@ -1495,6 +1537,27 @@ describe("unseparated dates (spec 0015, AC-4)", () => {
     ["20260927-27/09/2026", "20260927"],
   ])("lists the date in %s", (text, date) => {
     expect(texts(`Ref ${text} here`)[0]).toBe(date);
+  });
+
+  /**
+   * Today's exemption (AC-4): a joiner with only a time back to the last date
+   * listed lifts the start rejection, and that date may be the first scan's
+   * row (AC-1).
+   */
+  it("parts an unseparated date from a first scan row across a time", () => {
+    expect(scans("Leave 2026-09-27 10:00-20260928 ok")).toEqual({
+      first: [["2026-09-27", false]],
+      added: [["20260928", false]],
+    });
+  });
+
+  /** Only a separator with a digit after it drops the date, never a sentence's end. */
+  it.each([
+    ["20260927. Next", "20260927"],
+    ["20260927, then", "20260927"],
+    ["20260927-final", "20260927"],
+  ])("lists the date before a separator with no digit after it in %s", (text, date) => {
+    expect(found(`Ref ${text} here`)).toEqual([[date, false]]);
   });
 });
 
@@ -1594,6 +1657,18 @@ describe("written months with flush separators (spec 0015, AC-2)", () => {
   ])("lists the date in %s without what is glued after it", (text, date) => {
     expect(found(`Ref ${text} here`)).toEqual([[date, false]]);
   });
+
+  /**
+   * A month name is never part of a code, so, as for every written date, a
+   * separator and digits after the year leave the date listed (INV-17), its
+   * own separator included, unlike a numeric date's.
+   */
+  it.each([
+    ["05-Jan-2026-17", "05-Jan-2026"],
+    ["27/Sep/2026/3", "27/Sep/2026"],
+  ])("lists the date in %s without the separator and digits after it", (text, date) => {
+    expect(found(`Ref ${text} here`)).toEqual([[date, false]]);
+  });
 });
 
 /** Spec 0015, AC-6: new joints in the written forms. */
@@ -1642,6 +1717,16 @@ describe("new joints in the written forms (spec 0015, AC-6)", () => {
 
   it("finds no date with two digits glued after the year", () => {
     expect(found("Ref 27. September 202612 here")).toEqual([]);
+  });
+
+  /** A deed often sets the formula in capitals: the month, `day of` and the ordinal read in any case. */
+  it.each([
+    ["THIS 1ST DAY OF MAY, 2026", "1ST DAY OF MAY, 2026"],
+    ["ON 27. SEPTEMBER 2026", "27. SEPTEMBER 2026"],
+    ["BY SEPT.27, 2026", "SEPT.27, 2026"],
+    ["AT 15 MARCH,2026", "15 MARCH,2026"],
+  ])("lists the date in %s, in capitals", (text, date) => {
+    expect(found(text)).toEqual([[date, false]]);
   });
 });
 
@@ -1703,6 +1788,15 @@ describe("two digit years in written dates (spec 0015, AC-5)", () => {
   it("ticks a two digit year after a birth word", () => {
     expect(found("DOB 5 Jan 80")).toEqual([["5 Jan 80", true]]);
   });
+
+  /** A `:`, `.` or `,` with no digit after it ends a sentence or a clause, not the year. */
+  it.each([
+    ["Seen 27 Sep 26. Next", "27 Sep 26"],
+    ["On 27-SEP-26: signed", "27-SEP-26"],
+    ["By Sep 27, '26.", "Sep 27, '26"],
+  ])("lists the date in %s", (text, date) => {
+    expect(found(text)).toEqual([[date, false]]);
+  });
 });
 
 /**
@@ -1724,6 +1818,10 @@ describe("a digit in another script after a date (spec 0015, AC-9)", () => {
     ["27 Sep 26١", "27 Sep 26", false],
     ["05-Jan-2026१", "05-Jan-2026", false],
     ["2026-09-27١ later", "2026-09-27", false],
+    ["05-Jan-2026¹١", "05-Jan-2026", false],
+    ["1st day of May, 2026١", "1st day of May, 2026", false],
+    ["15 March,2026١", "15 March,2026", false],
+    ["27. September 2026¹١", "27. September 2026", false],
   ])("lists the date in %s", (text, date, ticked) => {
     expect(found(nfkc(`Ref ${text}`))).toEqual([[date, ticked]]);
   });
@@ -1744,6 +1842,18 @@ describe("a digit in another script after a date (spec 0015, AC-9)", () => {
   ])("finds no date with %s: %s", (_what, text) => {
     expect(found(nfkc(`Ref ${text} here`))).toEqual([]);
   });
+
+  /**
+   * Only the digit right after a date or its marker changed: a numeric date's
+   * own separator with a digit of any script after it is still a longer code,
+   * as today (AC-9).
+   */
+  it.each(["2026-09-27-١", "12.05.1980.١", "27/09/2026/١"])(
+    "finds no date in %s, its own separator then another script's digit",
+    (text) => {
+      expect(found(`Ref ${text} here`)).toEqual([]);
+    },
+  );
 });
 
 /**

@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { detect, DETECTORS, PRECEDENCE, readsJoinAsNothing } from "@/detect";
-import { datePasses } from "@/detect/date";
+import { datePasses, detectDate } from "@/detect/date";
 import { DETECTOR_KINDS, type DetectorKind } from "@/worker/protocol";
 
 /**
@@ -596,6 +596,27 @@ describe("new numeric dates inside phone rows (spec 0015, AC-13)", () => {
     ["Ref 20260927 12 x", [["phone", "20260927 12", true]]],
   ])("lists main's phone row in %s", (text, expected) => {
     expect(withTicks(text)).toEqual(expected);
+  });
+});
+
+/**
+ * Spec 0015, AC-12 and AC-13: `DETECTORS.date` stays `detectDate`, both
+ * scans' spans together, and the second scan's seams stay inside
+ * `src/detect`: `datePasses` is read by `detectDate` and `detect` alone, and
+ * `isYearFirstDate` and `isUnseparatedDate` by the date detector alone, never
+ * by `isNumericDate` or the phone detector.
+ */
+describe("the date detector's surface (spec 0015, AC-12, AC-13)", () => {
+  it("keeps detectDate as the date detector", () => {
+    expect(DETECTORS.date).toBe(detectDate);
+  });
+
+  it("exports the added labels from @/detect, and not the second scan or its predicates", async () => {
+    const surface = await import("@/detect");
+    expect(surface).toHaveProperty("ADDED_DATE_LABELS");
+    for (const name of ["datePasses", "isYearFirstDate", "isUnseparatedDate"]) {
+      expect(surface, name).not.toHaveProperty(name);
+    }
   });
 });
 
