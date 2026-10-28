@@ -1,7 +1,7 @@
 # 0015. More date forms
 
 **Date**: 2026-10-27
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 
@@ -189,6 +189,7 @@ Skateboard: the forms deeds, contracts and UK documents use most, on the second 
 - A new date a higher kind's row holds in part is listed as its free pieces, which may be a few digits with no meaning as a date; kept, since each piece holds digits main leaves with no row.
 - A new numeric date a phone row holds stays in the phone row (as on main): in the layouts 17% to 22% of `2026/9/7` and `2026-9-7` beside phone numbers. Masking (spec 0014's Follow-up) would give them back.
 - A two digit year with a glued ASCII digit, `20260927` with one, and a year first date whose day has one or two digits with one are never found: a glued digit there is as likely a longer number.
+- A day range with a two digit year is read from its last day only, since AC-5 gives two digit years to the written forms without a day range: `3–5 June 26` lists only `5 June 26`, unticked, and the bare day `3` is left in the file with no row. With a four digit year the range is one row, as today (`3–5 June 2026`).
 - The date detector does more work: at most 281 ms at 100,000 characters on the prototype against 62 ms for today's, within its 1 second budget.
 - Two label lists, and a rules value threaded through the date functions.
 - Still missed, each a variant no list named: `A.D.` or `in the year` before the year, number words (`twenty-seventh day`), a day range in a new form (`3-5 Jan-2026`), a written year first date with spaces (`2026 Sep 27`), uneven spacing round a separator (`27/09 /2026`), an ordinal in a flush form (`1st-May-2026`), mixed dashes in a flush form (`27-Sep–2026`), a space before a comma (`15 March ,2026`), and a number right before a month first date, which reads as a day first two digit year (`19 December, 16 2015` lists `19 December, 16`, `5 MARCH 25, 52` lists `5 MARCH 25`).
@@ -199,7 +200,12 @@ Skateboard: the forms deeds, contracts and UK documents use most, on the second 
 
 ## Follow-up
 
-- [ ] Record for root `AGENTS.md` (owned by `/sync`): chrono-node on the `Declined:` line (2026-10-27, spec 0015: it misses six listed forms and adds about twice the noise; linear and 13.3 KB gzip), and the second scan rule in the detector wall's bullet (a new date form is read in `datePasses`'s second scan and never through `isNumericDate`).
+- [x] Record for root `AGENTS.md` (owned by `/sync`): chrono-node on the `Declined:` line (2026-10-27, spec 0015: it misses six listed forms and adds about twice the noise; linear and 13.3 KB gzip), and the second scan rule in the detector wall's bullet (a new date form is read in `datePasses`'s second scan and never through `isNumericDate`). _Done 2026-10-28 by `/sync`: both lines are in root `AGENTS.md`._
 - [ ] Masking (spec 0014's first Follow-up) would also give a new numeric date back the digits a phone row holds; measure the new forms with it when it is designed.
 - [ ] The variants *Consequences* lists as still missed: bring to `/architect` if a review or a visitor meets one, measured through `detect` against main like this spec.
 - [ ] The noise figures come from synthetic shapes and token soup; a natural text corpus (made up content only) would tighten them, the two digit year and numbered list figures first.
+- [ ] INV-1 and INV-2 are held by a scratch measurement (AC-15, `rationale.md`) and by hand written literals, and no committed test pins that the first scan is main's (the review's first Minor, [2026-10-28](../../reviews/2026-10-28-feat-more-date-forms.md)). An edit to `FIRST_PASS`, such as a word moved into `DATE_LABELS` or a change to `digitAfter`, would pass every literal test and change main's rows without a sound. By the owner's rule that a check someone must remember to run becomes a gate, commit one: a frozen list of main's rows for a few dozen strings from the date and phone suites, checked through `datePasses(...).first` and through `detect`, plus a pin that `DATE_LABELS` and the first scan's end rules hold their values from before this spec, so `pnpm test` fails the change instead of waiting for someone to rerun AC-15. For the next `/test` round.
+- [ ] A spaced date is not checked after its end for a longer code (the review's second Minor): `spacedAt` in `src/detect/date.ts` drops only a digit right after the date, so `2026 - 09 - 27 - 01` lists `2026 - 09 - 27` and `x 12 - 5 - 2026 - 7` lists `12 - 5 - 2026`, both unticked, where the numeric reader drops a date with its own separator and a digit after it. Only extra unticked rows, never a lost one, and *Consequences* names only the start side (`Ref 1 / 27 / 09 / 2026`). Either add the end side to that line, or apply the own separator and digit test after a spaced date, measured through `detect` against main first (INV-3); bring either to `/architect`.
+- [ ] A piece of a new date can start with stray punctuation (the review's third Minor): `212 918 8665 1119 21. June 2014` lists the date row `. June 2014`, pinned in `detect.test.ts`, because the piece rule trims whitespace only. Harmless to the bar (an extra row over free positions), but the row reads oddly in the checklist and removes the full stop. Note it beside the free pieces line in *Consequences*, or trim a date piece's leading punctuation in a later spec, measured like AC-15; bring either to `/architect`.
+- [ ] `WORD_REACH` (5, in `src/detect/date.ts`) is justified by `12-15 May`; a comment line naming the longest case it must cover (`12-15th`) would make a future form easier to check (the review's first nit). A comment only, for the next change that touches `date.ts`.
+- [ ] `20260927-20260928` and `2026-09-27-20260928` list nothing, because in the second scan a joiner sees no AC-4 form beyond it (AC-1, deliberate, and main lists nothing there either; the review's second nit). Add them to the still missed variants in *Consequences*, and bring them to `/architect` with those if a review or a visitor meets one.

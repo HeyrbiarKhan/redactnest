@@ -35,7 +35,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 22 | Brand & UI refresh | Release 2 | done |
 | 23 | Legal review | Release 6 | planned |
 | 24 | Detector follow ups | Release 3 | done |
-| 25 | More date forms | Release 3 | in-progress |
+| 25 | More date forms | Release 3 | done |
 | 26 | UI polish | Release 3 | done |
 
 ## Foundations
@@ -310,7 +310,7 @@ spec [0013](../specs/0013-brand-ui-refresh/index.md) · code in `src/app/page.ts
 - [x] Verify it: `/check verify UI polish`
 - [x] Test it: `/test UI polish`
 
-### 25. More date forms · in-progress · Beta + review · from spec 0005
+### 25. More date forms · done · Beta + review · from spec 0005
 Date forms the date detector has no pattern for, so a date written that way gets no row whatever stands beside it: a written month with separators (`05-Jan-2026`, `27/Sep/2026`), year first with dots or one digit parts (`2026.09.27`, `2026/9/7`), unseparated (`20260927`), a written date with a two digit year (`27 Sep 26`), spaced separators, the legal formula (`27th day of September 2026`), German style ordinals and odd commas. Exports, UK documents, deeds and contracts write these.
 **Done when:** each listed form is either found, with its own near misses measured, or recorded as a miss with its reason; a change to `isNumericDate` reruns the phone look alike cases, since the phone detector shares it (INV-14); and every form found redacts through the real engine from a fixture.
 **Also owed here:** the fourth review's nits on feature 12: the card marker followed by a digit in another script (pinned as listed unticked; dates now list that case, Social Security numbers do not, measured), the `DATE_LABELS` words, and the `cutAtEnd` asymmetry pin. chrono-node was measured as a second reader and declined (spec 0015).
