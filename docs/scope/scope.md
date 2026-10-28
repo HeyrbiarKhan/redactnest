@@ -324,7 +324,7 @@ spec [0015](../specs/0015-more-date-forms/index.md) · code in `src/detect` (`da
   - [x] Measured and recorded: the layouts through `detect` against main on the built code (0 lost, 0 ticks, 0 rows changed), the corpus and the timings in `rationale.md`; specs 0005 and 0014 amended · AC-15, AC-16, AC-18
 - [x] Verify it: `/check verify more date forms`
 - [x] Test it: `/test more date forms`
-- [ ] Review it (fresh model): `/check review more date forms`
+- [x] Review it (fresh model): `/check review more date forms`
 
 ### 11. Telemetry & error monitoring · needs a decision
 Enough numbers to know whether the funnel works and whether anything is failing silently, without ever touching document content.
