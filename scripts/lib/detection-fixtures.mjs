@@ -616,6 +616,93 @@ export function detectDate() {
 }
 
 /**
+ * The dates `detect-date-forms.pdf` holds, as found, in reading order, with
+ * their tick. Spec 0015, AC-17: each a form the date detector's second scan
+ * adds, the last wrapped across two lines of one block.
+ */
+export const DETECT_DATE_FORMS = Object.freeze([
+  ["05-Jan-2026", false],
+  ["27/Sep/1980", true],
+  ["Sep-27-2026", false],
+  ["2026-Sep-27", false],
+  ["2026.09.27", false],
+  ["2026/9/7", false],
+  ["2026-9-7", false],
+  ["20260927", false],
+  ["27 Sep 26", false],
+  ["27-SEP-26", false],
+  ["Sep 27, '26", false],
+  ["27 / 09 / 2026", false],
+  ["2026 - 09 - 27", false],
+  ["1st day of May, 2026", false],
+  ["27. September 2026", false],
+  ["15 March,2026", false],
+  ["September, 27 2026", false],
+  ["Sept.27, 2026", false],
+  ["1980.05.12", true],
+  ["27/09/2026", false],
+  ["2nd day of June, 2026", false],
+]);
+
+/**
+ * The rows of other kinds `detect-date-forms.pdf` holds beside its dates, as
+ * found, with their kind and tick: each as it is listed with no new form
+ * beside it.
+ */
+export const DETECT_DATE_FORMS_OTHERS = Object.freeze([
+  ["phone", "020 7946 0958", true],
+  ["card", "4111 1111 1111 1111", true],
+  ["us-ssn", "123-45-6789", true],
+  ["uk-nino", "AB 12 34 56 C", true],
+  ["phone", "212 555 0123", true],
+]);
+
+/** The lines of `detect-date-forms.pdf` above the wrapped one, in AC-17's order. */
+const DATE_FORMS_LINES = Object.freeze([
+  "Signed 05-Jan-2026 at 020 7946 0958 today",
+  "DOB 27/Sep/1980 card 4111 1111 1111 1111",
+  "Due Sep-27-2026 or 2026-Sep-27 at the latest",
+  "Export 2026.09.27, 2026/9/7 and 2026-9-7 done",
+  "Batch 20260927 SSN 123-45-6789 on file",
+  "Seen 27 Sep 26, 27-SEP-26 and Sep 27, '26 here",
+  "Spaced 27 / 09 / 2026 and 2026 - 09 - 27 here",
+  "Dated this 1st day of May, 2026 at noon",
+  "Am 27. September 2026 in Leeds",
+  "On 15 March,2026, September, 27 2026 and Sept.27, 2026",
+  "Born 1980.05.12 NI AB 12 34 56 C",
+  "Created27/09/2026 by 212 555 0123",
+]);
+
+/**
+ * Spec 0015, AC-17. One line for each form the date detector's second scan
+ * adds, with a neighbour of another kind on some, so a run can redact each
+ * date and leave the neighbour: a written month with flush separators, day
+ * first beside a phone number, after a birth word beside a card, month first
+ * and year first; year first with any separator and one digit parts;
+ * unseparated beside a Social Security number; two digit years, spaced, flush
+ * and after an apostrophe; spaced separators; the legal formula, with
+ * `Dated this` outside its row; a full stop after the day; a comma with no
+ * space before the year, a comma after the month, and a day glued to an
+ * abbreviation's full stop; year first after a birth word beside a National
+ * Insurance number; a date glued to a label only the second scan reads,
+ * beside a phone number; and the legal formula wrapped after `of`, which the
+ * line join reads as one space.
+ */
+export function detectDateForms() {
+  const wrapped = 740 - DATE_FORMS_LINES.length * 20;
+  return document(() => [
+    {
+      content:
+        DATE_FORMS_LINES.map((text, row) =>
+          line("F1", 12, 72, 740 - row * 20, text),
+        ).join("") +
+        line("F1", 12, 72, wrapped, "Signed the 2nd day of") +
+        line("F1", 12, 72, wrapped - 14, "June, 2026 here"),
+    },
+  ]);
+}
+
+/**
  * WinAnsiEncoding's en dash, byte 0x96. The fixture writer turns each
  * character into one byte, so the dash is written as the byte the font's
  * encoding gives it, and MuPDF reads it back as U+2013.

@@ -37,6 +37,8 @@ import {
   DETECT_CARD,
   DETECT_CARD_PIECES,
   DETECT_DATE,
+  DETECT_DATE_FORMS,
+  DETECT_DATE_FORMS_OTHERS,
   DETECT_DENSE_PAGES,
   DETECT_DENSE_PER_PAGE,
   DETECT_IBAN,
@@ -142,10 +144,11 @@ function pageDrawing(content: string): ArrayBuffer {
 }
 
 /**
- * Feature 12's fixtures, one per release 3 kind, with what each holds as
- * found, in reading order, and its tick, then the rows of any other kind it
- * holds (AC-3's pieces, with their kind). The last value in each is wrapped
- * across two lines of one block.
+ * Feature 12's fixtures, one per release 3 kind, and spec 0015's date forms
+ * (AC-17), with what each holds as found, in reading order, and its tick, then
+ * the rows of any other kind it holds (AC-3's pieces, or a date form's
+ * neighbours, with their kind). The last value in each is wrapped across two
+ * lines of one block.
  */
 const RELEASE_3: readonly (readonly [
   DetectorKind,
@@ -158,6 +161,7 @@ const RELEASE_3: readonly (readonly [
   ["iban", "detect-iban.pdf", DETECT_IBAN, []],
   ["us-ssn", "detect-us-ssn.pdf", DETECT_US_SSN, []],
   ["uk-nino", "detect-uk-nino.pdf", DETECT_UK_NINO, []],
+  ["date", "detect-date-forms.pdf", DETECT_DATE_FORMS, DETECT_DATE_FORMS_OTHERS],
 ];
 
 const RELEASE_3_FIXTURES = RELEASE_3.map(([, name]) => name);

@@ -11,6 +11,14 @@
  *
  * Not exported from `@/detect`: these are rules the detectors share, not
  * detectors.
+ *
+ * Spec 0015 adds two numeric forms, year first with any separator and eight
+ * digits unseparated, judged by `isYearFirstDate` and `isUnseparatedDate`.
+ * Only the `date` detector's second scan asks them (AC-13). `isNumericDate`
+ * reads neither, since a phone unit read as a date leaves the phone window:
+ * widening it took digits from phone rows listed before (194 of 230,000
+ * strings, spec 0015's `rationale.md`), where a new numeric date a phone row
+ * holds now stays in that row, as it did before.
  */
 
 /** The four digit years a date may name. A rule about the pattern, not a cap. */
@@ -28,6 +36,10 @@ const LONGEST = 10;
 const DAY_MONTH_YEAR = /^([0-9]{1,2})([-/.])([0-9]{1,2})\2([0-9]{4}|[0-9]{2})$/u;
 /** Year first, in ISO 8601's order: `2026-09-27`, `2026/09/27`. */
 const YEAR_FIRST = /^([0-9]{4})([-/])([0-9]{2})\2([0-9]{2})$/u;
+/** Year first with any separator and one or two digit parts: `2026.09.27`, `2026/9/7`. */
+const YEAR_FIRST_ANY = /^([0-9]{4})([-/.])([0-9]{1,2})\2([0-9]{1,2})$/u;
+/** Year, month and day with nothing between: `20260927`. */
+const UNSEPARATED = /^([0-9]{4})([0-9]{2})([0-9]{2})$/u;
 
 /**
  * Every dash a phone unit may be glued by, read here as `-`, so the phone
@@ -60,6 +72,30 @@ export function isNumericDate(text: string): boolean {
     isRealDate(year, Number(second), Number(first)) ||
     isRealDate(year, Number(first), Number(second))
   );
+}
+
+/**
+ * Is `text` a year first date with any separator: a four digit year, then a
+ * month and a day of one or two digits each, the same separator (`/`, `.` or
+ * any hyphen, read as `-`) twice, and a real day? Spec 0015, AC-3.
+ */
+export function isYearFirstDate(text: string): boolean {
+  if (text.length > LONGEST) return false;
+  const found = YEAR_FIRST_ANY.exec(text.replace(DASHES, "-"));
+  if (!found) return false;
+  const [, year, , month, day] = found;
+  return isRealDate(year, Number(month), Number(day));
+}
+
+/**
+ * Is `text` exactly eight digits read as a four digit year, a month and a
+ * day, and a real day? Only that order: `27092026` is none. Spec 0015, AC-4.
+ */
+export function isUnseparatedDate(text: string): boolean {
+  const found = UNSEPARATED.exec(text);
+  if (!found) return false;
+  const [, year, month, day] = found;
+  return isRealDate(year, Number(month), Number(day));
 }
 
 /**

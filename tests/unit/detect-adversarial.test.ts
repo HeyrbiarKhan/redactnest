@@ -38,6 +38,8 @@ import type { DetectorKind } from "@/worker/protocol";
  * stranded group is in reach, so it adds a stray group before and after each
  * number, and numbers beside stray groups and written dates, where each
  * stretch then yields to the date (AC-14).
+ * Spec 0015's second date scan tries the forms it adds at every start the
+ * first scan leaves free, so it adds each new form side by side and cut short.
  * Every detector reads every shape, so each is also tried on the others'
  * worst cases.
  *
@@ -274,6 +276,30 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["a stray group before each US number", "9346 212 555 0123 "],
   ["a stray group after each US number", "212 555 0123 9346 "],
   ["numbers, stray groups and written dates", "212 918 8665 1119 21 June 2014 "],
+  // Spec 0015, AC-16: the date detector's second scan tries the forms it adds
+  // at every start the first scan leaves free, so each new form side by side,
+  // and each cut short just before it would hold.
+  ["flush written dates side by side", "05-Jan-2026 "],
+  ["flush written dates cut short", "27-Sep-"],
+  ["flush month first dates cut short", "Sep.27."],
+  ["legal formulas side by side", "27th day of September, 2026 "],
+  ["legal formulas cut short", "27th day of "],
+  ["days with a full stop cut short", "1. May "],
+  ["months with a comma cut short", "September, 27 "],
+  ["years after a comma cut short", "15 March,"],
+  ["year first dates side by side", "2026.9.7 "],
+  ["year first dates cut short", "2026.9."],
+  ["unseparated dates side by side", "20260927 "],
+  ["unseparated dates glued end to end", "20260927"],
+  ["spaced dates side by side", "27 / 09 / 2026 "],
+  ["spaced separators cut short", "1 / 2 / "],
+  ["two digit years side by side", "5 may 26 "],
+  ["two digit years after an apostrophe", "Sep 27, '26 "],
+  ["two digit years before a time", "27 Sep 10:"],
+  ["flush two digit years glued end to end", "27-SEP-26"],
+  ["added labels glued to dates", "Updated27/09/2026 Due-27/09/2026 "],
+  ["added labels glued to dates cut short", "Updated27/09/"],
+  ["a marker then a digit in another script", "27/09/20261١ "],
 ];
 
 /**

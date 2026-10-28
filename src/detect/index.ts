@@ -17,7 +17,7 @@
  */
 
 import { detectCard } from "./card";
-import { detectDate } from "./date";
+import { datePasses, detectDate } from "./date";
 import { detectEmail } from "./email";
 import { detectIban } from "./iban";
 import { detectPhone } from "./phone";
@@ -28,7 +28,7 @@ import { detectUsSsn } from "./us-ssn";
 import type { DetectorKind } from "@/worker/protocol";
 
 export { CARD_BRANDS, CARD_GROUP_DIGITS, type CardBrand } from "./card";
-export { BIRTH_WORDS, DATE_LABELS, MONTHS } from "./date";
+export { ADDED_DATE_LABELS, BIRTH_WORDS, DATE_LABELS, MONTHS } from "./date";
 export { IBAN_LENGTHS } from "./iban";
 export { KEYWORD_REACH } from "./text";
 export { NI_PREFIX_RULES } from "./uk-nino";
@@ -66,7 +66,9 @@ export const DETECTORS: Readonly<Record<DetectorKind, Detector>> = Object.freeze
  * numeric date is ever lost to `phone` for it: the phone detector never reads
  * one (INV-14). A rescued stretch's phone row is cut back where a lower kind's
  * span begins, or dropped, before precedence is applied (spec 0014, AC-15), so
- * the rescue never takes a date's digits either. `tests/unit/detect.test.ts`
+ * the rescue never takes a date's digits either; of the dates, it yields only
+ * to those the date detector's first scan lists, so every row today lists keeps
+ * its extent (spec 0015, AC-12). `tests/unit/detect.test.ts`
  * fails `pnpm typecheck` when a kind has no place here (AC-24).
  */
 export const PRECEDENCE = Object.freeze([
@@ -93,7 +95,8 @@ export const PRECEDENCE = Object.freeze([
  * card can never untick it. The higher row is never touched.
  *
  * Before that, each stretch the phone rescue lists yields to the kinds below
- * `phone` (spec 0014, AC-15), and no span leaves with `rescued`.
+ * `phone` (spec 0014, AC-15), the date detector's first scan alone among the
+ * dates (spec 0015, AC-12), and no span leaves with `rescued`.
  *
  * Positions are marked as they are claimed, and each span's positions are
  * read once, so this costs the length of what was found.
@@ -103,19 +106,24 @@ export function detect(input: DetectInput): readonly Span[] {
   const claimed = new Uint8Array(points.length);
   const kept: Span[] = [];
 
-  // Every kind below `phone` runs once, as today, and its spans as its
-  // detector returns them are what a rescued stretch yields to.
+  // Every kind below `phone` runs once, and its spans are what a rescued
+  // stretch yields to: of the date detector's, only those its first scan
+  // lists, today's, so a stretch keeps exactly today's extent beside a date
+  // only the second scan reads (spec 0015, AC-12). Precedence reads both.
+  const dates = datePasses(input);
   const lower = new Map<DetectorKind, readonly Span[]>(
     PRECEDENCE.slice(PRECEDENCE.indexOf("phone") + 1).map((kind) => [
       kind,
-      DETECTORS[kind](input),
+      kind === "date" ? dates.first : DETECTORS[kind](input),
     ]),
   );
   const spansOf = (kind: DetectorKind): readonly Span[] =>
-    lower.get(kind) ??
-    (kind === "phone"
-      ? yieldRescued(points, DETECTORS.phone(input), [...lower.values()].flat())
-      : DETECTORS[kind](input));
+    kind === "date"
+      ? [...dates.first, ...dates.added]
+      : (lower.get(kind) ??
+        (kind === "phone"
+          ? yieldRescued(points, DETECTORS.phone(input), [...lower.values()].flat())
+          : DETECTORS[kind](input)));
 
   for (const kind of PRECEDENCE) {
     for (const span of spansOf(kind)) {

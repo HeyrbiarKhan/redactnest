@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { detect, DETECTORS, PRECEDENCE, readsJoinAsNothing } from "@/detect";
+import { datePasses, detectDate } from "@/detect/date";
 import { DETECTOR_KINDS, type DetectorKind } from "@/worker/protocol";
 
 /**
@@ -509,6 +510,134 @@ describe("AC-3's cases on NFKC text keep main's rows (spec 0014, AC-3)", () => {
     ["01-02-03-04-05", [["phone", "01-02-03-04-05", false]]],
   ])("lists main's rows in %s", (text, expected) => {
     expect(withTicks(nfkc(text))).toEqual(expected);
+  });
+});
+
+/** The text of each span, read from `text`. */
+function spanTexts(
+  text: string,
+  spans: readonly { start: number; end: number }[],
+): string[] {
+  const points = Array.from(text);
+  return spans.map((span) => points.slice(span.start, span.end).join(""));
+}
+
+/**
+ * Spec 0015, AC-12 and AC-14, through `detect`: a rescued phone stretch
+ * yields only to the dates the date detector's first scan lists, today's, so
+ * it keeps exactly today's extent beside a date only the second scan reads,
+ * and that date keeps its free pieces under precedence (spec 0005, INV-16).
+ * Each case's rows are main's, written out, plus the new date.
+ */
+describe("dates only the second scan lists, through detect (spec 0015, AC-12)", () => {
+  it("keeps a rescued stretch at today's extent beside a new form", () => {
+    const text = "212 918 8665 1119 21. June 2014";
+    expect(withTicks(text)).toEqual([
+      ["phone", "212 918 8665", true],
+      ["phone", "1119 21", false],
+      ["date", ". June 2014", false],
+    ]);
+    // The phone detector alone lists the stretch whole, and the date is the
+    // second scan's, so the stretch has no first scan date to yield to.
+    expect(spanTexts(text, DETECTORS.phone({ text, joins: [] }))).toEqual([
+      "212 918 8665",
+      "1119 21",
+    ]);
+    const { first, added } = datePasses({ text, joins: [] });
+    expect(spanTexts(text, first)).toEqual([]);
+    expect(spanTexts(text, added)).toEqual(["21. June 2014"]);
+  });
+
+  it("returns spans holding only kind, start, end and tick", () => {
+    expect(
+      detect({ text: "Tel 020 7946 0958 DOB 27-Sep-1980", joins: [] }),
+    ).toStrictEqual([
+      { kind: "phone", start: 4, end: 17, tickedByDefault: true },
+      { kind: "date", start: 22, end: 33, tickedByDefault: true },
+    ]);
+  });
+
+  it("lists a new form beside a phone row and a stranded group, each as main lists them", () => {
+    expect(withTicks("9346 212 555 0123 05-Jan-2026")).toEqual([
+      ["phone", "9346 212 555", true],
+      ["phone", "0123", false],
+      ["date", "05-Jan-2026", false],
+    ]);
+  });
+
+  /**
+   * Main lists `1987.12.278` as an unticked rescued phone row. With the yield
+   * over the second scan's dates too, the stretch was cut at `1987.12.27` and
+   * its last digit was left with no row; yielding to the first scan only
+   * keeps main's row, and the date inside it gives no piece.
+   */
+  it("keeps main's rescued row over a new numeric date", () => {
+    const text = "Ref 23 60915 488, 9145 36006 2 1987.12.278";
+    expect(withTicks(text)).toEqual([
+      ["phone", "23 60915 488", false],
+      ["phone", "9145 36006 2", true],
+      ["phone", "1987.12.278", false],
+    ]);
+    const { first, added } = datePasses({ text, joins: [] });
+    expect(spanTexts(text, first)).toEqual([]);
+    expect(spanTexts(text, added)).toEqual(["1987.12.27"]);
+  });
+});
+
+/**
+ * Spec 0015, AC-13: `isNumericDate` and the phone detector are unchanged, so
+ * a new numeric date a phone row holds stays in that row, as on main. Adding
+ * the new forms to `isNumericDate` made `2026-9-7` a date unit in the phone
+ * run and left `0123` with no row.
+ */
+describe("new numeric dates inside phone rows (spec 0015, AC-13)", () => {
+  it.each<[string, [DetectorKind, string, boolean][]]>([
+    ["Tel 2026-9-7 0123 ok", [["phone", "2026-9-7 0123", true]]],
+    ["Ref 20260927 12 x", [["phone", "20260927 12", true]]],
+  ])("lists main's phone row in %s", (text, expected) => {
+    expect(withTicks(text)).toEqual(expected);
+  });
+});
+
+/**
+ * Spec 0015, AC-12 and AC-13: `DETECTORS.date` stays `detectDate`, both
+ * scans' spans together, and the second scan's seams stay inside
+ * `src/detect`: `datePasses` is read by `detectDate` and `detect` alone, and
+ * `isYearFirstDate` and `isUnseparatedDate` by the date detector alone, never
+ * by `isNumericDate` or the phone detector.
+ */
+describe("the date detector's surface (spec 0015, AC-12, AC-13)", () => {
+  it("keeps detectDate as the date detector", () => {
+    expect(DETECTORS.date).toBe(detectDate);
+  });
+
+  it("exports the added labels from @/detect, and not the second scan or its predicates", async () => {
+    const surface = await import("@/detect");
+    expect(surface).toHaveProperty("ADDED_DATE_LABELS");
+    for (const name of ["datePasses", "isYearFirstDate", "isUnseparatedDate"]) {
+      expect(surface, name).not.toHaveProperty(name);
+    }
+  });
+});
+
+/**
+ * Spec 0015, AC-10 and AC-11: the fourth review's nits, pinned through
+ * `detect` with main's rows. The Social Security detector finds nothing in
+ * `SSN 123-45-67891١`, and the phone detector, which reads digits of any
+ * script, lists it whole and ticked; listing the Social Security number there
+ * turned its digits unticked in 5.8% of strings. After a marker, a separator
+ * and a digit leave the first two strings ticked phone rows and the third an
+ * unticked date, as on main.
+ */
+describe("the fourth review's nits, through detect (spec 0015, AC-10, AC-11)", () => {
+  it.each<[string, [DetectorKind, string, boolean][]]>([
+    ["SSN 123-45-67891١", [["phone", "123-45-67891١", true]]],
+    ["Card 4111 1111 1111 11111١", [["card", "4111 1111 1111 1111", false]]],
+    ["27-09-20261-5", [["phone", "27-09-20261-5", true]]],
+    ["2026-09-271-5", [["phone", "2026-09-271-5", true]]],
+    ["27/09/20261/5", [["date", "27/09/2026", false]]],
+  ])("lists main's rows in %s", (text, expected) => {
+    expect(withTicks(text)).toEqual(expected);
   });
 });
 

@@ -24,8 +24,12 @@ import {
   type RedactionTarget,
 } from "@/engine";
 
+import {
+  DETECT_DATE_FORMS,
+  DETECT_DATE_FORMS_OTHERS,
+} from "../../scripts/lib/detection-fixtures.mjs";
 import { fixture } from "../support/bytes";
-import { LIMITS, mupdf, pageCharacters } from "../support/mupdf";
+import { inspect, LIMITS, mupdf, pageCharacters, pageText } from "../support/mupdf";
 import { findTarget } from "../support/targets";
 
 /**
@@ -350,6 +354,90 @@ describe("a value beside a glyph off its line", () => {
   it("redacts every row together and keeps every marker", async () => {
     const { output } = await redactDocumentWith(mupdf, fixture(NAME), targets);
     expectMarkersKept(output);
+  });
+});
+
+/**
+ * Spec 0015, AC-17. Every date `detect-date-forms.pdf` lists, each a form the
+ * date detector's second scan adds, redacts alone and with every other: the
+ * self check passes, the date is gone, and every neighbour of another kind,
+ * the words before the legal formula and the label glued to a date are still
+ * in the output.
+ */
+describe("the date forms spec 0015 adds", () => {
+  const NAME = "detect-date-forms.pdf";
+  let dates: readonly RedactionTarget[] = [];
+  let neighbours: readonly string[] = [];
+
+  beforeAll(async () => {
+    const doc = await openDocumentWith(mupdf, fixture(NAME), LIMITS);
+    try {
+      const found = await doc.findMatches({ contextChars: 0 });
+      dates = found.flatMap((match) =>
+        match.kind === "date" && match.target ? [match.target] : [],
+      );
+      neighbours = found
+        .filter((match) => match.kind !== "date")
+        .map((match) => match.text);
+    } finally {
+      doc.close();
+    }
+  });
+
+  /** Text with whitespace removed, so the wrapped date reads as one. */
+  function packed(text: string): string {
+    return text.replace(/\s/gu, "");
+  }
+
+  function pageOf(bytes: ArrayBuffer): string {
+    return packed(inspect(bytes, (doc) => pageText(doc, 0)));
+  }
+
+  function occurrences(haystack: string, needle: string): number {
+    return haystack.split(needle).length - 1;
+  }
+
+  /**
+   * Each of `removed` is gone: the page holds its text once fewer for each
+   * removed target whose text holds it, since a glued label's date and a
+   * spaced date read the same with whitespace removed. Every neighbour of
+   * another kind, `Dated this` and the glued label `Created` are still there.
+   */
+  function expectRemoved(output: ArrayBuffer, removed: readonly RedactionTarget[]) {
+    const before = pageOf(fixture(NAME));
+    const after = pageOf(output);
+    for (const target of removed) {
+      const text = packed(target.text);
+      const named = removed.reduce(
+        (held, other) => held + occurrences(packed(other.text), text),
+        0,
+      );
+      expect(occurrences(after, text), target.text).toBe(
+        occurrences(before, text) - named,
+      );
+    }
+    for (const kept of [...neighbours, "Dated this", "Created"]) {
+      expect(after).toContain(packed(kept));
+    }
+  }
+
+  it("lists a target for every date, and its neighbours as other kinds", () => {
+    expect(dates.map((target) => target.text)).toEqual(
+      DETECT_DATE_FORMS.map(([text]) => text),
+    );
+    expect(neighbours).toEqual(DETECT_DATE_FORMS_OTHERS.map(([, text]) => text));
+  });
+
+  it("redacts each date alone and keeps every neighbour", async () => {
+    for (const target of dates) {
+      const { output } = await redactDocumentWith(mupdf, fixture(NAME), [target]);
+      expectRemoved(output, [target]);
+    }
+  }, 60_000);
+
+  it("redacts every date together and keeps every neighbour", async () => {
+    const { output } = await redactDocumentWith(mupdf, fixture(NAME), dates);
+    expectRemoved(output, dates);
   });
 });
 

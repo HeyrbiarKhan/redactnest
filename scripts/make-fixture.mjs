@@ -16,6 +16,7 @@ import {
   detectBlocked,
   detectCard,
   detectDate,
+  detectDateForms,
   detectDense,
   detectStamped,
   detectEmail,
@@ -472,6 +473,12 @@ const FIXTURES = [
     "detect-markers.pdf",
     detectMarkers(),
     "a raised footnote marker after a value of every kind, ordinals, a guard",
+  ],
+  // Spec 0015: more date forms.
+  [
+    "detect-date-forms.pdf",
+    detectDateForms(),
+    "one line per date form the second scan adds, beside other kinds",
   ],
   [
     "sample-agreement.pdf",
