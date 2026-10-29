@@ -27,3 +27,14 @@ Run the tool at `/tool` against a production build (`pnpm build && pnpm start`).
 
 - [x] `tests/unit/detect-dates.test.ts` lists `Ref 2026 - 09 - 271 here` as `2026 - 09 - 27` and finds nothing in `Ref 2026 - 9 - 71 here`: AC-7's marker read as for numeric dates, the owner's choice during the build → AC-7
 - [x] `writtenCouldStart` in `src/detect/date.ts` changes no row: `rationale.md`'s *Measured in the build* records the layouts unchanged and 0 of 230,000 strings differing from the prototype; `pnpm exec vitest run --project unit --maxWorkers=1 --reporter=verbose tests/unit/detect-adversarial.test.ts` alone shows the date detector's worst shape well under 1 s → AC-1, AC-16
+
+## Feature 27: detector and fixture gates (2026-10-29)
+
+_From this spec's Follow-up (the review's first Minor and first nit) and the fourth review of feature 12. Each drift is made on a copy of the file and restored after._
+
+- [x] `pnpm exec vitest run --project unit tests/unit/detect-main-rows.test.ts` → 125 pass: 62 strings from the date and phone suites, each through `datePasses(...).first` (main's date rows exactly) and through `detect` (every row main lists, with its start, end, kind and tick), and the `DATE_LABELS` pin → INV-1, INV-2, AC-15
+- [x] The literals are main's, not the current code's: extract d42464b's `src/detect` and `src/worker/protocol.ts` into a scratch folder (`git archive`), load it with jiti, and print `DETECTORS.date` and `detect` for each string → each matches its literal → INV-1, INV-2
+- [x] In `src/detect/date.ts`, move `updated` from `ADDED_DATE_LABELS` into `DATE_LABELS` → the gate fails (the `Updated27/09/2026` string's first scan and the pin); set `FIRST_PASS.scriptDigitEndsRow` true → it fails; set `FIRST_PASS.newFormsBeyondJoiner` true → it fails, through `detect` too; make `digitAfter` return `ASCII_DIGIT` alone → it fails → INV-1
+- [x] `pnpm exec vitest run --project unit tests/unit/fixtures.test.ts` → 83 pass, one per committed fixture and one for the names, and `git status --short tests/fixtures` is empty after it
+- [x] Change a line in `scripts/lib/detection-fixtures.mjs` with no rerun → the fixture it writes fails; append a byte to a committed fixture → that fixture fails; add a stray file to `tests/fixtures` → the names test fails; delete a committed fixture → the names test fails
+- [x] `WORD_REACH`'s comment in `src/detect/date.ts` names `12-15th May 2026` as the longest case it must cover

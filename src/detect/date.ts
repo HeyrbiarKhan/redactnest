@@ -1035,10 +1035,12 @@ function addedWrittenAt(
 
 /**
  * How far past a digit start the first letter or whitespace a written pattern
- * needs may lie: a year first flush date's month starts there
- * (`2026-Sep-27`), and a day range's gap (`12-15 May 2026`). Every other day
- * first form needs one sooner: an ordinal's letter, the gap after the day, or
- * the month after a flush separator. A rule about the patterns.
+ * needs may lie: a day range of two digit days puts its ordinal's letter
+ * there (`12-15th May 2026`, the longest case this must cover) or its gap
+ * (`12-15 May 2026`), and a year first flush date its month (`2026-Sep-27`).
+ * Every other day first form needs one sooner: the first day's ordinal, the
+ * gap after the day, or the month after a flush separator. A rule about the
+ * patterns.
  */
 const WORD_REACH = 5;
 
