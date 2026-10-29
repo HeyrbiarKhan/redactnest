@@ -336,6 +336,7 @@ spec [0015](../specs/0015-more-date-forms/index.md) · code in `tests/unit/detec
   - [x] The first scan gate: 62 strings from the date and phone suites with main's rows at d42464b (the merge before spec 0015), read once from that commit's code and frozen as literals; `datePasses(...).first` lists them exactly, `detect` keeps every one with its start, end, kind and tick (AC-15's three columns), and `DATE_LABELS` pinned at main's words; the end rules held by strings, each literal checked against its string; shown failing on a word moved into `DATE_LABELS` (2 tests), either `FIRST_PASS` flag flipped (4 each) and `digitAfter` read as ASCII only (4) · INV-1, INV-2
   - [x] The fixture gate: the script run from an empty temporary folder, its files compared with `tests/fixtures` by name and byte for byte; the script measured to write the same bytes on every run, so nothing went to `/architect`; shown failing on a fixture's code changed with no rerun, a fixture edited by hand, a stray committed file and a missing one
   - [x] The nit: `WORD_REACH`'s comment names `12-15th May 2026` as the longest case, beside `12-15 May 2026` and `2026-Sep-27`
+- [x] Verify it: `/check verify detector and fixture gates`
 
 ### 11. Telemetry & error monitoring · needs a decision
 Enough numbers to know whether the funnel works and whether anything is failing silently, without ever touching document content.
