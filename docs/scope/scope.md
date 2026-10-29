@@ -37,7 +37,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 24 | Detector follow ups | Release 3 | done |
 | 25 | More date forms | Release 3 | done |
 | 26 | UI polish | Release 3 | done |
-| 27 | Detector and fixture gates | Release 3 | in-progress |
+| 27 | Detector and fixture gates | Release 3 | done |
 
 ## Foundations
 
@@ -327,7 +327,7 @@ spec [0015](../specs/0015-more-date-forms/index.md) · code in `src/detect` (`da
 - [x] Test it: `/test more date forms`
 - [x] Review it (fresh model): `/check review more date forms`
 
-### 27. Detector and fixture gates · in-progress · Alpha · from spec 0015
+### 27. Detector and fixture gates · done · Alpha · from spec 0015
 Two checks that run today only when someone remembers them, made into gates that `pnpm test` or CI runs every time. Spec 0015's bar, that the first date scan lists exactly main's rows, is held only by a scratch measurement (AC-15) and hand written literals, so a word moved into `DATE_LABELS` or a change to `FIRST_PASS` or `digitAfter` would change main's rows with every test passing (the review's first Minor, [2026-10-28](../reviews/2026-10-28-feat-more-date-forms.md)). And nothing fails when a committed PDF in `tests/fixtures` differs from what `scripts/make-fixture.mjs` writes today, so each review checks it by hand (from the fourth review of feature 12). If the script turns out not to write the same bytes on every run, bring that to `/architect` rather than loosening the comparison.
 **Done when:** a committed test holds a frozen list of main's rows for a few dozen strings from the date and phone suites, read through `datePasses(...).first` and through `detect`, and pins `DATE_LABELS` and the first scan's end rules at their values from before spec 0015; `pnpm test` or CI fails when a committed fixture differs from what the script writes; and each gate is shown failing on a deliberate drift.
 **Also owed here:** the review's first nit, a comment at `WORD_REACH` in `src/detect/date.ts` naming the longest case it must cover (`12-15th`).
