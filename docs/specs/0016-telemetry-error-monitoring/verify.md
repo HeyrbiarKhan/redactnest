@@ -39,3 +39,10 @@ Run against the Playwright build (`tests/e2e/build-env.ts`, which sets `NEXT_PUB
 - [ ] *Go live* steps 1 to 6 done before the merge; the production build passed the gate → AC-9, AC-25
 - [ ] Past about 30 requests a minute from one address, `/api/telemetry` answers `429` with no `Set-Cookie` and no challenge page → AC-25
 - [ ] A visit to `/` shows in Umami; a deliberate failure shows in Sentry and its email arrives → AC-25
+
+## Added by the build (2026-10-30)
+
+- [ ] Under `pnpm build && pnpm start`, throw once in a page (say `/pricing`) and once in a route handler (`/api/telemetry`), and read the `routePath` `onRequestError` receives: it matches a shape `ROUTE_KINDS`'s comment in `src/instrumentation.ts` records (`/pricing/page`, `/api/telemetry`), and `routeKindFor` names the right kind. The build read those strings from Next.js 16's own templates and the build manifest, not from a throw → AC-15
+- [ ] Go live step 7: if the home page visit never shows in Umami, its bot filter refused `TELEMETRY_USER_AGENT` (`Mozilla/5.0 (Server)`, the string Umami's server side guide uses). Swap it for one fixed generic browser string, the same on every event, and send again → AC-21
+- [ ] The Umami and Sentry entries in `OUTSIDE_SERVICES` state the data region chosen at sign up (Go live steps 1 and 2). The build wrote the EU region for both → AC-22
+- [ ] The newest entry in `PRIVACY_CHANGES` (`src/lib/policy-changes.ts`) is dated the day this ships; the build wrote 2026-10-30 → AC-22
