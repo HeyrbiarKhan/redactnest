@@ -24,6 +24,11 @@ export type PolicyChanges = readonly [PolicyChange, ...PolicyChange[]];
 
 export const PRIVACY_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
   Object.freeze({
+    date: "2026-10-30",
+    summary:
+      "Added Counts and error reports: we now count what happens on the site, by kind and in ranges, and report when our code fails, through Umami and Sentry, with nothing about your document or you. Global Privacy Control and Do Not Track stop the counts.",
+  }),
+  Object.freeze({
     date: "2026-10-07",
     summary:
       "Made clear that the one day applies to the logs our host keeps for us, and that what it keeps for itself follows its own privacy policy.",

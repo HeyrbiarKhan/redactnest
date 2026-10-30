@@ -11,6 +11,9 @@
  * Spec 0012 adds accounts and Pro: "Your account" and "Payments" after "Your
  * documents" in the privacy policy, and "Your account" and "Pro subscriptions"
  * after "Checking the result is your job" in the Terms of service (AC-22).
+ *
+ * Spec 0016 adds "Counts and error reports" after "What we receive when you
+ * visit" in the privacy policy (AC-22), for claims C14 to C16.
  */
 
 export const PRIVACY_SECTIONS = Object.freeze({
@@ -19,6 +22,7 @@ export const PRIVACY_SECTIONS = Object.freeze({
   yourAccount: "Your account",
   payments: "Payments",
   whatWeReceive: "What we receive when you visit",
+  countsAndReports: "Counts and error reports",
   whatWeDoNotDo: "What we do not do",
   services: "Services we use",
   transfers: "Transfers outside the UK and the EU",

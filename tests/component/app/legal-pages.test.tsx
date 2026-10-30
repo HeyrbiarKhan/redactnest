@@ -328,6 +328,68 @@ describe("the privacy policy's facts", () => {
     }
   });
 
+  /**
+   * covers: spec 0016, AC-22 and claims C5, C7 and C14 to C16. The tool page
+   * asks for the plan and sends counts; there is no tracking across sites and
+   * no analytics cookie, never "no analytics" any more; and the new section
+   * says what is counted, what is never held, who receives it, and that an
+   * opt out stops counts but not failure reports.
+   */
+  it("states what is counted and reported, and what stops it", () => {
+    render(<PrivacyPage />);
+    const text = mainText();
+
+    // C5
+    expect(text).toContain("tells it counts of what happened");
+    expect(text).toContain("The counts carry no cookie");
+    expect(text).not.toContain("one question only");
+    // C7, still one line, word for word.
+    expect(
+      screen.getByText(
+        /^No advertising, no tracking across sites, and no cookies for analytics\./,
+      ).tagName,
+    ).toBe("LI");
+    expect(text).not.toMatch(/No analytics, advertising, tracking or error reporting/);
+
+    const counts = sectionText(PRIVACY_SECTIONS.countsAndReports);
+    // C14
+    expect(counts).toContain("by kind and in ranges");
+    expect(counts).toContain("2 to 5 email addresses found");
+    expect(counts).toContain("never holds your document, its name, its words");
+    expect(counts).toContain("no id and no cookie");
+    expect(counts).toContain("Umami never receives your IP address or browser details");
+    // C15
+    expect(counts).toContain("our server tells Sentry what kind of failure happened");
+    expect(counts).toContain(
+      "Never an error message, your document or anything about you",
+    );
+    // C16
+    expect(counts).toContain(
+      "Global Privacy Control or Do Not Track, it sends no counts",
+    );
+    expect(counts).toContain("Failure reports still go");
+    expect(counts).toContain("Article 6(1)(f)");
+    // Retention is the services' entries' to state, so no figure here.
+    expect(counts).not.toMatch(/\d+ (days|months)/);
+  });
+
+  /**
+   * covers: spec 0016, AC-22. Umami and Sentry are listed like every service,
+   * with where and how long, and the transfers list names both.
+   */
+  it("lists Umami and Sentry with where they keep counts and reports, and for how long", () => {
+    render(<PrivacyPage />);
+    const services = sectionText(PRIVACY_SECTIONS.services);
+    const transfers = sectionText(PRIVACY_SECTIONS.transfers);
+
+    for (const name of ["Umami", "Sentry"]) {
+      const service = OUTSIDE_SERVICES.find((entry) => entry.name === name);
+      expect(service).toBeDefined();
+      expect(services).toContain(service?.retention);
+      expect(transfers).toContain(`${name}. Where: ${service?.location}.`);
+    }
+  });
+
   /** covers: AC-6. Nothing about representatives while none is recorded. */
   it("says nothing about representatives while none is recorded", () => {
     // Only meaningful while the repository's decision names nobody, as the

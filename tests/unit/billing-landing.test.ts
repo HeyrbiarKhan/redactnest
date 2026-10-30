@@ -9,6 +9,7 @@ import {
   pagePath,
   type SearchParams,
 } from "@/app/(account)/landing";
+import { SignInDone } from "@/app/(account)/sign-in-done";
 import { SignInPanel } from "@/app/(account)/sign-in-panel";
 
 /**
@@ -236,7 +237,9 @@ describe("the pages", () => {
    * Spec 0013, AC-7 and AC-23: the wide account shell with nothing current in
    * the header, then our panel and Clerk's card side by side, the panel
    * first, and nothing of ours after Clerk's card, so its own spinner is the
-   * only thing that moves after Continue.
+   * only thing that moves after Continue. Spec 0016 adds `SignInDone` before
+   * the card, which renders nothing, so nothing shows or moves for it, and it
+   * counts the page it is on (AC-14).
    */
   it.each([
     ["sign-in", SignIn],
@@ -253,8 +256,9 @@ describe("the pages", () => {
       expect(shell.props.current).toBeUndefined();
       const grid = shell.props.children as ReactElement<{ children: unknown }>;
       expect(isValidElement(grid)).toBe(true);
-      const parts = [grid.props.children].flat() as ReactElement[];
-      expect(parts.map((part) => part.type)).toEqual([SignInPanel, card]);
+      const parts = [grid.props.children].flat() as ReactElement<{ via?: string }>[];
+      expect(parts.map((part) => part.type)).toEqual([SignInPanel, SignInDone, card]);
+      expect(parts[1]?.props.via).toBe(which);
     },
   );
 });

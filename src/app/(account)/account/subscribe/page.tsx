@@ -55,11 +55,11 @@ export default async function SubscribePage() {
   // Spec 0016, AC-14 and AC-19. The outcome's kind alone reaches a report,
   // never the outcome, so no email, id or checkout address can. Scheduled
   // here because the redirects below end the render.
-  const requestHeaders = await headers();
-  const failure = billingFailure("subscribe", outcome.kind);
-  if (failure !== null) reportServer(failure, requestHeaders);
-  if (outcome.kind === "checkout")
-    reportServer({ name: "subscribe-started" }, requestHeaders);
+  const event =
+    outcome.kind === "checkout"
+      ? ({ name: "subscribe-started" } as const)
+      : billingFailure("subscribe", outcome.kind);
+  if (event !== null) reportServer(event, await headers());
 
   switch (outcome.kind) {
     case "sign-in":

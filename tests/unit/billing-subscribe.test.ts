@@ -165,6 +165,9 @@ vi.mock("next/navigation", () => ({
     throw new Redirected(to);
   },
 }));
+// A failure or a checkout reports by kind (spec 0016, AC-14 and AC-19), which
+// reads the request's headers; `telemetry-billing.test.ts` covers the report.
+vi.mock("next/headers", () => ({ headers: () => Promise.resolve(new Headers()) }));
 vi.mock("@clerk/nextjs/server", () => ({
   auth: () => Promise.resolve({ userId: session.userId }),
   currentUser: () =>

@@ -39,15 +39,18 @@ describe("the real list", () => {
   });
 
   /**
-   * covers: spec 0011 AC-8, spec 0012 AC-21. The host, then Clerk with its
-   * origins, then Polar with none, because checkout and the portal are
-   * Polar's own pages reached by a redirect.
+   * covers: spec 0011 AC-8, spec 0012 AC-21, spec 0016 AC-22. The host, then
+   * Clerk with its origins, then Polar with none, because checkout and the
+   * portal are Polar's own pages reached by a redirect, then Umami and Sentry
+   * with none, because only our server ever sends to them (INV-4).
    */
-  it("names Vercel, Clerk and Polar, with only Clerk's origins for the policy", () => {
+  it("names Vercel, Clerk, Polar, Umami and Sentry, with only Clerk's origins for the policy", () => {
     expect(OUTSIDE_SERVICES.map((service) => service.name)).toEqual([
       "Vercel",
       "Clerk",
       "Polar",
+      "Umami",
+      "Sentry",
     ]);
     const origins = Object.fromEntries(
       OUTSIDE_SERVICES.map((service) => [
@@ -60,6 +63,8 @@ describe("the real list", () => {
       Vercel: [[], [], []],
       Clerk: [clerk, clerk, ["https://img.clerk.com"]],
       Polar: [[], [], []],
+      Umami: [[], [], []],
+      Sentry: [[], [], []],
     });
   });
 

@@ -17,10 +17,11 @@ import { ServicesSection } from "./services-section";
 
 /**
  * The privacy policy. Spec 0011, AC-1, AC-3 and AC-6 to AC-9, with the claims
- * spec 0012 changed and added for accounts and Pro (AC-22).
+ * spec 0012 changed and added for accounts and Pro (AC-22), and the ones spec
+ * 0016 changed and added for counts and error reports (AC-22).
  *
- * It makes only the claims in spec 0011's claims register as spec 0012 amends
- * it (C1 to C13), each held by the test or gate the register names, and no
+ * It makes only the claims in spec 0011's claims register as specs 0012 and
+ * 0016 amend it (C1 to C16), each held by the test or gate the register names, and no
  * other claim about data (AC-7, INV-3). A change that weakens a claim's holder
  * changes this page and adds an entry to `PRIVACY_CHANGES` in the same change.
  * The comments name the claim each paragraph makes, so `/check verify` can
@@ -39,7 +40,7 @@ const CLERK_HOST = new URL(CLERK_PRODUCTION_ORIGIN).host;
 export const metadata: Metadata = {
   title: LEGAL.privacyLabel,
   description:
-    "What happens to your data on RedactNest: your document is processed only in your browser and never uploaded, there is no tracking, and only the sign in and account pages set cookies.",
+    "What happens to your data on RedactNest: your document is processed only in your browser and never uploaded, nothing tracks you across sites, and only the sign in and account pages set cookies.",
 };
 
 export default function PrivacyPage() {
@@ -92,13 +93,15 @@ export default function PrivacyPage() {
           When you close the page or start over, the document is gone from the page’s
           memory.
         </p>
-        {/* C5 */}
+        {/* C5, as spec 0016 changes it */}
         <p>
-          Apart from loading the page and its own files, the tool page asks our server one
-          question only: which plan applies to you. That request carries your sign in
-          cookie if you have one, and nothing about your document. To answer, our server
-          checks your sign in cookie itself and, when it shows you are signed in, asks
-          Polar whether you hold Pro, sending your account id and nothing else.
+          Apart from loading the page and its own files, the tool page asks our server
+          which plan applies to you, and tells it counts of what happened (see Counts and
+          error reports). The plan question carries your sign in cookie if you have one.
+          The counts carry no cookie, and neither carries anything about your document. To
+          answer the plan question, our server checks your sign in cookie itself and, when
+          it shows you are signed in, asks Polar whether you hold Pro, sending your
+          account id and nothing else.
         </p>
         <p>
           The cleaned file is saved wherever your browser saves downloads. We cannot see,
@@ -196,6 +199,39 @@ export default function PrivacyPage() {
       </section>
 
       <section>
+        <SectionHeading sections={PRIVACY_SECTIONS} name="countsAndReports" />
+        {/* C14 */}
+        <p>
+          We count page visits, documents opened and redacted, refusals and steps toward
+          Pro, by kind and in ranges: for example, 2 to 5 email addresses found. A count
+          never holds your document, its name, its words or what was found in it. It
+          carries no id and no cookie, so no two counts can be tied together, or to you.
+        </p>
+        <p>
+          Our server passes the counts to Umami. Umami never receives your IP address or
+          browser details, because the counts come from our server, not from your browser.
+          It keeps them for the time its entry under Services we use states.
+        </p>
+        {/* C15 */}
+        <p>
+          When something breaks, our server tells Sentry what kind of failure happened and
+          where. Never an error message, your document or anything about you. Sentry keeps
+          each report for the time its entry under Services we use states.
+        </p>
+        {/* C16 */}
+        <p>
+          If your browser sends Global Privacy Control or Do Not Track, it sends no
+          counts, and our server counts nothing for it. Failure reports still go, because
+          they say nothing about you.
+        </p>
+        <p>
+          We use the counts and reports to keep the service working and to improve it. Our
+          legal basis is our legitimate interest in doing that (Article 6(1)(f) of the UK
+          GDPR and the EU GDPR).
+        </p>
+      </section>
+
+      <section>
         <SectionHeading sections={PRIVACY_SECTIONS} name="whatWeDoNotDo" />
         <ul>
           {/* C6, word for word (spec 0012, *Policy and terms changes*) */}
@@ -203,10 +239,12 @@ export default function PrivacyPage() {
             No page sets a cookie except the sign in and account pages, and we set none of
             our own (see Your account).
           </li>
-          {/* C7 */}
+          {/* C7, as spec 0016 changes it */}
           <li>
-            No analytics, advertising, tracking or error reporting. The only script from
-            anyone else is Clerk’s, on the sign in and account pages.
+            No advertising, no tracking across sites, and no cookies for analytics. We
+            count what happens on the site and report when our code fails (see Counts and
+            error reports). The only script from anyone else is Clerk’s, on the sign in
+            and account pages.
           </li>
           {/* C8 */}
           <li>Our own code keeps no logs.</li>

@@ -8,6 +8,12 @@ import {
   OUTSIDE_SERVICES,
   originCoversHost,
 } from "../../src/config/privacy";
+import { TELEMETRY_PATH } from "../../src/lib/routes";
+import {
+  isUsageEvent,
+  parseTelemetryEvent,
+  type TelemetryEvent,
+} from "../../src/telemetry/events";
 
 /**
  * The guarantee, proved rather than promised. Spec 0002, AC-2 and AC-3.
@@ -182,6 +188,72 @@ function recordRequests(page: Page): Request[] {
     if (/^https?:/.test(request.url())) requests.push(request);
   });
   return requests;
+}
+
+/**
+ * What a page asked its own server for, beyond the page and its static
+ * assets, sorted and once each.
+ */
+function dataPaths(requests: readonly Request[]): string[] {
+  const paths = requests
+    .map((request) => new URL(request.url()).pathname)
+    .filter((path) => path !== "/tool")
+    .filter((path) => !ASSET_PATHS.some((asset) => asset.test(path)));
+  return [...new Set(paths)].sort();
+}
+
+/**
+ * Spec 0016, AC-23: all `/tool` may ask its own server for. The plan check,
+ * which accepts no document data, and the counts, whose bodies are checked
+ * below.
+ */
+const TOOL_DATA_PATHS = ["/api/entitlement", TELEMETRY_PATH].sort();
+
+const isTelemetry = (request: Request): boolean =>
+  new URL(request.url()).pathname === TELEMETRY_PATH;
+
+/** A telemetry body, parsed as `/api/telemetry` parses it, or `null`. */
+function parsedBody(request: Request): TelemetryEvent | null {
+  try {
+    return parseTelemetryEvent(JSON.parse(request.postData() ?? ""));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Every event a page posted, once the one named has been (`report` never
+ * waits, so neither can this). Each is a `POST` with no cookie whose body the
+ * route's own parser accepts, so a body carrying anything the catalog does not
+ * allow fails here (spec 0016, AC-23).
+ */
+async function telemetryEvents(
+  requests: readonly Request[],
+  until?: TelemetryEvent["name"],
+): Promise<TelemetryEvent[]> {
+  if (until !== undefined) {
+    await expect
+      .poll(
+        () => requests.filter(isTelemetry).map((request) => parsedBody(request)?.name),
+        {
+          timeout: ENGINE_TIMEOUT,
+        },
+      )
+      .toContain(until);
+  }
+  const posts = requests.filter(isTelemetry);
+  for (const post of posts) {
+    expect(post.method(), "telemetry is sent as a POST").toBe("POST");
+    expect(
+      parsedBody(post),
+      `a body the route would drop: ${post.postData()}`,
+    ).not.toBeNull();
+    expect(
+      await post.headerValue("cookie"),
+      "a telemetry request carried a cookie",
+    ).toBeNull();
+  }
+  return posts.map((post) => parsedBody(post) as TelemetryEvent);
 }
 
 /** Choose the fixture under the distinctive name, and wait for it to open. */
@@ -382,9 +454,20 @@ test("a request to a Clerk host would be seen", () => {
   expect(isClerkHost("https://redactnest.test/pricing")).toBe(false);
 });
 
-test("the only thing the tool route asks its own server for is the entitlement", async ({
+/**
+ * Spec 0016, AC-23 and claim C5: the tool route asks its own server which
+ * plan applies and posts counts, and nothing else. A cookie sits in the jar
+ * for our own origin, so "no telemetry request carries a cookie" tests
+ * `credentials: "omit"` rather than an empty jar, and the plan check, which
+ * does send cookies, is the control.
+ */
+test("the tool route asks its own server only for the entitlement, and posts only counts", async ({
   page,
+  baseURL,
 }) => {
+  await page
+    .context()
+    .addCookies([{ name: "redactnest_probe", value: "1", url: baseURL }]);
   const requests = recordRequests(page);
 
   await page.goto("/tool");
@@ -403,14 +486,22 @@ test("the only thing the tool route asks its own server for is the entitlement",
   await hoverHeaderLinks(page);
 
   // AC-3. Everything else the route fetches is its own code and the engine, both
-  // static assets. What is left is the one endpoint spec 0001 allows, and that
-  // endpoint accepts no document data and returns none.
-  const dataRequests = requests
-    .map((request) => new URL(request.url()).pathname)
-    .filter((path) => path !== "/tool")
-    .filter((path) => !ASSET_PATHS.some((asset) => asset.test(path)));
+  // static assets. What is left is the endpoint spec 0001 allows, which accepts
+  // no document data and returns none, and the counts (spec 0016).
+  const events = await telemetryEvents(requests, "document-opened");
+  expect(events.map((event) => event.name)).toEqual(
+    expect.arrayContaining(["page-view", "document-opened"]),
+  );
+  expect(events).toContainEqual({ name: "page-view", page: "tool" });
+  expect(dataPaths(requests)).toEqual(TOOL_DATA_PATHS);
 
-  expect([...new Set(dataRequests)]).toEqual(["/api/entitlement"]);
+  const planCheck = requests.find(
+    (request) => new URL(request.url()).pathname === "/api/entitlement",
+  );
+  expect(
+    await planCheck?.headerValue("cookie"),
+    "the control: the jar was empty",
+  ).toContain("redactnest_probe");
 });
 
 /**
@@ -457,13 +548,13 @@ test("a full run sends no document, text, match or name anywhere", async ({ page
     );
   }
 
-  // The entitlement is still the only thing the route asks its own server for.
-  const dataRequests = requests
-    .map((request) => new URL(request.url()).pathname)
-    .filter((path) => path !== "/tool")
-    .filter((path) => !ASSET_PATHS.some((asset) => asset.test(path)));
-
-  expect([...new Set(dataRequests)]).toEqual(["/api/entitlement"]);
+  // The plan check and the counts are still all the route asks its own server
+  // for, and every count the run sent parses (spec 0016, AC-23).
+  const events = await telemetryEvents(requests, "redaction-completed");
+  expect(events.map((event) => event.name)).toEqual(
+    expect.arrayContaining(["document-opened", "redaction-completed"]),
+  );
+  expect(dataPaths(requests)).toEqual(TOOL_DATA_PATHS);
 });
 
 /**
@@ -579,9 +670,16 @@ test("a flagged document sends, stores and logs no page text or finding detail",
     "zzsecretpayroll",
   ];
 
+  // A finding's kind may travel as a count, in a body the catalog parses
+  // (spec 0016, AC-11, ticking spec 0006's Follow-up). Which page, and what it
+  // holds, never may.
+  const countedKinds = new Set(["scanned"]);
+  await telemetryEvents(requests, "redaction-completed");
+
   for (const request of requests) {
     const sent = `${request.url()}\n${request.postData() ?? ""}`;
     for (const text of secret) {
+      if (isTelemetry(request) && countedKinds.has(text)) continue;
       expect(sent, `a request carried "${text}"`).not.toContain(text);
     }
   }
@@ -595,11 +693,51 @@ test("a flagged document sends, stores and logs no page text or finding detail",
     }
   }
 
-  const dataRequests = requests
-    .map((request) => new URL(request.url()).pathname)
-    .filter((path) => path !== "/tool")
-    .filter((path) => !ASSET_PATHS.some((asset) => asset.test(path)));
-  expect([...new Set(dataRequests)]).toEqual(["/api/entitlement"]);
+  expect(dataPaths(requests)).toEqual(TOOL_DATA_PATHS);
+});
+
+/**
+ * Spec 0016, AC-6 and AC-23, claim C16. A browser sending Global Privacy
+ * Control posts no count through a whole run, and a failure report still
+ * goes, because it says nothing about the visitor (INV-6).
+ */
+test.describe("with Global Privacy Control on", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(Navigator.prototype, "globalPrivacyControl", {
+        configurable: true,
+        get: () => true,
+      });
+    });
+    await page.setExtraHTTPHeaders({ "Sec-GPC": "1" });
+  });
+
+  test("a full run posts no count", async ({ page }) => {
+    const requests = recordRequests(page);
+
+    await page.goto("/tool");
+    await redactAndDownload(page);
+    await page.waitForLoadState("networkidle");
+
+    // Each count is posted the moment its step shows, so by the time the file
+    // is downloaded every one the run would have sent has been asked for.
+    expect((await telemetryEvents(requests)).filter(isUsageEvent)).toEqual([]);
+  });
+
+  test("an engine that will not load is still reported", async ({ page }) => {
+    const requests = recordRequests(page);
+    await page.route("**/engine/**", (route) => route.abort());
+
+    await page.goto("/tool");
+    await page.getByTestId("file-input").setInputFiles({
+      name: FILE_NAME,
+      mimeType: "application/pdf",
+      buffer: readFileSync(FIXTURE),
+    });
+
+    const events = await telemetryEvents(requests, "engine-unavailable");
+    expect(events.filter(isUsageEvent)).toEqual([]);
+  });
 });
 
 /**
