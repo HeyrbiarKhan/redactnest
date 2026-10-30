@@ -21,7 +21,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 8 | Redact flow | Release 1 | done |
 | 9 | Privacy policy & terms | Release 2 | done |
 | 10 | Billing & paid plan | Release 2 | done |
-| 11 | Telemetry & error monitoring | Release 3 | planned |
+| 11 | Telemetry & error monitoring | Release 3 | in-progress |
 | 12 | Remaining detectors | Release 3 | done |
 | 13 | Custom terms | Release 4 | planned |
 | 14 | Manual rectangle redaction | Release 5 | planned |
@@ -338,11 +338,20 @@ spec [0015](../specs/0015-more-date-forms/index.md) · code in `tests/unit/detec
   - [x] The nit: `WORD_REACH`'s comment names `12-15th May 2026` as the longest case, beside `12-15 May 2026` and `2026-Sep-27`
 - [x] Verify it: `/check verify detector and fixture gates`
 
-### 11. Telemetry & error monitoring · needs a decision
+### 11. Telemetry & error monitoring · in-progress
 Enough numbers to know whether the funnel works and whether anything is failing silently, without ever touching document content.
 **Done when:** events carry counts only (page count, items redacted by type, completion, upgrade), analytics sets no cookies so no consent banner is needed, error reports are scrubbed of file names and content, and the only cookies in the product are the strictly necessary auth ones.
 **Also owed here:** the policy work from specs 0011 and 0012. Its counts only telemetry becomes new privacy policy claims, its service goes into `OUTSIDE_SERVICES`, and the console ban lifts narrowly for its one reporter, in the same change as the policy update. An upgrade event is a count, never an email or an id. Error reporting stays off `/tool` and never captures the billing seams' arguments.
-- [ ] Design it (spec): `/architect telemetry & error monitoring`
+spec [0016](../specs/0016-telemetry-error-monitoring/index.md)
+- [x] Design it (spec): `/architect telemetry & error monitoring`
+- [ ] Build it: `/develop telemetry & error monitoring`
+  - [ ] The tool's counts reach Umami: the closed events, buckets and parser with the type gate, the config gate, `/api/telemetry` with its same origin and browser only checks, the reporter with GPC and DNT, page visits, the tool's events from session transitions, and the lint walls · AC-1 to AC-13, AC-21, AC-24
+  - [ ] Errors reach Sentry and alert: the envelope with no SDK, `onRequestError`, the plan check falling back, browser crashes, `engine-unavailable`, and billing failures including `still-waiting` · AC-15 to AC-20
+  - [ ] The funnel outside the tool: `SignInDone`, `subscribe-started` and `subscription-confirmed` · AC-6, AC-14
+  - [ ] The policy, the proof and the amends: Umami and Sentry in `OUTSIDE_SERVICES`, C5 and C7 rewritten and C14 to C16 in a new section, the change entry, the privacy browser test with GPC, specs 0001 to 0012 amended, and your read of every word · AC-22, AC-23
+  - [ ] Go live (your steps, before the merge): Umami and Sentry on free plans with no card, the two values for Production only, the separate firewall rule, Sentry's alerts and key limit, Vercel's metered analytics confirmed off; then a visit and a test error seen after the deploy · AC-25
+- [ ] Verify it: `/check verify telemetry & error monitoring`
+- [ ] Test it: `/test telemetry & error monitoring`
 
 ## Release 4: First paid capability
 
@@ -414,6 +423,8 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **A date piece that starts with punctuation**: a new date a higher kind's row holds in part is listed as its free pieces, and the piece rule trims whitespace only, so `212 918 8665 1119 21. June 2014` lists `. June 2014` (pinned in `detect.test.ts`). Harmless to the bar, but the row reads oddly in the checklist and removes the full stop. Trim a date piece's leading punctuation, measured through `detect` against main first (the review's third Minor) · needs a decision · from spec 0015
 - **Date variants still missed after feature 25**: `A.D.` or `in the year` before a year, number words (`twenty-seventh day`), a day range in a new form (`3-5 Jan-2026`), a written year first date with spaces (`2026 Sep 27`), uneven spacing round a separator, an ordinal or mixed dashes in a flush form, a space before a comma, a number right before a month first date read as a two digit year (`19 December, 16 2015`), and two dates joined where one is unseparated (`20260927-20260928`, which main misses too). Bring one to `/architect` when a review or a visitor meets it, measured through `detect` against main · needs a decision · from spec 0015
 - **A natural text corpus for detector noise**: spec 0015's noise figures come from synthetic shapes and token soup; a corpus of made up but natural documents would tighten them, the two digit year and numbered list figures first · needs a decision · from spec 0015
+- **Read the first month of counts**: once feature 11 has run for a month, bring its numbers to `/architect` for spec 0006's thresholds and `off-page-picture`, spec 0005's `replacement-text` refusals and spec 0007's named refused item (*Name the item behind a refused run*, above) · needs a decision · from spec 0016
+- **Automated browsers in the counts**: if page visits look inflated, measure, then consider skipping `navigator.webdriver`, keeping the e2e flag so the privacy proof still runs · needs a decision · from spec 0016
 - **Cookie consent banner**: deliberately not built. The only cookies are the strictly necessary auth ones and analytics is cookieless, so no consent is required. Kept here so it does not get added later out of habit.
 
 ## Legend
