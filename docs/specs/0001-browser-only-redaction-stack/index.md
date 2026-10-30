@@ -33,7 +33,7 @@ Reasoning and the options weighed: see [rationale.md](rationale.md).
 | Primary database | None | Processing is local and feature 10 commits to no user table of your own. There is nothing to persist |
 | File storage | None | Documents exist only in worker memory for the life of one tab |
 | Auth | Deferred to feature 10, but the entitlement path is decided here. Feature 10 chose Clerk, loaded on the account pages only (spec 0012) | The tool route may load no third party auth script, so the pattern has to be settled now rather than discovered by feature 10 |
-| Observability | Deferred to feature 11 | Constrained here to counts only, and to routing any third party call through the application's own origin or keeping it off the tool route |
+| Observability | Spec 0016: counts to Umami, errors to Sentry, both forwarded by our own server; nothing from anyone else on `/tool` | Constrained here to counts only, and to routing any third party call through the application's own origin or keeping it off the tool route |
 | Hosting | Vercel | Chosen by the engineer, and the lowest friction path for Next.js server rendering, previews and per route headers |
 | Configuration | Build time environment variables through one typed config module validated at module load | A missing or malformed cap fails `next build` rather than silently becoming undefined and removing the cap |
 | Package manager | pnpm, Node version pinned in the repository | Strict by default, so an undeclared transitive dependency cannot be imported by accident on a product where an unnoticed dependency could be the thing that phones home |
