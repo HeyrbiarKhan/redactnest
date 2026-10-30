@@ -1,11 +1,14 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { accountSeams } from "@/billing/clients";
 import { subscribe } from "@/billing/subscribe";
 import { billing } from "@/config/billing";
 import { LEGAL } from "@/lib/legal";
+import { billingFailure } from "@/telemetry/events";
+import { reportServer } from "@/telemetry/server";
 import {
   ACCOUNT_PATH,
   PRICING_PATH,
@@ -48,6 +51,15 @@ export default async function SubscribePage() {
     successUrl: `${seams.siteUrl}${WELCOME_PATH}`,
     returnUrl: `${seams.siteUrl}${PRICING_PATH}`,
   });
+
+  // Spec 0016, AC-14 and AC-19. The outcome's kind alone reaches a report,
+  // never the outcome, so no email, id or checkout address can. Scheduled
+  // here because the redirects below end the render.
+  const requestHeaders = await headers();
+  const failure = billingFailure("subscribe", outcome.kind);
+  if (failure !== null) reportServer(failure, requestHeaders);
+  if (outcome.kind === "checkout")
+    reportServer({ name: "subscribe-started" }, requestHeaders);
 
   switch (outcome.kind) {
     case "sign-in":

@@ -9,6 +9,7 @@ import { ACCOUNT_PATH, SIGN_IN_PATH, SIGN_UP_PATH } from "@/lib/routes";
 
 import { AccountShell } from "../../account-shell";
 import { landingAfterSignIn, pagePath } from "../../landing";
+import { SignInDone } from "../../sign-in-done";
 import { SignInPanel } from "../../sign-in-panel";
 
 export const metadata: Metadata = {
@@ -44,6 +45,8 @@ export default async function SignUpPage({
     <AccountShell width="wide">
       <div className="grid w-full items-center gap-10 md:grid-cols-[minmax(0,1fr)_auto]">
         <SignInPanel />
+        {/* Counts the sign in once Clerk reports it (spec 0016, AC-14). */}
+        <SignInDone via="sign-up" />
         <SignUp
           path={SIGN_UP_PATH}
           signInUrl={SIGN_IN_PATH}

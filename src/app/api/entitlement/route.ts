@@ -9,7 +9,8 @@
  *
  *  - It accepts no document data and returns none. There is no request body, no
  *    query it reads, and nothing about the document in the answer. The only
- *    thing it reads is Clerk's sign in cookie.
+ *    thing it reads is Clerk's sign in cookie. A failure it reports (spec
+ *    0016) carries its name alone, nothing of the request.
  *  - Failure is closed, never open, and never silent. An absent, forged or
  *    stale sign in, or a check that fails, gets the free tier with the reason
  *    in `account` (spec 0012, INV-2). Nothing about a slow or broken network
@@ -21,11 +22,12 @@
  * never sets a cookie of its own (INV-5).
  */
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 import { entitlementSeams } from "@/billing/clients";
 import { resolveEntitlement } from "@/billing/entitlement";
 import { config } from "@/config";
+import { reportServer } from "@/telemetry/server";
 
 /**
  * Route handlers are not cached by default in this version of Next.js, which is
@@ -41,6 +43,13 @@ export async function GET(): Promise<Response> {
     caps: config,
     billing: entitlementSeams(),
   });
+
+  // Spec 0016, AC-16. The check failing closed is the silent failure spec
+  // 0012 worried about: a paying visitor capped with nobody told. So each
+  // `unknown` answer reports, after the answer, by name alone.
+  if (entitlement.account === "unknown") {
+    reportServer({ name: "plan-check-failed" }, await headers());
+  }
 
   return Response.json(entitlement, {
     headers: { "Cache-Control": NO_SHARED_CACHE },

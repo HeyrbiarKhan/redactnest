@@ -530,3 +530,40 @@ export function isBrowserEvent(event: TelemetryEvent): boolean {
   }
   return (BROWSER_EVENTS as readonly string[]).includes(event.name);
 }
+
+type BillingAction = (typeof BILLING_ACTIONS)[number];
+type BillingOutcome = (typeof BILLING_OUTCOMES)[number];
+
+/**
+ * Which outcome kinds are failures, for each billing action (AC-19). The rest
+ * are the seam working: Subscribe's `sign-in`, `already-pro`, `settling` and
+ * `checkout`, Manage billing's `sign-in`, `no-customer` and `portal`, and
+ * Delete account's `sign-in`, `renewing`, `other-product` and `deleted`.
+ */
+const BILLING_FAILURES: Readonly<Record<BillingAction, readonly BillingOutcome[]>> =
+  Object.freeze({
+    subscribe: Object.freeze([
+      "plan-unknown",
+      "customer-conflict",
+      "other-product",
+      "checkout-failed",
+    ] as const),
+    portal: Object.freeze(["portal-failed"] as const),
+    delete: Object.freeze(["billing-failed", "sign-in-kept"] as const),
+    welcome: Object.freeze(["still-waiting"] as const),
+  });
+
+/**
+ * The report a billing seam's outcome makes, or `null` when the seam worked
+ * (AC-19). It is handed the outcome's kind alone, never the outcome, so no
+ * email, id, address or message from a seam can reach a report.
+ */
+export function billingFailure(
+  action: BillingAction,
+  kind: string,
+): BillingFailed | null {
+  const outcome = BILLING_FAILURES[action].find((failure) => failure === kind);
+  return outcome === undefined
+    ? null
+    : Object.freeze({ name: "billing-failed", action, outcome });
+}

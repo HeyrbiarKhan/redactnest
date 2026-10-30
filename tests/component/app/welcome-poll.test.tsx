@@ -24,7 +24,11 @@ const mocks = vi.hoisted(() => ({
   visibility: "visible" as DocumentVisibilityState,
   userId: "user_aaaaaaaaaaaaaaaaaaaaaaaaaaa" as string | null,
   billingOn: true,
+  report: vi.fn(),
 }));
+
+// What the page reports (spec 0016, AC-14 and AC-19), read off the reporter.
+vi.mock("@/telemetry/client", () => ({ report: mocks.report }));
 
 vi.mock("@clerk/nextjs/server", () => ({
   auth: () => Promise.resolve({ userId: mocks.userId }),
@@ -100,6 +104,7 @@ beforeEach(() => {
   mocks.visibility = "visible";
   mocks.userId = "user_aaaaaaaaaaaaaaaaaaaaaaaaaaa";
   mocks.billingOn = true;
+  mocks.report.mockClear();
   vi.spyOn(document, "visibilityState", "get").mockImplementation(() => mocks.visibility);
   fetchMock.mockReset();
   fetchMock.mockImplementation(() => reply(FREE));
@@ -412,5 +417,34 @@ describe("the page around it", () => {
     mocks.billingOn = false;
 
     expect(await openPage()).toBeNull();
+  });
+});
+
+describe("what it reports (spec 0016, AC-14 and AC-19)", () => {
+  it("counts reaching Pro once, and nothing while confirming", async () => {
+    fetchMock
+      .mockImplementationOnce(() => reply(FREE))
+      .mockImplementation(() => reply(PRO));
+    await open();
+    expect(mocks.report).not.toHaveBeenCalled();
+
+    await elapse(POLL_MS);
+    await elapse(POLL_MS * 3);
+
+    expect(screen.getByRole("status")).toHaveTextContent(ON_PRO);
+    expect(mocks.report.mock.calls).toEqual([[{ name: "subscription-confirmed" }]]);
+  });
+
+  it("reports each round that ends without Pro, and nothing about the buyer", async () => {
+    await open();
+    await elapse(POLL_MS * ASKS_PER_ROUND);
+    expect(screen.getByRole("status")).toHaveTextContent(STILL_WAITING);
+    expect(mocks.report.mock.calls).toEqual([
+      [{ name: "billing-failed", action: "welcome", outcome: "still-waiting" }],
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await elapse(POLL_MS * ASKS_PER_ROUND);
+    expect(mocks.report).toHaveBeenCalledTimes(2);
   });
 });

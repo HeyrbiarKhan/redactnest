@@ -4,7 +4,9 @@ import { ENTITLEMENT_ACCOUNTS, type EntitlementSnapshot } from "@/worker/protoco
 
 /**
  * The route reads Clerk's cookie through `next/headers`, which needs a request
- * scope a unit test does not have. The jar here is what the route sees.
+ * scope a unit test does not have. The jar here is what the route sees. It
+ * reads the headers only to report an `unknown` answer (spec 0016, AC-16),
+ * which `telemetry-crashes.test.ts` covers.
  */
 const cookieJar = new Map<string, string>();
 vi.mock("next/headers", () => ({
@@ -15,6 +17,7 @@ vi.mock("next/headers", () => ({
         return value === undefined ? undefined : { name, value };
       },
     }),
+  headers: () => Promise.resolve(new Headers()),
 }));
 
 /**
