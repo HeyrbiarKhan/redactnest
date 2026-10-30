@@ -348,7 +348,7 @@ spec [0016](../specs/0016-telemetry-error-monitoring/index.md)
   - [x] The tool's counts reach Umami: the closed events, buckets and parser with the type gate, the config gate, `/api/telemetry` with its same origin and browser only checks, the reporter with GPC and DNT, page visits, the tool's events from session transitions, and the lint walls · AC-1 to AC-13, AC-21, AC-24
   - [x] Errors reach Sentry and alert: the envelope with no SDK, `onRequestError`, the plan check falling back, browser crashes, `engine-unavailable`, and billing failures including `still-waiting` · AC-15 to AC-20
   - [x] The funnel outside the tool: `SignInDone`, `subscribe-started` and `subscription-confirmed` · AC-6, AC-14
-  - [ ] The policy, the proof and the amends: Umami and Sentry in `OUTSIDE_SERVICES`, C5 and C7 rewritten and C14 to C16 in a new section, the change entry, the privacy browser test with GPC, specs 0001 to 0012 amended, and your read of every word · AC-22, AC-23
+  - [x] The policy, the proof and the amends: Umami and Sentry in `OUTSIDE_SERVICES`, C5 and C7 rewritten and C14 to C16 in a new section, the change entry, the privacy browser test with GPC, specs 0001 to 0012 amended, and your read of every word · AC-22, AC-23
   - [ ] Go live (your steps, before the merge): Umami and Sentry on free plans with no card, the two values for Production only, the separate firewall rule, Sentry's alerts and key limit, Vercel's metered analytics confirmed off; then a visit and a test error seen after the deploy · AC-25
 - [ ] Verify it: `/check verify telemetry & error monitoring`
 - [ ] Test it: `/test telemetry & error monitoring`

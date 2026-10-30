@@ -355,8 +355,12 @@ describe("the privacy policy's facts", () => {
     // C14
     expect(counts).toContain("by kind and in ranges");
     expect(counts).toContain("2 to 5 email addresses found");
-    expect(counts).toContain("never holds your document, its name, its words");
-    expect(counts).toContain("no id and no cookie");
+    expect(counts).toContain(
+      "never holds your document, its name, its words or the details found in it, such as the email addresses themselves",
+    );
+    expect(counts).toContain(
+      "no id and no cookie, so the counts Umami holds cannot be tied to each other or to you",
+    );
     expect(counts).toContain("Umami never receives your IP address or browser details");
     // C15
     expect(counts).toContain("our server tells Sentry what kind of failure happened");

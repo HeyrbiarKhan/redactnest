@@ -204,8 +204,9 @@ export default function PrivacyPage() {
         <p>
           We count page visits, documents opened and redacted, refusals and steps toward
           Pro, by kind and in ranges: for example, 2 to 5 email addresses found. A count
-          never holds your document, its name, its words or what was found in it. It
-          carries no id and no cookie, so no two counts can be tied together, or to you.
+          never holds your document, its name, its words or the details found in it, such
+          as the email addresses themselves. It carries no id and no cookie, so the counts
+          Umami holds cannot be tied to each other or to you.
         </p>
         <p>
           Our server passes the counts to Umami. Umami never receives your IP address or
