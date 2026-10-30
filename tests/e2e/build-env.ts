@@ -10,6 +10,14 @@ export const SOURCE_URL =
   "https://example.invalid/redactnest/tree/0123456789abcdef0123456789abcdef01234567";
 
 /**
+ * The Playwright build's browser sends its counts and failure reports, so the
+ * privacy test can read every body `/tool` posts (spec 0016, AC-5 and AC-23).
+ * No sink value is set, so `/api/telemetry` forwards nothing anywhere, and
+ * `src/config/telemetry.ts` refuses this flag on any Vercel build.
+ */
+export const TELEMETRY_ENV = Object.freeze({ NEXT_PUBLIC_TELEMETRY_E2E: "1" });
+
+/**
  * A fake but complete and consistent billing set, so the browser tests build
  * with billing on and see the real shape (spec 0012, *Decided while writing*).
  * Every value passes `src/config/billing.ts`: test Clerk keys naming a

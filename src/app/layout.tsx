@@ -9,6 +9,10 @@ import { config } from "@/config";
 // inconsistent set of billing values fails the build and every server start
 // here, and a Vercel production deploy refuses anything but live keys.
 import "@/config/billing";
+// The telemetry gate, for its checks alone (spec 0016, AC-9): one value
+// without the other, a production deploy with neither, or a preview with
+// either fails the build and every server start here.
+import "@/config/telemetry";
 import { LEGAL } from "@/lib/legal";
 import { BrandLockup } from "@/ui/brand-mark";
 import { SiteFooter } from "@/ui/site-footer";
@@ -17,6 +21,7 @@ import { SkipLink } from "@/ui/skip-link";
 import { LegalNav } from "./legal-nav";
 import { LicenceNotice } from "./licence-notice";
 import { ProductNav } from "./site-nav";
+import { TelemetryReporter } from "./telemetry-reporter";
 
 import "./globals.css";
 
@@ -49,6 +54,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col bg-canvas font-sans text-body text-ink">
         <SkipLink />
+        {/* Page views and browser crashes, from every page (spec 0016, AC-10, AC-17). */}
+        <TelemetryReporter />
         {children}
         <SiteFooter
           brand={

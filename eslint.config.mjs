@@ -504,6 +504,70 @@ const WALL_SYNTAX = [
 const BILLING_IMPORTS = [noClerkImport, noPolarImport, noBillingImport];
 const BILLING_SYNTAX = [...noClerkPolarAnywhere, ...noBillingAnywhere];
 
+const TELEMETRY_SERVER_MESSAGE =
+  "Only src/app/api/telemetry, src/app/api/entitlement, src/instrumentation.ts " +
+  "and the (account) route group may import @/telemetry/server, and only " +
+  "src/telemetry/server.ts and the root layout may import @/config/telemetry " +
+  "(spec 0016, AC-24). They hold the Umami and Sentry values and the server's " +
+  "sends, and they are server only.";
+
+const TELEMETRY_MESSAGE =
+  "src/engine, src/detect, src/worker and src/ui may not import @/telemetry " +
+  "(spec 0016, AC-24). Counts are made on the main thread, from the session's " +
+  "transitions and the kinds the protocol already carries, never inside the " +
+  "engine, the detectors, the worker or a design system primitive.";
+
+/** The server's sends, by alias and by relative path. */
+const noTelemetryServerImport = {
+  regex: String.raw`^(@/|(\.\.?/)+)telemetry/server$`,
+  message: TELEMETRY_SERVER_MESSAGE,
+};
+
+/** The two telemetry values, by alias and by relative path. */
+const noConfigTelemetryImport = {
+  regex: String.raw`^(@/|(\.\.?/)+)config/telemetry$`,
+  message: TELEMETRY_SERVER_MESSAGE,
+};
+
+/** The server's sends from beside them, for `src/telemetry`'s other files. */
+const noSiblingServerImport = {
+  regex: String.raw`^\./server$`,
+  message: TELEMETRY_SERVER_MESSAGE,
+};
+
+/** All of `@/telemetry`, for the zones that make no count at all. */
+const noTelemetryImport = {
+  regex: String.raw`^(@/|(\.\.?/)+)telemetry(/.*)?$`,
+  message: TELEMETRY_MESSAGE,
+};
+
+const telemetrySelectors = (pattern, message) => [
+  { selector: `ImportExpression > Literal[value=${pattern}]`, message },
+  { selector: `TSImportType[source.value=${pattern}]`, message },
+];
+
+/** `await import(...)` and `typeof import(...)`, `.` for the slash. */
+const noTelemetryServerAnywhere = telemetrySelectors(
+  "/^@.telemetry.server$/",
+  TELEMETRY_SERVER_MESSAGE,
+);
+const noConfigTelemetryAnywhere = telemetrySelectors(
+  "/^@.config.telemetry$/",
+  TELEMETRY_SERVER_MESSAGE,
+);
+const noTelemetryAnywhere = telemetrySelectors("/^@.telemetry/", TELEMETRY_MESSAGE);
+
+/** The telemetry walls for every zone that is not one of their homes. */
+const TELEMETRY_SERVER_IMPORTS = [noTelemetryServerImport, noConfigTelemetryImport];
+const TELEMETRY_SERVER_SYNTAX = [
+  ...noTelemetryServerAnywhere,
+  ...noConfigTelemetryAnywhere,
+];
+
+/** And for the four zones that may not count at all. */
+const NO_TELEMETRY_IMPORTS = [noTelemetryImport, noConfigTelemetryImport];
+const NO_TELEMETRY_SYNTAX = [...noTelemetryAnywhere, ...noConfigTelemetryAnywhere];
+
 /**
  * A zone's rules, from the restrictions it does not get to relax.
  *
@@ -556,9 +620,10 @@ const eslintConfig = defineConfig([
     files: [WALL],
     // Spec 0012 adds the billing walls here, so they hold in every zone of
     // `src` by default; only the zones below that are their homes relax them.
+    // Spec 0016 adds the telemetry server walls the same way (AC-24).
     rules: zone(
-      [...WALL_IMPORTS, ...BILLING_IMPORTS],
-      [...WALL_SYNTAX, ...BILLING_SYNTAX],
+      [...WALL_IMPORTS, ...BILLING_IMPORTS, ...TELEMETRY_SERVER_IMPORTS],
+      [...WALL_SYNTAX, ...BILLING_SYNTAX, ...TELEMETRY_SERVER_SYNTAX],
     ),
   },
   {
@@ -568,7 +633,13 @@ const eslintConfig = defineConfig([
     name: "redactnest/engine-wall-engine",
     files: ["src/engine/**/*.{ts,mts}"],
     rules: zone(
-      [noEngineImport, noPhoneLibraryImport, noToolClientImport, ...BILLING_IMPORTS],
+      [
+        noEngineImport,
+        noPhoneLibraryImport,
+        noToolClientImport,
+        ...BILLING_IMPORTS,
+        ...NO_TELEMETRY_IMPORTS,
+      ],
       [
         ...noEngineAnywhere,
         ...noPhoneLibraryAnywhere,
@@ -576,6 +647,7 @@ const eslintConfig = defineConfig([
         ...noToolClientAnywhere,
         ...noSearch,
         ...BILLING_SYNTAX,
+        ...NO_TELEMETRY_SYNTAX,
       ],
     ),
   },
@@ -596,6 +668,7 @@ const eslintConfig = defineConfig([
           noWorkerButProtocol,
           noToolClientImport,
           ...BILLING_IMPORTS,
+          ...NO_TELEMETRY_IMPORTS,
         ],
         [
           ...noMupdfAnywhere,
@@ -606,6 +679,7 @@ const eslintConfig = defineConfig([
           ...noToolClientAnywhere,
           ...noSearch,
           ...BILLING_SYNTAX,
+          ...NO_TELEMETRY_SYNTAX,
         ],
       ),
       "@typescript-eslint/no-restricted-imports": [
@@ -628,6 +702,17 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    // The worker and its protocol make no count (spec 0016, AC-24): the
+    // protocol stays exactly as it was, and counts come from the main thread.
+    // The two files below restate this with their own relaxations.
+    name: "redactnest/worker",
+    files: ["src/worker/**/*.{ts,mts}"],
+    rules: zone(
+      [...WALL_IMPORTS, ...BILLING_IMPORTS, ...NO_TELEMETRY_IMPORTS],
+      [...WALL_SYNTAX, ...BILLING_SYNTAX, ...NO_TELEMETRY_SYNTAX],
+    ),
+  },
+  {
     // The only importer of the walled module.
     name: "redactnest/engine-wall-worker",
     files: ["src/worker/engine.worker.ts"],
@@ -638,6 +723,7 @@ const eslintConfig = defineConfig([
         noPhoneLibraryImport,
         noToolClientImport,
         ...BILLING_IMPORTS,
+        ...NO_TELEMETRY_IMPORTS,
       ],
       [
         ...noMupdfAnywhere,
@@ -646,6 +732,7 @@ const eslintConfig = defineConfig([
         ...noNewWorker,
         ...noToolClientAnywhere,
         ...BILLING_SYNTAX,
+        ...NO_TELEMETRY_SYNTAX,
       ],
     ),
   },
@@ -654,7 +741,7 @@ const eslintConfig = defineConfig([
     name: "redactnest/engine-wall-client",
     files: ["src/worker/client.ts"],
     rules: zone(
-      [...WALL_IMPORTS, ...BILLING_IMPORTS],
+      [...WALL_IMPORTS, ...BILLING_IMPORTS, ...NO_TELEMETRY_IMPORTS],
       [
         ...noMupdfAnywhere,
         ...noEngineAnywhere,
@@ -662,6 +749,7 @@ const eslintConfig = defineConfig([
         ...noPhoneLibraryAnywhere,
         ...noToolClientAnywhere,
         ...BILLING_SYNTAX,
+        ...NO_TELEMETRY_SYNTAX,
       ],
     ),
   },
@@ -679,6 +767,7 @@ const eslintConfig = defineConfig([
         noUiDependencies,
         noToolClientImport,
         ...BILLING_IMPORTS,
+        ...NO_TELEMETRY_IMPORTS,
       ],
       [
         ...noMupdfAnywhere,
@@ -689,6 +778,7 @@ const eslintConfig = defineConfig([
         ...noInnerHtml,
         ...noToolClientAnywhere,
         ...BILLING_SYNTAX,
+        ...NO_TELEMETRY_SYNTAX,
       ],
     ),
   },
@@ -700,8 +790,12 @@ const eslintConfig = defineConfig([
     name: "redactnest/billing",
     files: ["src/billing/**/*.{ts,mts}"],
     rules: zone(
-      [...WALL_IMPORTS, noClerkBut("backend", "shared")],
-      [...WALL_SYNTAX, ...noClerkButAnywhere("backend", "shared")],
+      [...WALL_IMPORTS, noClerkBut("backend", "shared"), ...TELEMETRY_SERVER_IMPORTS],
+      [
+        ...WALL_SYNTAX,
+        ...noClerkButAnywhere("backend", "shared"),
+        ...TELEMETRY_SERVER_SYNTAX,
+      ],
     ),
   },
   {
@@ -710,30 +804,88 @@ const eslintConfig = defineConfig([
     name: "redactnest/config-billing",
     files: ["src/config/billing.ts"],
     rules: zone(
-      [...WALL_IMPORTS, noClerkBut("shared"), noPolarImport],
-      [...WALL_SYNTAX, ...noClerkButAnywhere("shared"), ...noPolarAnywhere],
+      [...WALL_IMPORTS, noClerkBut("shared"), noPolarImport, ...TELEMETRY_SERVER_IMPORTS],
+      [
+        ...WALL_SYNTAX,
+        ...noClerkButAnywhere("shared"),
+        ...noPolarAnywhere,
+        ...TELEMETRY_SERVER_SYNTAX,
+      ],
     ),
   },
   {
     // The account pages and Clerk's proxy (spec 0012, AC-9): the only home of
     // `@clerk/nextjs`, and allowed the billing modules. No Polar SDK here;
-    // they reach Polar through src/billing.
+    // they reach Polar through src/billing. Spec 0016 lets them report
+    // through `@/telemetry/server` (AC-24), never read its values.
     name: "redactnest/account",
     files: ["src/app/(account)/**/*.{ts,tsx}", "src/proxy.ts"],
     rules: zone(
-      [...WALL_IMPORTS, noClerkBut("nextjs"), noPolarImport],
-      [...WALL_SYNTAX, ...noClerkButAnywhere("nextjs"), ...noPolarAnywhere],
+      [...WALL_IMPORTS, noClerkBut("nextjs"), noPolarImport, noConfigTelemetryImport],
+      [
+        ...WALL_SYNTAX,
+        ...noClerkButAnywhere("nextjs"),
+        ...noPolarAnywhere,
+        ...noConfigTelemetryAnywhere,
+      ],
     ),
   },
   {
-    // The plan check, and the root layout that imports the billing gate for
-    // its checks (spec 0012, AC-1 and AC-23). Allowed the billing modules,
-    // never Clerk or Polar directly.
+    // The plan check (spec 0012, AC-1). Allowed the billing modules, never
+    // Clerk or Polar directly, and allowed to report `plan-check-failed`
+    // through `@/telemetry/server` (spec 0016, AC-16).
     name: "redactnest/billing-entry",
-    files: ["src/app/api/entitlement/**/*.ts", "src/app/layout.tsx"],
+    files: ["src/app/api/entitlement/**/*.ts"],
     rules: zone(
-      [...WALL_IMPORTS, noClerkImport, noPolarImport],
-      [...WALL_SYNTAX, ...noClerkPolarAnywhere],
+      [...WALL_IMPORTS, noClerkImport, noPolarImport, noConfigTelemetryImport],
+      [...WALL_SYNTAX, ...noClerkPolarAnywhere, ...noConfigTelemetryAnywhere],
+    ),
+  },
+  {
+    // The root layout imports the billing gate and the telemetry gate for
+    // their checks (spec 0012, AC-23; spec 0016, AC-9), and never the
+    // server's sends.
+    name: "redactnest/root-layout",
+    files: ["src/app/layout.tsx"],
+    rules: zone(
+      [...WALL_IMPORTS, noClerkImport, noPolarImport, noTelemetryServerImport],
+      [...WALL_SYNTAX, ...noClerkPolarAnywhere, ...noTelemetryServerAnywhere],
+    ),
+  },
+  {
+    // The route that passes pages' events on, and `onRequestError` (spec
+    // 0016, AC-7 and AC-15): allowed the server's sends, never its values.
+    name: "redactnest/telemetry-entry",
+    files: ["src/app/api/telemetry/**/*.ts", "src/instrumentation.ts"],
+    rules: zone(
+      [...WALL_IMPORTS, ...BILLING_IMPORTS, noConfigTelemetryImport],
+      [...WALL_SYNTAX, ...BILLING_SYNTAX, ...noConfigTelemetryAnywhere],
+    ),
+  },
+  {
+    // The telemetry capability (spec 0016, AC-24). Its catalog, the browser's
+    // reporter and the tool's events reach neither the server's sends nor
+    // their values, so nothing server only can slip into a page's bundle.
+    name: "redactnest/telemetry",
+    files: ["src/telemetry/**/*.{ts,mts}"],
+    rules: zone(
+      [
+        ...WALL_IMPORTS,
+        ...BILLING_IMPORTS,
+        ...TELEMETRY_SERVER_IMPORTS,
+        noSiblingServerImport,
+      ],
+      [...WALL_SYNTAX, ...BILLING_SYNTAX, ...TELEMETRY_SERVER_SYNTAX],
+    ),
+  },
+  {
+    // The server's sends, the one reader of the two values (AC-24). Last of
+    // the telemetry zones, so it replaces the ban above for this file alone.
+    name: "redactnest/telemetry-server",
+    files: ["src/telemetry/server.ts"],
+    rules: zone(
+      [...WALL_IMPORTS, ...BILLING_IMPORTS, noTelemetryServerImport],
+      [...WALL_SYNTAX, ...BILLING_SYNTAX, ...noTelemetryServerAnywhere],
     ),
   },
   {
@@ -749,6 +901,7 @@ const eslintConfig = defineConfig([
         noDetectImport,
         noPhoneLibraryImport,
         ...BILLING_IMPORTS,
+        ...TELEMETRY_SERVER_IMPORTS,
       ],
       [
         ...noMupdfAnywhere,
@@ -757,6 +910,7 @@ const eslintConfig = defineConfig([
         ...noPhoneLibraryAnywhere,
         ...noNewWorker,
         ...BILLING_SYNTAX,
+        ...TELEMETRY_SERVER_SYNTAX,
       ],
     ),
   },

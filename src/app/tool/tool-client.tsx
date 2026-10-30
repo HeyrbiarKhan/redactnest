@@ -56,6 +56,8 @@ import {
   type ToolSession,
 } from "@/lib/session";
 import { getSupport, SUPPORT_GAP_TEXT, type SupportReport } from "@/lib/support";
+import { report } from "@/telemetry/client";
+import { toolEvents } from "@/telemetry/tool";
 
 import {
   EngineError,
@@ -353,6 +355,19 @@ export function ToolClient() {
       retry: retryRef,
     };
     targets[target].current?.focus();
+  }, [session]);
+
+  /**
+   * Spec 0016, AC-11 to AC-13 and AC-18. The tool's counts come from the step
+   * change itself, keyed like the focus above, so each event fires once per
+   * change the visitor sees. Ranges and kinds only; `report` never waits and
+   * never throws, so nothing here can slow or break a step.
+   */
+  const reportedRef = useRef<ToolSession>(IDLE);
+  useEffect(() => {
+    const previous = reportedRef.current;
+    reportedRef.current = session;
+    for (const event of toolEvents(previous, session)) report(event);
   }, [session]);
 
   /**

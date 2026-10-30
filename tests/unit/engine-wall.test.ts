@@ -1004,3 +1004,147 @@ describe("Clerk's sign out components", () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * Spec 0016, AC-24. The server's sends and the two telemetry values stay
+ * with the importers *Security model* names, all of `@/telemetry` stays out
+ * of the engine, the detectors, the worker and the primitives, and the log
+ * ban holds in the telemetry folder as everywhere else (claim C8).
+ */
+describe("the telemetry walls", () => {
+  const TELEMETRY_SERVER = /may import @\/telemetry\/server/;
+  const NO_COUNTS = /may not import @\/telemetry/;
+
+  const TELEMETRY_ROUTE = "src/app/api/telemetry/route.ts";
+  const PLAN_CHECK = "src/app/api/entitlement/route.ts";
+  const INSTRUMENTATION = "src/instrumentation.ts";
+  const ACCOUNT_PAGE = "src/app/(account)/account/probe/page.tsx";
+  const ROOT_LAYOUT = "src/app/layout.tsx";
+  const TELEMETRY_MODULE = "src/telemetry/probe.ts";
+  const TELEMETRY_SERVER_FILE = "src/telemetry/server.ts";
+  const PROTOCOL = "src/worker/protocol.ts";
+
+  const importing = (specifier: string) =>
+    `import * as probe from "${specifier}";\nexport const p = probe;\n`;
+
+  const SERVER = importing("@/telemetry/server");
+  const VALUES = importing("@/config/telemetry");
+  const CLIENT_REPORT = importing("@/telemetry/client");
+  const CATALOG = importing("@/telemetry/events");
+
+  it.each([
+    ROUTE,
+    PAGE,
+    LIBRARY,
+    TOOL_PAGE,
+    ROOT_LAYOUT,
+    TELEMETRY_MODULE,
+    "src/billing/probe.ts",
+  ])("rejects the server's sends in %s", async (path) => {
+    expect(await wallErrors(path, SERVER)).toContainEqual(
+      expect.stringMatching(TELEMETRY_SERVER),
+    );
+  });
+
+  it.each([
+    ROUTE,
+    PAGE,
+    LIBRARY,
+    TOOL_PAGE,
+    TELEMETRY_ROUTE,
+    PLAN_CHECK,
+    INSTRUMENTATION,
+    ACCOUNT_PAGE,
+    TELEMETRY_MODULE,
+  ])("rejects the telemetry values in %s", async (path) => {
+    expect(await wallErrors(path, VALUES)).toContainEqual(
+      expect.stringMatching(TELEMETRY_SERVER),
+    );
+  });
+
+  it.each([TELEMETRY_ROUTE, PLAN_CHECK, INSTRUMENTATION, ACCOUNT_PAGE])(
+    "lets %s report through the server's sends",
+    async (path) => {
+      expect(await wallErrors(path, SERVER)).toEqual([]);
+    },
+  );
+
+  it("lets the root layout and the server's sends read the values", async () => {
+    expect(await wallErrors(ROOT_LAYOUT, VALUES)).toEqual([]);
+    expect(await wallErrors(TELEMETRY_SERVER_FILE, VALUES)).toEqual([]);
+  });
+
+  it("keeps the server's sends out of the rest of src/telemetry, by any path", async () => {
+    for (const code of [
+      importing("./server"),
+      importing("../telemetry/server"),
+      SERVER,
+    ]) {
+      expect(await wallErrors(TELEMETRY_MODULE, code)).toContainEqual(
+        expect.stringMatching(TELEMETRY_SERVER),
+      );
+    }
+  });
+
+  it.each([
+    [
+      "a dynamic import of the sends",
+      'export const m = await import("@/telemetry/server");\n',
+    ],
+    [
+      "a type only import of the values",
+      'export type M = typeof import("@/config/telemetry");\n',
+    ],
+    ["a relative path to the values", importing("../config/telemetry")],
+  ])("rejects %s in a shared library", async (_form, code) => {
+    expect(await wallErrors(LIBRARY, code)).toContainEqual(
+      expect.stringMatching(TELEMETRY_SERVER),
+    );
+  });
+
+  it.each([ENGINE_MODULE, DETECTOR, WORKER, CLIENT, PROTOCOL, PRIMITIVE])(
+    "keeps all of @/telemetry out of %s",
+    async (path) => {
+      for (const code of [
+        CLIENT_REPORT,
+        CATALOG,
+        'export type M = typeof import("@/telemetry/events");\n',
+        'export const m = await import("@/telemetry/client");\n',
+      ]) {
+        expect(await wallErrors(path, code)).toContainEqual(
+          expect.stringMatching(NO_COUNTS),
+        );
+      }
+    },
+  );
+
+  it.each([PAGE, LIBRARY, "src/app/tool/tool-client.tsx", TELEMETRY_MODULE])(
+    "lets %s report from the browser and read the catalog",
+    async (path) => {
+      expect(await wallErrors(path, CLIENT_REPORT)).toEqual([]);
+      expect(await wallErrors(path, CATALOG)).toEqual([]);
+    },
+  );
+
+  it.each([TELEMETRY_MODULE, TELEMETRY_SERVER_FILE, TELEMETRY_ROUTE, INSTRUMENTATION])(
+    "keeps the log ban, the billing walls and the engine wall in %s",
+    async (path) => {
+      expect(
+        await wallErrors(path, 'export const log = () => console.log("x");\n'),
+      ).toContainEqual(expect.stringMatching(CONSOLE));
+      expect(await wallErrors(path, importing("@/billing/plan"))).toContainEqual(
+        expect.stringMatching(/may import @\/billing or @\/config\/billing/),
+      );
+      expect(await wallErrors(path, IMPORTS_ENGINE)).toContainEqual(
+        expect.stringMatching(ENGINE),
+      );
+    },
+  );
+
+  it("keeps the billing modules and Clerk out of the root layout's new zone as before", async () => {
+    expect(await wallErrors(ROOT_LAYOUT, importing("@/config/billing"))).toEqual([]);
+    expect(await wallErrors(ROOT_LAYOUT, importing("@clerk/nextjs"))).toContainEqual(
+      expect.stringMatching(/Clerk and Polar stay behind their walls/),
+    );
+  });
+});

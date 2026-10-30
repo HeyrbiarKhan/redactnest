@@ -1,7 +1,7 @@
 # 0016. Telemetry and error monitoring
 
 **Date**: 2026-10-30
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 

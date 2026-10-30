@@ -45,3 +45,10 @@ export const ACCOUNT_PATH = "/account";
 export const SUBSCRIBE_PATH = "/account/subscribe";
 export const BILLING_PATH = "/account/billing";
 export const WELCOME_PATH = "/account/welcome";
+
+/**
+ * Where every page posts its counts and failure reports (spec 0016, AC-4).
+ * Our own origin, so `/tool`'s `connect-src 'self'` already allows it, and the
+ * route passes each event on server to server.
+ */
+export const TELEMETRY_PATH = "/api/telemetry";

@@ -41,6 +41,12 @@ const RAW = {
   NEXT_PUBLIC_VERCEL_GIT_REPO_OWNER: process.env.NEXT_PUBLIC_VERCEL_GIT_REPO_OWNER,
   NEXT_PUBLIC_VERCEL_GIT_REPO_SLUG: process.env.NEXT_PUBLIC_VERCEL_GIT_REPO_SLUG,
   NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA,
+  // Which kind of Vercel deploy this is, as the browser sees it (spec 0016,
+  // AC-5): the same value as `VERCEL_ENV`, under the prefix that inlines it.
+  NEXT_PUBLIC_VERCEL_ENV: process.env.NEXT_PUBLIC_VERCEL_ENV,
+  // `1` only in the Playwright build, so the privacy test can read what the
+  // browser sends (spec 0016). `src/config/telemetry.ts` refuses it on Vercel.
+  NEXT_PUBLIC_TELEMETRY_E2E: process.env.NEXT_PUBLIC_TELEMETRY_E2E,
   VERCEL: process.env.VERCEL,
   // Which kind of Vercel deploy this is (spec 0011, AC-16 and AC-17). The
   // browser never sees it, so the production rules below run only at build and
@@ -328,6 +334,16 @@ export const config = Object.freeze({
    * agree with it is `src/config/billing.ts`'s check. Spec 0012, AC-23.
    */
   billingEnabled: present(RAW.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) !== undefined,
+  /**
+   * Whether pages send their counts and failure reports to `/api/telemetry`:
+   * on a Vercel production build, and on the Playwright build so the privacy
+   * test can read what is sent. Previews, `next dev` and every other build
+   * send nothing. Whether the server passes anything on is a separate check,
+   * `src/config/telemetry.ts`'s. Spec 0016, AC-5 and INV-8.
+   */
+  telemetryReporting:
+    present(RAW.NEXT_PUBLIC_VERCEL_ENV) === "production" ||
+    present(RAW.NEXT_PUBLIC_TELEMETRY_E2E) === "1",
 });
 
 // Last, so a cap or a source link that is wrong is still reported the way it
