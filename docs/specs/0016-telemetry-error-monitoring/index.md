@@ -2,6 +2,7 @@
 
 **Date**: 2026-10-30
 **Status**: In Progress
+**Updated**: 2026-11-02, after the verify walk found `sign-in-completed` never sent (sign in and sign up both, Clerk development instance). Clerk reports signed in only after its client side move to Account, when `SignInDone` has already unmounted, and on the Get Pro path the page leaves for Polar's checkout before Clerk would report at all. The event and `SignInDone` are removed, leaving twelve events, and the funnel's sign in step is read from Clerk's dashboard, which counts every sign in and sign up on Clerk's side (AC-14, task 18, Go live step 8; `rationale.md`, *Counting a finished sign in*). No word of the privacy policy changes: "steps toward Pro" stays true through `subscribe-started` and `subscription-confirmed`.
 
 ## Summary
 
@@ -30,12 +31,12 @@ Applied in place by the build (task 17).
 - As a visitor, I want the site to send only counts that cannot be tied to me, and no counts at all when my browser asks for that, so that the privacy policy holds as written.
 
 **Acceptance criteria**:
-- **AC-1**: `TelemetryEvent` in `src/telemetry/events.ts` is a union of exactly the thirteen events in *Data model sketch*. Every field is a closed kind from `src/worker/protocol.ts`, a closed list in `src/telemetry/events.ts`, or a `Bucket`, and no field holds a raw number. The gate in `tests/unit/loggable.test.ts` checks `LoggablePayload | TelemetryEvent`, so `pnpm typecheck` fails if any event gains a free string. `src/worker/protocol.ts` is unchanged, because the worker zone may not import `@/telemetry` (AC-24).
+- **AC-1**: `TelemetryEvent` in `src/telemetry/events.ts` is a union of exactly the twelve events in *Data model sketch*. Every field is a closed kind from `src/worker/protocol.ts`, a closed list in `src/telemetry/events.ts`, or a `Bucket`, and no field holds a raw number. The gate in `tests/unit/loggable.test.ts` checks `LoggablePayload | TelemetryEvent`, so `pnpm typecheck` fails if any event gains a free string. `src/worker/protocol.ts` is unchanged, because the worker zone may not import `@/telemetry` (AC-24).
 - **AC-2**: `bucket(n)` returns `"0"` for 0, `"1"` for 1, `"2-5"`, `"6-20"`, `"21-50"`, and `"51+"` for anything above 50. A map by kind (`bucketsByKind`) leaves out every kind whose count is 0 or absent, so `"0"` appears only where a field is a single count.
-- **AC-3**: `parseTelemetryEvent(value: unknown)` returns a `TelemetryEvent` only when the name is one of the thirteen and every key and value is one that event allows. Anything else returns `null`: an unknown key, a value outside its list, a number, an object where a kind belongs, a repeated item in `stripped`. The reporter and the parser read the same lists, so they cannot disagree.
+- **AC-3**: `parseTelemetryEvent(value: unknown)` returns a `TelemetryEvent` only when the name is one of the twelve and every key and value is one that event allows. Anything else returns `null`: an unknown key, a value outside its list, a number, an object where a kind belongs, a repeated item in `stripped`. The reporter and the parser read the same lists, so they cannot disagree.
 - **AC-4**: `report(event)` in `src/telemetry/client.ts` sends one event as JSON in a `POST` to `TELEMETRY_PATH` (`/api/telemetry`, in `src/lib/routes.ts`) with `keepalive: true`, `credentials: "omit"` and `cache: "no-store"`. It returns nothing, is never awaited, swallows every failure, never retries and keeps no queue, so nothing the visitor does waits on it or changes when it fails.
 - **AC-5**: The reporter sends only when `config.telemetryReporting` is true: `NEXT_PUBLIC_VERCEL_ENV === "production" || NEXT_PUBLIC_TELEMETRY_E2E === "1"`, both read literally in `RAW` in `src/config/index.ts` (`NEXT_PUBLIC_VERCEL_ENV` is added there; only `VERCEL_ENV` is read today). That is a Vercel production build or the Playwright build. Previews, `next dev` and every other build send nothing.
-- **AC-6**: In a browser where `navigator.globalPrivacyControl` is `true` or `navigator.doNotTrack` is `"1"`, no usage event is sent (the eight in *Usage events*); error reports still go. On the server, no usage event is sent for a request carrying `Sec-GPC: 1` or `DNT: 1`.
+- **AC-6**: In a browser where `navigator.globalPrivacyControl` is `true` or `navigator.doNotTrack` is `"1"`, no usage event is sent (the seven in *Usage events*); error reports still go. On the server, no usage event is sent for a request carrying `Sec-GPC: 1` or `DNT: 1`.
 - **AC-7**: `POST /api/telemetry` reads no cookie and sets none. It answers `413` without reading the body when `Content-Length` is over 2048, and stops reading a body that runs past 2048 bytes without one, dropping it with a `204`. Every other request it answers `204` with no body and `Cache-Control: no-store`, forwarding the event only when (a) `Sec-Fetch-Site` is `same-origin`, or that header is absent and `Origin` equals `config.siteUrl`'s origin, (b) `parseTelemetryEvent` accepts it and `isBrowserEvent` does too (`BROWSER_EVENTS`, *Data model sketch*), so a script can't post a server only event such as `server-crash` or `plan-check-failed`, and (c) sinks are configured. Otherwise the event is dropped with the same `204`.
 - **AC-8**: An accepted event is forwarded after the answer, inside `after()` (`onRequestError` has no answer to wait for, so it calls `forward` directly and awaits it, as Next.js's docs require): a usage event to Umami's send endpoint, an error event to Sentry's envelope endpoint, each with a 3 second timeout, every failure swallowed and never retried. The outbound request holds only what *Value sourcing* names for that sink and a fixed `User-Agent`. It never holds the visitor's IP address, `User-Agent`, cookie, referrer or any other header of the incoming request.
 - **AC-9**: `UMAMI_WEBSITE_ID` and `SENTRY_DSN` are both set or both absent. Each of these fails the build, with every problem in one error as the launch gate does: a build with one value; a Vercel production build with neither; a Vercel build that is not production with either; a Vercel build with `NEXT_PUBLIC_TELEMETRY_E2E` set; a website id that is not a UUID; a DSN that is not `https://<key>@<host>/<project>` on a host ending `.sentry.io`. Off Vercel, sinks are never configured.
@@ -43,7 +44,7 @@ Applied in place by the build (task 17).
 - **AC-11**: The tool's events come from session transitions: an effect in `tool-client.tsx` compares the previous session with the next. When an open succeeds (the session leaves `opening` for `reviewing`), the tool sends `document-opened` once: `pages` from `summary.pageCount`, `found` and `blocked` from `detectionCounts`, `pagesWith` from `countPagesByFinding(summary.pages)`, and `tier` and `account` from the job's frozen entitlement.
 - **AC-12**: When a run completes (the session leaves `redacting` for `complete`), the tool sends `redaction-completed` once, built from `resultCounts` (`removed`, `unticked`, `blockedByKind`, `blockedByReason`, `stripped`) with `tier` and `account`. A rerun sends again.
 - **AC-13**: The tool sends `run-refused` when an open fails (`opening` to `failed`, the kind from the new `failure`), when a run is refused (`redacting` back to `reviewing` with a new `runFailure`, which is its kind), and when the session reaches `lost` (kind `engine-unavailable`). `step` is `redact` when the previous state was `redacting`, and `open` otherwise. A free tier `too-many-pages` or `too-large` sends `cap-reached` instead (`cap` is `pages` or `size`, with `account`), so one refusal is one event. A cancel sends nothing. Neither does the silent retry while the engine was still loading (spec 0002, AC-11a): its `worker-lost` and `retry` land in one render, so the session never shows `lost`.
-- **AC-14**: `sign-in-completed` is sent by `SignInDone` (`src/app/(account)/sign-in-done.tsx`), a small client component the sign in and sign up pages each render with its `via` prop, when Clerk's `useAuth().isSignedIn` turns true while it is mounted. If the sandbox walk shows Clerk's redirect drops the event, that is recorded here as a known miss and brought back to `/architect`, rather than adding state to the address. `subscribe-started` is sent by the server when Subscribe's outcome is `checkout`, scheduled before the redirect. `subscription-confirmed` is sent when `WelcomePoll` first reaches `pro`, once per page load.
+- **AC-14**: `subscribe-started` is sent by the server when Subscribe's outcome is `checkout`, scheduled before the redirect. `subscription-confirmed` is sent when `WelcomePoll` first reaches `pro`, once per page load. Nothing we send counts a finished sign in or sign up: the funnel's sign in step is read from Clerk's dashboard, which counts each one on Clerk's side, the Get Pro path included (Go live step 8). There is no `sign-in-completed` event and no `SignInDone`, so the sign in and sign up pages render our panel and Clerk's card only (`tests/unit/billing-landing.test.ts`), and the only telemetry they post is AC-10's `page-view`.
 - **AC-15**: `onRequestError` in `src/instrumentation.ts` reports `server-crash` with `route` (`context.routePath` mapped through `ROUTE_KINDS`, or `other`) and `routeType`, and reads nothing else from the error or the request.
 - **AC-16**: `/api/entitlement` reports `plan-check-failed`, after its answer, each time it answers `account: "unknown"`.
 - **AC-17**: The root layout reporter listens for `error` and `unhandledrejection` on `window`. An `error` event whose `filename` is on the page's own origin sends `browser-crash` with the page kind and `kind: "error"`; every `unhandledrejection` sends it with `kind: "rejection"`; an `error` from another origin (a browser extension) sends nothing. The message, filename, line and stack are read only for that origin test and never sent.
@@ -54,7 +55,7 @@ Applied in place by the build (task 17).
 - **AC-22**: The privacy policy changes as *Policy claims* says. `src/lib/policy-sections.ts` gains the h2 "Counts and error reports" after "What we receive when you visit". `OUTSIDE_SERVICES` gains Umami and Sentry with no origin, every fact read from each service's own pages on the day. `src/lib/policy-changes.ts` gains an entry at the top dated the day it ships. Both content security policies stay byte for byte as they are today.
 - **AC-23**: `tests/e2e/privacy.spec.ts` shows, on a real open and run, that `/tool` asks its own server only for the entitlement and posts only to `/api/telemetry`. Every telemetry body parses with `parseTelemetryEvent` and holds neither the file's name, nor any text of the document, nor any match. No telemetry request carries a `Cookie` header. With GPC on, no usage event is posted.
 - **AC-24**: `src/telemetry/server.ts` and `src/config/telemetry.ts` import `server-only`, and the two values are read only in `src/config/telemetry.ts`. Lint lets only the importers *Security model* names reach `@/telemetry/server` or `@/config/telemetry`, and keeps all of `@/telemetry` out of `src/engine`, `src/detect`, `src/worker` and `src/ui`. The console ban stays whole in every zone (spec 0011, AC-15), so claim C8 stays true.
-- **AC-25**: Before the merge that ships this, *Go live* steps 1 to 6 are done: the Umami website and the Sentry project exist, the two values are set for Production only, the separate firewall rule is in place, Sentry's alert rules, key limit and IP setting are set, and Vercel's metered analytics are confirmed off. After the deploy, step 7's visit and test error each arrive.
+- **AC-25**: Before the merge that ships this, *Go live* steps 1 to 6 are done: the Umami website and the Sentry project exist, the two values are set for Production only, the separate firewall rule is in place, Sentry's alert rules, key limit and IP setting are set, and Vercel's metered analytics are confirmed off. After the deploy, step 7's visit and test error each arrive. Step 8's read of what Clerk's dashboard shows is recorded in `rationale.md`, before or after the merge.
 
 ## Decision
 
@@ -62,7 +63,7 @@ Applied in place by the build (task 17).
 
 Every page reports closed events to `/api/telemetry`. The route checks and forwards them server to server, so no outside script, cookie or origin reaches any page. Options and reasoning: [rationale.md](rationale.md).
 
-Decisions made in the design (each with its runner up in [rationale.md](rationale.md), *Small choices*): no SDK for either service; forward inside `after()`; `204` for every read body; `cap-reached` instead of `run-refused`; `still-waiting` as a billing failure; `sign-in-completed` on Clerk's signed in transition; the console ban not lifted; an e2e build flag for the browser proof; a new capability folder `src/telemetry`; no bot filter.
+Decisions made in the design (each with its runner up in [rationale.md](rationale.md), *Small choices*): no SDK for either service; forward inside `after()`; `204` for every read body; `cap-reached` instead of `run-refused`; `still-waiting` as a billing failure; no count of a finished sign in, because Clerk's dashboard holds that step (decided 2026-11-02, after the verify walk); the console ban not lifted; an e2e build flag for the browser proof; a new capability folder `src/telemetry`; no bot filter.
 
 ## Rationale
 
@@ -83,9 +84,10 @@ Reasoning, options and costs: see [rationale.md](rationale.md).
 | `redaction-completed` | `/tool` | `removed`, `unticked`, `blockedByKind: Partial<Record<DetectorKind, Bucket>>`, `blockedByReason: Partial<Record<BlockedReason, Bucket>>`, `stripped: readonly SanitizedKind[]` (no repeats), `tier`, `account` |
 | `run-refused` | `/tool` | `kind: EngineErrorKind`, `step: "open" \| "redact"`, `tier`, `account` |
 | `cap-reached` | `/tool` | `cap: "pages" \| "size"`, `account` |
-| `sign-in-completed` | browser, `SignInDone` | `via: "sign-in" \| "sign-up"` |
 | `subscribe-started` | server, Subscribe | none |
 | `subscription-confirmed` | browser, `WelcomePoll` | none |
+
+No event counts a finished sign in or sign up (AC-14). That step of the funnel is read from Clerk's dashboard, beside Umami's `page-view`s of `sign-in` and `sign-up`.
 
 *Error reports* (to Sentry; always sent):
 
@@ -99,13 +101,13 @@ Reasoning, options and costs: see [rationale.md](rationale.md).
 
 `RouteKind` = `home | tool | pricing | privacy | terms | not-found | entitlement | telemetry | account | subscribe | billing | welcome | sign-in | sign-up | proxy | other`. `ROUTE_KINDS` maps each route file's `routePath`, as Next.js 16 reports it, to a kind. The build reads the real strings by throwing once in each route locally and records them in the map's comment; `routeType: "proxy"` maps to `proxy` whatever the path.
 
-`BROWSER_EVENTS`, the only events `/api/telemetry` forwards (AC-7): `page-view`, `document-opened`, `redaction-completed`, `run-refused`, `cap-reached`, `sign-in-completed`, `subscription-confirmed`, `browser-crash`, `engine-unavailable`, and `billing-failed` only with `action: "welcome"` and `outcome: "still-waiting"`. Everything else (`subscribe-started`, `server-crash`, `plan-check-failed` and the server's `billing-failed`) is sent by server code alone.
+`BROWSER_EVENTS`, the only events `/api/telemetry` forwards (AC-7): `page-view`, `document-opened`, `redaction-completed`, `run-refused`, `cap-reached`, `subscription-confirmed`, `browser-crash`, `engine-unavailable`, and `billing-failed` only with `action: "welcome"` and `outcome: "still-waiting"`. Everything else (`subscribe-started`, `server-crash`, `plan-check-failed` and the server's `billing-failed`) is sent by server code alone.
 
 Relationships: none, on purpose. No id, no session, no timestamp from the browser, no join key: the funnel is read from totals. Sentry's `event_id` is made fresh on the server for each report and links nothing.
 
 Split, only if Umami's property limit is below `redaction-completed`'s worst case (38 properties: 7 removed, 7 unticked and 7 blocked detector kinds, 4 blocked reasons, 11 stripped kinds, plus `tier` and `account`): it becomes `redaction-completed` (`removed`, `stripped`, `tier`, `account`) and `redaction-left` (`unticked`, `blockedByKind`, `blockedByReason`), both sent at the same moment.
 
-**State transitions**: none of its own. Events fire on transitions that already exist: the session leaving `opening` or `redacting`, or reaching `lost` (AC-11 to AC-13); Clerk's signed in flag turning true under `SignInDone`; `WelcomePoll`'s phase reaching `pro` or `still-waiting`; Subscribe's, Manage billing's and Delete account's outcome kinds; `/api/entitlement`'s `unknown` answer; a server request erroring.
+**State transitions**: none of its own. Events fire on transitions that already exist: the session leaving `opening` or `redacting`, or reaching `lost` (AC-11 to AC-13); `WelcomePoll`'s phase reaching `pro` or `still-waiting`; Subscribe's, Manage billing's and Delete account's outcome kinds; `/api/entitlement`'s `unknown` answer; a server request erroring.
 
 **API surface**:
 
@@ -131,13 +133,12 @@ The exact Umami endpoint (the region chosen at sign up) and the `User-Agent` it 
 | `redaction-completed` | `removed`, `unticked`, `blockedByKind`, `blockedByReason`, `stripped` | `resultCounts(...)` (spec 0007): `removedByType`, `untickedByType`, `blockedByType`, `blockedByReason`, `sanitized` |
 | `run-refused` | `kind`, `step` | the next session's new `failure` (an open) or `runFailure` (a run), or `engine-unavailable` on reaching `lost`; `step` from the previous session's state (`redacting` is `redact`, anything else `open`) |
 | `cap-reached` | `cap` | `too-many-pages` is `pages`, `too-large` is `size`, only when the snapshot's tier is `free` |
-| `sign-in-completed` | `via` | the `via` prop the sign in page (`"sign-in"`) or sign up page (`"sign-up"`) passes to `SignInDone` |
 | `server-crash` | `route`, `routeType` | `context.routePath` through `ROUTE_KINDS`; `context.routeType` |
 | `billing-failed` | `action`, `outcome` | the page or action that ran (Subscribe's page, Manage billing's page, `deleteAccountAction`), and its outcome `kind` (`src/billing/subscribe.ts`, `portal.ts`, `delete.ts`), or `WelcomePoll`'s `still-waiting` phase |
 | server usage events | GPC or DNT | the request's `Sec-GPC` and `DNT` headers, through `headers()` |
 | Umami | `website` | `UMAMI_WEBSITE_ID` |
 | Umami | `hostname` | the host of `config.siteUrl` |
-| Umami | `url` | the page path for `page-view` (`TOOL_PATH` and the rest from `src/lib/routes.ts`, `/404` for `not-found`); for other events, the path of the page that sent it (`TOOL_PATH` for tool events, `SIGN_IN_PATH` or `SIGN_UP_PATH`, `SUBSCRIBE_PATH`, `WELCOME_PATH`) |
+| Umami | `url` | the page path for `page-view` (`TOOL_PATH` and the rest from `src/lib/routes.ts`, `/404` for `not-found`); for other events, the path of the page that sent it (`TOOL_PATH` for tool events, `SUBSCRIBE_PATH`, `WELCOME_PATH`) |
 | Sentry | the ingest address, project and key | parsed from `SENTRY_DSN` |
 | Sentry | `release` | `NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA`, the commit `config.sourceUrl` is built from |
 | Sentry | `event_id`, `timestamp` | `crypto.randomUUID()` without dashes, and the server clock, at forward time |
@@ -183,10 +184,11 @@ The exact Umami endpoint (the region chosen at sign up) and the `User-Agent` it 
 - Gate: one value set, production with none, preview with one, the e2e flag on Vercel, a bad UUID and a non Sentry DSN each fail with one listed problem, verifies **AC-9**.
 - Cap: a free visitor opening a 4 page fixture sends one `cap-reached` and no `run-refused`; a paid visitor over the paid cap sends `run-refused`, verifies **AC-13**.
 - Crashes: an `error` event from our origin sends `browser-crash`; one with an extension's `chrome-extension://` filename sends nothing; a thrown route handler sends `server-crash` with its kind and nothing from the message, verifies **AC-15**, **AC-17**.
+- Sign in: the catalog holds twelve events with no `sign-in-completed`; the sign in and sign up pages render the panel and Clerk's card only; on the walk, signing in and signing up post only `page-view`s, verifies **AC-1**, **AC-14**.
 
 ## Build plan
 
-Skateboard: slice 1 is the thinnest whole that works (the tool's counts reach Umami through the route, gated and walled). Slices 2 and 3 grow it, and slice 4 makes it publishable. All four ship in one merge, because the policy must change in the same change as the first production event. *Go live* comes before the merge, because the gate fails a production build without the values.
+Skateboard: slice 1 is the thinnest whole that works (the tool's counts reach Umami through the route, gated and walled). Slices 2 and 3 grow it, slice 4 makes it publishable, and slice 5 takes out the sign in count the verify walk showed can never be sent. All five ship in one merge, because the policy must change in the same change as the first production event. *Go live* comes before the merge, because the gate fails a production build without the values.
 
 *Slice 1: the tool's counts reach Umami*
 1. `src/telemetry/events.ts`: the catalog as frozen lists, `TelemetryEvent`, `Bucket`, `bucket`, `bucketsByKind`, `PageKind`, `pageKindFor`, `parseTelemetryEvent`, `BROWSER_EVENTS` and `isBrowserEvent`; `TelemetryEvent` added to the gate in `tests/unit/loggable.test.ts` (never to `src/worker/protocol.ts`); unit tests for the bucket edges (0, 1, 2, 5, 6, 20, 21, 50, 51), `pageKindFor` and every parser refusal, satisfies **AC-1**, **AC-2**, **AC-3**, **AC-10**.
@@ -205,7 +207,7 @@ Skateboard: slice 1 is the thinnest whole that works (the tool's counts reach Um
 12. `billing-failed` from Subscribe's page, Manage billing's page and `deleteAccountAction` (server, passing only the outcome `kind`) and from `WelcomePoll`'s `still-waiting` (browser); tests that no seam argument reaches a report, satisfies **AC-19**.
 
 *Slice 3: the funnel outside the tool*
-13. `SignInDone` (`src/app/(account)/sign-in-done.tsx`, a client component) rendered by the sign in and sign up pages with `via`, sending `sign-in-completed` when `useAuth().isSignedIn` turns true, and checked on the sandbox walk; `subscribe-started` in Subscribe's `checkout` case through `reportServer`, with the GPC header test; `subscription-confirmed` in `WelcomePoll` on reaching `pro`, satisfies **AC-6**, **AC-14**.
+13. `subscribe-started` in Subscribe's `checkout` case through `reportServer`, with the GPC header test; `subscription-confirmed` in `WelcomePoll` on reaching `pro`, satisfies **AC-6**, **AC-14**. (Built first with `SignInDone` as well, which task 18 removes.)
 
 *Slice 4: the policy, the proof and the amends*
 14. Umami and Sentry entries in `OUTSIDE_SERVICES` (no origins), every fact read from each service's privacy policy, DPA and retention docs on the day and commented with that date, as the Polar entry is; `csp.test.ts` proves both policies unchanged, satisfies **AC-22**.
@@ -213,9 +215,12 @@ Skateboard: slice 1 is the thinnest whole that works (the tool's counts reach Um
 16. `tests/e2e/privacy.spec.ts`: the tool's request test rewritten to allow `/api/telemetry` and check every body, plus a GPC case (an init script setting `navigator.globalPrivacyControl` and the `Sec-GPC` header), satisfies **AC-23**.
 17. Specs 0001, 0002, 0004, 0005, 0006, 0007, 0011 and 0012 amended as *Amends* says; your read of every word of the policy change before merge, satisfies **AC-22**.
 
+*Slice 5: the sign in count comes out (after the verify walk, 2026-11-02)*
+18. Remove `sign-in-completed` whole. Delete `src/app/(account)/sign-in-done.tsx` and `tests/component/app/sign-in-done.test.tsx`; take `SignInDone` and its comment off the sign in and sign up pages, and out of `tests/unit/billing-landing.test.ts`'s order, which goes back to the panel then Clerk's card. In `src/telemetry/events.ts`, remove `SIGN_IN_VIAS`, `SignInCompleted`, and the event from `TelemetryEvent`, `USAGE_EVENTS`, `EVENT_FIELDS` and `BROWSER_EVENTS`; in `src/telemetry/server.ts`, its case in `umamiUrl` (and the `SIGN_IN_PATH` and `SIGN_UP_PATH` imports if nothing else uses them); in `tests/unit/telemetry-server.test.ts`, its two `urlOf` lines. Every "thirteen" about the catalog in code and tests becomes "twelve" (the comment above the event types, and the `toHaveLength(13)` test). No policy word, change entry or claim changes. Satisfies **AC-1**, **AC-3**, **AC-14**.
+
 ## Go live
 
-Your steps, before the merge (steps 1 to 6) and after the deploy (step 7). Satisfies **AC-25**.
+Your steps, before the merge (steps 1 to 6), after the deploy (step 7), and at any time (step 8). Satisfies **AC-25**.
 
 1. Umami Cloud: a free Hobby account with no card, in the EU region if offered; one website for `redactnest.com`. Record its retention and region in the Umami entry (task 14).
 2. Sentry: a free Developer organisation with no card, in the EU data region if offered (it is chosen at creation and cannot move); one project. Record the error quota you see (sources disagree on 5K and 50K) and the retention in `rationale.md` and the Sentry entry.
@@ -224,17 +229,19 @@ Your steps, before the merge (steps 1 to 6) and after the deploy (step 7). Satis
 5. Vercel firewall: a second, separate rate limit rule for `/api/telemetry` only, about 30 a minute per IP, action deny with a 429, never a challenge (spec 0012, INV-12). `/api/entitlement`'s rule stays as it is. Check it: past the limit from one address, the route answers 429 with no `Set-Cookie` and no challenge page.
 6. Vercel: confirm Observability Plus, Web Analytics, Speed Insights and drains are off (spec 0011, INV-9). Observability Plus is on by default for Pro teams created or upgraded from 3 April 2026, and it bills $1.20 per million events from the same budget.
 7. After the deploy: visit the home page and see the visit in Umami. Trigger one error with a request that makes the route fail, or the plan check fall back with a revoked token on a test account, and see the email arrive.
+8. Clerk: open the dashboard for the production instance and note what it counts by day: new accounts (sign ups) at least, and sign ins if it shows them. Record what you see, and the date, in `rationale.md`, *Counting a finished sign in*. If it shows neither, bring AC-14 back to `/architect` (Follow-up). Reading it creates nothing and needs no test account. Satisfies **AC-14**.
 
 ## Consequences
 
 **Positive**:
-- The funnel is visible end to end (visit, open, complete, cap, sign in, subscribe, confirmed), and the silent failures spec 0012 worried about (the plan check, a paid checkout without Pro) now email you.
+- The funnel is visible end to end: visit, open, complete, cap, subscribe and confirmed in Umami, with sign ups and sign ins from Clerk's dashboard, which counts every one exactly. The silent failures spec 0012 worried about (the plan check, a paid checkout without Pro) now email you.
 - Specs 0004 to 0007 get the refusal and finding counts their Follow-ups wait on.
 - The privacy story stays structural: closed types and a parser, not a scrubber. There is nothing to scrub because there is nowhere to put anything (spec 0002).
 - $0 a month in services, and no path from a flood of events to the budget that pauses the site.
 
 **Negative / tradeoffs**:
 - No per visitor funnel: conversion is read from totals, so a visitor who opens three documents and one who opens one look the same.
+- The sign in step lives in Clerk's dashboard, not Umami, so the funnel is read across two dashboards, as daily totals, and each may draw its day on a different clock. What Clerk shows is Clerk's to change (Go live step 8 records it).
 - Debugging is slower: a report says only kind and where. The stack is in Vercel's runtime logs, which Next.js writes and Vercel keeps for one day.
 - Two more outside services in the policy, and in feature 17's DPA, each with free terms that can change. A change to billing would break INV-9 and must come back here.
 - History is short: Umami's free plan keeps 6 months, Sentry's 30 days.
@@ -256,3 +263,4 @@ Your steps, before the merge (steps 1 to 6) and after the deploy (step 7). Satis
 - [ ] Feature 17 (DPA) lists Umami and Sentry; feature 16 (security page) explains what the counts hold, linking claims C14 to C16 rather than restating them.
 - [ ] `/sync`: the scope's feature 11 "Also owed" line about lifting the console ban, `AGENTS.md`'s capability folders and its telemetry wall rule.
 - [ ] Revisit if either free plan starts to bill, drops its quota below the month's volume, or changes what it records about a sender.
+- [ ] If Clerk's dashboard stops showing sign ups by day, or you want the sign in step in Umami, bring AC-14 back to `/architect`. The runner up, a watcher in the `(account)` group layout, counts only sign ins that land on Account and never the Get Pro path (`rationale.md`, *Counting a finished sign in*).

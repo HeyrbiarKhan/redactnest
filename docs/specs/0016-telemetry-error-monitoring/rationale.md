@@ -96,7 +96,7 @@ Each made in the design, with its runner up:
 - **`204` for every body the route reads**, whether valid, invalid, cross site or with no sinks. Runner up: `400` for invalid, which tells a prober what the parser accepts and helps nobody, since the reporter ignores the answer. `413` stays because it's decided before reading.
 - **`cap-reached` replaces `run-refused`** for a free tier cap refusal, so one refusal is one event and the paywall step reads on its own. Runner up: sending both, which double counts refusals.
 - **`still-waiting` is a `billing-failed` report** (it alerts). It means a paid checkout that hasn't become Pro after about 30 seconds, which is a support case. Runner up: a usage count, which nobody would see in time.
-- **`sign-in-completed` fires on Clerk's signed in transition**, in `SignInDone`, a client component each sign in page renders beside the server side panel. Runner up: counting arrival at the landing page, which would also count reloads and direct visits.
+- **No count of a finished sign in** (decided 2026-11-02, after the verify walk). Clerk's dashboard holds that step; see *Counting a finished sign in* below. Runner up: a watcher in the `(account)` group layout, which counts only sign ins that land on Account. First designed as `sign-in-completed`, sent by `SignInDone` on Clerk's signed in transition, which the walk showed never fires.
 - **`subscription-confirmed` comes from the browser**, because the welcome page's check runs in `WelcomePoll` and no server point knows when Pro appears.
 - **The console ban stays whole.** The scope expected a narrow lift for "its one reporter", but no reporter here writes a log, so C8 stays true unchanged. Runner up: the scope's log line reporter, which needs a drain that bills.
 - **`NEXT_PUBLIC_TELEMETRY_E2E` for the browser proof.** C5 changes, and spec 0011 holds C5 with a browser test, so the proof stays in a browser. Runner up: unit tests only, which can't show what the real page sends. A Vercel build refuses the flag.
@@ -108,6 +108,29 @@ Each made in the design, with its runner up:
 - **Tool events come from session transitions**, not from actions: the reducer turns a refused run back into `reviewing`, so only the previous and next session together say what happened, and the silent retry never shows `lost`. Runner up: wrapping `dispatch`, which can't tell a refused run from a failed open (found by the cross check).
 - **The route forwards only `BROWSER_EVENTS`**, so a script can't forge the server's alerts (found by the cross check). Runner up: any parsed event, which lets anyone trip `plan-check-failed` emails.
 - **A 3 second timeout on each forward.** Long enough for a healthy sink, short enough that a hung one can't hold function time.
+
+### Counting a finished sign in (decided 2026-11-02)
+
+**What the verify walk found.** `SignInDone` never sent `sign-in-completed`, for sign in and sign up both, on Clerk's development instance. When a code is accepted, Clerk switches to the new session, moves to the landing (Account) with a client side navigation, and only once that move has finished tells its hooks the visitor is signed in. By then the sign in page, and `SignInDone` with it, has unmounted. `keepalive` never came into it, because nothing was ever sent.
+
+**The Get Pro path is lost to any watcher.** A signed out visitor who chooses Get Pro signs in with Subscribe as the landing. Subscribe's `checkout` case is a server `redirect` to Polar, which the router carries out as a full page load, so Clerk's move never finishes and Clerk never reports signed in on our site. This follows from the order the walk saw and Subscribe's code; it was not walked itself. Those are the sign ins that matter most for Pro.
+
+**The constraints**: no id, no cookie of ours and no state in the address (INV-2, and AC-14 as first written). A miss costs a count, never privacy.
+
+| Option | For | Against |
+|---|---|---|
+| Drop the event, read Clerk's dashboard (chosen) | Exact, on every path, Get Pro included. Nothing to build, and code comes out. No reliance on the order Clerk reports in. No policy change | The step lives in another dashboard, as daily totals. What it shows is Clerk's to change |
+| A watcher in the `(account)` group layout, inside `ClerkProvider`, which stays mounted across the move; `via` from the last sign in or sign up page seen while signed out | Stays in Umami beside the other counts, and uses only `useAuth` | Misses every sign in that lands on Subscribe, so the number means "sign ins not for buying", and a sign up completion rate read from it would be wrong. Runs on every account page |
+| The server counts at the landing when the navigation's `Referer` path is a sign in or sign up page | Catches both landings, Get Pro included | Clerk's cache refresh around a sign in can render the landing twice, a double count to measure. It reads the previous page's address, close to the "no state in the address" line, and adds a report to Account's and Subscribe's renders |
+| Drop the event as a known miss, naming no other source | The same removal | Leaves a gap in the funnel when an exact figure already exists |
+
+Also ruled out without a full row. Reading `useSignIn()` or `useSignUp()` for a `complete` status before the move, or Clerk's in between state while it switches sessions: both lean on clerk-js internals, which load from Clerk's servers and can change with no package bump here (`AGENTS.md`, the note on Clerk's interface). The session's age on the server (`factorVerificationAge`): it counts reloads, and Clerk's own refresh, within the minute. A Clerk webhook: it would bring each user's record to an endpoint of ours for one count, a data path this project keeps out everywhere (spec 0012 has no webhook either).
+
+**Why the first.** The funnel is already read from totals, because nothing joins one step to the next (INV-2), so a total from Clerk sits beside Umami's totals with nothing lost. Clerk sees every completed sign in, whatever page it lands on, so its figure is exact where any figure of ours would be partial, and taking the event out removes code rather than adding it. The layout watcher is the better pick only if the step must live in Umami, and even then it is blind to Get Pro.
+
+**Privacy.** Nothing new is processed. Clerk already records each sign in to run accounts (the policy's *Your account* and *Services we use*), and you read a daily total on Clerk's dashboard. No count of ours is sent, so claim C16 (GPC and DNT) is untouched, and C14's "steps toward Pro" stays true through `subscribe-started` and `subscription-confirmed`.
+
+**What Clerk's dashboard shows** (Go live step 8): not yet recorded.
 
 ### Costs
 
@@ -134,6 +157,7 @@ At normal volume, Option 1's analytics would cost cents too. The case against it
 - Spec 0001 (the two policy regimes, error payloads carry a kind), spec 0002 (INV-4 and `LoggablePayload`), spec 0011 (the claims register, INV-3, INV-9, AC-15), spec 0012 (the entitlement route, the outcome kinds, INV-12's deny only rule, the spending cap)
 - `node_modules/next/dist/docs`: `instrumentation.md` (`onRequestError` and its `context`) and `after.md` (route handlers, server components, after a `redirect`)
 - `docs/.agent-cache/research/telemetry-error-monitoring.md`: the full price and limit findings, 2026-10-30
+- The verify walk of 2026-11-02 on Clerk's development instance, and Subscribe's server redirect to Polar in `src/app/(account)/account/subscribe/page.tsx`: the sign in count decision
 
 **Practices & standards**:
 - Structure over scrubbing: closed types and a strict parser instead of filtering free text

@@ -17,12 +17,13 @@ Run against the Playwright build (`tests/e2e/build-env.ts`, which sets `NEXT_PUB
 - [ ] With an init script setting `navigator.globalPrivacyControl = true` and the `Sec-GPC: 1` header, repeat the open and redact → no usage event is posted; the blocked engine case still posts `engine-unavailable` → AC-6, AC-23
 - [ ] In the console, run `setTimeout(() => { throw new Error("x") })` → a `browser-crash` with `kind: "error"` and the page kind; run `Promise.reject(new Error("x"))` → `kind: "rejection"`; neither body holds `x`, a filename or a line → AC-17
 - [ ] Send `POST /api/telemetry` with a 2049 byte body → `413`; with `Sec-Fetch-Site: cross-site` and a valid event → `204`; with an extra key, a raw number or an unknown kind → `204`; a well formed `server-crash`, `plan-check-failed` or `subscribe-started` → `204` and, in the route test, no forward; `GET /api/telemetry` → `405` → AC-7
-- [ ] Sign in with a test account on the sign in page → `SignInDone` posts `sign-in-completed` with `via: "sign-in"` before Clerk's redirect (and `via: "sign-up"` for a new account); if Clerk's redirect drops it, record the miss in the spec and bring it to `/architect` → AC-14
+- [ ] Sign in with a test account on the sign in page, and sign up with a new one (sandbox, throwaway accounts) → the only telemetry either page posts is `page-view` (`sign-in` or `sign-up`, then `account` after Clerk's client side move); no body names `sign-in-completed` → AC-10, AC-14
 - [ ] Hit `/account/subscribe` with billing seams that answer `checkout` (the sandbox walk, as in spec 0012's task 13) → the server schedules `subscribe-started`; on the welcome page reaching Pro → `subscription-confirmed`; with a plan that never turns Pro → `billing-failed` with `action: "welcome"`, `outcome: "still-waiting"` → AC-14, AC-19
 
 ## Code and records
 
 - [ ] `tests/unit/loggable.test.ts`'s gate checks `LoggablePayload | TelemetryEvent`; adding a `string` field to any event fails `pnpm typecheck`; `git diff main -- src/worker/protocol.ts` is empty → AC-1
+- [ ] `sign-in-completed`, `SignInDone`, `SIGN_IN_VIAS` and `SignInCompleted` appear nowhere in `src` or `tests`; the event list test counts twelve; `billing-landing.test.ts` holds the sign in page's order as the panel then Clerk's card → AC-1, AC-14
 - [ ] The bucket tests cover 0, 1, 2, 5, 6, 20, 21, 50 and 51; the parser tests refuse every shape AC-3 names → AC-2, AC-3
 - [ ] `tests/unit/telemetry-config.test.ts` fails the build for one value, production with none, preview with either, the e2e flag on Vercel, a bad UUID and a non Sentry DSN, each with its problem named → AC-9
 - [ ] The forwarder tests, through the fetch seam: the Umami request holds only `website`, `hostname`, `url`, `name` and `data` with flattened buckets; the Sentry envelope's event holds exactly `event_id`, `timestamp`, `level`, `message`, `tags`, `fingerprint`, `environment`, `release` and `platform`; neither carries any header from the incoming request; a sink answering `500` or hanging past 3 seconds is swallowed → AC-8, AC-20, AC-21
@@ -39,6 +40,7 @@ Run against the Playwright build (`tests/e2e/build-env.ts`, which sets `NEXT_PUB
 - [ ] *Go live* steps 1 to 6 done before the merge; the production build passed the gate → AC-9, AC-25
 - [ ] Past about 30 requests a minute from one address, `/api/telemetry` answers `429` with no `Set-Cookie` and no challenge page → AC-25
 - [ ] A visit to `/` shows in Umami; a deliberate failure shows in Sentry and its email arrives → AC-25
+- [ ] Go live step 8: Clerk's dashboard for the production instance shows sign ups by day (and sign ins, if it shows them), recorded with the date in `rationale.md`, *Counting a finished sign in* → AC-14, AC-25
 
 ## Added by the build (2026-10-30)
 
