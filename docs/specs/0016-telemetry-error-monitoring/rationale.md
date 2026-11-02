@@ -49,6 +49,7 @@ Umami's free Hobby plan for usage, Sentry's free Developer plan for errors, each
 - Short history: Umami's free plan keeps 6 months, Sentry's 30 days, with one user.
 - Two small HTTP clients to keep current against APIs that can change, with no SDK to absorb it.
 - Sources disagree on Sentry's free quota (5K or 50K errors). An EU region wasn't confirmed for either free plan.
+- Settled at sign up on 2 November 2026 (Go live steps 1 and 2): Sentry's free Developer plan shows an error quota of 5,000 a month, and both accounts hold their data in the EU (Umami Cloud in Frankfurt; Sentry's EU data storage location, whose DSN host is `ingest.de.sentry.io`). Neither has a card on file.
 
 ### Option 3: PostHog Cloud EU for both
 
@@ -114,8 +115,8 @@ Read on 2026-10-30 (see References). Volume assumed: about 2,000 visitors a mont
 
 | Item | Monthly cost | Notes |
 |---|---|---|
-| Umami Cloud, Hobby (chosen) | $0 | 100K events a month, 6 months of history, 1 website. Pro is $20 a month for 1M events and 2 years. EU region not confirmed |
-| Sentry, Developer (chosen) | $0 | 5K errors (one source says 50K), 30 days, 1 user, email alerts. Events past quota are dropped, not billed. Team is $29 a month, $26 billed yearly |
+| Umami Cloud, Hobby (chosen) | $0 | 100K events a month, 6 months of history, 1 website. Pro is $20 a month for 1M events and 2 years. EU region (Frankfurt), chosen at sign up on 2 November 2026 |
+| Sentry, Developer (chosen) | $0 | 5K errors a month, as the account shows it at sign up on 2 November 2026 (one source said 50K), 30 days, 1 user, email alerts. Events past quota are dropped, not billed. Team is $29 a month, $26 billed yearly |
 | `/api/telemetry` function time (chosen) | a few cents, from the $20 credit | Pro includes no invocations or CPU of its own; per unit rates not confirmed |
 | Vercel firewall rule (chosen) | usage based | 40 rules per project on Pro; the per request price ("regional") wasn't confirmed, the same as the entitlement rule today |
 | Vercel Web Analytics (not chosen) | about $0.30 at 10K events | $0.03 per 1,000 from the credit and then the on demand budget, with no cap of its own. Web Analytics Plus is $10 a month |
