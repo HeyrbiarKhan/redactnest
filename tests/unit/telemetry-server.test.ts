@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { TelemetrySinks } from "@/config/telemetry";
-import type { UsageEvent } from "@/telemetry/events";
+import type { ServerCrash, UsageEvent } from "@/telemetry/events";
 import {
   forward,
   optsOut,
+  reportCrash,
   reportServer,
   sentryRequest,
   TELEMETRY_USER_AGENT,
@@ -23,9 +24,10 @@ import {
 } from "@/worker/protocol";
 
 /**
- * Forwarding, spec 0016 AC-6, AC-8, AC-20 and AC-21. Through the seams, so
- * every request a sink would receive is read whole: what it holds, what it
- * does not, and that a sink failing or hanging changes nothing for anyone.
+ * Forwarding, spec 0016 AC-6, AC-8, AC-20, AC-21 and AC-27. Through the
+ * seams, so every request a sink would receive is read whole: what it holds,
+ * what it does not, and that a sink failing or hanging changes nothing for
+ * anyone.
  */
 
 const SINKS: TelemetrySinks = Object.freeze({
@@ -315,6 +317,102 @@ describe("forward", () => {
     await sending;
     expect(done).toBe(true);
     expect(signal?.aborted).toBe(true);
+  });
+});
+
+/**
+ * One report for each server failure (AC-27, INV-10). Every case hands
+ * `reportCrash` a memory of its own, so the module's default one, which the
+ * hook and the proxy share in a real server, is never touched here.
+ */
+describe("reportCrash", () => {
+  const CRASH: ServerCrash = {
+    name: "server-crash",
+    route: "subscribe",
+    routeType: "render",
+  };
+
+  /** Recording seams on a clock the test moves, and a fresh memory. */
+  function crashSeams(overrides: Partial<TelemetrySeams> = {}) {
+    const clock = { at: NOW.getTime() };
+    const recording = recordingSeams({ now: () => new Date(clock.at), ...overrides });
+    return { ...recording, clock, memory: new Map<string, number>() };
+  }
+
+  it("forwards the first failure from a place as a Sentry report", async () => {
+    const { seams, sent, memory } = crashSeams();
+    await reportCrash(CRASH, seams, memory);
+    expect(sent.map(({ url }) => url)).toEqual([SINKS.sentry.envelopeUrl]);
+  });
+
+  it("forwards nothing for the same route and type inside the minute", async () => {
+    const { seams, sent, clock, memory } = crashSeams();
+    await reportCrash(CRASH, seams, memory);
+    await reportCrash(CRASH, seams, memory);
+    clock.at += 59_999;
+    await reportCrash(CRASH, seams, memory);
+    expect(sent).toHaveLength(1);
+  });
+
+  it("forwards a different route or a different type", async () => {
+    const { seams, sent, memory } = crashSeams();
+    await reportCrash(CRASH, seams, memory);
+    await reportCrash({ ...CRASH, route: "billing" }, seams, memory);
+    await reportCrash({ ...CRASH, routeType: "action" }, seams, memory);
+    expect(sent).toHaveLength(3);
+  });
+
+  it("forwards the same one again at exactly 60 seconds", async () => {
+    const { seams, sent, clock, memory } = crashSeams();
+    await reportCrash(CRASH, seams, memory);
+    clock.at += 60_000;
+    await reportCrash(CRASH, seams, memory);
+    expect(sent).toHaveLength(2);
+  });
+
+  it("forwards once for two started together, before either send answers", async () => {
+    const answer = Promise.withResolvers<Response>();
+    const fetch = vi.fn(() => answer.promise);
+    const { seams, memory } = crashSeams({ fetch });
+
+    const first = reportCrash(CRASH, seams, memory);
+    const second = reportCrash(CRASH, seams, memory);
+    await second;
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    answer.resolve(new Response(null, { status: 200 }));
+    await first;
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts a send that fails, so the next failure that minute goes unreported", async () => {
+    const fetch = vi.fn(() => Promise.reject(new TypeError("fetch failed")));
+    const { seams, clock, memory } = crashSeams({ fetch });
+    await expect(reportCrash(CRASH, seams, memory)).resolves.toBeUndefined();
+    clock.at += 1_000;
+    await reportCrash(CRASH, seams, memory);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("records nothing when this build forwards nothing", async () => {
+    const { seams, sent, memory } = crashSeams({ sinks: null });
+    await reportCrash(CRASH, seams, memory);
+    expect(memory.size).toBe(0);
+    expect(sent).toEqual([]);
+
+    const live = crashSeams();
+    await reportCrash(CRASH, live.seams, memory);
+    expect(live.sent).toHaveLength(1);
+  });
+
+  it("still resolves when the clock throws, and sends nothing", async () => {
+    const { seams, sent, memory } = crashSeams({
+      now: () => {
+        throw new Error("no clock");
+      },
+    });
+    await expect(reportCrash(CRASH, seams, memory)).resolves.toBeUndefined();
+    expect(sent).toEqual([]);
   });
 });
 

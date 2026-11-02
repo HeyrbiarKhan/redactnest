@@ -25,6 +25,10 @@ const clerk = vi.hoisted(() => ({
 
 vi.mock("@clerk/nextjs/server", () => ({ clerkMiddleware: () => clerk.spy }));
 
+// The proxy reports its own failures (spec 0016, AC-26); none happen here,
+// and `proxy-crash.test.ts` covers the catch.
+vi.mock("@/telemetry/server", () => ({ reportCrash: vi.fn(() => Promise.resolve()) }));
+
 const event = {} as NextFetchEvent;
 
 const matches = (url: string): boolean =>
@@ -89,7 +93,7 @@ describe("with billing off", () => {
     vi.resetModules();
     const { default: proxy } = await import("@/proxy");
 
-    const result = proxy(
+    const result = await proxy(
       new Request("http://localhost:3000/account") as unknown as NextRequest,
       event,
     );
@@ -103,7 +107,7 @@ describe("with billing off", () => {
     vi.resetModules();
     const { default: proxy } = await import("@/proxy");
 
-    const result = proxy(
+    const result = await proxy(
       new NextRequest("http://localhost:3000/account/welcome?customer_session_token=x"),
       event,
     );
@@ -186,7 +190,7 @@ describe("the proxy with billing on (AC-26)", () => {
     init?: ConstructorParameters<typeof NextRequest>[1],
   ): Promise<unknown> {
     const { default: proxy } = await import("@/proxy");
-    return proxy(new NextRequest(url, init), event);
+    return await proxy(new NextRequest(url, init), event);
   }
 
   it("answers the portal token with a 307 to the clean address, and never runs Clerk", async () => {

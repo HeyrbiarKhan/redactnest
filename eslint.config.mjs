@@ -505,8 +505,8 @@ const BILLING_IMPORTS = [noClerkImport, noPolarImport, noBillingImport];
 const BILLING_SYNTAX = [...noClerkPolarAnywhere, ...noBillingAnywhere];
 
 const TELEMETRY_SERVER_MESSAGE =
-  "Only src/app/api/telemetry, src/app/api/entitlement, src/instrumentation.ts " +
-  "and the (account) route group may import @/telemetry/server, and only " +
+  "Only src/app/api/telemetry, src/app/api/entitlement, src/instrumentation.ts, " +
+  "src/proxy.ts and the (account) route group may import @/telemetry/server, and only " +
   "src/telemetry/server.ts and the root layout may import @/config/telemetry " +
   "(spec 0016, AC-24). They hold the Umami and Sentry values and the server's " +
   "sends, and they are server only.";
@@ -817,7 +817,8 @@ const eslintConfig = defineConfig([
     // The account pages and Clerk's proxy (spec 0012, AC-9): the only home of
     // `@clerk/nextjs`, and allowed the billing modules. No Polar SDK here;
     // they reach Polar through src/billing. Spec 0016 lets them report
-    // through `@/telemetry/server` (AC-24), never read its values.
+    // through `@/telemetry/server` (AC-24, and AC-26 for the proxy's own
+    // catch), never read its values.
     name: "redactnest/account",
     files: ["src/app/(account)/**/*.{ts,tsx}", "src/proxy.ts"],
     rules: zone(

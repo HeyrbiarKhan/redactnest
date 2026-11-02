@@ -1,6 +1,6 @@
 /**
  * Counts to Umami and failure reports to Sentry, server to server. Spec 0016,
- * AC-6, AC-8, AC-20 and AC-21, INV-2 to INV-4.
+ * AC-6, AC-8, AC-20, AC-21 and AC-27, INV-2 to INV-4 and INV-10.
  *
  * No SDK for either service: a plain `fetch` from our own server, so no
  * outside script, cookie or origin reaches any page (INV-4). The outbound
@@ -29,6 +29,7 @@ import {
   fieldsOf,
   isUsageEvent,
   PAGE_PATHS,
+  type ServerCrash,
   type TelemetryEvent,
   type UsageEvent,
 } from "./events";
@@ -61,6 +62,23 @@ export const UMAMI_MAX_PROPERTIES = 50;
 
 /** How long a sink gets before its answer stops mattering (AC-8). */
 const SINK_TIMEOUT_MS = 3_000;
+
+/**
+ * How long a `server-crash` from one place stays reported (AC-27). A rule
+ * about reporting, not a cap on the visitor: one failed render calls
+ * `onRequestError` two or three times, and a route failing on every request
+ * would otherwise spend Sentry's key limit alone.
+ */
+const CRASH_WINDOW_MS = 60_000;
+
+/**
+ * When each place last sent a `server-crash` from this server instance, by
+ * route and type (AC-27). A deliberate cache, the module level state
+ * `AGENTS.md` allows: its keys are every `RouteKind` by every `routeType`, 64
+ * at most, so it never needs pruning. Each bundle holds its own, the proxy's
+ * apart from the server's, and a cold start begins empty.
+ */
+const CRASHES_SENT = new Map<string, number>();
 
 /** Our own host, the only one Umami is told about (AC-21). */
 const SITE_HOSTNAME = new URL(config.siteUrl).hostname;
@@ -260,8 +278,9 @@ export function sentryRequest(
  * Resolves once the sink answers or 3 seconds pass, whichever is first, and
  * never rejects. Nothing when this build forwards nothing.
  *
- * `onRequestError` awaits this directly, as Next.js's docs ask, because it
- * has no answer to wait for. Request code goes through `reportServer` below.
+ * A server failure goes through `reportCrash` below, which awaits this
+ * directly, as Next.js's docs ask, because a failure has no answer to wait
+ * for. Request code goes through `reportServer`.
  */
 export async function forward(
   event: TelemetryEvent,
@@ -296,6 +315,38 @@ export async function forward(
   const sending = send().catch(() => undefined);
   await Promise.race([sending, timeout]);
   clearTimeout(timer);
+}
+
+/**
+ * Report a server failure: `onRequestError` and the proxy's own catch both
+ * come here (AC-27, INV-10). It sends only when no `server-crash` with the
+ * same route and type went from this server instance in the last minute, so
+ * Next.js calling the hook more than once for one render sends one report.
+ *
+ * The time is recorded before the send is awaited, with no `await` between
+ * the check and the record, so a repeat that arrives while the first is still
+ * in flight is skipped too. A send that fails or times out still counts: a
+ * lost report, never a second one. It reads only the event and the clock.
+ *
+ * Awaited by its callers, as `forward` is (AC-8). It never rejects, so the
+ * proxy always rethrows its own error and the hook never adds a failure.
+ */
+export async function reportCrash(
+  crash: ServerCrash,
+  seams: TelemetrySeams = TELEMETRY_SEAMS,
+  sent: Map<string, number> = CRASHES_SENT,
+): Promise<void> {
+  try {
+    if (seams.sinks === null) return;
+    const now = seams.now().getTime();
+    const key = `${crash.route} ${crash.routeType}`;
+    const last = sent.get(key);
+    if (last !== undefined && now - last < CRASH_WINDOW_MS) return;
+    sent.set(key, now);
+    await forward(crash, seams);
+  } catch {
+    // A failure to report never becomes a second failure.
+  }
 }
 
 /** The one thing read from a request: its headers, for the opt out signals. */

@@ -2,21 +2,32 @@
  * Server failures, reported to Sentry by kind and place. Spec 0016, AC-15.
  *
  * Next.js calls `onRequestError` when a server request fails: a page
- * rendering, a route handler, a server action or the proxy. It reports
- * `server-crash` with the route's kind and what Next.js was doing, and reads
- * nothing else: not the error, its message or stack, and not the request, its
- * path, query, headers or cookies. So a failure carrying an email address in
- * its message reports exactly what any other failure on that route reports
- * (claim C15). The stack stays in Vercel's runtime logs, which Next.js writes.
+ * rendering, a route handler or a server action. It reports `server-crash`
+ * with the route's kind and what Next.js was doing, and reads nothing else:
+ * not the error, its message or stack, and not the request, its path, query,
+ * headers or cookies. So a failure carrying an email address in its message
+ * reports exactly what any other failure on that route reports (claim C15).
+ * The stack stays in Vercel's runtime logs, which Next.js writes.
  *
- * There is no answer to wait for here, so the send is awaited directly, as
- * Next.js's docs ask, rather than scheduled with `after()` (AC-8).
+ * It never hears the proxy. In Next.js 16.3.5 the proxy's wrapper
+ * (`next/dist/build/templates/middleware.js`) passes a throw to
+ * `edgeInstrumentationOnRequestError`, which looks for this module in
+ * `globalThis._ENTRIES` (`next/dist/server/web/globals.js`), and only the
+ * edge runtime sets that. Our proxy runs on Node, so the lookup finds nothing
+ * and the call goes nowhere. `src/proxy.ts` catches and reports its own
+ * failures instead (AC-26).
+ *
+ * Every report goes through `reportCrash`, which sends one a minute for each
+ * route and type (AC-27), because one failed render calls this hook two or
+ * three times. There is no answer to wait for here, so it is awaited
+ * directly, as Next.js's docs ask, rather than scheduled with `after()`
+ * (AC-8).
  */
 
 import type { Instrumentation } from "next";
 
 import { ROUTE_TYPES, type RouteKind, type ServerCrash } from "@/telemetry/events";
-import { forward } from "@/telemetry/server";
+import { reportCrash } from "@/telemetry/server";
 
 /**
  * Each route's kind, by its route path once normalised (`routeKindFor`).
@@ -32,9 +43,16 @@ import { forward } from "@/telemetry/server";
  * when a stale background revalidation fails, or when a failure escapes the
  * render itself. A route handler reports `/api/entitlement`, or
  * `/api/entitlement/route` when a stale background revalidation fails
- * (`app-route.js`). The proxy reports `/proxy` with `routeType` `proxy`
- * (`middleware.js`). Read from Next.js 16.3.5 on 2 November 2026.
+ * (`app-route.js`). Read from Next.js 16.3.5 on 2 November 2026.
  * `normaliseRoutePath` reads both shapes as one.
+ *
+ * The proxy's wrapper would report `/proxy` with `routeType` `proxy`
+ * (`middleware.js`), but on Node that call never arrives here (above).
+ * `routeKindFor` still maps any `proxy` type to `proxy`, so a later Next.js
+ * that does reach this hook from the proxy lands on the kind the proxy's own
+ * catch already sends. Its report and the catch's would then be two, since
+ * the proxy is a separate bundle with its own memory for AC-27, until the
+ * catch comes out (spec 0016, Follow-up).
  */
 export const ROUTE_KINDS: Readonly<Record<string, RouteKind>> = Object.freeze({
   "/": "home",
@@ -91,9 +109,9 @@ export const onRequestError: Instrumentation.onRequestError = async (
   context,
 ) => {
   try {
-    await forward(crashReport(context));
+    await reportCrash(crashReport(context));
   } catch {
-    // `forward` never rejects; this guards the report itself. A failure to
-    // report never becomes a second failure.
+    // `reportCrash` never rejects; this guards building the report. A
+    // failure to report never becomes a second failure.
   }
 };

@@ -1019,6 +1019,7 @@ describe("the telemetry walls", () => {
   const PLAN_CHECK = "src/app/api/entitlement/route.ts";
   const INSTRUMENTATION = "src/instrumentation.ts";
   const ACCOUNT_PAGE = "src/app/(account)/account/probe/page.tsx";
+  const PROXY_FILE = "src/proxy.ts";
   const ROOT_LAYOUT = "src/app/layout.tsx";
   const TELEMETRY_MODULE = "src/telemetry/probe.ts";
   const TELEMETRY_SERVER_FILE = "src/telemetry/server.ts";
@@ -1055,6 +1056,7 @@ describe("the telemetry walls", () => {
     PLAN_CHECK,
     INSTRUMENTATION,
     ACCOUNT_PAGE,
+    PROXY_FILE,
     TELEMETRY_MODULE,
   ])("rejects the telemetry values in %s", async (path) => {
     expect(await wallErrors(path, VALUES)).toContainEqual(
@@ -1062,7 +1064,7 @@ describe("the telemetry walls", () => {
     );
   });
 
-  it.each([TELEMETRY_ROUTE, PLAN_CHECK, INSTRUMENTATION, ACCOUNT_PAGE])(
+  it.each([TELEMETRY_ROUTE, PLAN_CHECK, INSTRUMENTATION, ACCOUNT_PAGE, PROXY_FILE])(
     "lets %s report through the server's sends",
     async (path) => {
       expect(await wallErrors(path, SERVER)).toEqual([]);

@@ -4,18 +4,18 @@ import type { EntitlementAccount, EntitlementSnapshot } from "@/worker/protocol"
 
 /**
  * The server's failure reports: `onRequestError` (spec 0016, AC-15) and the
- * plan check falling back (AC-16). `forward` and `reportServer` are the
+ * plan check falling back (AC-16). `reportCrash` and `reportServer` are the
  * boundaries; `telemetry-server.test.ts` covers them from there on.
  */
 
 const mocks = vi.hoisted(() => ({
-  forward: vi.fn(() => Promise.resolve()),
+  reportCrash: vi.fn(() => Promise.resolve()),
   reportServer: vi.fn(),
   account: "none" as EntitlementAccount,
 }));
 
 vi.mock("@/telemetry/server", () => ({
-  forward: mocks.forward,
+  reportCrash: mocks.reportCrash,
   reportServer: mocks.reportServer,
 }));
 
@@ -40,7 +40,7 @@ const { crashReport, normaliseRoutePath, onRequestError, routeKindFor } =
 const { GET } = await import("@/app/api/entitlement/route");
 
 beforeEach(() => {
-  mocks.forward.mockClear();
+  mocks.reportCrash.mockClear();
   mocks.reportServer.mockClear();
 });
 
@@ -124,20 +124,20 @@ describe("onRequestError", () => {
         revalidateReason: undefined,
       },
     );
-    expect(mocks.forward).toHaveBeenCalledTimes(1);
-    expect(mocks.forward).toHaveBeenCalledWith({
+    expect(mocks.reportCrash).toHaveBeenCalledTimes(1);
+    expect(mocks.reportCrash).toHaveBeenCalledWith({
       name: "server-crash",
       route: "subscribe",
       routeType: "render",
     });
-    const sent = JSON.stringify(mocks.forward.mock.calls);
+    const sent = JSON.stringify(mocks.reportCrash.mock.calls);
     for (const leak of ["jane", "passport", "secret", "Visitor", "1234567890", "email"]) {
       expect(sent).not.toContain(leak);
     }
   });
 
   it("never throws, even if reporting does", async () => {
-    mocks.forward.mockImplementationOnce(() => Promise.reject(new Error("down")));
+    mocks.reportCrash.mockImplementationOnce(() => Promise.reject(new Error("down")));
     await expect(
       onRequestError(
         new Error("x"),
