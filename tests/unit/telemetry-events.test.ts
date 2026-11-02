@@ -120,9 +120,9 @@ describe("pageKindFor", () => {
 });
 
 describe("the event lists", () => {
-  it("split the thirteen events into usage and errors, with nothing left over", () => {
+  it("split the twelve events into usage and errors, with nothing left over", () => {
     const names = Object.keys(EVENT_FIELDS);
-    expect(names).toHaveLength(13);
+    expect(names).toHaveLength(12);
     expect([...USAGE_EVENTS, ...ERROR_EVENTS].sort()).toEqual([...names].sort());
   });
 

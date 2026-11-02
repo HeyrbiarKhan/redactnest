@@ -177,9 +177,6 @@ export const REFUSAL_STEPS = Object.freeze(["open", "redact"] as const);
 /** Which free limit a visitor met: the page cap or the size cap. */
 export const CAPS = Object.freeze(["pages", "size"] as const);
 
-/** Which page a sign in finished on. */
-export const SIGN_IN_VIAS = Object.freeze(["sign-in", "sign-up"] as const);
-
 /**
  * The server routes a crash can be reported from (AC-15). `ROUTE_KINDS` in
  * `src/instrumentation.ts` maps Next.js's route paths onto these.
@@ -236,7 +233,7 @@ export const BILLING_OUTCOMES = Object.freeze([
 ] as const);
 
 /*
- * The thirteen events, as *Data model sketch* lists them. Type aliases rather
+ * The twelve events, as *Data model sketch* lists them. Type aliases rather
  * than interfaces, so each reads as a plain record of its fields.
  */
 
@@ -278,11 +275,6 @@ export type CapReached = Readonly<{
   account: EntitlementAccount;
 }>;
 
-export type SignInCompleted = Readonly<{
-  name: "sign-in-completed";
-  via: (typeof SIGN_IN_VIAS)[number];
-}>;
-
 export type SubscribeStarted = Readonly<{ name: "subscribe-started" }>;
 
 export type SubscriptionConfirmed = Readonly<{ name: "subscription-confirmed" }>;
@@ -316,7 +308,6 @@ export type UsageEvent =
   | RedactionCompleted
   | RunRefused
   | CapReached
-  | SignInCompleted
   | SubscribeStarted
   | SubscriptionConfirmed;
 
@@ -334,7 +325,6 @@ export const USAGE_EVENTS = Object.freeze([
   "redaction-completed",
   "run-refused",
   "cap-reached",
-  "sign-in-completed",
   "subscribe-started",
   "subscription-confirmed",
 ] as const satisfies readonly UsageEvent["name"][]);
@@ -414,7 +404,6 @@ export const EVENT_FIELDS: {
     account: one(ENTITLEMENT_ACCOUNTS),
   }),
   "cap-reached": Object.freeze({ cap: one(CAPS), account: one(ENTITLEMENT_ACCOUNTS) }),
-  "sign-in-completed": Object.freeze({ via: one(SIGN_IN_VIAS) }),
   "subscribe-started": NONE,
   "subscription-confirmed": NONE,
   "server-crash": Object.freeze({
@@ -516,7 +505,6 @@ export const BROWSER_EVENTS = Object.freeze([
   "redaction-completed",
   "run-refused",
   "cap-reached",
-  "sign-in-completed",
   "subscription-confirmed",
   "browser-crash",
   "engine-unavailable",

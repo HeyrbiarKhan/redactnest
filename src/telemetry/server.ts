@@ -22,13 +22,7 @@ import { after } from "next/server";
 
 import { config } from "@/config";
 import { telemetrySinks, type TelemetrySinks } from "@/config/telemetry";
-import {
-  SIGN_IN_PATH,
-  SIGN_UP_PATH,
-  SUBSCRIBE_PATH,
-  TOOL_PATH,
-  WELCOME_PATH,
-} from "@/lib/routes";
+import { SUBSCRIBE_PATH, TOOL_PATH, WELCOME_PATH } from "@/lib/routes";
 
 import {
   type ErrorReport,
@@ -146,8 +140,6 @@ function umamiUrl(event: UsageEvent): string {
     case "run-refused":
     case "cap-reached":
       return TOOL_PATH;
-    case "sign-in-completed":
-      return event.via === "sign-in" ? SIGN_IN_PATH : SIGN_UP_PATH;
     case "subscribe-started":
       return SUBSCRIBE_PATH;
     case "subscription-confirmed":

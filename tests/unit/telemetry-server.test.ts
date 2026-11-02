@@ -169,8 +169,6 @@ describe("the Umami request", () => {
     const urlOf = (event: UsageEvent) =>
       (JSON.parse(umamiRequest(event, "id").init.body) as { payload: { url: string } })
         .payload.url;
-    expect(urlOf({ name: "sign-in-completed", via: "sign-in" })).toBe("/sign-in");
-    expect(urlOf({ name: "sign-in-completed", via: "sign-up" })).toBe("/sign-up");
     expect(urlOf({ name: "subscribe-started" })).toBe("/account/subscribe");
     expect(urlOf({ name: "subscription-confirmed" })).toBe("/account/welcome");
     expect(urlOf({ name: "cap-reached", cap: "pages", account: "none" })).toBe("/tool");
