@@ -350,6 +350,7 @@ spec [0016](../specs/0016-telemetry-error-monitoring/index.md)
   - [x] The funnel outside the tool: `subscribe-started` and `subscription-confirmed` (and `SignInDone`, which the verify walk showed never sends) · AC-6, AC-14
   - [x] The policy, the proof and the amends: Umami and Sentry in `OUTSIDE_SERVICES`, C5 and C7 rewritten and C14 to C16 in a new section, the change entry, the privacy browser test with GPC, specs 0001 to 0012 amended, and your read of every word · AC-22, AC-23
   - [x] The sign in count comes out (slice 5, decided 2026-11-02): `SignInDone` and `sign-in-completed` removed, twelve events, the sign in pages back to the panel and Clerk's card; the step is read from Clerk's dashboard · AC-1, AC-3, AC-14
+  - [ ] One report for each server failure (slice 6, decided 2026-11-03): the proxy catches and reports its own throw, which `onRequestError` never hears on Node, and every `server-crash` goes through `reportCrash`, at most once a minute for each route and type from each server instance · AC-15, AC-26, AC-27
   - [ ] Go live (your steps, before the merge): Umami and Sentry on free plans with no card, the two values for Production only, the separate firewall rule, Sentry's alerts and key limit, Vercel's metered analytics confirmed off; then a visit and a test error seen after the deploy; and what Clerk's dashboard counts by day, recorded (step 8) · AC-14, AC-25
 - [ ] Verify it: `/check verify telemetry & error monitoring`
 - [ ] Test it: `/test telemetry & error monitoring`

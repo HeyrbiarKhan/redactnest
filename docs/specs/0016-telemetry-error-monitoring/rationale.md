@@ -132,6 +132,44 @@ Also ruled out without a full row. Reading `useSignIn()` or `useSignUp()` for a 
 
 **What Clerk's dashboard shows** (Go live step 8): not yet recorded.
 
+### Server failures: the proxy and repeated reports (decided 2026-11-03)
+
+**What the verify walk found.** Two things the design read wrong from Next.js 16.3.5.
+
+1. *The proxy never reaches `onRequestError`.* `src/proxy.ts` runs on Node: Next.js 16 runs every proxy there, and throws if a proxy file sets `runtime`. Its compiled wrapper (`errorHandledHandler` in `next/dist/build/templates/middleware.js`) does catch a throw, but hands it to `edgeInstrumentationOnRequestError` (`next/dist/server/web/globals.js`), which looks for the hook in `_ENTRIES.middleware_instrumentation`, a global only the edge wrapper fills. On Node it finds nothing, so nothing reports. The server's own catch around the proxy (`next/dist/server/next-server.js`) then logs the error and renders the 500 page, with no call to the hook. The proxy stands in front of sign in, sign up and every account page, so a broken Clerk setup would lock out every paying visitor with nothing but a line in Vercel's one day logs.
+2. *One failed render calls the hook more than once.* React's server component handler calls it (`createErrorContext` in `next/dist/server/app-render/app-render.js`, with `renderSource` and the plain path), and the page template's outer catch calls it again for the failure that escapes the render (`next/dist/build/templates/app-page-runtime.js`, with the definition path, group and leaf included). The walk saw two reports for a page and three for an account page; route handlers and server actions send one. Each report counted toward Sentry's 60 an hour key limit and the more than 10 an hour alert.
+
+**The constraints.** A report holds only closed kinds (INV-1), and the hook reads nothing from the error or the request (AC-15, claim C15). Telemetry never breaks its caller (INV-3).
+
+*The proxy's own failures*
+
+| Option | For | Against |
+|---|---|---|
+| Catch in the proxy and report through `reportCrash` (chosen) | Hears every throw before Next.js does, whatever the runtime. Mirrors Next.js's own edge wrapper: report, await, rethrow. Lint already allows the import (the proxy shares the account zone). About ten lines | Rests on a reading of compiled code that an upgrade may change: if the hook starts hearing the proxy, one throw reports twice until the catch comes out, because the two run in separate bundles. The first failure each minute waits up to 3 seconds for its send |
+| Record the gap | No code | Sign in and the account pages can fail for everyone with no email, the silent failure this spec exists to catch |
+
+Also ruled out: moving the proxy to the edge runtime, where the hook does work, because Next.js 16 refuses a `runtime` option in a proxy file (`proxy.md`, *Runtime*). Setting `_ENTRIES.middleware_instrumentation` ourselves: it writes into Next.js internals and would break with no warning on an upgrade.
+
+*Repeated reports*
+
+| Option | For | Against |
+|---|---|---|
+| At most once a minute for each `route` and `routeType`, in `reportCrash` (chosen) | Reads nothing from the error or the request. Holds however many times, and from wherever, Next.js calls the hook, and the proxy's catch uses it too. A route failing on every request sends one report a minute from each server instance, so it can't spend the key limit alone. Never hides an issue, because its key is finer than the fingerprint (name plus `route`) | Sentry counts minutes with a failure, not failures. Kept per server instance and per bundle, so the hook and the proxy don't share it. Assumes a render's repeated calls map to one `route` and `routeType`, which verify measures. One small piece of module level state |
+| Skip a repeated error object (a `WeakSet`) | Exactly one per failure, where it works | Assumes every call carries the same object, which nobody checked: React rebuilds the error for the HTML render, and an account page's third call may be a second real throw as the error page renders the layout again. Reads the error's identity, a widening of AC-15 |
+| Keep the repeats, raise the limits | No code | The repeats are uneven (one, two or three by route), so no single threshold means the same thing everywhere, and a burst of page failures still crowds `plan-check-failed` and `billing-failed` out of the shared key limit |
+
+Also ruled out: keeping only the calls that carry a `renderSource`. It ties the count to which call site Next.js uses, and the account pages' third call was never traced to its source.
+
+**Why these.** The proxy is the door to the account pages, so its failure is exactly the kind spec 0016 promised to email about, and catching it in our own code is the only way that works on Node today. The collapse answers the duplicates without asking anything of the error or of Next.js's internals, so it stays right through an upgrade that adds, removes or moves a call. Its cost, a count of minutes rather than failures, matches how the alerts are read: a new issue says something broke, and the hourly alert says it keeps breaking.
+
+**Four smaller choices.**
+- **The key is `route` and `routeType`**, finer than the fingerprint, so a render failure and an action failure on one page each report. Runner up: `route` alone, which matches the fingerprint exactly and would also absorb a repeat whose `routeType` differed, at the cost of the second failure's tag. The walk saw no such repeat, and slice 6's verify step on an account page would show one.
+- **A minute.** Longer than any one request, so every repeat of one failure lands inside it, and short enough that a failure coming back through an hour shows as many reports. Runner up: a few seconds, closer to one report per failure but at the mercy of a slow render's length.
+- **The proxy awaits its report** before rethrowing, as Next.js's own wrapper does. Runner up: `event.waitUntil`, which adds no wait for the visitor, but `next/dist/server/web/adapter.js` hands that work to the platform only when the handler returns (its `waitUntil` result, line 423); a throw skips it, so the report could be dropped.
+- **A failed send still counts.** The time is recorded before the send, so a sink that fails or times out still holds back that route's next report for the minute. Runner up: taking the time back on failure, which turns a sink outage into a retry on every failing request, the burst the key limit exists to stop.
+
+**Privacy.** No new value leaves. The proxy's report is a constant, and the collapse sends less, never more. Claim C15 holds as written, so no policy word or change entry moves.
+
 ### Costs
 
 Read on 2026-10-30 (see References). Volume assumed: about 2,000 visitors a month at about 5 usage events each, so about 10K usage events a month.
@@ -158,6 +196,7 @@ At normal volume, Option 1's analytics would cost cents too. The case against it
 - `node_modules/next/dist/docs`: `instrumentation.md` (`onRequestError` and its `context`) and `after.md` (route handlers, server components, after a `redirect`)
 - `docs/.agent-cache/research/telemetry-error-monitoring.md`: the full price and limit findings, 2026-10-30
 - The verify walk of 2026-11-02 on Clerk's development instance, and Subscribe's server redirect to Polar in `src/app/(account)/account/subscribe/page.tsx`: the sign in count decision
+- The verify walk's server failure findings, and Next.js 16.3.5's compiled code read on 2026-11-03: `build/templates/middleware.js` (`errorHandledHandler`), `server/web/globals.js` (`edgeInstrumentationOnRequestError`), `server/next-server.js` (the catch around the proxy), `server/app-render/app-render.js` (`createErrorContext`), `build/templates/app-page-runtime.js` (the outer catch), `server/web/adapter.js` (`waitUntil` returned only on success) and `docs/01-app/03-api-reference/03-file-conventions/proxy.md` (*Runtime*): the proxy and repeated reports decision
 
 **Practices & standards**:
 - Structure over scrubbing: closed types and a strict parser instead of filtering free text
