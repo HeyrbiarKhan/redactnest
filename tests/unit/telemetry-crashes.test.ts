@@ -45,17 +45,37 @@ beforeEach(() => {
 });
 
 describe("routeKindFor", () => {
-  // The strings Next.js 16 reports, as `ROUTE_KINDS`'s comment records them.
+  // The strings Next.js 16 reports, as `ROUTE_KINDS`'s comment records them:
+  // first the plain path a failed render, action or route handler reports,
+  // then the definition a failed stale revalidation reports.
   it.each([
+    ["/", "render", "home"],
+    ["/tool", "render", "tool"],
+    ["/pricing", "render", "pricing"],
+    ["/privacy", "render", "privacy"],
+    ["/terms", "render", "terms"],
+    ["/_not-found", "render", "not-found"],
+    ["/account", "render", "account"],
+    ["/account", "action", "account"],
+    ["/account/subscribe", "render", "subscribe"],
+    ["/account/billing", "render", "billing"],
+    ["/account/welcome", "render", "welcome"],
+    ["/sign-in/[[...sign-in]]", "render", "sign-in"],
+    ["/sign-up/[[...sign-up]]", "render", "sign-up"],
+    ["/api/entitlement", "route", "entitlement"],
+    ["/api/telemetry", "route", "telemetry"],
+    ["/proxy", "proxy", "proxy"],
+    ["/account", "proxy", "proxy"],
+    ["/_global-error", "render", "other"],
+    ["/favicon.ico", "route", "other"],
     ["/page", "render", "home"],
     ["/tool/page", "render", "tool"],
     ["/pricing/page", "render", "pricing"],
     ["/privacy/page", "render", "privacy"],
     ["/terms/page", "render", "terms"],
     ["/_not-found/page", "render", "not-found"],
-    ["/api/entitlement", "route", "entitlement"],
     ["/api/entitlement/route", "route", "entitlement"],
-    ["/api/telemetry", "route", "telemetry"],
+    ["/api/telemetry/route", "route", "telemetry"],
     ["/(account)/account/page", "render", "account"],
     ["/(account)/account/page", "action", "account"],
     ["/(account)/account/subscribe/page", "render", "subscribe"],
@@ -63,7 +83,6 @@ describe("routeKindFor", () => {
     ["/(account)/account/welcome/page", "render", "welcome"],
     ["/(account)/sign-in/[[...sign-in]]/page", "render", "sign-in"],
     ["/(account)/sign-up/[[...sign-up]]/page", "render", "sign-up"],
-    ["/proxy", "proxy", "proxy"],
     ["/(account)/account/page", "proxy", "proxy"],
     ["/_global-error/page", "render", "other"],
     ["/favicon.ico/route", "route", "other"],

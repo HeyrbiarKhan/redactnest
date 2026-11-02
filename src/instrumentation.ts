@@ -21,15 +21,20 @@ import { forward } from "@/telemetry/server";
 /**
  * Each route's kind, by its route path once normalised (`routeKindFor`).
  *
- * Next.js 16 reports a route path in two shapes, read from its own templates
- * (`next/dist/build/templates/app-page-runtime.js`, `app-route.js` and
- * `middleware.js`) and this build's `.next/server/app-paths-manifest.json` on
- * 30 October 2026. A page reports its definition, route group and leaf file
- * included: `/page`, `/tool/page`, `/(account)/account/subscribe/page`,
- * `/(account)/sign-in/[[...sign-in]]/page`, `/_not-found/page`, and a server
- * action the page it runs from. A route handler reports `/api/entitlement`,
- * or `/api/entitlement/route` when a stale background revalidation fails. The
- * proxy reports `/proxy` with `routeType` `proxy`.
+ * Next.js 16 reports a route path in two shapes. A page that fails to render
+ * reports its plain path, route group and leaf file dropped: `/`, `/pricing`,
+ * `/account/subscribe`, `/sign-in/[[...sign-in]]`, `/_not-found`, and a
+ * server action the page it runs from. That is `ctx.pagePath` in
+ * `next/dist/server/app-render/app-render.js`, and a throw in `/pricing` under
+ * `pnpm build && pnpm start` reported `/pricing`. Its definition, group and
+ * leaf included (`/pricing/page`, `/(account)/account/subscribe/page`), comes
+ * from the page template (`next/dist/build/templates/app-page-runtime.js`)
+ * when a stale background revalidation fails, or when a failure escapes the
+ * render itself. A route handler reports `/api/entitlement`, or
+ * `/api/entitlement/route` when a stale background revalidation fails
+ * (`app-route.js`). The proxy reports `/proxy` with `routeType` `proxy`
+ * (`middleware.js`). Read from Next.js 16.3.5 on 2 November 2026.
+ * `normaliseRoutePath` reads both shapes as one.
  */
 export const ROUTE_KINDS: Readonly<Record<string, RouteKind>> = Object.freeze({
   "/": "home",
