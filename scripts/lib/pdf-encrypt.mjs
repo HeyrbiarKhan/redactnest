@@ -12,10 +12,13 @@
  *   - `aes-128`: V 4, R 4, AESV2
  *   - `aes-256`: V 5, R 6, AESV3
  *
- * Each has an empty user password, so the file opens for anyone, and an owner
- * password with editing forbidden. Only stream data is encrypted: the fixtures
- * put every string they carry inside a stream, which keeps this to the
- * algorithms and away from parsing dictionaries.
+ * Each has an owner password with editing forbidden, and by default an empty
+ * user password, so the file opens for anyone. `userPassword` sets one instead,
+ * for a file that opens only with it: the engine refuses that as
+ * `password-required` (spec 0004), which spec 0016's verify step 15 counts.
+ * Only stream data is encrypted: the fixtures put every string they carry
+ * inside a stream, which keeps this to the algorithms and away from parsing
+ * dictionaries.
  *
  * Deterministic on purpose. Keys, salts and IVs are derived from fixed seeds,
  * so running the fixture script again writes the same bytes and a reviewer can
@@ -36,7 +39,6 @@ const PAD = Buffer.from(
 export const OWNER_ONLY_PERMISSIONS = -44;
 
 const OWNER_PASSWORD = Buffer.from("owner-secret", "latin1");
-const USER_PASSWORD = Buffer.alloc(0);
 
 const md5 = (...parts) => createHash("md5").update(Buffer.concat(parts)).digest();
 const sha = (bits, data) => createHash(`sha${bits}`).update(data).digest();
@@ -80,7 +82,7 @@ function ivFor(num) {
 }
 
 /** Algorithms 2, 3 and 5, for R 3 and R 4: the key, and the O and U entries. */
-function legacyHandler(revision, id, permissions) {
+function legacyHandler(revision, id, permissions, userPassword) {
   const length = 16;
 
   // Algorithm 3: the O entry.
@@ -88,7 +90,7 @@ function legacyHandler(revision, id, permissions) {
   for (let round = 0; round < 50; round += 1)
     ownerHash = md5(ownerHash.subarray(0, length));
   const ownerKey = ownerHash.subarray(0, length);
-  let owner = rc4(ownerKey, Buffer.concat([USER_PASSWORD, PAD]).subarray(0, 32));
+  let owner = rc4(ownerKey, Buffer.concat([userPassword, PAD]).subarray(0, 32));
   for (let round = 1; round <= 19; round += 1) {
     owner = rc4(
       ownerKey.map((byte) => byte ^ round),
@@ -98,7 +100,7 @@ function legacyHandler(revision, id, permissions) {
 
   // Algorithm 2: the file key.
   let keyHash = md5(
-    Buffer.concat([USER_PASSWORD, PAD]).subarray(0, 32),
+    Buffer.concat([userPassword, PAD]).subarray(0, 32),
     owner,
     int32le(permissions),
     id,
@@ -134,7 +136,7 @@ function hash2B(password, salt, userEntry) {
 }
 
 /** Algorithms 8, 9 and 10: the R 6 key and its five entries. */
-function aes256Handler(permissions) {
+function aes256Handler(permissions, userPassword) {
   const key = sha(256, Buffer.from("RedactNest AES-256 fixture key", "latin1"));
   const seed = sha(512, Buffer.from("RedactNest AES-256 fixture salts", "latin1"));
   const [userValidation, userKeySalt, ownerValidation, ownerKeySalt] = [0, 8, 16, 24].map(
@@ -143,13 +145,13 @@ function aes256Handler(permissions) {
   const zeroIv = Buffer.alloc(16);
 
   const user = Buffer.concat([
-    hash2B(USER_PASSWORD, userValidation, Buffer.alloc(0)),
+    hash2B(userPassword, userValidation, Buffer.alloc(0)),
     userValidation,
     userKeySalt,
   ]);
   const userEncrypted = aesCbc(
     256,
-    hash2B(USER_PASSWORD, userKeySalt, Buffer.alloc(0)),
+    hash2B(userPassword, userKeySalt, Buffer.alloc(0)),
     zeroIv,
     key,
     false,
@@ -189,16 +191,22 @@ const hex = (bytes) => `<${Buffer.from(bytes).toString("hex")}>`;
  * `objects[i]` is object `i + 1`, exactly as `writePdf` numbers them. Returns
  * the objects with every stream's data encrypted and the Encrypt dictionary
  * appended, plus the trailer entries the file needs (`/Encrypt` and `/ID`).
+ * `userPassword` is ASCII, which every scheme reads the same way.
  */
-export function encryptObjects(objects, scheme, permissions = OWNER_ONLY_PERMISSIONS) {
+export function encryptObjects(
+  objects,
+  scheme,
+  { permissions = OWNER_ONLY_PERMISSIONS, userPassword = "" } = {},
+) {
   const id = md5(Buffer.from(`RedactNest ${scheme} fixture`, "latin1"));
+  const user = Buffer.from(userPassword, "latin1");
   const encryptNum = objects.length + 1;
 
   let encryptStream;
   let encryptDict;
 
   if (scheme === "aes-256") {
-    const handler = aes256Handler(permissions);
+    const handler = aes256Handler(permissions, user);
     encryptStream = (num, data) =>
       Buffer.concat([ivFor(num), aesCbc(256, handler.key, ivFor(num), data, true)]);
     encryptDict =
@@ -208,7 +216,7 @@ export function encryptObjects(objects, scheme, permissions = OWNER_ONLY_PERMISS
       `/UE ${hex(handler.userEncrypted)} /P ${permissions} /Perms ${hex(handler.permsEncrypted)} >>`;
   } else {
     const aes = scheme === "aes-128";
-    const handler = legacyHandler(aes ? 4 : 3, id, permissions);
+    const handler = legacyHandler(aes ? 4 : 3, id, permissions, user);
     const objectKey = (num) =>
       md5(
         handler.key,
