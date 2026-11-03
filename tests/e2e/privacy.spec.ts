@@ -558,6 +558,108 @@ test("a full run sends no document, text, match or name anywhere", async ({ page
 });
 
 /**
+ * Spec 0016, AC-11 to AC-13, through the real page. `toolEvents` is proved
+ * pure in `tests/unit/telemetry-tool.test.ts`; what only a browser shows is
+ * the effect in `tool-client.tsx` that calls it, so each case counts what the
+ * page actually posted, by name and by number, rather than that a name
+ * appeared somewhere. A refusal must be one event, never a `run-refused` and
+ * a `cap-reached` both.
+ *
+ * Each case ends by loading `/` and waiting for its page view. That is the
+ * fence: every post the tool made was asked for before the page left, so
+ * once the home page's view is recorded, nothing the tool sent is still to
+ * come, and an event sent twice would be in the list.
+ */
+test.describe("what the tool counts, once each", () => {
+  /** Leave for `/`, then hand back every event, the fence included. */
+  async function eventsUpToHome(
+    page: Page,
+    requests: readonly Request[],
+  ): Promise<TelemetryEvent[]> {
+    await page.goto("/");
+    await expect
+      .poll(() => requests.filter(isTelemetry).map(parsedBody).at(-1), {
+        timeout: ENGINE_TIMEOUT,
+      })
+      .toEqual({ name: "page-view", page: "home" });
+    return telemetryEvents(requests);
+  }
+
+  /** The plan the job froze, as `/api/entitlement` gave it to the page. */
+  async function planOf(requests: readonly Request[]) {
+    const check = requests.find(
+      (request) => new URL(request.url()).pathname === "/api/entitlement",
+    );
+    const response = await check?.response();
+    const plan = (await response?.json()) as { tier: string; account: string };
+    return { tier: plan.tier, account: plan.account };
+  }
+
+  test("a full run posts its page view, its open and its run, and nothing twice", async ({
+    page,
+  }) => {
+    const requests = recordRequests(page);
+
+    await page.goto("/tool");
+    await redactAndDownload(page);
+    const events = await eventsUpToHome(page, requests);
+
+    expect(events.map((event) => event.name)).toEqual([
+      "page-view",
+      "document-opened",
+      "redaction-completed",
+      "page-view",
+    ]);
+    expect(events[0]).toEqual({ name: "page-view", page: "tool" });
+    expect(events[1]).toMatchObject({ pages: "2-5", ...(await planOf(requests)) });
+    expect(events[2]).toMatchObject(await planOf(requests));
+  });
+
+  test("a free visitor over the page cap posts one cap-reached and no refusal", async ({
+    page,
+  }) => {
+    const requests = recordRequests(page);
+
+    await page.goto("/tool");
+    await page
+      .getByTestId("file-input")
+      .setInputFiles(resolve("tests/fixtures/detect-dense.pdf"));
+    await expect(page.getByTestId("error")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+    const { tier, account } = await planOf(requests);
+    expect(tier, "the cap is the free tier's").toBe("free");
+
+    expect(await eventsUpToHome(page, requests)).toEqual([
+      { name: "page-view", page: "tool" },
+      { name: "cap-reached", cap: "pages", account },
+      { name: "page-view", page: "home" },
+    ]);
+  });
+
+  test("a file that needs its password posts one run-refused at the open step", async ({
+    page,
+  }) => {
+    const requests = recordRequests(page);
+
+    await page.goto("/tool");
+    await page
+      .getByTestId("file-input")
+      .setInputFiles(resolve("tests/fixtures/user-password.pdf"));
+    await expect(page.getByTestId("error")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+
+    expect(await eventsUpToHome(page, requests)).toEqual([
+      { name: "page-view", page: "tool" },
+      {
+        name: "run-refused",
+        kind: "password-required",
+        step: "open",
+        ...(await planOf(requests)),
+      },
+      { name: "page-view", page: "home" },
+    ]);
+  });
+});
+
+/**
  * Spec 0005, AC-15. Detection puts document text on the main thread for the
  * first time as more than one fixture line: every match, and the words either
  * side of it. A run over a document full of them, open to download, and none of

@@ -353,7 +353,7 @@ spec [0016](../specs/0016-telemetry-error-monitoring/index.md)
   - [x] One report for each server failure (slice 6, decided 2026-11-03): the proxy catches and reports its own throw, which `onRequestError` never hears on Node, and every `server-crash` goes through `reportCrash`, at most once a minute for each route and type from each server instance · AC-15, AC-26, AC-27
   - [ ] Go live (your steps, before the merge): Umami and Sentry on free plans with no card, the two values for Production only, the separate firewall rule, Sentry's alerts and key limit, Vercel's metered analytics confirmed off; then a visit and a test error seen after the deploy; and what Clerk's dashboard counts by day, recorded (step 8) · AC-14, AC-25
 - [ ] Verify it: `/check verify telemetry & error monitoring`
-- [ ] Test it: `/test telemetry & error monitoring`
+- [x] Test it: `/test telemetry & error monitoring`
 
 ## Release 4: First paid capability
 

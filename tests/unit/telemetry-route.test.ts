@@ -175,4 +175,48 @@ describe("the size limit", () => {
     await POST(post(body));
     expect(reportServer).toHaveBeenCalledTimes(1);
   });
+
+  it("drops a body one byte over that declares no length, with the quiet 204", async () => {
+    const event = JSON.stringify({ name: "page-view", page: "home" });
+    const request = post(event + " ".repeat(MAX_EVENT_BYTES + 1 - event.length));
+    expect(request.headers.get("content-length")).toBeNull();
+    await expectQuietAnswer(await POST(request));
+    expect(reportServer).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The limit is on bytes, not characters. JSON keeps the last of a repeated
+   * key, so a padded first `page` vanishes in parsing and the event is valid
+   * whatever the padding holds: only its size decides. Each "é" is two bytes.
+   */
+  const padded = (characters: number) =>
+    `{"page":"${"é".repeat(characters)}","name":"page-view","page":"home"}`;
+
+  it("measures the limit in bytes, so a body under 2048 characters can be over it", async () => {
+    const body = padded(1100);
+    expect(body.length).toBeLessThan(MAX_EVENT_BYTES);
+    expect(new TextEncoder().encode(body).byteLength).toBeGreaterThan(MAX_EVENT_BYTES);
+    await expectQuietAnswer(await POST(post(body)));
+    expect(reportServer).not.toHaveBeenCalled();
+  });
+
+  it("forwards the same padded shape when its bytes fit, so the size is what dropped it", async () => {
+    const body = padded(900);
+    expect(new TextEncoder().encode(body).byteLength).toBeLessThanOrEqual(
+      MAX_EVENT_BYTES,
+    );
+    await POST(post(body));
+    expect(reportServer).toHaveBeenCalledTimes(1);
+    expect(reportServer.mock.calls[0]?.[0]).toEqual({ name: "page-view", page: "home" });
+  });
+});
+
+describe("the methods it answers", () => {
+  it("exports POST alone, so every other method gets Next.js's own 405", async () => {
+    const route: Record<string, unknown> = await import("@/app/api/telemetry/route");
+    expect(typeof route.POST).toBe("function");
+    for (const method of ["GET", "HEAD", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
+      expect(route[method], method).toBeUndefined();
+    }
+  });
 });

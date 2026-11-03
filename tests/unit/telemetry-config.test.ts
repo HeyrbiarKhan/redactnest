@@ -1,3 +1,7 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -233,10 +237,58 @@ describe("at module load", () => {
     [{ NEXT_PUBLIC_VERCEL_ENV: "production" }, true],
     [{ NEXT_PUBLIC_VERCEL_ENV: "preview" }, false],
     [{ NEXT_PUBLIC_VERCEL_ENV: "development" }, false],
+    // Read literally: Vercel writes it in lower case, so nothing else matches.
+    [{ NEXT_PUBLIC_VERCEL_ENV: "Production" }, false],
     [{ NEXT_PUBLIC_TELEMETRY_E2E: "1" }, true],
     [{ NEXT_PUBLIC_TELEMETRY_E2E: "true" }, false],
+    [{ NEXT_PUBLIC_TELEMETRY_E2E: "0" }, false],
   ])("sets telemetryReporting from %j to %s", async (env, reporting) => {
     setEnv(env);
     expect((await import("@/config")).config.telemetryReporting).toBe(reporting);
+  });
+});
+
+/**
+ * Spec 0016, AC-24 and *Security model*: the website id and the DSN are
+ * server only. Read from the source as text, because what matters is where
+ * the code reads them, and Vitest stands in for `server-only` with an empty
+ * module (`tests/setup/server-only.ts`), so no import can show it.
+ */
+describe("where the two values live", () => {
+  const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+  const CONFIG_FILE = "src/config/telemetry.ts";
+  const SERVER_FILE = "src/telemetry/server.ts";
+
+  const FILES = readdirSync(join(ROOT, "src"), { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && /\.tsx?$/.test(entry.name))
+    .map((entry) =>
+      relative(ROOT, join(entry.parentPath, entry.name)).replaceAll("\\", "/"),
+    );
+  const source = (file: string) => readFileSync(join(ROOT, file), "utf8");
+
+  /** `process.env.NAME` or `process.env["NAME"]`, for either value. */
+  const READS_A_VALUE = /process\.env(?:\.|\[\s*["'`])(?:UMAMI_WEBSITE_ID|SENTRY_DSN)\b/;
+
+  it("reads the source it checks", () => {
+    expect(FILES).toEqual(expect.arrayContaining([CONFIG_FILE, SERVER_FILE]));
+  });
+
+  it.each([CONFIG_FILE, SERVER_FILE])(
+    "keeps %s out of every browser bundle with server-only",
+    (file) => {
+      expect(source(file)).toMatch(/^import "server-only";$/m);
+    },
+  );
+
+  it("reads both values in src/config/telemetry.ts and nowhere else", () => {
+    const readers = FILES.filter((file) => READS_A_VALUE.test(source(file)));
+    expect(readers).toEqual([CONFIG_FILE]);
+  });
+
+  it("never gives either a NEXT_PUBLIC_ name, which would inline it into pages", () => {
+    const leaking = FILES.filter((file) =>
+      /NEXT_PUBLIC_(?:UMAMI|SENTRY)/.test(source(file)),
+    );
+    expect(leaking).toEqual([]);
   });
 });

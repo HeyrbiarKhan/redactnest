@@ -165,6 +165,44 @@ describe("a document with layers", () => {
 });
 
 /**
+ * Spec 0004's `password-required`, on a real file. RedactNest takes no
+ * password, so a PDF that opens only with its user password is refused at
+ * open. `user-password.pdf` is the fixture spec 0016's verify step 15 opens
+ * to see that refusal counted as `run-refused`; these cases hold that it
+ * still needs its password, so the refusal it shows is the real one.
+ */
+describe("a document that needs a user password", () => {
+  it("is encrypted with 256-bit AES and opens only with its own password", () => {
+    const doc = mupdf.Document.openDocument(
+      fixture("user-password.pdf"),
+      "application/pdf",
+    );
+    try {
+      expect(doc.needsPassword()).toBe(true);
+      expect(doc.getMetaData("encryption")).toContain("256-bit AES");
+      expect(doc.authenticatePassword("not-the-password")).toBe(0);
+      // `needsPassword()` asks about the empty password every time, so it
+      // stays true after a good one; the page reading is what proves it opened.
+      expect(doc.authenticatePassword("user-secret")).toBeGreaterThan(0);
+      const pdf = doc.asPDF();
+      if (!pdf) throw new Error("expected a PDF document");
+      expect(pageText(pdf, 0)).toContain("User password fixture");
+    } finally {
+      doc.destroy();
+    }
+  });
+
+  it("is refused as password-required, before anything is inspected", async () => {
+    const onPhase = vi.fn();
+
+    await expect(
+      openDocumentWith(mupdf, fixture("user-password.pdf"), LIMITS, { onPhase }),
+    ).rejects.toMatchObject({ name: "EngineFailure", errorKind: "password-required" });
+    expect(onPhase).not.toHaveBeenCalledWith("inspecting");
+  });
+});
+
+/**
  * Spec 0004, AC-22 and INV-9. The one prepare step, as both copies get it.
  *
  * Asserted on a document MuPDF opened directly, because the review copy's
