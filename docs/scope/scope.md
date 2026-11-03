@@ -354,6 +354,7 @@ spec [0016](../specs/0016-telemetry-error-monitoring/index.md)
   - [ ] Go live (your steps, before the merge): Umami and Sentry on free plans with no card, the two values for Production only, the separate firewall rule, Sentry's alerts and key limit, Vercel's metered analytics confirmed off; then a visit and a test error seen after the deploy; and what Clerk's dashboard counts by day, recorded (step 8) · AC-14, AC-25
 - [ ] Verify it: `/check verify telemetry & error monitoring`
 - [x] Test it: `/test telemetry & error monitoring`
+- [x] Review it (fresh model): `/check review telemetry & error monitoring` ([2026-11-04](../reviews/2026-11-04-feat-telemetry.md))
 
 ## Release 4: First paid capability
 
