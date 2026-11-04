@@ -193,4 +193,44 @@ describe("report's once per page load cap", () => {
     nextLoad(FAILURE);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
+
+  // The cap goes by category, every error report, not only the shapes the
+  // route accepts from a page, so a report that only server code sends today
+  // is held the same way if a page ever sends it.
+  it("caps an error report no page sends today, since the cap goes by category", async () => {
+    const report = await loadReport(ON);
+    const sent = new Set<string>();
+    const serverOnly: readonly TelemetryEvent[] = [
+      { name: "plan-check-failed" },
+      { name: "billing-failed", action: "subscribe", outcome: "checkout-failed" },
+    ];
+    for (let time = 0; time < 3; time += 1) {
+      for (const event of serverOnly) report(event, sent);
+    }
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([{ globalPrivacyControl: true }, { doNotTrack: "1" }])(
+    "sends a failure once from a browser that opted out (%j), capped like any other",
+    async (signals) => {
+      vi.stubGlobal("navigator", signals);
+      const report = await loadReport(ON);
+      const sent = new Set<string>();
+      for (let time = 0; time < 3; time += 1) report(FAILURE, sent);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(sent.size).toBe(1);
+    },
+  );
+
+  // INV-3: telemetry never retries. A request that went out counts, whatever
+  // came back, so a page offline in a loop still sends one report.
+  it("remembers a report whose request went out and failed, so the page never sends it again", async () => {
+    const report = await loadReport(ON);
+    const sent = new Set<string>();
+    fetchSpy.mockImplementationOnce(() => Promise.reject(new TypeError("offline")));
+    report(FAILURE, sent);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    report(FAILURE, sent);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
 });

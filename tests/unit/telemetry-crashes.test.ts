@@ -174,9 +174,16 @@ describe("onRequestError", () => {
     });
   });
 
-  it.each(["render", "route", "action"])("keeps a %s as itself", (routeType) => {
-    expect(crashReport({ routePath: "/tool/page", routeType }).routeType).toBe(routeType);
-  });
+  // `proxy` stays itself so a later Next.js that calls the hook for the proxy
+  // lands on the proxy's own key, and a literal `other` stays `other`.
+  it.each(["render", "route", "action", "proxy", "other"])(
+    "keeps a %s as itself",
+    (routeType) => {
+      expect(crashReport({ routePath: "/tool/page", routeType }).routeType).toBe(
+        routeType,
+      );
+    },
+  );
 });
 
 describe("the plan check falling back", () => {

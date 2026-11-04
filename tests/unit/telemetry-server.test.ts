@@ -262,6 +262,23 @@ describe("the Sentry envelope", () => {
     };
     expect(report.fingerprint).toEqual(fingerprint);
   });
+
+  // AC-15: `other` keeps its own collapse key (AC-27), but Sentry files it by
+  // name and route alone, so it lands on the same issue as a render there.
+  it("tags a route type a later Next.js adds as other, under the same issue as a render there", () => {
+    const reportFor = (routeType: ServerCrash["routeType"]) =>
+      lines(
+        sentryRequest(
+          { name: "server-crash", route: "tool", routeType },
+          SINKS,
+          NOW,
+          EVENT_ID,
+        ).init.body,
+      )[2] as { fingerprint: unknown; tags: unknown };
+    const later = reportFor("other");
+    expect(later.tags).toEqual({ route: "tool", routeType: "other" });
+    expect(later.fingerprint).toEqual(reportFor("render").fingerprint);
+  });
 });
 
 describe("forward", () => {
@@ -606,6 +623,16 @@ describe("reportServer's collapse (AC-16, AC-27)", () => {
     expect(memory.sent.size).toBe(0);
     expect(memory.pageDays.size).toBe(0);
   });
+
+  it("passes a count even when the clock throws, since counts never meet the collapse", () => {
+    const { seams, scheduled, memory } = reportSeams({
+      now: () => {
+        throw new Error("no clock");
+      },
+    });
+    reportServer({ name: "page-view", page: "tool" }, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(1);
+  });
 });
 
 describe("the flood, on the server (AC-27, AC-29, INV-10)", () => {
@@ -683,6 +710,51 @@ describe("the flood, on the server (AC-27, AC-29, INV-10)", () => {
 
     for (const report of PAGE_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
     expect(scheduled).toHaveLength(SERVER_REPORTS.length + 20);
+  });
+
+  // AC-29: the budget is asked only once the collapse admits, so a forged
+  // flood of one shape costs one, not the day's twenty.
+  it("spends no budget on repeats the collapse refused, so other page reports still go", () => {
+    const { seams, scheduled, clock, memory } = reportSeams();
+    const today = Math.floor(clock.at / DAY_MS);
+    for (let time = 0; time < 100; time += 1) {
+      reportServer(PAGE_REPORTS[0]!, NO_HEADERS, seams, memory);
+    }
+    expect(memory.pageDays.get(today)).toBe(1);
+
+    for (const report of PAGE_REPORTS.slice(1)) {
+      reportServer(report, NO_HEADERS, seams, memory);
+    }
+    expect(scheduled).toHaveLength(20);
+  });
+
+  // INV-10's bound: a page failure that keeps coming back is admitted once an
+  // hour, and each of those spends the budget, so it never passes 20 a day.
+  it("spends the budget each hour a page failure comes back, so a whole UTC day sends 20", () => {
+    const { seams, scheduled, clock, memory } = reportSeams();
+    clock.at = Math.floor(clock.at / DAY_MS) * DAY_MS;
+    for (let hour = 0; hour < 24; hour += 1) {
+      reportServer(PAGE_REPORTS[0]!, NO_HEADERS, seams, memory);
+      clock.at += HOUR_MS;
+    }
+    expect(scheduled).toHaveLength(20);
+  });
+
+  it("starts the budget again at midnight UTC, and not a millisecond before", () => {
+    const { seams, scheduled, clock, memory } = reportSeams();
+    for (const report of PAGE_REPORTS.slice(0, 20)) {
+      reportServer(report, NO_HEADERS, seams, memory);
+    }
+    const midnight = (Math.floor(clock.at / DAY_MS) + 1) * DAY_MS;
+    const late = PAGE_REPORTS[20]!;
+
+    clock.at = midnight - 1;
+    reportServer(late, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(20);
+
+    clock.at = midnight;
+    reportServer(late, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(21);
   });
 });
 
