@@ -366,13 +366,25 @@ function reportSeams(overrides: Partial<TelemetrySeams> = {}) {
   return { ...recording, clock, memory: freshMemory() };
 }
 
-/** Every report shape a page can send, 24 of them (AC-28). */
-const PAGE_REPORTS: readonly ErrorReport[] = Object.freeze([
+/** Every page report shape that draws on the day's budget, 23 of them (AC-29). */
+const BUDGET_REPORTS: readonly ErrorReport[] = Object.freeze([
   ...PAGE_KINDS.flatMap((page) =>
     CRASH_SOURCES.map((kind): ErrorReport => ({ name: "browser-crash", page, kind })),
   ),
   { name: "engine-unavailable" },
-  { name: "billing-failed", action: "welcome", outcome: "still-waiting" },
+]);
+
+/** The welcome page's report: a page sends it, and it draws on no budget (AC-29). */
+const STILL_WAITING: ErrorReport = {
+  name: "billing-failed",
+  action: "welcome",
+  outcome: "still-waiting",
+};
+
+/** Every report shape a page can send, 24 of them (AC-28). */
+const PAGE_REPORTS: readonly ErrorReport[] = Object.freeze([
+  ...BUDGET_REPORTS,
+  STILL_WAITING,
 ]);
 
 /** Eight reports only request code sends, never a page (AC-29). */
@@ -401,6 +413,7 @@ const NO_HEADERS = new Headers();
 describe("the report shapes these cases use", () => {
   it("are every page report and twenty server reports, each with a key of its own", () => {
     expect(PAGE_REPORTS).toHaveLength(24);
+    expect(BUDGET_REPORTS).toHaveLength(23);
     expect(PAGE_REPORTS.every(isBrowserEvent)).toBe(true);
     expect(SERVER_REPORTS.some(isBrowserEvent)).toBe(false);
     expect(SERVER_REPORTS.length + SERVER_CRASHES.length).toBe(20);
@@ -649,15 +662,56 @@ describe("the flood, on the server (AC-27, AC-29, INV-10)", () => {
     expect(scheduled).toHaveLength(1);
   });
 
-  it("schedules 20 of the 24 page report shapes in one UTC day, and drops the rest", () => {
+  it("schedules 20 of the 23 budgeted page report shapes in one UTC day, and drops the rest", () => {
     const { seams, scheduled, memory } = reportSeams();
-    for (const report of PAGE_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
+    for (const report of BUDGET_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
     expect(scheduled).toHaveLength(20);
+  });
+
+  // AC-29: rejections can use up the day for every other page report, but
+  // never for a paying customer who never got Pro.
+  it("still sends still-waiting once the budget is spent, and spends none of it", () => {
+    const { seams, scheduled, clock, memory } = reportSeams();
+    const today = Math.floor(clock.at / DAY_MS);
+    for (const report of BUDGET_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(20);
+
+    reportServer(STILL_WAITING, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(21);
+    expect(memory.pageDays.get(today)).toBe(20);
+  });
+
+  it("spends no budget on still-waiting before the day's 20, so all 20 still go", () => {
+    const { seams, scheduled, memory } = reportSeams();
+    reportServer(STILL_WAITING, NO_HEADERS, seams, memory);
+    expect(memory.pageDays.size).toBe(0);
+
+    for (const report of BUDGET_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(21);
+  });
+
+  it("holds still-waiting to one an hour by the collapse alone, budget spent or not", () => {
+    const { seams, scheduled, clock, memory } = reportSeams();
+    for (let time = 0; time < 100; time += 1) {
+      reportServer(STILL_WAITING, NO_HEADERS, seams, memory);
+    }
+    expect(scheduled).toHaveLength(1);
+
+    for (const report of BUDGET_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(21);
+
+    clock.at += HOUR_MS - 1;
+    reportServer(STILL_WAITING, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(21);
+
+    clock.at += 1;
+    reportServer(STILL_WAITING, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(22);
   });
 
   it("still sends a server-crash and a plan-check-failed once the budget is spent", async () => {
     const { seams, sent, scheduled, memory } = reportSeams();
-    for (const report of PAGE_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
+    for (const report of BUDGET_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
     expect(scheduled).toHaveLength(20);
 
     reportServer({ name: "plan-check-failed" }, NO_HEADERS, seams, memory);
@@ -672,11 +726,11 @@ describe("the flood, on the server (AC-27, AC-29, INV-10)", () => {
 
   it("sends again on the next UTC day", () => {
     const { seams, scheduled, clock, memory } = reportSeams();
-    for (const report of PAGE_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
+    for (const report of BUDGET_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
     expect(scheduled).toHaveLength(20);
 
     clock.at = (Math.floor(clock.at / DAY_MS) + 1) * DAY_MS;
-    for (const report of PAGE_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
+    for (const report of BUDGET_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
     expect(scheduled).toHaveLength(40);
     expect([...memory.pageDays.keys()]).toEqual([Math.floor(clock.at / DAY_MS)]);
   });
@@ -685,10 +739,10 @@ describe("the flood, on the server (AC-27, AC-29, INV-10)", () => {
     const { seams, scheduled, clock, memory } = reportSeams();
     const nextDay = (Math.floor(clock.at / DAY_MS) + 1) * DAY_MS;
     clock.at = nextDay - 30 * 60 * 1000;
-    for (const report of PAGE_REPORTS.slice(0, 20)) {
+    for (const report of BUDGET_REPORTS.slice(0, 20)) {
       reportServer(report, NO_HEADERS, seams, memory);
     }
-    const dropped = PAGE_REPORTS[20]!;
+    const dropped = BUDGET_REPORTS[20]!;
     reportServer(dropped, NO_HEADERS, seams, memory);
     expect(scheduled).toHaveLength(20);
     expect(memory.sent.has(reportKey(dropped))).toBe(false);
@@ -708,7 +762,7 @@ describe("the flood, on the server (AC-27, AC-29, INV-10)", () => {
     expect(sent).toHaveLength(SERVER_CRASHES.length);
     expect(memory.pageDays.size).toBe(0);
 
-    for (const report of PAGE_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
+    for (const report of BUDGET_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
     expect(scheduled).toHaveLength(SERVER_REPORTS.length + 20);
   });
 
@@ -718,11 +772,11 @@ describe("the flood, on the server (AC-27, AC-29, INV-10)", () => {
     const { seams, scheduled, clock, memory } = reportSeams();
     const today = Math.floor(clock.at / DAY_MS);
     for (let time = 0; time < 100; time += 1) {
-      reportServer(PAGE_REPORTS[0]!, NO_HEADERS, seams, memory);
+      reportServer(BUDGET_REPORTS[0]!, NO_HEADERS, seams, memory);
     }
     expect(memory.pageDays.get(today)).toBe(1);
 
-    for (const report of PAGE_REPORTS.slice(1)) {
+    for (const report of BUDGET_REPORTS.slice(1)) {
       reportServer(report, NO_HEADERS, seams, memory);
     }
     expect(scheduled).toHaveLength(20);
@@ -734,7 +788,7 @@ describe("the flood, on the server (AC-27, AC-29, INV-10)", () => {
     const { seams, scheduled, clock, memory } = reportSeams();
     clock.at = Math.floor(clock.at / DAY_MS) * DAY_MS;
     for (let hour = 0; hour < 24; hour += 1) {
-      reportServer(PAGE_REPORTS[0]!, NO_HEADERS, seams, memory);
+      reportServer(BUDGET_REPORTS[0]!, NO_HEADERS, seams, memory);
       clock.at += HOUR_MS;
     }
     expect(scheduled).toHaveLength(20);
@@ -742,11 +796,11 @@ describe("the flood, on the server (AC-27, AC-29, INV-10)", () => {
 
   it("starts the budget again at midnight UTC, and not a millisecond before", () => {
     const { seams, scheduled, clock, memory } = reportSeams();
-    for (const report of PAGE_REPORTS.slice(0, 20)) {
+    for (const report of BUDGET_REPORTS.slice(0, 20)) {
       reportServer(report, NO_HEADERS, seams, memory);
     }
     const midnight = (Math.floor(clock.at / DAY_MS) + 1) * DAY_MS;
-    const late = PAGE_REPORTS[20]!;
+    const late = BUDGET_REPORTS[20]!;
 
     clock.at = midnight - 1;
     reportServer(late, NO_HEADERS, seams, memory);

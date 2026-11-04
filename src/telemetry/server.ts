@@ -79,8 +79,9 @@ const REPORT_WINDOW_MS = 60 * 60 * 1000;
  * How many page error reports this server instance forwards in one UTC day
  * (AC-29). A rule about reporting, not a cap on the visitor. Page reports are
  * the ones a script can forge, so they share a budget no server report draws
- * on: about 600 a month, leaving the rest of Sentry's free quota for server
- * failures (INV-10).
+ * on: about 600 a month, and `still-waiting` (outside it) at most 720 at one
+ * an hour, leaving the rest of Sentry's free quota for server failures
+ * (INV-10).
  */
 const PAGE_REPORTS_PER_DAY = 20;
 
@@ -348,11 +349,22 @@ export async function forward(
 }
 
 /**
+ * Whether an error report draws on the day's page budget (AC-29): every page
+ * report (one `isBrowserEvent` accepts) but the welcome page's `still-waiting`,
+ * the only `billing-failed` a page may send. That one is a paying customer who
+ * never got Pro, so a day of unfiltered rejections must not hide it, and the
+ * collapse alone holds it to one an hour (AC-27).
+ */
+const drawsOnPageBudget = (event: ErrorReport): boolean =>
+  isBrowserEvent(event) && event.name !== "billing-failed";
+
+/**
  * Whether an error report may go, recording it if so (AC-27, AC-29, INV-10).
  * The collapse first: nothing when the same report (`reportKey`) was admitted
  * in the last hour, and again at exactly one hour. Then, for a page report
- * (one `isBrowserEvent` accepts), the day's budget: nothing once today's
- * `PAGE_REPORTS_PER_DAY` are spent. A server report has no budget.
+ * other than `still-waiting` (`drawsOnPageBudget`), the day's budget: nothing
+ * once today's `PAGE_REPORTS_PER_DAY` are spent. A server report and
+ * `still-waiting` have no budget.
  *
  * Synchronous, so the check and the record happen together with no `await`
  * between them, and a repeat that arrives while the first send is still in
@@ -365,7 +377,7 @@ function admitReport(event: ErrorReport, now: number, memory: ReportMemory): boo
   const last = memory.sent.get(key);
   if (last !== undefined && now - last < REPORT_WINDOW_MS) return false;
 
-  const page = isBrowserEvent(event);
+  const page = drawsOnPageBudget(event);
   const day = Math.floor(now / DAY_MS);
   const today = memory.pageDays.get(day) ?? 0;
   if (page && today >= PAGE_REPORTS_PER_DAY) return false;
@@ -423,8 +435,9 @@ export const optsOut = (headers: HeaderReader): boolean =>
  * account pages. A count is dropped when the request opts out, and is never
  * held back otherwise: each one counts. A failure report ignores the opt out
  * (INV-6), and every one goes through the collapse, at most once an hour for
- * each report from this server instance, and a page's report through the
- * day's budget too (AC-27, AC-29). The send runs after the answer (AC-8).
+ * each report from this bundle, and a page's report (but `still-waiting`)
+ * through the day's budget too (AC-27, AC-29). The send runs after the answer
+ * (AC-8).
  *
  * Nothing here throws, even outside a request where there is no answer to run
  * after. A report admitted before `schedule` throws is lost for the hour, and
