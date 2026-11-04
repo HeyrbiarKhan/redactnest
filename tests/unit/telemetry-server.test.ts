@@ -1,10 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { TelemetrySinks } from "@/config/telemetry";
-import type { ServerCrash, UsageEvent } from "@/telemetry/events";
+import {
+  CRASH_ROUTES,
+  CRASH_SOURCES,
+  type ErrorReport,
+  isBrowserEvent,
+  PAGE_KINDS,
+  reportKey,
+  type ServerCrash,
+  type UsageEvent,
+} from "@/telemetry/events";
 import {
   forward,
   optsOut,
+  type ReportMemory,
   reportCrash,
   reportServer,
   sentryRequest,
@@ -320,11 +330,68 @@ describe("forward", () => {
   });
 });
 
-/**
- * One report for each server failure (AC-27, INV-10). Every case hands
- * `reportCrash` a memory of its own, so the module's default one, which the
- * hook and the proxy share in a real server, is never touched here.
+/*
+ * The collapse and the page budget (AC-27, AC-29, INV-10). Every case that
+ * sends an error report hands it a memory of its own, so the module's default
+ * one, which the hook, the proxy and request code share in a real server, is
+ * never touched here.
  */
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+const freshMemory = (): ReportMemory => ({ sent: new Map(), pageDays: new Map() });
+
+/** Recording seams on a clock the test moves, and a fresh memory. */
+function reportSeams(overrides: Partial<TelemetrySeams> = {}) {
+  const clock = { at: NOW.getTime() };
+  const recording = recordingSeams({ now: () => new Date(clock.at), ...overrides });
+  return { ...recording, clock, memory: freshMemory() };
+}
+
+/** Every report shape a page can send, 24 of them (AC-28). */
+const PAGE_REPORTS: readonly ErrorReport[] = Object.freeze([
+  ...PAGE_KINDS.flatMap((page) =>
+    CRASH_SOURCES.map((kind): ErrorReport => ({ name: "browser-crash", page, kind })),
+  ),
+  { name: "engine-unavailable" },
+  { name: "billing-failed", action: "welcome", outcome: "still-waiting" },
+]);
+
+/** Eight reports only request code sends, never a page (AC-29). */
+const SERVER_REPORTS: readonly ErrorReport[] = Object.freeze([
+  { name: "billing-failed", action: "subscribe", outcome: "plan-unknown" },
+  { name: "billing-failed", action: "subscribe", outcome: "customer-conflict" },
+  { name: "billing-failed", action: "subscribe", outcome: "other-product" },
+  { name: "billing-failed", action: "subscribe", outcome: "checkout-failed" },
+  { name: "billing-failed", action: "portal", outcome: "portal-failed" },
+  { name: "billing-failed", action: "delete", outcome: "billing-failed" },
+  { name: "billing-failed", action: "delete", outcome: "sign-in-kept" },
+  { name: "plan-check-failed" },
+]);
+
+/** Twelve server failures, one on each of the first twelve routes. */
+const SERVER_CRASHES: readonly ServerCrash[] = Object.freeze(
+  CRASH_ROUTES.slice(0, 12).map((route): ServerCrash => ({
+    name: "server-crash",
+    route,
+    routeType: "render",
+  })),
+);
+
+const NO_HEADERS = new Headers();
+
+describe("the report shapes these cases use", () => {
+  it("are every page report and twenty server reports, each with a key of its own", () => {
+    expect(PAGE_REPORTS).toHaveLength(24);
+    expect(PAGE_REPORTS.every(isBrowserEvent)).toBe(true);
+    expect(SERVER_REPORTS.some(isBrowserEvent)).toBe(false);
+    expect(SERVER_REPORTS.length + SERVER_CRASHES.length).toBe(20);
+    const keys = [...PAGE_REPORTS, ...SERVER_REPORTS, ...SERVER_CRASHES].map(reportKey);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
 describe("reportCrash", () => {
   const CRASH: ServerCrash = {
     name: "server-crash",
@@ -332,40 +399,34 @@ describe("reportCrash", () => {
     routeType: "render",
   };
 
-  /** Recording seams on a clock the test moves, and a fresh memory. */
-  function crashSeams(overrides: Partial<TelemetrySeams> = {}) {
-    const clock = { at: NOW.getTime() };
-    const recording = recordingSeams({ now: () => new Date(clock.at), ...overrides });
-    return { ...recording, clock, memory: new Map<string, number>() };
-  }
-
   it("forwards the first failure from a place as a Sentry report", async () => {
-    const { seams, sent, memory } = crashSeams();
+    const { seams, sent, memory } = reportSeams();
     await reportCrash(CRASH, seams, memory);
     expect(sent.map(({ url }) => url)).toEqual([SINKS.sentry.envelopeUrl]);
   });
 
-  it("forwards nothing for the same route and type inside the minute", async () => {
-    const { seams, sent, clock, memory } = crashSeams();
+  it("forwards nothing for the same route and type inside the hour", async () => {
+    const { seams, sent, clock, memory } = reportSeams();
     await reportCrash(CRASH, seams, memory);
     await reportCrash(CRASH, seams, memory);
-    clock.at += 59_999;
+    clock.at += HOUR_MS - 1;
     await reportCrash(CRASH, seams, memory);
     expect(sent).toHaveLength(1);
   });
 
   it("forwards a different route or a different type", async () => {
-    const { seams, sent, memory } = crashSeams();
+    const { seams, sent, memory } = reportSeams();
     await reportCrash(CRASH, seams, memory);
     await reportCrash({ ...CRASH, route: "billing" }, seams, memory);
     await reportCrash({ ...CRASH, routeType: "action" }, seams, memory);
-    expect(sent).toHaveLength(3);
+    await reportCrash({ ...CRASH, routeType: "other" }, seams, memory);
+    expect(sent).toHaveLength(4);
   });
 
-  it("forwards the same one again at exactly 60 seconds", async () => {
-    const { seams, sent, clock, memory } = crashSeams();
+  it("forwards the same one again at exactly one hour", async () => {
+    const { seams, sent, clock, memory } = reportSeams();
     await reportCrash(CRASH, seams, memory);
-    clock.at += 60_000;
+    clock.at += HOUR_MS;
     await reportCrash(CRASH, seams, memory);
     expect(sent).toHaveLength(2);
   });
@@ -373,7 +434,7 @@ describe("reportCrash", () => {
   it("forwards once for two started together, before either send answers", async () => {
     const answer = Promise.withResolvers<Response>();
     const fetch = vi.fn(() => answer.promise);
-    const { seams, memory } = crashSeams({ fetch });
+    const { seams, memory } = reportSeams({ fetch });
 
     const first = reportCrash(CRASH, seams, memory);
     const second = reportCrash(CRASH, seams, memory);
@@ -385,34 +446,36 @@ describe("reportCrash", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("counts a send that fails, so the next failure that minute goes unreported", async () => {
+  it("counts a send that fails, so the next failure that hour goes unreported", async () => {
     const fetch = vi.fn(() => Promise.reject(new TypeError("fetch failed")));
-    const { seams, clock, memory } = crashSeams({ fetch });
+    const { seams, clock, memory } = reportSeams({ fetch });
     await expect(reportCrash(CRASH, seams, memory)).resolves.toBeUndefined();
-    clock.at += 1_000;
+    clock.at += HOUR_MS / 2;
     await reportCrash(CRASH, seams, memory);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("records nothing when this build forwards nothing", async () => {
-    const { seams, sent, memory } = crashSeams({ sinks: null });
+    const { seams, sent, memory } = reportSeams({ sinks: null });
     await reportCrash(CRASH, seams, memory);
-    expect(memory.size).toBe(0);
+    expect(memory.sent.size).toBe(0);
+    expect(memory.pageDays.size).toBe(0);
     expect(sent).toEqual([]);
 
-    const live = crashSeams();
+    const live = reportSeams();
     await reportCrash(CRASH, live.seams, memory);
     expect(live.sent).toHaveLength(1);
   });
 
   it("still resolves when the clock throws, and sends nothing", async () => {
-    const { seams, sent, memory } = crashSeams({
+    const { seams, sent, memory } = reportSeams({
       now: () => {
         throw new Error("no clock");
       },
     });
     await expect(reportCrash(CRASH, seams, memory)).resolves.toBeUndefined();
     expect(sent).toEqual([]);
+    expect(memory.sent.size).toBe(0);
   });
 });
 
@@ -450,33 +513,176 @@ describe("reportServer", () => {
   it.each<Record<string, string>>([{ "sec-gpc": "1" }, { dnt: "1" }])(
     "drops a count from a request carrying %j, but still reports a failure",
     (optOut) => {
-      const { seams, scheduled } = recordingSeams();
-      reportServer({ name: "subscribe-started" }, headers(optOut), seams);
+      const { seams, scheduled, memory } = reportSeams();
+      reportServer({ name: "subscribe-started" }, headers(optOut), seams, memory);
       expect(scheduled).toEqual([]);
       reportServer(
         { name: "billing-failed", action: "subscribe", outcome: "checkout-failed" },
         headers(optOut),
         seams,
+        memory,
       );
       expect(scheduled).toHaveLength(1);
     },
   );
 
-  it("schedules nothing when this build forwards nothing", () => {
-    const { seams, scheduled } = recordingSeams({ sinks: null });
-    reportServer({ name: "plan-check-failed" }, headers({}), seams);
+  it("schedules and records nothing when this build forwards nothing", () => {
+    const { seams, scheduled, memory } = reportSeams({ sinks: null });
+    reportServer({ name: "plan-check-failed" }, NO_HEADERS, seams, memory);
+    reportServer({ name: "engine-unavailable" }, NO_HEADERS, seams, memory);
     expect(scheduled).toEqual([]);
+    expect(memory.sent.size).toBe(0);
+    expect(memory.pageDays.size).toBe(0);
   });
 
   it("never throws into its caller, even outside a request", () => {
-    const { seams } = recordingSeams({
+    const { seams, memory } = reportSeams({
       schedule: () => {
         throw new Error("after() called outside a request scope");
       },
     });
     expect(() =>
-      reportServer({ name: "plan-check-failed" }, headers({}), seams),
+      reportServer({ name: "plan-check-failed" }, NO_HEADERS, seams, memory),
     ).not.toThrow();
+  });
+
+  it("loses a report whose schedule throws for the hour, and takes nothing back", () => {
+    const { seams, scheduled, clock, memory } = reportSeams();
+    const failing = {
+      ...seams,
+      schedule: () => {
+        throw new Error("after() called outside a request scope");
+      },
+    };
+    reportServer({ name: "plan-check-failed" }, NO_HEADERS, failing, memory);
+    clock.at += HOUR_MS - 1;
+    reportServer({ name: "plan-check-failed" }, NO_HEADERS, seams, memory);
+    expect(scheduled).toEqual([]);
+    clock.at += 1;
+    reportServer({ name: "plan-check-failed" }, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(1);
+  });
+
+  it("schedules nothing and throws nothing when the clock throws", () => {
+    const { seams, scheduled, memory } = reportSeams({
+      now: () => {
+        throw new Error("no clock");
+      },
+    });
+    expect(() =>
+      reportServer({ name: "plan-check-failed" }, NO_HEADERS, seams, memory),
+    ).not.toThrow();
+    expect(() => reportServer(PAGE_REPORTS[0]!, NO_HEADERS, seams, memory)).not.toThrow();
+    expect(scheduled).toEqual([]);
+    expect(memory.sent.size).toBe(0);
+  });
+});
+
+describe("reportServer's collapse (AC-16, AC-27)", () => {
+  it("schedules one send for plan-check-failed 100 times inside the hour", () => {
+    const { seams, scheduled, clock, memory } = reportSeams();
+    for (let time = 0; time < 100; time += 1) {
+      reportServer({ name: "plan-check-failed" }, NO_HEADERS, seams, memory);
+      clock.at += 1_000;
+    }
+    expect(scheduled).toHaveLength(1);
+  });
+
+  it("keys billing-failed for subscribe and for portal apart", () => {
+    const { seams, scheduled, memory } = reportSeams();
+    for (const report of SERVER_REPORTS.slice(3, 5)) {
+      reportServer(report, NO_HEADERS, seams, memory);
+      reportServer(report, NO_HEADERS, seams, memory);
+    }
+    expect(scheduled).toHaveLength(2);
+  });
+
+  it("passes every count untouched, however many, and remembers none", () => {
+    const { seams, scheduled, memory } = reportSeams();
+    for (let time = 0; time < 100; time += 1) {
+      reportServer({ name: "page-view", page: "tool" }, NO_HEADERS, seams, memory);
+    }
+    expect(scheduled).toHaveLength(100);
+    expect(memory.sent.size).toBe(0);
+    expect(memory.pageDays.size).toBe(0);
+  });
+});
+
+describe("the flood, on the server (AC-27, AC-29, INV-10)", () => {
+  it("schedules one send for the same browser-crash 100 times", () => {
+    const { seams, scheduled, memory } = reportSeams();
+    for (let time = 0; time < 100; time += 1) {
+      reportServer(
+        { name: "browser-crash", page: "tool", kind: "rejection" },
+        NO_HEADERS,
+        seams,
+        memory,
+      );
+    }
+    expect(scheduled).toHaveLength(1);
+  });
+
+  it("schedules 20 of the 24 page report shapes in one UTC day, and drops the rest", () => {
+    const { seams, scheduled, memory } = reportSeams();
+    for (const report of PAGE_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(20);
+  });
+
+  it("still sends a server-crash and a plan-check-failed once the budget is spent", async () => {
+    const { seams, sent, scheduled, memory } = reportSeams();
+    for (const report of PAGE_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(20);
+
+    reportServer({ name: "plan-check-failed" }, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(21);
+    await reportCrash(
+      { name: "server-crash", route: "entitlement", routeType: "route" },
+      seams,
+      memory,
+    );
+    expect(sent).toHaveLength(1);
+  });
+
+  it("sends again on the next UTC day", () => {
+    const { seams, scheduled, clock, memory } = reportSeams();
+    for (const report of PAGE_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(20);
+
+    clock.at = (Math.floor(clock.at / DAY_MS) + 1) * DAY_MS;
+    for (const report of PAGE_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(40);
+    expect([...memory.pageDays.keys()]).toEqual([Math.floor(clock.at / DAY_MS)]);
+  });
+
+  it("records nothing for a report the budget dropped, so it sends next day inside its hour", () => {
+    const { seams, scheduled, clock, memory } = reportSeams();
+    const nextDay = (Math.floor(clock.at / DAY_MS) + 1) * DAY_MS;
+    clock.at = nextDay - 30 * 60 * 1000;
+    for (const report of PAGE_REPORTS.slice(0, 20)) {
+      reportServer(report, NO_HEADERS, seams, memory);
+    }
+    const dropped = PAGE_REPORTS[20]!;
+    reportServer(dropped, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(20);
+    expect(memory.sent.has(reportKey(dropped))).toBe(false);
+    expect(memory.pageDays.get(Math.floor(clock.at / DAY_MS))).toBe(20);
+
+    // Forty minutes on: the next UTC day, but inside the hour of the drop.
+    clock.at = nextDay + 10 * 60 * 1000;
+    reportServer(dropped, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(21);
+  });
+
+  it("spends none of the budget on 20 server reports, so 20 page reports still go", async () => {
+    const { seams, sent, scheduled, memory } = reportSeams();
+    for (const report of SERVER_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
+    for (const crash of SERVER_CRASHES) await reportCrash(crash, seams, memory);
+    expect(scheduled).toHaveLength(SERVER_REPORTS.length);
+    expect(sent).toHaveLength(SERVER_CRASHES.length);
+    expect(memory.pageDays.size).toBe(0);
+
+    for (const report of PAGE_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
+    expect(scheduled).toHaveLength(SERVER_REPORTS.length + 20);
   });
 });
 

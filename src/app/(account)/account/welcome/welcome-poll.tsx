@@ -108,10 +108,11 @@ export function WelcomePoll() {
   }, [phase, round]);
 
   /**
-   * Spec 0016, AC-14 and AC-19. Reaching Pro is the last step of the funnel,
-   * counted once: the page never leaves `pro`. A round ending without it is
-   * the silent failure spec 0012 worried about, a paid checkout that never
-   * turned into Pro, so each such round reports.
+   * Spec 0016, AC-14, AC-19 and AC-28. Reaching Pro is the last step of the
+   * funnel, counted once: the page never leaves `pro`. A round ending without
+   * it is the silent failure spec 0012 worried about, a paid checkout that
+   * never turned into Pro, so it reports, once per page load however many
+   * times Check again starts a round (`report` holds that).
    */
   useEffect(() => {
     if (phase === "pro") report({ name: "subscription-confirmed" });

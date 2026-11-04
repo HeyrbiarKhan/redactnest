@@ -20,14 +20,22 @@ export function isOwnScript(filename: string, origin: string): boolean {
 }
 
 /**
- * The root layout's reporter. Spec 0016, AC-10 and AC-17.
+ * The root layout's reporter. Spec 0016, AC-10, AC-17 and AC-28.
  *
  * A `page-view` with the page's kind on every page load and every client
  * side pathname change, from the pathname alone, never the query or the hash.
  * And a `browser-crash` for an error thrown by our own scripts or a promise
- * rejected with nobody listening. The message, file name, line and stack are
- * read only for the origin test and never sent: a report says what kind of
- * failure and on which kind of page, and nothing else (claim C15).
+ * rejected with nobody listening, at most once per page load for each page
+ * kind and source (`report` holds that, AC-28), however often it happens. The
+ * message, file name, line and stack are read only for the origin test and
+ * never sent: a report says what kind of failure and on which kind of page,
+ * and nothing else (claim C15).
+ *
+ * Every rejection reports, whoever caused it, by design. A rejection carries
+ * no origin we can trust (its reason is often not an `Error`, and stacks
+ * differ by browser), so a filter would guess, and a wrong guess hides our
+ * own failures. The page load cap, the server's collapse and its daily page
+ * budget bound the noise instead (AC-27 to AC-29).
  *
  * Renders nothing. A file such as `/licence.txt` is served without this
  * layout, so it sends nothing.

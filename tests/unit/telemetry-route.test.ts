@@ -15,11 +15,16 @@ vi.mock("@/telemetry/server", () => ({ reportServer }));
 
 const URL_ = `${config.siteUrl}/api/telemetry`;
 const SAME_ORIGIN = Object.freeze({ "sec-fetch-site": "same-origin" });
+const AS_JSON = Object.freeze({ "content-type": "application/json" });
 
+/**
+ * A post sent as JSON, as our pages send it, unless a case names another
+ * `Content-Type`. Without one a string body would go as `text/plain`.
+ */
 function post(body: unknown, headers: Record<string, string> = SAME_ORIGIN): Request {
   return new Request(URL_, {
     method: "POST",
-    headers,
+    headers: { ...AS_JSON, ...headers },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
@@ -126,7 +131,7 @@ describe("what the route drops, with the same empty answer", () => {
     });
     const request = new Request(URL_, {
       method: "POST",
-      headers: SAME_ORIGIN,
+      headers: { ...SAME_ORIGIN, ...AS_JSON },
       body: stream,
       duplex: "half",
     } as RequestInit);
@@ -149,6 +154,64 @@ describe("what the route drops, with the same empty answer", () => {
   });
 });
 
+describe("the Content-Type it requires", () => {
+  const EVENT = Object.freeze({ name: "page-view", page: "home" });
+
+  it.each([
+    "application/json",
+    "application/json; charset=utf-8",
+    "APPLICATION/JSON",
+    "Application/Json;charset=UTF-8",
+    "  application/json  ; charset=utf-8",
+  ])("forwards a body sent as %j", async (type) => {
+    await expectQuietAnswer(
+      await POST(post(EVENT, { ...SAME_ORIGIN, "content-type": type })),
+    );
+    expect(reportServer).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    "text/plain",
+    "text/plain;charset=UTF-8",
+    "application/x-www-form-urlencoded",
+    "multipart/form-data; boundary=x",
+    "application/jsonp",
+    "application/json-patch+json",
+    "",
+  ])("drops a valid body sent as %j, unread", async (type) => {
+    const request = post(EVENT, { ...SAME_ORIGIN, "content-type": type });
+    await expectQuietAnswer(await POST(request));
+    expect(request.bodyUsed).toBe(false);
+    expect(reportServer).not.toHaveBeenCalled();
+  });
+
+  it("drops a valid body sent with no Content-Type at all, unread", async () => {
+    // Bytes, not a string, so the request carries no Content-Type of its own.
+    const request = new Request(URL_, {
+      method: "POST",
+      headers: SAME_ORIGIN,
+      body: new TextEncoder().encode(JSON.stringify(EVENT)),
+    });
+    expect(request.headers.get("content-type")).toBeNull();
+    await expectQuietAnswer(await POST(request));
+    expect(request.bodyUsed).toBe(false);
+    expect(reportServer).not.toHaveBeenCalled();
+  });
+
+  it("checks the size before the Content-Type, so an oversized body is still a 413", async () => {
+    const request = new Request(URL_, {
+      method: "POST",
+      headers: {
+        ...SAME_ORIGIN,
+        "content-type": "text/plain",
+        "content-length": String(MAX_EVENT_BYTES + 1),
+      },
+      body: "x".repeat(MAX_EVENT_BYTES + 1),
+    });
+    expect((await POST(request)).status).toBe(413);
+  });
+});
+
 describe("the size limit", () => {
   it("refuses a declared body over 2048 bytes with 413, before reading it", async () => {
     const body = JSON.stringify({
@@ -158,7 +221,11 @@ describe("the size limit", () => {
     });
     const request = new Request(URL_, {
       method: "POST",
-      headers: { ...SAME_ORIGIN, "content-length": String(MAX_EVENT_BYTES + 1) },
+      headers: {
+        ...SAME_ORIGIN,
+        ...AS_JSON,
+        "content-length": String(MAX_EVENT_BYTES + 1),
+      },
       body,
     });
     const response = await POST(request);

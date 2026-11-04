@@ -202,8 +202,18 @@ export const CRASH_ROUTES = Object.freeze([
 
 export type RouteKind = (typeof CRASH_ROUTES)[number];
 
-/** What Next.js was doing when a server request failed, as it reports it. */
-export const ROUTE_TYPES = Object.freeze(["render", "route", "action", "proxy"] as const);
+/**
+ * What Next.js was doing when a server request failed, as it reports it, and
+ * `other` for a type a later Next.js adds (AC-15), so a new type never shares
+ * a real render failure's collapse key (AC-27).
+ */
+export const ROUTE_TYPES = Object.freeze([
+  "render",
+  "route",
+  "action",
+  "proxy",
+  "other",
+] as const);
 
 /** A browser crash: a thrown error, or a promise rejected with nobody listening. */
 export const CRASH_SOURCES = Object.freeze(["error", "rejection"] as const);
@@ -493,6 +503,20 @@ export function parseTelemetryEvent(value: unknown): TelemetryEvent | null {
 
 export const isUsageEvent = (event: TelemetryEvent): event is UsageEvent =>
   (USAGE_EVENTS as readonly string[]).includes(event.name);
+
+/**
+ * What makes two failure reports the same report (AC-27, AC-28): the name,
+ * then each field's value in `EVENT_FIELDS` order, joined by single spaces
+ * (`server-crash home render`, `plan-check-failed`). The page and the server
+ * build it here, from one place, so both caps count the same shapes. No value
+ * in the lists holds a space (`telemetry-events.test.ts`), so no two events
+ * can share a key.
+ */
+export function reportKey(event: ErrorReport): string {
+  const values: Readonly<Record<string, unknown>> = event;
+  const fields = Object.keys(fieldsOf(event.name)).map((key) => String(values[key]));
+  return [event.name, ...fields].join(" ");
+}
 
 /**
  * The only events `/api/telemetry` forwards (AC-7). Everything else is sent by

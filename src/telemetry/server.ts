@@ -1,6 +1,6 @@
 /**
  * Counts to Umami and failure reports to Sentry, server to server. Spec 0016,
- * AC-6, AC-8, AC-20, AC-21 and AC-27, INV-2 to INV-4 and INV-10.
+ * AC-6, AC-8, AC-20, AC-21, AC-27 and AC-29, INV-2 to INV-4 and INV-10.
  *
  * No SDK for either service: a plain `fetch` from our own server, so no
  * outside script, cookie or origin reaches any page (INV-4). The outbound
@@ -27,8 +27,10 @@ import { SUBSCRIBE_PATH, TOOL_PATH, WELCOME_PATH } from "@/lib/routes";
 import {
   type ErrorReport,
   fieldsOf,
+  isBrowserEvent,
   isUsageEvent,
   PAGE_PATHS,
+  reportKey,
   type ServerCrash,
   type TelemetryEvent,
   type UsageEvent,
@@ -64,21 +66,49 @@ export const UMAMI_MAX_PROPERTIES = 50;
 const SINK_TIMEOUT_MS = 3_000;
 
 /**
- * How long a `server-crash` from one place stays reported (AC-27). A rule
- * about reporting, not a cap on the visitor: one failed render calls
- * `onRequestError` two or three times, and a route failing on every request
- * would otherwise spend Sentry's key limit alone.
+ * How long an error report stays reported from this server instance (AC-27).
+ * A rule about reporting, not a cap on the visitor. A failed page calls
+ * `onRequestError` once, and two or three times only when `not-found.tsx`
+ * throws too; and a place failing on every request would otherwise report on
+ * every request. An hour holds one failure left running to 720 reports a
+ * month, well inside Sentry's free 5,000 (INV-10).
  */
-const CRASH_WINDOW_MS = 60_000;
+const REPORT_WINDOW_MS = 60 * 60 * 1000;
 
 /**
- * When each place last sent a `server-crash` from this server instance, by
- * route and type (AC-27). A deliberate cache, the module level state
- * `AGENTS.md` allows: its keys are every `RouteKind` by every `routeType`, 64
- * at most, so it never needs pruning. Each bundle holds its own, the proxy's
- * apart from the server's, and a cold start begins empty.
+ * How many page error reports this server instance forwards in one UTC day
+ * (AC-29). A rule about reporting, not a cap on the visitor. Page reports are
+ * the ones a script can forge, so they share a budget no server report draws
+ * on: about 600 a month, leaving the rest of Sentry's free quota for server
+ * failures (INV-10).
  */
-const CRASHES_SENT = new Map<string, number>();
+const PAGE_REPORTS_PER_DAY = 20;
+
+/** One UTC day, so the page budget starts again at midnight UTC (AC-29). */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * What the collapse and the page budget remember (AC-27, AC-29): when each
+ * report's key was last admitted, and how many page reports were admitted on
+ * the UTC day each count is keyed by, one day at a time.
+ */
+export interface ReportMemory {
+  readonly sent: Map<string, number>;
+  readonly pageDays: Map<number, number>;
+}
+
+/**
+ * This server instance's memory of its error reports. A deliberate cache, the
+ * module level state `AGENTS.md` allows: `sent` holds at most one entry for
+ * each report shape, 136 (16 route kinds by 5 route types, 11 page kinds by 2
+ * crash sources, 4 billing actions by 8 outcomes, and the two reports with no
+ * fields), and `pageDays` one day, so neither needs pruning. Each bundle holds
+ * its own, the proxy's apart from the server's, and a cold start begins empty.
+ */
+const REPORT_MEMORY: ReportMemory = Object.freeze({
+  sent: new Map<string, number>(),
+  pageDays: new Map<number, number>(),
+});
 
 /** Our own host, the only one Umami is told about (AC-21). */
 const SITE_HOSTNAME = new URL(config.siteUrl).hostname;
@@ -318,15 +348,46 @@ export async function forward(
 }
 
 /**
+ * Whether an error report may go, recording it if so (AC-27, AC-29, INV-10).
+ * The collapse first: nothing when the same report (`reportKey`) was admitted
+ * in the last hour, and again at exactly one hour. Then, for a page report
+ * (one `isBrowserEvent` accepts), the day's budget: nothing once today's
+ * `PAGE_REPORTS_PER_DAY` are spent. A server report has no budget.
+ *
+ * Synchronous, so the check and the record happen together with no `await`
+ * between them, and a repeat that arrives while the first send is still in
+ * flight is refused too. It changes the memory only when it admits, so a
+ * report the budget refused leaves nothing behind in either. It reads only
+ * the event and the time.
+ */
+function admitReport(event: ErrorReport, now: number, memory: ReportMemory): boolean {
+  const key = reportKey(event);
+  const last = memory.sent.get(key);
+  if (last !== undefined && now - last < REPORT_WINDOW_MS) return false;
+
+  const page = isBrowserEvent(event);
+  const day = Math.floor(now / DAY_MS);
+  const today = memory.pageDays.get(day) ?? 0;
+  if (page && today >= PAGE_REPORTS_PER_DAY) return false;
+
+  memory.sent.set(key, now);
+  if (page) {
+    // One day at a time: a new day's count replaces the last one's.
+    memory.pageDays.clear();
+    memory.pageDays.set(day, today + 1);
+  }
+  return true;
+}
+
+/**
  * Report a server failure: `onRequestError` and the proxy's own catch both
  * come here (AC-27, INV-10). It sends only when no `server-crash` with the
- * same route and type went from this server instance in the last minute, so
- * Next.js calling the hook more than once for one render sends one report.
+ * same route and type went from this server instance in the last hour, so
+ * however many times Next.js calls the hook for one failed page, and however
+ * often a broken route fails, it sends one report an hour.
  *
- * The time is recorded before the send is awaited, with no `await` between
- * the check and the record, so a repeat that arrives while the first is still
- * in flight is skipped too. A send that fails or times out still counts: a
- * lost report, never a second one. It reads only the event and the clock.
+ * Admitted before the send is awaited, so a send that fails or times out
+ * still counts: a lost report, never a second one.
  *
  * Awaited by its callers, as `forward` is (AC-8). It never rejects, so the
  * proxy always rethrows its own error and the hook never adds a failure.
@@ -334,15 +395,11 @@ export async function forward(
 export async function reportCrash(
   crash: ServerCrash,
   seams: TelemetrySeams = TELEMETRY_SEAMS,
-  sent: Map<string, number> = CRASHES_SENT,
+  memory: ReportMemory = REPORT_MEMORY,
 ): Promise<void> {
   try {
     if (seams.sinks === null) return;
-    const now = seams.now().getTime();
-    const key = `${crash.route} ${crash.routeType}`;
-    const last = sent.get(key);
-    if (last !== undefined && now - last < CRASH_WINDOW_MS) return;
-    sent.set(key, now);
+    if (!admitReport(crash, seams.now().getTime(), memory)) return;
     await forward(crash, seams);
   } catch {
     // A failure to report never becomes a second failure.
@@ -363,21 +420,31 @@ export const optsOut = (headers: HeaderReader): boolean =>
 
 /**
  * Report an event from request code: `/api/telemetry`, the plan check and the
- * account pages. A count is dropped when the request opts out; a failure
- * report is always sent (INV-6). The send runs after the answer (AC-8), and
- * nothing here throws, even outside a request where there is no answer to
- * run after.
+ * account pages. A count is dropped when the request opts out, and is never
+ * held back otherwise: each one counts. A failure report ignores the opt out
+ * (INV-6), and every one goes through the collapse, at most once an hour for
+ * each report from this server instance, and a page's report through the
+ * day's budget too (AC-27, AC-29). The send runs after the answer (AC-8).
+ *
+ * Nothing here throws, even outside a request where there is no answer to run
+ * after. A report admitted before `schedule` throws is lost for the hour, and
+ * nothing is taken back, the same rule as a send that fails.
  */
 export function reportServer(
   event: TelemetryEvent,
   requestHeaders: HeaderReader,
   seams: TelemetrySeams = TELEMETRY_SEAMS,
+  memory: ReportMemory = REPORT_MEMORY,
 ): void {
   if (seams.sinks === null) return;
   if (isUsageEvent(event) && optsOut(requestHeaders)) return;
   try {
+    if (!isUsageEvent(event) && !admitReport(event, seams.now().getTime(), memory)) {
+      return;
+    }
     seams.schedule(() => forward(event, seams));
   } catch {
-    // `after()` outside a request scope. Telemetry never breaks its caller.
+    // A clock that throws, or `after()` outside a request scope. Telemetry
+    // never breaks its caller.
   }
 }

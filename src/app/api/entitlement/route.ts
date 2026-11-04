@@ -45,8 +45,10 @@ export async function GET(): Promise<Response> {
   });
 
   // Spec 0016, AC-16. The check failing closed is the silent failure spec
-  // 0012 worried about: a paying visitor capped with nobody told. So each
-  // `unknown` answer reports, after the answer, by name alone.
+  // 0012 worried about: a paying visitor capped with nobody told. So an
+  // `unknown` answer reports, after the answer, by name alone, and the
+  // collapse (AC-27) holds a Polar outage to one report an hour from each
+  // server instance, not one for every signed in `/tool` load.
   if (entitlement.account === "unknown") {
     reportServer({ name: "plan-check-failed" }, await headers());
   }

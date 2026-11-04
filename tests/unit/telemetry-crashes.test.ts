@@ -153,17 +153,36 @@ describe("onRequestError", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("names a route type Next.js adds later as a render", () => {
-    expect(crashReport({ routePath: "/tool/page", routeType: "prefetch" })).toEqual({
+  it("reports a route type Next.js adds later as other, with its route", async () => {
+    // Next.js 16.3.5 types only today's four, so a later one is typed wide here.
+    const laterType: string = "cache";
+    await onRequestError(
+      new Error("x"),
+      { path: "/tool", method: "GET", headers: {} },
+      {
+        routerKind: "App Router",
+        routePath: "/tool/page",
+        routeType: laterType as "render",
+        renderSource: "server-rendering",
+        revalidateReason: undefined,
+      },
+    );
+    expect(mocks.reportCrash).toHaveBeenCalledWith({
       name: "server-crash",
       route: "tool",
-      routeType: "render",
+      routeType: "other",
     });
+  });
+
+  it.each(["render", "route", "action"])("keeps a %s as itself", (routeType) => {
+    expect(crashReport({ routePath: "/tool/page", routeType }).routeType).toBe(routeType);
   });
 });
 
 describe("the plan check falling back", () => {
-  it("reports plan-check-failed each time it answers unknown, whatever the opt out", async () => {
+  // `reportServer` is mocked here; its collapse to one an hour (AC-16, AC-27)
+  // is held in `telemetry-server.test.ts`.
+  it("hands plan-check-failed to reportServer each time it answers unknown, whatever the opt out", async () => {
     mocks.account = "unknown";
     const response = await GET();
     expect(((await response.json()) as EntitlementSnapshot).account).toBe("unknown");

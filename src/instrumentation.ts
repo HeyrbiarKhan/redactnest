@@ -17,11 +17,13 @@
  * and the call goes nowhere. `src/proxy.ts` catches and reports its own
  * failures instead (AC-26).
  *
- * Every report goes through `reportCrash`, which sends one a minute for each
- * route and type (AC-27), because one failed render calls this hook two or
- * three times. There is no answer to wait for here, so it is awaited
- * directly, as Next.js's docs ask, rather than scheduled with `after()`
- * (AC-8).
+ * Every report goes through `reportCrash`, which sends one an hour for each
+ * route and type from each server instance (AC-27). A failed page calls this
+ * hook once, and two or three times only when `not-found.tsx` throws as well;
+ * the collapse keeps that to one report, and above all keeps a route failing
+ * on every request to one report an hour rather than one for each request.
+ * There is no answer to wait for here, so it is awaited directly, as
+ * Next.js's docs ask, rather than scheduled with `after()` (AC-8).
  */
 
 import type { Instrumentation } from "next";
@@ -98,8 +100,10 @@ export function crashReport(context: {
   return Object.freeze({
     name: "server-crash",
     route: routeKindFor(context.routePath, context.routeType),
-    // A type a later Next.js adds still reports, as the one every page has.
-    routeType: routeType ?? "render",
+    // A type a later Next.js adds still reports, as `other` (AC-15). Filed as
+    // `render` it would share a real render failure's collapse key, and could
+    // hide that failure for the hour (AC-27).
+    routeType: routeType ?? "other",
   });
 }
 

@@ -435,7 +435,9 @@ describe("what it reports (spec 0016, AC-14 and AC-19)", () => {
     expect(mocks.report.mock.calls).toEqual([[{ name: "subscription-confirmed" }]]);
   });
 
-  it("reports each round that ends without Pro, and nothing about the buyer", async () => {
+  // `report` is mocked here; its once per page load cap (AC-28) is held in
+  // `tests/unit/telemetry-client.test.ts`.
+  it("hands every round that ends without Pro to report, and nothing about the buyer", async () => {
     await open();
     await elapse(POLL_MS * ASKS_PER_ROUND);
     expect(screen.getByRole("status")).toHaveTextContent(STILL_WAITING);

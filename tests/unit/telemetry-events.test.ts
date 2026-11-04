@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  BILLING_ACTIONS,
+  BILLING_OUTCOMES,
   BROWSER_EVENTS,
   bucket,
   bucketsByKind,
+  CRASH_ROUTES,
+  CRASH_SOURCES,
   ERROR_EVENTS,
+  type ErrorReport,
   EVENT_FIELDS,
   isBrowserEvent,
   isUsageEvent,
@@ -12,6 +17,8 @@ import {
   PAGE_PATHS,
   pageKindFor,
   parseTelemetryEvent,
+  reportKey,
+  ROUTE_TYPES,
   USAGE_EVENTS,
   type TelemetryEvent,
 } from "@/telemetry/events";
@@ -225,5 +232,69 @@ describe("parseTelemetryEvent", () => {
     ],
   ])("refuses %s", (_label, value) => {
     expect(parseTelemetryEvent(value)).toBeNull();
+  });
+});
+
+/** The key both caps count by, spec 0016 AC-27 and AC-28. */
+describe("reportKey", () => {
+  it.each<[ErrorReport, string]>([
+    [
+      { name: "server-crash", route: "home", routeType: "render" },
+      "server-crash home render",
+    ],
+    [{ name: "plan-check-failed" }, "plan-check-failed"],
+    [
+      { name: "browser-crash", page: "tool", kind: "rejection" },
+      "browser-crash tool rejection",
+    ],
+    [{ name: "engine-unavailable" }, "engine-unavailable"],
+    [
+      { name: "billing-failed", action: "welcome", outcome: "still-waiting" },
+      "billing-failed welcome still-waiting",
+    ],
+  ])("keys %j as %s", (event, key) => {
+    expect(reportKey(event)).toBe(key);
+  });
+
+  it("gives two keys to two events that differ in any one field", () => {
+    const crash: ErrorReport = {
+      name: "server-crash",
+      route: "home",
+      routeType: "render",
+    };
+    const browser: ErrorReport = { name: "browser-crash", page: "tool", kind: "error" };
+    const billing: ErrorReport = {
+      name: "billing-failed",
+      action: "subscribe",
+      outcome: "plan-unknown",
+    };
+    const shapes: readonly ErrorReport[] = [
+      crash,
+      { ...crash, route: "tool" },
+      { ...crash, routeType: "other" },
+      browser,
+      { ...browser, page: "home" },
+      { ...browser, kind: "rejection" },
+      billing,
+      { ...billing, action: "portal" },
+      { ...billing, outcome: "checkout-failed" },
+    ];
+    const keys = shapes.map(reportKey);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("can never join two values into one key, since no value holds a space", () => {
+    const lists = [
+      CRASH_ROUTES,
+      ROUTE_TYPES,
+      PAGE_KINDS,
+      CRASH_SOURCES,
+      BILLING_ACTIONS,
+      BILLING_OUTCOMES,
+      ERROR_EVENTS,
+    ];
+    for (const list of lists) {
+      for (const value of list) expect(value).not.toContain(" ");
+    }
   });
 });

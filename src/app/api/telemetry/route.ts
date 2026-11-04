@@ -3,16 +3,20 @@
  * and AC-8, INV-2 and INV-3.
  *
  * It trusts nothing it receives. An event is forwarded only when it comes
- * from one of our own pages, parses against the catalog's closed lists, and is
- * one a page may send at all (`isBrowserEvent`), so a forged body can skew a
- * count but can never carry text anywhere, nor raise a server only alert. What
- * goes on is the parser's rebuilt copy, never the body that arrived.
+ * from one of our own pages, is sent as JSON, parses against the catalog's
+ * closed lists, and is one a page may send at all (`isBrowserEvent`), so a
+ * forged body can skew a count but can never carry text anywhere, nor raise a
+ * server only alert. The origin and the `Content-Type` are both checked before
+ * the body is read. What goes on is the parser's rebuilt copy, never the body
+ * that arrived, and a failure report then passes the server's collapse and
+ * its daily page budget (`reportServer`, AC-27 and AC-29).
  *
  * Every answer but one is the same empty `204`, whatever happened, so the
- * answer says nothing about what was accepted. The exception is a body that
- * declares itself too large, refused with `413` before it is read. Cookies are
- * never read and none is set; pages send with `credentials: "omit"` anyway.
- * Any other method is Next.js's own `405`.
+ * answer says nothing about what was accepted: a wrong `Content-Type` gets it
+ * too, never a `415` that would tell a prober what passes. The exception is a
+ * body that declares itself too large, refused with `413` before it is read.
+ * Cookies are never read and none is set; pages send with
+ * `credentials: "omit"` anyway. Any other method is Next.js's own `405`.
  */
 
 import { config } from "@/config";
@@ -35,6 +39,17 @@ function fromOurPages(headers: Headers): boolean {
   const site = headers.get("sec-fetch-site");
   if (site !== null) return site === "same-origin";
   return headers.get("origin") === SITE_ORIGIN;
+}
+
+/**
+ * Sent as JSON, as our pages always send it (AC-7, a): the media type before
+ * any `;`, trimmed, in any letter case, so `application/json; charset=utf-8`
+ * passes. A form or a `text/plain` beacon, which another site's page can send
+ * without the browser asking first, does not.
+ */
+function isJson(headers: Headers): boolean {
+  const type = headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
+  return type === "application/json";
 }
 
 /**
@@ -65,7 +80,7 @@ export async function POST(request: Request): Promise<Response> {
   if (declared > MAX_EVENT_BYTES) {
     return new Response(null, { status: 413, headers: NO_STORE });
   }
-  if (!fromOurPages(request.headers)) return done();
+  if (!fromOurPages(request.headers) || !isJson(request.headers)) return done();
 
   let text: string | null;
   try {
