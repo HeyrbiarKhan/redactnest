@@ -76,7 +76,7 @@ _From the scope's Done when for feature 26; AC-11, AC-14 and AC-16 describe it a
 - AC-11: the three `/` steps, the home page component test and the band's browser tests · AC-14: the 900 px step and the stacked layout browser test · AC-16: the 1280 px open, the opened layout step and the tool layout tests · AC-17: the sticky step and the existing sticky tests · AC-20: the screen reader step and the same node component test
 
 ## Feature 28: UI polish 2 · added 2026-11-09
-_From the scope's Done when for feature 28, with the failure rule you set on 2026-11-09: the line shows when Clerk reports `error` or after 20 s of ours, and the form still replaces it if Clerk loads later. AC-16 and AC-23 are owed their amend as built. Where Feature 26's 1280 px step puts the spinner beside the phase line under the file bar, these steps replace it._
+_From the scope's Done when for feature 28, with the failure rule you set on 2026-11-09: the line shows when Clerk reports `error` or after 20 s of ours, and the form still replaces it if Clerk loads later. AC-16 and AC-23 describe it as built since 2026-11-09. Where Feature 26's 1280 px step puts the spinner beside the phase line under the file bar, these steps replace it._
 
 ### UI / manual
 - [ ] `/tool` at 1280 px, choose a PDF with the engine held (`page.route("**/engine/**", () => {})`) → the file bar across the top; a 40 px spinner centred across the left column, the phase line centred under it, both centred down the room beside the rail; the plan card and lock line in the rail → AC-16

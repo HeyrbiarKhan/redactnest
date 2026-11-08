@@ -301,6 +301,36 @@ Feature 26 (UI polish) made two visual fixes you called on 2026-10-11, with no n
 
 **Left over.** `IconCircle`'s `sm` size (the 32 pixel circle) had one caller, the Strips circles, and now has none (a Follow-up in `index.md`).
 
+### Recorded after feature 28's build
+
+Feature 28 (UI polish 2) made two visual fixes you called on 2026-11-09, with no new design, built on `feat/ui-polish-2` (commits `2faaee3` and `e9372e2`) and recorded here the same day, before `/check verify`. The figures are the build's own, from its code, its spinner test, its scope milestones and its sandbox walk. The runners up below were weighed for this record against what the build's code and comments say it chose.
+
+**The opening phase line.** Feature 26 moved the spinner and the phase line into the left column while a document opens, but kept their form: a 20 pixel spinner beside the line at the top of the column, small in a large empty space. `Spinner` now has `lg`, 40 pixels. While L holds the left column (`compact && !reviewable`: a document on the page and no list yet, the inputs that put L there), `StatusLine` is stacked, the large spinner centred with the line centred under it, 16 pixels apart with 40 above and below. From `lg` the grid already stretches L to the rail's height under `"a a" "l b"`, so `justify-center` on L puts the line in the middle of the room beside the rail. Below `lg` the stacked line is centred across the column. Only classes change: the region, the paragraph and its spinner and words are the same nodes in both forms, so a line still showing as a file is chosen ("Checking your plan") takes the stacked form without being added or heard again. A run's line, at the head of the rail, keeps the small spinner beside it.
+
+- **Centre only across, at the column's top** (runner up): one class fewer, but beside a tall rail the line still sits at the top of a mostly empty column, the look the fix was for.
+- **A second, larger spinner outside the region** (runner up), the region keeping its small line: two marks for one wait, so what is seen and what is heard part ways, the reason feature 26 turned the same idea down.
+- **A different element for the stacked form** (runner up): an element swapped in the same place is a remount, and a remounted live region may say its words again, or not at all.
+
+**Clerk's wait.** Clerk's script loads from Clerk's servers after the page, so on `/sign-in` and `/sign-up` the card's place sat empty, the panel beside nothing, for as long as that took. `ClerkWait` is passed as Clerk's own `fallback` on both pages: Clerk shows it until it has loaded and its card is in the page, then drops it. It is a white `Card` the size of Clerk's (400 pixels wide from `md`, at least 25rem tall, between the sign in and sign up cards), with the large spinner and a polite line, "Loading sign in…" or "Loading sign up…". Clerk reports a refused start at once (`status` `"error"`) and gives up on its own script after 15 seconds, but never reports a request that hangs with no answer, so a timer of ours, `CLERK_WAIT_MS`, gives up at 20 seconds, your call, leaving Clerk's 15 to speak first. Either way the spinner goes and the same status node says the form did not load, in `danger-ink`. Clerk still decides when its card draws, so a form that arrives after the failure line replaces it. The words are `CLERK_WAIT_TEXT`, beside the component in the account group, as `BUSY_TEXT` and `SIGNING_OUT` are.
+
+Walked in the Clerk development sandbox on 2026-11-09:
+
+| Case | What showed |
+|---|---|
+| A normal load, at 1280, 800 and 390 pixels | the placeholder where the card draws, then the form in its place; the panel beside it moved 12 pixels, from Clerk's development band |
+| Clerk's start refused | the failure line at 0.5 s |
+| Every request to Clerk's host hung | the loading line, then the failure line at 20.4 s |
+| Clerk's script held past 20 s, then let through | the failure line, then the form replacing it |
+
+- **Our own loaded check** (runner up): show the placeholder until `useClerk().loaded`, then render the card. Clerk can report loaded a moment before its card has drawn, so the place would flash empty between them; `fallback` goes only once the card is in the page, and Clerk owns that moment.
+- **Clerk's `error` alone, no timer** (runner up): one moving part fewer, but a hung request leaves the spinner turning for ever, which the scope's Done when rules out.
+- **A timer that also gives up on the form** (runner up): simpler to reason about, but a slow connection that loads Clerk at 25 seconds would have a working form held back by our own guess.
+- **The words in `src/lib/plans.ts`** (runner up), beside `SIGN_IN_PANEL`: `plans.ts` holds what a plan is and how it is sold, not how a page loads, and `src/ui` takes no words at all (spec 0003, INV-7).
+
+**The brand pictures.** No brand picture shows the opening state or the sign in pages (the product shot is the reviewing state), so the build left `scripts/make-brand.mjs` alone, as the scope's milestone records.
+
+**Not yet held by a test.** The build added the size cases to `spinner.test.tsx`. The stacked line, the placeholder and its two ways to fail are walked by hand and wait for the scope's Test it step (*Critical test scenarios* in `index.md`). Playwright's fake Clerk never draws the form, so the handover from placeholder to form stays a sandbox check.
+
 ### What each reference gave, and what stayed out
 
 | Reference | Kept | Left out, and why |
