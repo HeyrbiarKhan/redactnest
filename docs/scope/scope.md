@@ -38,6 +38,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 25 | More date forms | Release 3 | done |
 | 26 | UI polish | Release 3 | done |
 | 27 | Detector and fixture gates | Release 3 | done |
+| 28 | UI polish 2 | Release 3 | planned |
 
 ## Foundations
 
@@ -264,7 +265,7 @@ spec [0013](../specs/0013-brand-ui-refresh/index.md) · code in `src/ui/brand-ma
 
 ## Release 3: Widen the net, and see it working
 
-Detectors first (your call, 2026-10-07): spec 0005 already covers them, so they go straight to `/develop` and give visitors more to find right away. Then the misses feature 12's reviews left open (feature 24), a small visual polish (feature 26), and the date forms with no pattern yet (feature 25), still before telemetry, since telemetry never sees content and so cannot measure a miss (your call, 2026-10-11). Then the two gates feature 25's review asked for (feature 27), so a check someone must remember to run becomes one that runs every time (your call, 2026-10-29). Telemetry follows.
+Detectors first (your call, 2026-10-07): spec 0005 already covers them, so they go straight to `/develop` and give visitors more to find right away. Then the misses feature 12's reviews left open (feature 24), a small visual polish (feature 26), and the date forms with no pattern yet (feature 25), still before telemetry, since telemetry never sees content and so cannot measure a miss (your call, 2026-10-11). Then the two gates feature 25's review asked for (feature 27), so a check someone must remember to run becomes one that runs every time (your call, 2026-10-29). Telemetry follows. Then a second visual polish (feature 28), next in line, before releases 4 to 6 and the outreach work (your call, 2026-11-09).
 
 ### 12. Remaining detectors · done · Beta + review
 Dates, credit cards with Luhn validation, IBAN with checksum validation, US Social Security numbers, and UK National Insurance numbers, built against the detection spec already written in release 1.
@@ -357,6 +358,14 @@ spec [0016](../specs/0016-telemetry-error-monitoring/index.md) · code in `src/t
 - [x] Verify it: `/check verify telemetry & error monitoring`. Every row passes except step 57, a real proxy `server-crash` reaching Sentry, which is left on purpose: it waits for the first real proxy failure, never one made to test it (your call, 2026-11-08)
 - [x] Test it: `/test telemetry & error monitoring`
 - [x] Review it (fresh model): `/check review telemetry & error monitoring` (first review done, [2026-11-04](../reviews/2026-11-04-feat-telemetry.md); for the first review's fix, [second review](../reviews/2026-11-04-feat-telemetry-second.md))
+
+### 28. UI polish 2 · from spec 0013
+Two visual fixes, no new design (your call, 2026-11-09). On `/tool`, while a document opens, the spinner is small and sits at the top left of the left column, with the phase line beside it. On `/sign-in` and `/sign-up`, Clerk's form takes a moment to appear, and its place in the page looks empty meanwhile.
+**Done when:** on `/tool`, while a document opens, a larger spinner sits centred across and down in the left column's empty area beside the rail, with the phase line centred under it (centred across where the areas stack below `lg`), and the polite region is still one region, the same node throughout, each phase heard once and focus never moved (spec 0013, AC-14, AC-16, AC-20). On `/sign-in` and `/sign-up`, the same spinner with a short line naming the step (such as "Loading sign in…") holds the form's place until Clerk has loaded, then the form replaces it with the panel beside it unchanged; a screen reader hears the line, not the spinner; and if Clerk never loads, the spinner gives way to a short line saying so rather than turning for ever.
+**Also owed here:** `Spinner` in `src/ui` gains a larger size (today it has 16 and 20 pixels only) with its component test, and the loading line's words stay in the `(account)` group with the panel's, never in `src/ui` (spec 0003, INV-7). Playwright's build points Clerk at a fake instance where the form never loads, so a browser test can hold only the loading state; the change to the form is walked in the Clerk sandbox. Spec 0013's AC-16 (the opening state's layout) and AC-23 (the sign in pages) amended as built, and `scripts/make-brand.mjs` rerun only if the change shows in a brand picture (feature 26 changed the same opening state and left the product shot alone).
+- [ ] Build it: `/develop UI polish 2`
+- [ ] Verify it: `/check verify UI polish 2`
+- [ ] Test it: `/test UI polish 2`
 
 ## Release 4: First paid capability
 
