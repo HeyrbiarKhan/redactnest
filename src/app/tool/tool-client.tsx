@@ -882,9 +882,11 @@ export function ToolClient() {
 
           While it holds the left column, its line sits in the middle of the
           room beside the rail, which the grid stretches it to fill from `lg`
-          (feature 28). Only classes change, never the nodes, so a line still
-          showing as the area moves (Checking your plan, as a file is chosen)
-          is not heard twice.
+          (feature 28). Only classes change on the region, so it keeps its
+          node as the area moves. Its line does not keep its node: a file
+          chosen while Checking your plan shows replaces that line, the region
+          is empty and hidden for a moment, and the first phase arrives in a
+          new node. Each line is heard once (spec 0013, AC-16).
         */}
         <div
           key="l"

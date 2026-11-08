@@ -12,11 +12,13 @@ export type ClerkStep = "sign-in" | "sign-up";
 
 /**
  * How long the page waits before it says the form did not load, when Clerk
- * has not said so itself. Clerk gives up on its own script after 15 s and
- * reports a refused start at once, but a request that hangs with no answer is
- * never reported, so without this the spinner could turn for ever. 20 s
- * leaves Clerk's own 15 s to speak first. A rule about these pages, decided
- * with you on 2026-11-09 (feature 28), not a cap on the visitor.
+ * has not said so itself. A start Clerk's servers answer 400 leaves Clerk at
+ * `loading`, as a request that hangs does (feature 28's verify walks), so
+ * without this the spinner could turn for ever, and this timer is what shows
+ * the failure. 20 s is longer than Clerk's own 15 s limit on its script;
+ * Clerk's `error`, should it come, ends the wait sooner. A rule about these
+ * pages, decided with you on 2026-11-09 (feature 28), not a cap on the
+ * visitor.
  */
 export const CLERK_WAIT_MS = 20_000;
 
