@@ -130,7 +130,7 @@ Also ruled out without a full row. Reading `useSignIn()` or `useSignUp()` for a 
 
 **Privacy.** Nothing new is processed. Clerk already records each sign in to run accounts (the policy's *Your account* and *Services we use*), and you read a daily total on Clerk's dashboard. No count of ours is sent, so claim C16 (GPC and DNT) is untouched, and C14's "steps toward Pro" stays true through `subscribe-started` and `subscription-confirmed`.
 
-**What Clerk's dashboard shows** (Go live step 8): not yet recorded.
+**What Clerk's dashboard shows** (Go live step 8, read 2026-11-08 on the production instance's Overview): "Sign-ups per week", "Sign-ins per week", "Total sign-ups" (3, all time) and "Weekly cohort retention", with an Interval selector. So it counts both steps on Clerk's side, sign ups and sign ins, and AC-14 holds. As read, both charts are weekly totals, so the sign in step sits beside Umami's counts as a figure for each week.
 
 ### Server failures: the proxy and repeated reports (decided 2026-11-03)
 
