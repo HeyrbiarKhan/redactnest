@@ -8,6 +8,7 @@ import { billing } from "@/config/billing";
 import { ACCOUNT_PATH, SIGN_IN_PATH, SIGN_UP_PATH } from "@/lib/routes";
 
 import { AccountShell } from "../../account-shell";
+import { ClerkWait } from "../../clerk-wait";
 import { landingAfterSignIn, pagePath } from "../../landing";
 import { SignInPanel } from "../../sign-in-panel";
 
@@ -41,7 +42,8 @@ export default async function SignInPage({
   }
 
   // Nothing is current in the header here (spec 0013, AC-7). Wide, with our
-  // panel beside Clerk's card from md and above it below (AC-23).
+  // panel beside Clerk's card from md and above it below (AC-23). Until the
+  // card has drawn, `ClerkWait` holds its place (feature 28).
   return (
     <AccountShell width="wide">
       <div className="grid w-full items-center gap-10 md:grid-cols-[minmax(0,1fr)_auto]">
@@ -51,6 +53,7 @@ export default async function SignInPage({
           signUpUrl={SIGN_UP_PATH}
           forceRedirectUrl={landing}
           signUpForceRedirectUrl={landing}
+          fallback={<ClerkWait step="sign-in" />}
         />
       </div>
     </AccountShell>
