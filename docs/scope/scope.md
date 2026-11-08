@@ -21,7 +21,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 8 | Redact flow | Release 1 | done |
 | 9 | Privacy policy & terms | Release 2 | done |
 | 10 | Billing & paid plan | Release 2 | done |
-| 11 | Telemetry & error monitoring | Release 3 | in-progress |
+| 11 | Telemetry & error monitoring | Release 3 | done |
 | 12 | Remaining detectors | Release 3 | done |
 | 13 | Custom terms | Release 4 | planned |
 | 14 | Manual rectangle redaction | Release 5 | planned |
@@ -338,7 +338,7 @@ spec [0015](../specs/0015-more-date-forms/index.md) · code in `tests/unit/detec
   - [x] The nit: `WORD_REACH`'s comment names `12-15th May 2026` as the longest case, beside `12-15 May 2026` and `2026-Sep-27`
 - [x] Verify it: `/check verify detector and fixture gates`
 
-### 11. Telemetry & error monitoring · in-progress
+### 11. Telemetry & error monitoring · done
 Enough numbers to know whether the funnel works and whether anything is failing silently, without ever touching document content.
 **Done when:** events carry counts only (page count, items redacted by type, completion, upgrade), analytics sets no cookies so no consent banner is needed, error reports are scrubbed of file names and content, and the only cookies in the product are the strictly necessary auth ones.
 **Also owed here:** the policy work from specs 0011 and 0012. Its counts only telemetry becomes new privacy policy claims, its service goes into `OUTSIDE_SERVICES`, and the console ban stays whole, because no reporter writes a log (spec 0016, AC-24). An upgrade event is a count, never an email or an id. Error reporting stays off `/tool` and never captures the billing seams' arguments.
