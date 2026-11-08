@@ -780,6 +780,10 @@ export function ToolClient() {
       : null;
   // Nothing worth hearing yet, so the polite region is hidden and takes no room.
   const quiet = !reviewable && phaseText === null;
+  // The polite region sits in the left column, where the list will be, while a
+  // document opens or the worker is lost (`toolGridAreas`), so the phase line
+  // holds that column rather than heading it (feature 28).
+  const holdsColumn = compact && !reviewable;
 
   /*
    * Spec 0013, AC-14 to AC-17, with feature 26's move of the phase line. One
@@ -875,6 +879,12 @@ export function ToolClient() {
           can draw it where the list will be while a document opens, and at
           the head of the rail once it holds the document card, without ever
           remounting it or moving focus (feature 26).
+
+          While it holds the left column, its line sits in the middle of the
+          room beside the rail, which the grid stretches it to fill from `lg`
+          (feature 28). Only classes change, never the nodes, so a line still
+          showing as the area moves (Checking your plan, as a file is chosen)
+          is not heard twice.
         */}
         <div
           key="l"
@@ -882,11 +892,12 @@ export function ToolClient() {
           aria-live="polite"
           className={cx(
             "flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:l]",
+            holdsColumn && "justify-center",
             quiet && "sr-only",
           )}
         >
           {reviewable && <OpenedDocument session={session} />}
-          {phaseText !== null && <StatusLine text={phaseText} />}
+          {phaseText !== null && <StatusLine text={phaseText} stacked={holdsColumn} />}
         </div>
 
         <div
@@ -1091,11 +1102,24 @@ function OpenFailure({
   );
 }
 
-/** The phase text, with a spinner that carries no meaning of its own. */
-function StatusLine({ text }: { text: string }) {
+/**
+ * The phase text, with a spinner that carries no meaning of its own.
+ *
+ * `stacked` while it holds the left column as a document opens: the large
+ * spinner centred, the line centred under it (spec 0013, AC-16, feature 28).
+ * Otherwise the small spinner beside the line, at the head of the rail. The
+ * same three nodes either way, so a change of form is never news.
+ */
+function StatusLine({ text, stacked = false }: { text: string; stacked?: boolean }) {
   return (
-    <p data-testid="progress" className="flex items-center gap-3 text-ink">
-      <Spinner />
+    <p
+      data-testid="progress"
+      className={cx(
+        "flex text-ink",
+        stacked ? "flex-col items-center gap-4 py-10 text-center" : "items-center gap-3",
+      )}
+    >
+      <Spinner size={stacked ? "lg" : "md"} />
       <span>{text}…</span>
     </p>
   );

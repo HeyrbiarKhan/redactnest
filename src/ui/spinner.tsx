@@ -1,11 +1,12 @@
 import { cx } from "@/lib/cx";
 
-export type SpinnerSize = "sm" | "md";
+export type SpinnerSize = "sm" | "md" | "lg";
 export type SpinnerTone = "accent" | "current";
 
 const SIZE: Readonly<Record<SpinnerSize, string>> = Object.freeze({
   sm: "size-4",
   md: "size-5",
+  lg: "size-10",
 });
 
 /**
@@ -14,6 +15,11 @@ const SIZE: Readonly<Record<SpinnerSize, string>> = Object.freeze({
  *
  * It stops turning when the visitor asks for reduced motion (AC-16). The text
  * next to it still says the work is under way.
+ *
+ * `sm` sits in a busy button and `md` beside a line of text. `lg`, 40 pixels,
+ * holds the place of something larger while it arrives, with its line under
+ * it: the list's column while a document opens on `/tool`, and Clerk's card
+ * on sign in and sign up (spec 0013, AC-16 and AC-23, feature 28).
  *
  * `current` is the arc alone, in the text colour of whatever holds it, for a
  * spinner inside a busy button (spec 0013, AC-34): white on the red, teal on
