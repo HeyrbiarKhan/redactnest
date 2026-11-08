@@ -341,12 +341,8 @@ function damaged() {
   return Uint8Array.from(broken, (character) => character.charCodeAt(0));
 }
 
-/**
- * Spec 0004, AC-10. A one page PDF anybody can open, with an owner password
- * that forbids editing, under `scheme`. The output of a run must come out
- * unencrypted and unrestricted.
- */
-function ownerPassword(scheme) {
+/** A one page PDF titled `title` with an email under it, encrypted under `scheme`. */
+function encryptedPage(title, scheme, options) {
   const { objects, trailer } = encryptObjects(
     [
       "<< /Type /Catalog /Pages 2 0 R >>",
@@ -356,14 +352,37 @@ function ownerPassword(scheme) {
       "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
       stream(
         "",
-        `BT /F1 12 Tf 72 700 Td (Owner password fixture, ${scheme}) Tj ET\n` +
+        `BT /F1 12 Tf 72 700 Td (${title}) Tj ET\n` +
           "BT /F1 12 Tf 72 680 Td (Contact: jane.doe@example.com) Tj ET\n",
       ),
     ],
     scheme,
+    options,
   );
 
   return writePdf({ objects, trailer: `/Root 1 0 R ${trailer}` }).bytes;
+}
+
+/**
+ * Spec 0004, AC-10. A one page PDF anybody can open, with an owner password
+ * that forbids editing, under `scheme`. The output of a run must come out
+ * unencrypted and unrestricted.
+ */
+function ownerPassword(scheme) {
+  return encryptedPage(`Owner password fixture, ${scheme}`, scheme);
+}
+
+/**
+ * A one page PDF that opens only with its user password, under AES-256, the
+ * scheme current PDF apps write. RedactNest takes no password, so the open
+ * refuses it as `password-required` (spec 0004), the `run-refused` spec 0016's
+ * verify step 15 counts. The email is there so a file that opened anyway would
+ * have something to find.
+ */
+function userPassword() {
+  return encryptedPage("User password fixture, aes-256", "aes-256", {
+    userPassword: "user-secret",
+  });
 }
 
 const FIXTURES = [
@@ -377,6 +396,7 @@ const FIXTURES = [
   ["owner-rc4.pdf", ownerPassword("rc4"), "owner password, 128 bit RC4"],
   ["owner-aes128.pdf", ownerPassword("aes-128"), "owner password, AES-128"],
   ["owner-aes256.pdf", ownerPassword("aes-256"), "owner password, AES-256"],
+  ["user-password.pdf", userPassword(), "user password, AES-256: opens only with it"],
   // Spec 0004, slice 2: the fixture matrix for real removal.
   ["text-page.pdf", textPage(), "an email and a phone number to tick"],
   ["single-spacing.pdf", singleSpacing(), "12pt and 14pt leading, Helvetica and Courier"],

@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-import { BILLING_ENV, SOURCE_URL } from "./tests/e2e/build-env";
+import { BILLING_ENV, SOURCE_URL, TELEMETRY_ENV } from "./tests/e2e/build-env";
 
 /**
  * Browser tests run against a production build, never `next dev`.
@@ -35,6 +35,8 @@ const BUILD_ENV = {
   NEXT_PUBLIC_SOURCE_URL: SOURCE_URL,
   // Billing on, from a fake set, never the keys in `.env.local` (spec 0012).
   ...BILLING_ENV,
+  // Pages report to `/api/telemetry`, which forwards nothing here (spec 0016).
+  ...TELEMETRY_ENV,
 };
 
 export default defineConfig({

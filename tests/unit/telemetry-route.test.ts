@@ -1,0 +1,289 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { POST } from "@/app/api/telemetry/route";
+import { config } from "@/config";
+import { MAX_EVENT_BYTES } from "@/telemetry/events";
+
+/**
+ * `POST /api/telemetry`, spec 0016 AC-7. What it forwards is read off the one
+ * call it makes, `reportServer`, which `telemetry-server.test.ts` covers from
+ * there on (the opt out headers, the sinks, the send).
+ */
+
+const reportServer = vi.hoisted(() => vi.fn());
+vi.mock("@/telemetry/server", () => ({ reportServer }));
+
+const URL_ = `${config.siteUrl}/api/telemetry`;
+const SAME_ORIGIN = Object.freeze({ "sec-fetch-site": "same-origin" });
+const AS_JSON = Object.freeze({ "content-type": "application/json" });
+
+/**
+ * A post sent as JSON, as our pages send it, unless a case names another
+ * `Content-Type`. Without one a string body would go as `text/plain`.
+ */
+function post(body: unknown, headers: Record<string, string> = SAME_ORIGIN): Request {
+  return new Request(URL_, {
+    method: "POST",
+    headers: { ...AS_JSON, ...headers },
+    body: typeof body === "string" ? body : JSON.stringify(body),
+  });
+}
+
+/** Every answer but the oversized one is this, whatever happened. */
+async function expectQuietAnswer(response: Response): Promise<void> {
+  expect(response.status).toBe(204);
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(response.headers.get("set-cookie")).toBeNull();
+  expect(await response.text()).toBe("");
+}
+
+beforeEach(() => {
+  reportServer.mockClear();
+});
+
+describe("what the route forwards", () => {
+  it("passes on a well formed page event, as the parser rebuilt it", async () => {
+    const response = await POST(post({ name: "page-view", page: "tool" }));
+    await expectQuietAnswer(response);
+    expect(reportServer).toHaveBeenCalledTimes(1);
+    const [event, headers] = reportServer.mock.calls[0] as [unknown, Headers];
+    expect(event).toEqual({ name: "page-view", page: "tool" });
+    expect(Object.isFrozen(event)).toBe(true);
+    expect(headers).toBeInstanceOf(Headers);
+  });
+
+  it("passes on the welcome page's still-waiting report", async () => {
+    await POST(
+      post({ name: "billing-failed", action: "welcome", outcome: "still-waiting" }),
+    );
+    expect(reportServer).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts a browser that sends no Sec-Fetch-Site but names our origin", async () => {
+    const origin = new URL(config.siteUrl).origin;
+    await POST(post({ name: "page-view", page: "home" }, { origin }));
+    expect(reportServer).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("what the route drops, with the same empty answer", () => {
+  it.each([
+    ["another site's page", { "sec-fetch-site": "cross-site" }],
+    ["a sibling subdomain", { "sec-fetch-site": "same-site" }],
+    ["a typed address", { "sec-fetch-site": "none" }],
+    ["a foreign Origin", { origin: "https://evil.example" }],
+    ["no Sec-Fetch-Site and no Origin", {}],
+    [
+      "Sec-Fetch-Site cross-site with our Origin",
+      {
+        "sec-fetch-site": "cross-site",
+        origin: new URL(config.siteUrl).origin,
+      },
+    ],
+  ])("drops an event from %s", async (_label, headers) => {
+    await expectQuietAnswer(
+      await POST(post({ name: "page-view", page: "home" }, headers)),
+    );
+    expect(reportServer).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a body that is not JSON", "page-view"],
+    ["an empty body", ""],
+    ["an extra key", { name: "page-view", page: "home", file: "passport.pdf" }],
+    ["a raw number", { name: "cap-reached", cap: 3, account: "none" }],
+    [
+      "an unknown kind",
+      {
+        name: "run-refused",
+        kind: "on-fire",
+        step: "open",
+        tier: "free",
+        account: "none",
+      },
+    ],
+    [
+      "a server crash, which only the server reports",
+      { name: "server-crash", route: "entitlement", routeType: "route" },
+    ],
+    [
+      "a plan check failure, which only the server reports",
+      { name: "plan-check-failed" },
+    ],
+    ["subscribe-started, which only the server sends", { name: "subscribe-started" }],
+    [
+      "a server side billing failure",
+      { name: "billing-failed", action: "subscribe", outcome: "checkout-failed" },
+    ],
+  ])("drops %s", async (_label, body) => {
+    await expectQuietAnswer(await POST(post(body)));
+    expect(reportServer).not.toHaveBeenCalled();
+  });
+
+  it("drops a body that runs past the limit with no Content-Length, unread past it", async () => {
+    let pulled = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        if (pulled > 100) controller.close();
+        else controller.enqueue(new Uint8Array(1024).fill(32));
+      },
+    });
+    const request = new Request(URL_, {
+      method: "POST",
+      headers: { ...SAME_ORIGIN, ...AS_JSON },
+      body: stream,
+      duplex: "half",
+    } as RequestInit);
+    await expectQuietAnswer(await POST(request));
+    expect(reportServer).not.toHaveBeenCalled();
+    expect(pulled).toBeLessThan(10);
+  });
+
+  it("answers a cookie exactly as it answers none", async () => {
+    const withCookie = await POST(
+      post(
+        { name: "page-view", page: "home" },
+        {
+          ...SAME_ORIGIN,
+          cookie: "__session=eyJhbGciOi; __client_uat=1",
+        },
+      ),
+    );
+    await expectQuietAnswer(withCookie);
+  });
+});
+
+describe("the Content-Type it requires", () => {
+  const EVENT = Object.freeze({ name: "page-view", page: "home" });
+
+  it.each([
+    "application/json",
+    "application/json; charset=utf-8",
+    "APPLICATION/JSON",
+    "Application/Json;charset=UTF-8",
+    "  application/json  ; charset=utf-8",
+  ])("forwards a body sent as %j", async (type) => {
+    await expectQuietAnswer(
+      await POST(post(EVENT, { ...SAME_ORIGIN, "content-type": type })),
+    );
+    expect(reportServer).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    "text/plain",
+    "text/plain;charset=UTF-8",
+    "application/x-www-form-urlencoded",
+    "multipart/form-data; boundary=x",
+    "application/jsonp",
+    "application/json-patch+json",
+    "",
+  ])("drops a valid body sent as %j, unread", async (type) => {
+    const request = post(EVENT, { ...SAME_ORIGIN, "content-type": type });
+    await expectQuietAnswer(await POST(request));
+    expect(request.bodyUsed).toBe(false);
+    expect(reportServer).not.toHaveBeenCalled();
+  });
+
+  it("drops a valid body sent with no Content-Type at all, unread", async () => {
+    // Bytes, not a string, so the request carries no Content-Type of its own.
+    const request = new Request(URL_, {
+      method: "POST",
+      headers: SAME_ORIGIN,
+      body: new TextEncoder().encode(JSON.stringify(EVENT)),
+    });
+    expect(request.headers.get("content-type")).toBeNull();
+    await expectQuietAnswer(await POST(request));
+    expect(request.bodyUsed).toBe(false);
+    expect(reportServer).not.toHaveBeenCalled();
+  });
+
+  it("checks the size before the Content-Type, so an oversized body is still a 413", async () => {
+    const request = new Request(URL_, {
+      method: "POST",
+      headers: {
+        ...SAME_ORIGIN,
+        "content-type": "text/plain",
+        "content-length": String(MAX_EVENT_BYTES + 1),
+      },
+      body: "x".repeat(MAX_EVENT_BYTES + 1),
+    });
+    expect((await POST(request)).status).toBe(413);
+  });
+});
+
+describe("the size limit", () => {
+  it("refuses a declared body over 2048 bytes with 413, before reading it", async () => {
+    const body = JSON.stringify({
+      name: "page-view",
+      page: "home",
+      pad: "x".repeat(2049),
+    });
+    const request = new Request(URL_, {
+      method: "POST",
+      headers: {
+        ...SAME_ORIGIN,
+        ...AS_JSON,
+        "content-length": String(MAX_EVENT_BYTES + 1),
+      },
+      body,
+    });
+    const response = await POST(request);
+    expect(response.status).toBe(413);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(request.bodyUsed).toBe(false);
+    expect(reportServer).not.toHaveBeenCalled();
+  });
+
+  it("reads a body of exactly 2048 bytes", async () => {
+    const event = JSON.stringify({ name: "page-view", page: "home" });
+    const body = event + " ".repeat(MAX_EVENT_BYTES - event.length);
+    expect(new TextEncoder().encode(body).byteLength).toBe(MAX_EVENT_BYTES);
+    await POST(post(body));
+    expect(reportServer).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a body one byte over that declares no length, with the quiet 204", async () => {
+    const event = JSON.stringify({ name: "page-view", page: "home" });
+    const request = post(event + " ".repeat(MAX_EVENT_BYTES + 1 - event.length));
+    expect(request.headers.get("content-length")).toBeNull();
+    await expectQuietAnswer(await POST(request));
+    expect(reportServer).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The limit is on bytes, not characters. JSON keeps the last of a repeated
+   * key, so a padded first `page` vanishes in parsing and the event is valid
+   * whatever the padding holds: only its size decides. Each "é" is two bytes.
+   */
+  const padded = (characters: number) =>
+    `{"page":"${"é".repeat(characters)}","name":"page-view","page":"home"}`;
+
+  it("measures the limit in bytes, so a body under 2048 characters can be over it", async () => {
+    const body = padded(1100);
+    expect(body.length).toBeLessThan(MAX_EVENT_BYTES);
+    expect(new TextEncoder().encode(body).byteLength).toBeGreaterThan(MAX_EVENT_BYTES);
+    await expectQuietAnswer(await POST(post(body)));
+    expect(reportServer).not.toHaveBeenCalled();
+  });
+
+  it("forwards the same padded shape when its bytes fit, so the size is what dropped it", async () => {
+    const body = padded(900);
+    expect(new TextEncoder().encode(body).byteLength).toBeLessThanOrEqual(
+      MAX_EVENT_BYTES,
+    );
+    await POST(post(body));
+    expect(reportServer).toHaveBeenCalledTimes(1);
+    expect(reportServer.mock.calls[0]?.[0]).toEqual({ name: "page-view", page: "home" });
+  });
+});
+
+describe("the methods it answers", () => {
+  it("exports POST alone, so every other method gets Next.js's own 405", async () => {
+    const route: Record<string, unknown> = await import("@/app/api/telemetry/route");
+    expect(typeof route.POST).toBe("function");
+    for (const method of ["GET", "HEAD", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
+      expect(route[method], method).toBeUndefined();
+    }
+  });
+});

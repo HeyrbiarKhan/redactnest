@@ -1,5 +1,6 @@
 import { describe, expectTypeOf, it } from "vitest";
 
+import type { TelemetryEvent } from "@/telemetry/events";
 import type {
   DetectionCounts,
   DetectorKind,
@@ -55,13 +56,56 @@ type Probe<T> =
 type Verdict<T> =
   true extends FreeStringIn<T> ? "carries a free string" : "kinds and numbers only";
 
+/**
+ * Does this type hold a raw number anywhere inside it? Spec 0016, AC-1: a
+ * telemetry event carries ranges (`Bucket`), never a count, so it is held to
+ * this as well as to the free string gate. Same walk as `FreeStringIn`.
+ */
+type NumberIn<T> = T extends unknown ? NumberProbe<T> : never;
+
+type NumberProbe<T> = [T] extends [number]
+  ? true
+  : T extends readonly (infer Element)[]
+    ? NumberIn<Element>
+    : T extends object
+      ? NumberIn<T[keyof T]>
+      : false;
+
+type RangeVerdict<T> = true extends NumberIn<T> ? "carries a number" : "no numbers";
+
 describe("what may reach a log", () => {
   /**
    * The gate itself. If this stops compiling, something loggable grew a field
-   * that a file name or an extracted snippet would fit into.
+   * that a file name or an extracted snippet would fit into. Spec 0016, AC-1
+   * puts every telemetry event under it too, beside spec 0002's payloads.
    */
   it("carries enumerated kinds and numbers, and no free strings", () => {
-    expectTypeOf<Verdict<LoggablePayload>>().toEqualTypeOf<"kinds and numbers only">();
+    expectTypeOf<
+      Verdict<LoggablePayload | TelemetryEvent>
+    >().toEqualTypeOf<"kinds and numbers only">();
+  });
+
+  /**
+   * Spec 0016, AC-1. A telemetry event carries ranges, never the count itself,
+   * so an exact page count or a number of matches cannot leave a page.
+   */
+  it("holds every telemetry event to kinds and ranges, with no raw number", () => {
+    expectTypeOf<Verdict<TelemetryEvent>>().toEqualTypeOf<"kinds and numbers only">();
+    expectTypeOf<RangeVerdict<TelemetryEvent>>().toEqualTypeOf<"no numbers">();
+  });
+
+  /** The number probe's canary, for the same reason as the one below. */
+  it("would catch a raw number, a nested one, and one inside an array", () => {
+    expectTypeOf<RangeVerdict<{ pages: number }>>().toEqualTypeOf<"carries a number">();
+    expectTypeOf<
+      RangeVerdict<{ found: Partial<Record<"email", number>> }>
+    >().toEqualTypeOf<"carries a number">();
+    expectTypeOf<
+      RangeVerdict<{ items: readonly { count: number }[] }>
+    >().toEqualTypeOf<"carries a number">();
+    expectTypeOf<
+      RangeVerdict<TelemetryEvent | { removedTotal: number }>
+    >().toEqualTypeOf<"carries a number">();
   });
 
   /**

@@ -156,6 +156,56 @@ export const OUTSIDE_SERVICES: readonly OutsideService[] = Object.freeze([
     imageOrigins: Object.freeze(["https://img.clerk.com"]),
   }),
   POLAR_SERVICE,
+  // Spec 0016. Each fact below was read from Umami's privacy policy, its DPA
+  // (umami.is/dpa: processor, Module Two; standard contractual clauses, 10.2,
+  // and the UK Addendum, 10.3), its subprocessor list and its Cloud FAQ
+  // ("Hobby keeps data for 6 months") on 30 October 2026. Our server sends it
+  // counts; no visitor's browser ever contacts it, so it names no origin.
+  // The location is its EU region: Go live step 1 chooses the region at sign
+  // up, and this entry must say whichever was chosen.
+  Object.freeze({
+    name: "Umami",
+    role: "Counts how the site is used, from figures our server sends it",
+    receives:
+      "Counts by kind and in ranges, such as 2 to 5 email addresses found, and which kind of page they came from. Never your document, its name or its words, and never your IP address or browser details, because our server sends the counts, not your browser",
+    purpose:
+      "To show us how many people reach each step, from a visit to a redacted file to Pro, and where they stop",
+    location:
+      "The EU, in Umami Cloud’s EU region. Some of its providers, such as its content delivery network, operate in the United States",
+    safeguard:
+      "Standard contractual clauses, with the UK’s International Data Transfer Addendum",
+    retention: "Six months",
+    // The final address, checked to resolve with no redirect on 30 October 2026.
+    policyUrl: "https://umami.is/privacy",
+    scriptOrigins: Object.freeze([]),
+    connectOrigins: Object.freeze([]),
+    imageOrigins: Object.freeze([]),
+  }),
+  // Spec 0016. Each fact below was read from Sentry's privacy policy (version
+  // 3.3.2, 29 October 2025), its DPA (sentry.io/legal/dpa: processor;
+  // Schedule 3, the Data Privacy Framework first and standard contractual
+  // clauses with the UK Addendum where it does not apply), its data storage
+  // location page (EU: Frankfurt, Germany) and its pricing page (the free
+  // plan's 30 day lookback) on 30 October 2026. Our server sends it reports;
+  // no visitor's browser ever contacts it, so it names no origin. The
+  // location is its EU region: Go live step 2 chooses it at sign up, for good,
+  // and this entry must say whichever was chosen.
+  Object.freeze({
+    name: "Sentry",
+    role: "Tells us when our code fails",
+    receives:
+      "The kind of failure, where on the site it happened, and which version of the site was running. Never an error message, your document or anything about you, and never your IP address or browser details, because our server sends the report, not your browser",
+    purpose: "To tell us, by email, when something on the site stops working",
+    location: "Germany, in Sentry’s EU data region. Sentry is based in the United States",
+    safeguard:
+      "The Data Privacy Framework between the EU and the US, with its UK Extension, and standard contractual clauses with the UK’s International Data Transfer Addendum where that does not apply",
+    retention: "30 days",
+    // The final address, checked to resolve with no redirect on 30 October 2026.
+    policyUrl: "https://sentry.io/privacy/",
+    scriptOrigins: Object.freeze([]),
+    connectOrigins: Object.freeze([]),
+    imageOrigins: Object.freeze([]),
+  }),
 ]);
 
 /**

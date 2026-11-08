@@ -1,9 +1,12 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
+import { headers } from "next/headers";
 
 import { accountSeams } from "@/billing/clients";
 import { deleteAccount, type DeleteOutcome } from "@/billing/delete";
+import { billingFailure } from "@/telemetry/events";
+import { reportServer } from "@/telemetry/server";
 
 /** What Delete account is told: a kind, never a detail from Polar or Clerk. */
 export type DeleteResult = DeleteOutcome["kind"];
@@ -24,5 +27,9 @@ export async function deleteAccountAction(): Promise<DeleteResult> {
   if (seams === null) return "billing-failed";
   const { userId } = await auth();
   const outcome = await deleteAccount(userId, seams);
+  // Spec 0016, AC-19: a deletion that removed nothing, or removed billing but
+  // kept the sign in, reports its kind alone, never the outcome.
+  const failure = billingFailure("delete", outcome.kind);
+  if (failure !== null) reportServer(failure, await headers());
   return outcome.kind;
 }

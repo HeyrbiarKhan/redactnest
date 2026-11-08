@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { readSnapshot } from "@/lib/entitlement";
 import { TOOL_PATH } from "@/lib/routes";
+import { report } from "@/telemetry/client";
 import { Button } from "@/ui/button";
 import { Spinner } from "@/ui/spinner";
 
@@ -105,6 +106,20 @@ export function WelcomePoll() {
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [phase, round]);
+
+  /**
+   * Spec 0016, AC-14, AC-19 and AC-28. Reaching Pro is the last step of the
+   * funnel, counted once: the page never leaves `pro`. A round ending without
+   * it is the silent failure spec 0012 worried about, a paid checkout that
+   * never turned into Pro, so it reports, once per page load however many
+   * times Check again starts a round (`report` holds that).
+   */
+  useEffect(() => {
+    if (phase === "pro") report({ name: "subscription-confirmed" });
+    if (phase === "still-waiting") {
+      report({ name: "billing-failed", action: "welcome", outcome: "still-waiting" });
+    }
+  }, [phase]);
 
   const checkAgain = useCallback(() => {
     setPhase("confirming");

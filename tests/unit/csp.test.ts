@@ -87,16 +87,20 @@ const SAMPLE_ORIGINS = [
 const CLERK = "https://clerk.redactnest.com https://*.clerk.accounts.dev";
 
 describe("the real list", () => {
-  /** covers: spec 0011 AC-14, spec 0012 AC-20. The tool's policy, unchanged. */
-  it("gives the tool exactly today's policy, Clerk and Polar listed or not", () => {
+  /**
+   * covers: spec 0011 AC-14, spec 0012 AC-20, spec 0016 AC-22. The tool's
+   * policy, unchanged, whatever services the list holds.
+   */
+  it("gives the tool exactly today's policy, Clerk, Polar, Umami and Sentry listed or not", () => {
     const { tool } = buildPolicies({ services: OUTSIDE_SERVICES, dev: false });
 
     expect(tool).toBe(TODAY);
   });
 
   /**
-   * covers: spec 0012 AC-21. The standard policy gains Clerk's script,
-   * connect and image origins, Polar adds none, and no other directive moves.
+   * covers: spec 0012 AC-21, spec 0016 AC-22. The standard policy gains
+   * Clerk's script, connect and image origins; Polar, Umami and Sentry add
+   * none, and no other directive moves.
    */
   it("gives the standard policy Clerk's origins and nothing else", () => {
     const { standard } = buildPolicies({ services: OUTSIDE_SERVICES, dev: false });

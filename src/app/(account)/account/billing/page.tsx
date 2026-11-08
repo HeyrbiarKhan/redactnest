@@ -1,11 +1,14 @@
 import { auth } from "@clerk/nextjs/server";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { accountSeams } from "@/billing/clients";
 import { openPortal } from "@/billing/portal";
 import { billing } from "@/config/billing";
 import { ACCOUNT_PATH, BILLING_PATH, PRICING_PATH, SIGN_IN_PATH } from "@/lib/routes";
+import { billingFailure } from "@/telemetry/events";
+import { reportServer } from "@/telemetry/server";
 import { Button } from "@/ui/button";
 import { Callout } from "@/ui/callout";
 
@@ -37,6 +40,10 @@ export default async function BillingPage() {
     createCustomerSession: seams.createCustomerSession,
     returnUrl: `${seams.siteUrl}${ACCOUNT_PATH}`,
   });
+
+  // Spec 0016, AC-19: the outcome's kind alone, never the outcome.
+  const failure = billingFailure("portal", outcome.kind);
+  if (failure !== null) reportServer(failure, await headers());
 
   switch (outcome.kind) {
     case "sign-in":
