@@ -45,14 +45,21 @@ import {
 export const UMAMI_SEND_URL = "https://gateway.umami.is/api/send";
 
 /**
- * The one `User-Agent` every outbound request carries, never the visitor's
- * (AC-8). Umami refuses a send without one, so this is the string its own
- * server side guide sends (docs.umami.is/docs/guides/send-server-side-events,
- * read 30 October 2026). If Go live step 7's visit never shows in Umami, its
- * bot filter refused this, and AC-21 says to swap in one fixed generic browser
- * string, the same on every event.
+ * The one `User-Agent` every outbound request carries, to Umami and Sentry
+ * alike: the same on every event, and never the visitor's (AC-8, AC-21).
+ * Umami refuses a send without one. It began as `Mozilla/5.0 (Server)`, the
+ * string Umami's server side guide sends, but Go live step 7 saw no visit in
+ * Umami while `/api/telemetry` answered 204: Umami drops every send its bot
+ * filter (isbot) flags, and isbot 5.2.2 flagged that string on 8 November
+ * 2026. So, by AC-21's fallback, this is Chrome's reduced desktop string for
+ * Windows, which isbot 5.2.2 passed the same day. Its version (153, the
+ * Chromium Playwright 1.63 ships) is never bumped, because one fixed string is
+ * the point. Umami now shows every visit as Chrome on Windows, so its browser,
+ * system and device panels mean nothing. Check any new string with isbot
+ * first. A rule about a service, not a cap on the visitor.
  */
-export const TELEMETRY_USER_AGENT = "Mozilla/5.0 (Server)";
+export const TELEMETRY_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36";
 
 /**
  * Umami's limit on an event's properties: "Objects: Max of 50 properties",
