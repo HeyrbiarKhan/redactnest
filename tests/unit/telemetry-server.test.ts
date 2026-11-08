@@ -281,6 +281,27 @@ describe("the Sentry envelope", () => {
   });
 });
 
+// AC-21's fallback: Umami's bot filter (isbot) dropped every send under
+// `Mozilla/5.0 (Server)`. Pinned whole, so a new string is a deliberate
+// change, checked with isbot first, as `TELEMETRY_USER_AGENT`'s comment says.
+describe("the User-Agent", () => {
+  it("is one fixed generic desktop Chrome string", () => {
+    expect(TELEMETRY_USER_AGENT).toBe(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+    );
+  });
+
+  it("is the same on every event, a page view, a count and a report alike", async () => {
+    const { seams, sent } = recordingSeams();
+    await forward({ name: "page-view", page: "home" }, seams);
+    await forward(WORST_CASE, seams);
+    await forward({ name: "plan-check-failed" }, seams);
+    expect(
+      sent.map(({ init }) => (init.headers as Record<string, string>)["User-Agent"]),
+    ).toEqual([TELEMETRY_USER_AGENT, TELEMETRY_USER_AGENT, TELEMETRY_USER_AGENT]);
+  });
+});
+
 describe("forward", () => {
   it("sends nothing when this build forwards nothing", async () => {
     const { seams, sent } = recordingSeams({ sinks: null });
