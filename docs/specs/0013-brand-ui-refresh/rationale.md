@@ -301,6 +301,73 @@ Feature 26 (UI polish) made two visual fixes you called on 2026-10-11, with no n
 
 **Left over.** `IconCircle`'s `sm` size (the 32 pixel circle) had one caller, the Strips circles, and now has none (a Follow-up in `index.md`).
 
+### Recorded after feature 28's build
+
+Feature 28 (UI polish 2) made two visual fixes you called on 2026-11-09, with no new design, built on `feat/ui-polish-2` (commits `2faaee3` and `e9372e2`) and recorded here the same day, before `/check verify`. The figures are the build's own, from its code, its spinner test, its scope milestones and its sandbox walk. The runners up below were weighed for this record against what the build's code and comments say it chose.
+
+**The opening phase line.** Feature 26 moved the spinner and the phase line into the left column while a document opens, but kept their form: a 20 pixel spinner beside the line at the top of the column, small in a large empty space. `Spinner` now has `lg`, 40 pixels. While L holds the left column (`compact && !reviewable`: a document on the page and no list yet, the inputs that put L there), `StatusLine` is stacked, the large spinner centred with the line centred under it, 16 pixels apart with 40 above and below. From `lg` the grid already stretches L to the rail's height under `"a a" "l b"`, so `justify-center` on L puts the line in the middle of the room beside the rail. Below `lg` the stacked line is centred across the column. Only classes change: the paragraph and its spinner and words are the same elements in both forms, so a line that stayed on screen as the form changed would keep its nodes. (Verify found that none does today; see *Corrected after feature 28's verify*.) A run's line, at the head of the rail, keeps the small spinner beside it.
+
+- **Centre only across, at the column's top** (runner up): one class fewer, but beside a tall rail the line still sits at the top of a mostly empty column, the look the fix was for.
+- **A second, larger spinner outside the region** (runner up), the region keeping its small line: two marks for one wait, so what is seen and what is heard part ways, the reason feature 26 turned the same idea down.
+- **A different element for the stacked form** (runner up): an element swapped in the same place is a remount, and a remounted live region may say its words again, or not at all.
+
+**Clerk's wait.** Clerk's script loads from Clerk's servers after the page, so on `/sign-in` and `/sign-up` the card's place sat empty, the panel beside nothing, for as long as that took. `ClerkWait` is passed as Clerk's own `fallback` on both pages: Clerk shows it until it has loaded and its card is in the page, then drops it. It is a white `Card` the size of Clerk's (400 pixels wide from `md`, at least 25rem tall, between the sign in and sign up cards), with the large spinner and a polite line, "Loading sign in…" or "Loading sign up…". Clerk gives up on its own script after 15 seconds, but in verify's walks it reported neither a start its servers answer 400 nor a request that hangs as `error`: its status stayed `loading`. So a timer of ours, `CLERK_WAIT_MS`, gives up at 20 seconds, your call, longer than Clerk's own 15, and Clerk's `error`, should it come, ends the wait sooner. (Corrected after verify: the build recorded that Clerk reports a refused start at once.) Either way the spinner goes and the same status node says the form did not load, in `danger-ink`. Clerk still decides when its card draws, so a form that arrives after the failure line replaces it. The words are `CLERK_WAIT_TEXT`, beside the component in the account group, as `BUSY_TEXT` and `SIGNING_OUT` are.
+
+Walked in the Clerk development sandbox on 2026-11-09:
+
+| Case | What showed |
+|---|---|
+| A normal load, at 1280, 800 and 390 pixels | the placeholder where the card draws, then the form in its place; the panel beside it moved 12 pixels, from Clerk's development band |
+| Clerk's start refused (`/v1/environment` and `/v1/client` answered 400) | the loading line, then the failure line at about 20 s, from our timer; Clerk's status stays `loading` (corrected after verify: the build recorded 0.5 s) |
+| Every request to Clerk's host hung | the loading line, then the failure line at 20.4 s |
+| Clerk's script held past 20 s, then let through | the failure line, then the form replacing it |
+
+- **Our own loaded check** (runner up): show the placeholder until `useClerk().loaded`, then render the card. Clerk can report loaded a moment before its card has drawn, so the place would flash empty between them; `fallback` goes only once the card is in the page, and Clerk owns that moment.
+- **Clerk's `error` alone, no timer** (runner up): one moving part fewer, but a hung request leaves the spinner turning for ever, which the scope's Done when rules out.
+- **A timer that also gives up on the form** (runner up): simpler to reason about, but a slow connection that loads Clerk at 25 seconds would have a working form held back by our own guess.
+- **The words in `src/lib/plans.ts`** (runner up), beside `SIGN_IN_PANEL`: `plans.ts` holds what a plan is and how it is sold, not how a page loads, and `src/ui` takes no words at all (spec 0003, INV-7).
+
+**The brand pictures.** No brand picture shows the opening state or the sign in pages (the product shot is the reviewing state), so the build left `scripts/make-brand.mjs` alone, as the scope's milestone records.
+
+**Not yet held by a test.** The build added the size cases to `spinner.test.tsx`. The stacked line, the placeholder and its two ways to fail are walked by hand and wait for the scope's Test it step (*Critical test scenarios* in `index.md`). Playwright's fake Clerk never draws the form, so the handover from placeholder to form stays a sandbox check.
+
+### Corrected after feature 28's verify
+
+`/check verify` walked feature 28 on 2026-11-09 (its walk scripts sit in `.playwright-mcp/polish2-walk/`, outside git) and found two claims in the record above that did not hold. Both are reworded here and in `index.md`. No design and no code changes.
+
+**"Checking your plan" as a file is chosen.** The build's record said the line, still showing as a file is chosen, takes the stacked form in the same node. Verify watched the region with a mutation observer: the line is removed, the region is empty and `sr-only` for 6 to 48 ms, and "Loading the PDF engine…" arrives in a new `progress` node, stacked. The region is the same node throughout and nothing is heard twice. The cause is older than feature 28. Once the plan answer lands, `checkingEntitlement` goes false and `file-chosen` starts the open with `phase: null` in the same render, and `phaseText` has no words for an open with no phase, so the region has nothing to show until the worker's first phase. Feature 28 left `phaseText` alone, so AC-16 now records this as an existing behaviour, not a promise, and a Follow-up keeps the choice open.
+
+- **Make the claim true by changing `phaseText`** (runner up): give an open with no phase yet a line of its own, so the node stays. It changes the redact flow's phase words (spec 0007, AC-16 and INV-3), which is design rather than wording, and the gap it closes lasts under a twentieth of a second and is not announced.
+
+**A refused Clerk start.** The build's record said Clerk reports a refused start at once (`status` `"error"`), and its walk table showed the failure line at 0.5 s. Verify answered `/v1/environment` and `/v1/client` with 400 and read Clerk's own status (clerk-js 6.41.0): it stayed `loading` for the 8 seconds watched, and the failure line came from `CLERK_WAIT_MS` at about 20 seconds, as in the hung case. What the build's walk did to reach 0.5 s is not recorded, so the figure is dropped rather than explained. The design holds: the timer was always the backstop, and now it is the path every walked failure takes. `status === "error"` stays in `ClerkWait` for a failure Clerk does report.
+
+- **Fail a refused start at once** (runner up): tell a refused start from a slow one by watching for Clerk's 400s, and show the line straight away. It needs a watch of our own on Clerk's requests, which the account pages do not have, for a case a visitor rarely meets, so the 20 seconds stays, your call.
+
+### Recorded after feature 28's reopened items
+
+You reopened feature 28 on 2026-11-09 for three small screen fixes, visual only and within this spec, with how the menu opens left to the build. They were built on `feat/ui-polish-2` (commits `de300df`, `84ff267` and `f0f0b81`) and are recorded here the same day, before `/check verify`. The runners up below were weighed for this record against what the build's code and comments say it chose.
+
+**The header menu (AC-7).** Below `sm` the header's links used to wrap onto ragged rows beneath the lockup. Now, with billing on, the lockup and a Menu button share one row, and the links wait in the browser's own popover (`popover="auto"`), which the button opens through `popovertarget`. The popover gives the button its expanded state, closes on Escape (returning focus to the button) or on a press outside, and moves no focus when it opens, so Tab runs from the button into the links. From `sm` the popover has no box (`display: contents`), so the very same links sit in the header's row. The button is drawn only where the browser supports popovers; elsewhere the links show stacked beneath the lockup. With billing off there is no nav, so `PageHeader` passes none and there is no menu.
+
+- **A disclosure button of our own** (runner up): a client component holding `aria-expanded`, with our own Escape and outside press handling. It would put a client component on Pricing and the home page, which spec 0012's AC-13 and this spec's AC-13 keep static, and it is code that does what the browser already does.
+- **`details` and `summary`** (runner up): no script either, but it gives no Escape, which the scope's Done when asked for, and no closing on a press outside.
+- **Two sets of links**, one for the row and one for the menu (runner up): each link twice in the page, so one copy has to be hidden from everyone at every width, and two places to keep the current page's mark in step.
+- **Keep the wrap** (runner up): no new parts, but the ragged rows were what you called out.
+
+**The three points (AC-10).** Below `md`, where `FeatureList` stacks its items, each is centred, its icon above its title and line; from `md` they line up at the start as before.
+
+- **Centre only on the home page**, through a prop (runner up): feature 15's search pages reuse `FeatureList`, and the scope asked that every caller inherit the change, so they cannot drift from the home page.
+
+**The idle rail (AC-15).** Where the tool's areas stack, `StepList` is centred as a block (`mx-auto w-fit`) and the lock line under it (`justify-center`), in the idle rail only, and both return to the start at the tool grid's own `lg`. `StepList` takes a layout only `className` for this.
+
+- **Centre each step's text** (runner up): the circles would move with each line's length and the joins between them would no longer meet them.
+- **The window's `lg`** (runner up): at 200% text the tool grid stacks while the window is still past `lg`, so the steps would sit at the start while stacked. The grid's own container query (`@min-[61rem]`) switches exactly when the areas do.
+- **Centre the lock line everywhere it stacks** (runner up): inside the action panel it belongs under Redact, and once a document is open the rail is no longer a short centred block, so the scope kept it to the idle rail.
+
+**The brand pictures.** Every brand picture is drawn at desktop width, where none of the three changes shows, so the build left `scripts/make-brand.mjs` alone.
+
+**Left over.** At 320 pixels with 200% text, `/`'s main content scrolls sideways, with the menu shut or open. The build found it older than the branch, so it is a Follow-up in `index.md`, not part of these items.
+
 ### What each reference gave, and what stayed out
 
 | Reference | Kept | Left out, and why |

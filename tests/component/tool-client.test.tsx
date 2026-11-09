@@ -2558,6 +2558,79 @@ describe("the redact flow (spec 0007)", () => {
     });
 
     /**
+     * AC-15, as feature 28 builds it: where the areas stack (below the grid's
+     * own `lg`, the `@min-[61rem]` container query, so 200% text on a wide
+     * window counts too) the idle steps sit centred as a block and the lock
+     * line centred under them; from that width both sit at the start of the
+     * rail, as before. A failed open is laid out as idle, so it centres too.
+     * jsdom lays nothing out, so this holds the classes and
+     * `design-system.spec.ts` measures the boxes.
+     */
+    it("centres the idle steps and the lock line until the grid is wide, after a failed open too", async () => {
+      mocks.openSession.mockRejectedValue(new EngineError("corrupt"));
+      render(<ToolClient />);
+      const expectCentred = () => {
+        expect(within(screen.getByTestId("area-rail")).getByRole("list")).toHaveClass(
+          "mx-auto",
+          "w-fit",
+          "@min-[61rem]:mx-0",
+          "@min-[61rem]:w-auto",
+        );
+        expect(screen.getByTestId("lock-line")).toHaveClass(
+          "justify-center",
+          "@min-[61rem]:justify-start",
+        );
+      };
+
+      expectCentred();
+
+      await chooseFile(pdfFile());
+      await screen.findByTestId("error");
+
+      expectCentred();
+    });
+
+    /**
+     * AC-15 and AC-16: only the idle rail centres. Once a document is open,
+     * the lock line at the rail's foot (while it opens, and after the result
+     * card) sits at the start, and the one inside the action panel keeps its
+     * own rule, following Redact as it did before feature 28: centred under
+     * the full width button on a phone and in the wide rail, at the start
+     * between. Neither takes the idle rail's centring.
+     */
+    it("leaves the rail's lock line at the start while a document opens", async () => {
+      mocks.openSession.mockImplementation(hangsAt("opening"));
+      render(<ToolClient />);
+
+      await chooseFile(pdfFile());
+      await screen.findByTestId("progress");
+
+      const line = screen.getByTestId("lock-line");
+      expect(screen.getByTestId("area-rail").lastElementChild).toBe(line);
+      expect(line.className).not.toMatch(/justify-/);
+    });
+
+    it("keeps the action panel's lock line under Redact, and the one after the result card at the start", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+
+      const inPanel = screen.getByTestId("lock-line");
+      expect(screen.getByTestId("action-panel")).toContainElement(inPanel);
+      expect(inPanel).toHaveClass(
+        "justify-center",
+        "sm:justify-start",
+        "@min-[61rem]:justify-center",
+      );
+      expect(inPanel).not.toHaveClass("@min-[61rem]:justify-start");
+
+      await userEvent.setup().click(screen.getByTestId("redact"));
+      await run.finish();
+
+      expect(screen.getByTestId("result")).toBeInTheDocument();
+      expect(screen.getByTestId("lock-line").className).not.toMatch(/justify-/);
+    });
+
+    /**
      * AC-15: "Checking your plan" in the polite region at the head of the
      * rail, as today. The file is not chosen until the answer comes, so the
      * page is still laid out as idle, with the region over B only while it
@@ -2997,6 +3070,134 @@ describe("the redact flow (spec 0007)", () => {
       await user.click(screen.getByTestId("redact"));
       const [ids] = vi.mocked(run.session.redact).mock.calls[0];
       expect([...ids].sort()).toEqual([E1, E2].sort());
+    });
+  });
+
+  /**
+   * Spec 0013, AC-16 and AC-20, feature 28: the *Opening phase line*
+   * scenario. While a document opens, the polite region holds the left
+   * column, so its line is stacked, a large spinner over centred words, and
+   * the region centres it down the room beside the rail. Every other phase
+   * line keeps the small spinner beside its words. jsdom computes no layout,
+   * so the form is proved by its classes here and measured in
+   * `design-system.spec.ts`.
+   */
+  describe("the opening phase line (spec 0013, AC-16, AC-20)", () => {
+    // `items-center` is in both forms: across in the column, down in the row.
+    const STACKED_ONLY = ["flex-col", "text-center"] as const;
+
+    function expectStacked(progress: HTMLElement): void {
+      expect(progress).toHaveClass(...STACKED_ONLY, "items-center");
+      expect(within(progress).getByTestId("spinner")).toHaveClass("size-10");
+      expect(screen.getByTestId("area-live")).toHaveClass("justify-center");
+    }
+
+    function expectRow(progress: HTMLElement): void {
+      for (const stacked of STACKED_ONLY) expect(progress).not.toHaveClass(stacked);
+      expect(progress).toHaveClass("items-center");
+      expect(within(progress).getByTestId("spinner")).toHaveClass("size-5");
+      expect(screen.getByTestId("area-live")).not.toHaveClass("justify-center");
+    }
+
+    it("stacks a large spinner over the line, centred in the region, in every phase of an open", async () => {
+      let report: ((phase: ProgressPhase) => void) | undefined;
+      mocks.openSession.mockImplementation(
+        ({ onProgress }: { onProgress?: (phase: ProgressPhase) => void }) => {
+          report = onProgress;
+          return new Promise<OpenedSession>(() => {});
+        },
+      );
+      render(<ToolClient />);
+      await chooseFile(pdfFile());
+
+      for (const phase of [
+        "loading-engine",
+        "opening",
+        "inspecting",
+        "detecting",
+      ] as const) {
+        await act(async () => report?.(phase));
+
+        const progress = screen.getByTestId("progress");
+        expect(progress).toHaveTextContent(`${PHASE_TEXT[phase]}…`);
+        expectStacked(progress);
+        // The spinner first, then the words, so the line sits under it.
+        expect(progress.firstElementChild).toBe(within(progress).getByTestId("spinner"));
+        expect(progress.lastElementChild).toHaveTextContent(`${PHASE_TEXT[phase]}…`);
+      }
+    });
+
+    it("drops the region's centring once the review opens", async () => {
+      await openFlow(controllable().session);
+
+      expect(screen.queryByTestId("progress")).not.toBeInTheDocument();
+      expect(screen.getByTestId("area-live")).not.toHaveClass("justify-center");
+    });
+
+    it("keeps the small spinner beside a run's line, at the head of the rail", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+
+      await userEvent.setup().click(screen.getByTestId("redact"));
+      await run.progress("redacting");
+
+      const progress = screen.getByTestId("progress");
+      expect(progress).toHaveTextContent("Removing what you ticked…");
+      expectRow(progress);
+    });
+
+    it("keeps the small spinner beside the reload line of a document not loaded at /tool", () => {
+      mocks.loadedAt.mockReturnValue("/");
+      render(<ToolClient />);
+
+      const progress = screen.getByTestId("progress");
+      expect(progress).toHaveTextContent("Loading the tool…");
+      for (const stacked of STACKED_ONLY) expect(progress).not.toHaveClass(stacked);
+      expect(within(progress).getByTestId("spinner")).toHaveClass("size-5");
+    });
+
+    /**
+     * A file chosen while "Checking your plan" shows: the plan check is the
+     * idle row form, over the rail, then the first phase arrives stacked. The
+     * region's words are held in order, each once. The `progress` node is not
+     * held: an open replaces it today (AC-16, Follow-up), so this case neither
+     * pins that gap nor fails once it is closed.
+     */
+    it("says Checking your plan in the row form, then the first phase stacked, each once and in that order", async () => {
+      let answer: (snapshot: EntitlementSnapshot) => void = () => {};
+      mocks.getEntitlement.mockImplementation(
+        ({ onWaiting }: { onWaiting?: () => void }) => {
+          onWaiting?.();
+          return new Promise<EntitlementSnapshot>((resolve) => {
+            answer = resolve;
+          });
+        },
+      );
+      let report: ((phase: ProgressPhase) => void) | undefined;
+      mocks.openSession.mockImplementation(
+        ({ onProgress }: { onProgress?: (phase: ProgressPhase) => void }) => {
+          report = onProgress;
+          return new Promise<OpenedSession>(() => {});
+        },
+      );
+      render(<ToolClient />);
+      const polite = screen.getByTestId("area-live");
+      const heard: string[] = [];
+      const observer = new MutationObserver(() => {
+        const words = polite.textContent ?? "";
+        if (words !== "" && words !== heard.at(-1)) heard.push(words);
+      });
+      observer.observe(polite, { childList: true, subtree: true, characterData: true });
+
+      await chooseFile(pdfFile());
+      expectRow(screen.getByTestId("progress"));
+
+      await act(async () => answer(FREE));
+      await act(async () => report?.("loading-engine"));
+      observer.disconnect();
+
+      expectStacked(screen.getByTestId("progress"));
+      expect(heard).toEqual(["Checking your plan…", `${PHASE_TEXT["loading-engine"]}…`]);
     });
   });
 

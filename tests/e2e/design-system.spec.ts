@@ -302,6 +302,42 @@ async function expectContained(box: Locator): Promise<void> {
   expect(size.scrollHeight).toBeLessThanOrEqual(size.clientHeight);
 }
 
+interface Rect {
+  readonly left: number;
+  readonly right: number;
+  readonly top: number;
+  readonly bottom: number;
+}
+
+/**
+ * Where an element sits in the window. A turning spinner's box is its rotated
+ * one, up to 1.41 times its size, but its centre stays put, so read a
+ * spinner's place here and its size with `cssSize`.
+ */
+async function rectOf(locator: Locator): Promise<Rect> {
+  return locator.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+  });
+}
+
+function middle(rect: Rect): { readonly x: number; readonly y: number } {
+  return { x: (rect.left + rect.right) / 2, y: (rect.top + rect.bottom) / 2 };
+}
+
+/** An element's laid out size, which a rotation leaves alone. */
+async function cssSize(locator: Locator): Promise<{ width: string; height: string }> {
+  return locator.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { width: style.width, height: style.height };
+  });
+}
+
+/** Within a pixel, since centring can land on a half pixel. */
+function expectNear(actual: number, expected: number): void {
+  expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1);
+}
+
 interface TargetBox {
   readonly name: string;
   readonly tag: string;
@@ -338,13 +374,14 @@ async function targetBoxes(page: Page): Promise<TargetBox[]> {
  * AC-7. At least 24 by 24 for every target, and 40px tall for every button.
  *
  * Some elements are visually hidden on purpose and so have no box to measure:
- * the skip link until it is focused, and on the tool page the file input, which
- * is not a tab stop at all. Anything else hidden that way is a control nobody
- * can see.
+ * the skip link until it is focused, on the tool page the file input, which
+ * is not a tab stop at all, and at these desktop widths the header's Menu
+ * button, which shows only below `sm`, where the links fold into its menu
+ * (feature 28). Anything else hidden that way is a control nobody can see.
  */
 async function expectTargetSizes(
   page: Page,
-  hiddenOnPurpose: readonly string[] = ["#main", "file-input"],
+  hiddenOnPurpose: readonly string[] = ["#main", "file-input", "Menu"],
 ): Promise<void> {
   const boxes = await targetBoxes(page);
   const hidden = boxes.filter((box) => box.width <= 1 || box.height <= 1);
@@ -716,6 +753,88 @@ test.describe("the tool page's layout (spec 0013)", () => {
       .getByTestId(testId)
       .evaluate((element) => element.lastElementChild?.getBoundingClientRect().bottom);
 
+  /** Each idle step's circle and the line it draws to the next (AC-15). */
+  const stepLines = (page: Page) =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('[data-testid="area-rail"] ol > li')].map((li) => {
+        const after = getComputedStyle(li, "::after");
+        const step = li.getBoundingClientRect();
+        const circle = (li.firstElementChild as Element).getBoundingClientRect();
+        const width = parseFloat(after.borderLeftWidth);
+        return {
+          drawn: after.content !== "none" && after.borderLeftStyle === "solid",
+          width: after.borderLeftWidth,
+          colour: after.borderLeftColor,
+          length: parseFloat(after.height),
+          height: step.height,
+          top: step.top + parseFloat(after.top),
+          bottom: step.bottom - parseFloat(after.bottom),
+          centre: step.left + parseFloat(after.left) + width / 2,
+          circle: {
+            left: circle.left,
+            top: circle.top,
+            bottom: circle.bottom,
+            centre: circle.left + circle.width / 2,
+          },
+          rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
+        };
+      }),
+    );
+
+  /**
+   * AC-15: a 2 pixel line on every step but the last, at least 16 pixels
+   * long, centred under its circle and 0.25rem clear of it and of the next.
+   */
+  const expectStepsJoined = async (page: Page) => {
+    const steps = await stepLines(page);
+    expect(steps.map((step) => step.drawn)).toEqual([true, true, false]);
+    for (const [index, step] of steps.slice(0, -1).entries()) {
+      const next = steps[index + 1];
+      expect(step.width).toBe("2px");
+      expect(step.length).toBeGreaterThanOrEqual(16);
+      expect(step.top - step.circle.bottom).toBeCloseTo(step.rem * 0.25, 0);
+      expect((next?.circle.top ?? 0) - step.bottom).toBeCloseTo(step.rem * 0.25, 0);
+      expect(Math.abs(step.centre - step.circle.centre)).toBeLessThanOrEqual(0.5);
+    }
+    return steps;
+  };
+
+  /**
+   * The idle rail's column, its steps list, and the lock line's drawn content
+   * (the lock and the words), which `justify-center` moves while the line's
+   * own box keeps the column's width.
+   */
+  const idleRail = (page: Page) =>
+    page.getByTestId("area-rail").evaluate((rail) => {
+      const rect = (element: Element) => {
+        const { left, right, top, bottom } = element.getBoundingClientRect();
+        return { left, right, top, bottom };
+      };
+      const list = rail.querySelector(":scope > ol");
+      const lock = rail.querySelector(':scope > [data-testid="lock-line"]');
+      if (list === null || lock === null) throw new Error("the rail is not idle");
+      const drawn = [...lock.children].map(rect);
+      return {
+        rail: rect(rail),
+        list: rect(list),
+        lock: rect(lock),
+        lockContent: {
+          left: Math.min(...drawn.map((part) => part.left)),
+          right: Math.max(...drawn.map((part) => part.right)),
+          top: Math.min(...drawn.map((part) => part.top)),
+          bottom: Math.max(...drawn.map((part) => part.bottom)),
+        },
+      };
+    });
+
+  /** How far the lock line's lock sits from the line's own start edge. */
+  const lockIndent = (lockLine: Locator) =>
+    lockLine.evaluate(
+      (line) =>
+        (line.firstElementChild as Element).getBoundingClientRect().left -
+        line.getBoundingClientRect().left,
+    );
+
   test("sets the drop zone left of the rail while nothing is open, and first in the page", async ({
     page,
   }) => {
@@ -749,44 +868,7 @@ test.describe("the tool page's layout (spec 0013)", () => {
   test("joins the idle steps with a line between each pair of circles", async ({
     page,
   }) => {
-    const lines = () =>
-      page.evaluate(() =>
-        [...document.querySelectorAll('[data-testid="area-rail"] ol > li')].map((li) => {
-          const after = getComputedStyle(li, "::after");
-          const step = li.getBoundingClientRect();
-          const circle = (li.firstElementChild as Element).getBoundingClientRect();
-          const width = parseFloat(after.borderLeftWidth);
-          return {
-            drawn: after.content !== "none" && after.borderLeftStyle === "solid",
-            width: after.borderLeftWidth,
-            colour: after.borderLeftColor,
-            length: parseFloat(after.height),
-            height: step.height,
-            top: step.top + parseFloat(after.top),
-            bottom: step.bottom - parseFloat(after.bottom),
-            centre: step.left + parseFloat(after.left) + width / 2,
-            circle: {
-              top: circle.top,
-              bottom: circle.bottom,
-              centre: circle.left + circle.width / 2,
-            },
-            rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
-          };
-        }),
-      );
-    const expectJoined = async () => {
-      const steps = await lines();
-      expect(steps.map((step) => step.drawn)).toEqual([true, true, false]);
-      for (const [index, step] of steps.slice(0, -1).entries()) {
-        const next = steps[index + 1];
-        expect(step.width).toBe("2px");
-        expect(step.length).toBeGreaterThanOrEqual(16);
-        expect(step.top - step.circle.bottom).toBeCloseTo(step.rem * 0.25, 0);
-        expect((next?.circle.top ?? 0) - step.bottom).toBeCloseTo(step.rem * 0.25, 0);
-        expect(Math.abs(step.centre - step.circle.centre)).toBeLessThanOrEqual(0.5);
-      }
-      return steps;
-    };
+    const expectJoined = () => expectStepsJoined(page);
 
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/tool");
@@ -810,6 +892,122 @@ test.describe("the tool page's layout (spec 0013)", () => {
           step.drawn && step.height > step.circle.bottom - step.circle.top + step.rem,
       ),
     ).toBe(true);
+  });
+
+  /**
+   * Spec 0013, AC-15, as feature 28 builds it. Where the areas stack (below
+   * the grid's own `lg`, a container query, so 200% text on a wide window
+   * counts too), the idle steps list sits centred in the column as a block,
+   * its steps still at the start inside it, so the circles keep one left edge
+   * and the joins still meet them; the lock line is centred under it. The
+   * widths are those verify walked, each well clear of the grid's switch.
+   */
+  for (const [label, width, doubled] of [
+    ["at 390 pixels", 390, false],
+    ["at 800 pixels", 800, false],
+    ["at 1280 pixels with 200% text", 1280, true],
+  ] as const) {
+    test(`centres the idle steps and the lock line where the areas stack, ${label}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/tool");
+      if (doubled) {
+        await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+      }
+      await planAnswered(page);
+
+      // Stacked: the drop zone above the rail, not beside it.
+      expect((await box(page, "area-document")).bottom).toBeLessThanOrEqual(
+        (await box(page, "area-rail")).top,
+      );
+      const { rail, list, lockContent } = await idleRail(page);
+      expectNear(middle(list).x, middle(rail).x);
+      // A block narrower than the column, not a full width list.
+      expect(list.right - list.left).toBeLessThan(rail.right - rail.left - 1);
+
+      const steps = await expectStepsJoined(page);
+      for (const step of steps) expectNear(step.circle.left, steps[0]?.circle.left ?? 0);
+
+      expectNear(middle(lockContent).x, middle(rail).x);
+      expect(lockContent.top).toBeGreaterThanOrEqual(list.bottom);
+    });
+  }
+
+  test("keeps the idle steps and the lock line at the start of the rail beside the drop zone", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/tool");
+    await planAnswered(page);
+
+    const { rail, list, lockContent } = await idleRail(page);
+    expectNear(list.left, rail.left);
+    expectNear(list.right, rail.right);
+    expectNear(lockContent.left, rail.left);
+    expect(await lockIndent(page.getByTestId("lock-line"))).toBeLessThanOrEqual(1);
+  });
+
+  /**
+   * AC-15 and AC-16: only the idle rail centres. With a document open where
+   * the areas stack, the lock line at the rail's foot (while it opens) sits at
+   * the start, as before feature 28.
+   */
+  for (const width of [390, 800]) {
+    test(`leaves the rail's lock line at the start while a document opens, at ${width} pixels`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/tool");
+      await planAnswered(page);
+      await openingHeld(page);
+
+      const line = page.getByTestId("lock-line");
+      await expect(line).toHaveCount(1);
+      await expect(page.getByTestId("area-rail").getByTestId("lock-line")).toBeVisible();
+      expect(await lockIndent(line)).toBeLessThanOrEqual(1);
+    });
+  }
+
+  /**
+   * AC-15 and AC-16: the action panel's lock line keeps its own rule, as
+   * before feature 28. It follows Redact: centred under the full width button
+   * on a phone, at the start under the button's own width between `sm` and
+   * the grid's `lg`. The idle rail's centring never reaches it.
+   */
+  test("leaves the action panel's lock line under Redact where the areas stack", async ({
+    page,
+  }) => {
+    const lockLine = page.getByTestId("action-panel").getByTestId("lock-line");
+    const drawn = () =>
+      lockLine.evaluate((line) => {
+        const parts = [...line.children].map((part) => part.getBoundingClientRect());
+        return {
+          left: Math.min(...parts.map((part) => part.left)),
+          right: Math.max(...parts.map((part) => part.right)),
+          top: Math.min(...parts.map((part) => part.top)),
+          bottom: Math.max(...parts.map((part) => part.bottom)),
+        };
+      });
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.goto("/tool");
+    await planAnswered(page);
+    await openDocument(page);
+
+    // The lock line's own box is the panel's width inside its padding.
+    let redact = await rectOf(page.getByTestId("redact"));
+    let row = await rectOf(lockLine);
+    expectNear(redact.left, row.left);
+    expectNear(redact.right, row.right);
+    expectNear(middle(await drawn()).x, middle(redact).x);
+
+    await page.setViewportSize({ width: 800, height: 800 });
+
+    redact = await rectOf(page.getByTestId("redact"));
+    row = await rectOf(lockLine);
+    expect(redact.right).toBeLessThan(row.right - 1);
+    expectNear(redact.left, row.left);
+    expect(await lockIndent(lockLine)).toBeLessThanOrEqual(1);
   });
 
   test("draws the found items left of the rail, while the rail comes first in the page", async ({
@@ -923,6 +1121,76 @@ test.describe("the tool page's layout (spec 0013)", () => {
     expect(live.right).toBeLessThanOrEqual(rail.left);
     expect(live.top).toBe(rail.top);
     expect(document.top).toBeLessThan(live.top);
+  });
+
+  /**
+   * AC-14 and AC-16, feature 28: the *Opening layout* scenario. While a
+   * document opens, the polite region holds the left column, so a 40 pixel
+   * spinner is centred across it with the line centred under it: beside the
+   * rail at 1280, and between the file bar and the rail at 900, where the
+   * areas stack.
+   */
+  for (const width of [1280, 900] as const) {
+    test(`centres a 40 pixel spinner across the left column, the line under it, while a document opens at ${width} pixels`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/tool");
+      await planAnswered(page);
+      await openingHeld(page);
+
+      const live = page.getByTestId("area-live");
+      const progress = live.getByTestId("progress");
+      const spinner = progress.getByTestId("spinner");
+      const [area, turning, words, fileBar, rail] = [
+        await rectOf(live),
+        await rectOf(spinner),
+        await rectOf(progress.locator("span")),
+        await rectOf(page.getByTestId("file-bar")),
+        await rectOf(page.getByTestId("area-rail")),
+      ];
+      expect(await cssSize(spinner)).toEqual({ width: "40px", height: "40px" });
+      expectNear(middle(turning).x, middle(area).x);
+      expectNear(middle(words).x, middle(area).x);
+      // The line under the spinner: below its centre by at least half its size.
+      expect(words.top).toBeGreaterThanOrEqual(middle(turning).y + 20);
+      expect(fileBar.bottom).toBeLessThanOrEqual(area.top);
+      if (width === 1280) {
+        expect(area.right).toBeLessThanOrEqual(rail.left);
+      } else {
+        expect(area.bottom).toBeLessThanOrEqual(rail.top);
+      }
+    });
+  }
+
+  /**
+   * AC-16, feature 28: from `lg` the grid stretches the region to the rail's
+   * height, and the region centres its line in that room. The rail is made
+   * taller than the line here, as verify's walk did, so the centring has room
+   * to show; at its own height the rail can be about the line's.
+   */
+  test("centres the opening line down the room beside a rail taller than it", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/tool");
+    await planAnswered(page);
+    await page.addStyleTag({
+      content: '[data-testid="area-rail"] { min-height: 40rem; }',
+    });
+    await openingHeld(page);
+
+    const live = page.getByTestId("area-live");
+    const [area, line, rail] = [
+      await rectOf(live),
+      await rectOf(live.getByTestId("progress")),
+      await rectOf(page.getByTestId("area-rail")),
+    ];
+    // The rail really is the taller, or the centring proves nothing.
+    expect(rail.bottom - rail.top).toBeGreaterThan(line.bottom - line.top + 100);
+    expect(area.top).toBe(rail.top);
+    expect(area.bottom).toBe(rail.bottom);
+    expectNear(middle(line).y, middle(area).y);
   });
 
   /**
@@ -1760,6 +2028,91 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     expect((text?.x ?? 0) + (text?.width ?? 0)).toBeLessThanOrEqual(picture?.x ?? 0);
   });
 
+  /**
+   * Spec 0013, AC-10, as feature 28 builds it. Each point's icon circle, and
+   * its title and line as the text itself (a range over the words, since the
+   * heading's own box is as wide as its column whatever the alignment).
+   */
+  const points = (page: Page) =>
+    page
+      .getByRole("main")
+      .getByRole("list")
+      .filter({ has: page.getByRole("heading", { name: "Stays on your device" }) })
+      .evaluate((list) => {
+        const box = (rect: DOMRect) => ({
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+        });
+        const words = (element: Element | null) => {
+          if (element === null) throw new Error("a point has lost its words");
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          return box(range.getBoundingClientRect());
+        };
+        return [...list.children].map((item) => ({
+          item: box(item.getBoundingClientRect()),
+          icon: box((item.firstElementChild as Element).getBoundingClientRect()),
+          title: words(item.querySelector("h2")),
+          line: words(item.querySelector("p")),
+        }));
+      });
+
+  /** Where they stack (below `md`), each point centred, its icon above its words. */
+  for (const width of [390, 700]) {
+    test(`centres each of the three points where they stack, at ${width} pixels`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/");
+
+      const trio = await points(page);
+      expect(trio).toHaveLength(3);
+      for (const [index, { item, icon, title, line }] of trio.entries()) {
+        if (index > 0)
+          expect(item.top).toBeGreaterThanOrEqual(trio[index - 1]?.item.bottom ?? 0);
+        expect(icon.bottom).toBeLessThanOrEqual(title.top);
+        expectNear(middle(icon).x, middle(item).x);
+        expectNear(middle(title).x, middle(item).x);
+        expectNear(middle(line).x, middle(item).x);
+      }
+    });
+  }
+
+  /**
+   * Side by side (from `md`) the three line up at the start again: the icon
+   * above the words until `lg`, and beside them from it.
+   */
+  for (const [width, beside] of [
+    [800, false],
+    [1280, true],
+  ] as const) {
+    test(`sets the three points side by side at the start, at ${width} pixels`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/");
+
+      const trio = await points(page);
+      expect(trio).toHaveLength(3);
+      for (const [index, { item, icon, title, line }] of trio.entries()) {
+        expectNear(item.top, trio[0]?.item.top ?? 0);
+        if (index > 0)
+          expect(item.left).toBeGreaterThanOrEqual(trio[index - 1]?.item.right ?? 0);
+        expectNear(icon.left, item.left);
+        expectNear(line.left, title.left);
+        if (beside) {
+          expect(title.left).toBeGreaterThanOrEqual(icon.right);
+          expect(title.top).toBeLessThan(icon.bottom);
+        } else {
+          expect(icon.bottom).toBeLessThanOrEqual(title.top);
+          expectNear(title.left, item.left);
+        }
+      }
+    });
+  }
+
   test("puts the text before the shot below lg", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 900 });
     await page.goto("/");
@@ -1852,7 +2205,7 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     expect(header?.height).toBe(40);
     expect(main?.height).toBe(48);
 
-    await expectTargetSizes(page, ["#main"]);
+    await expectTargetSizes(page, ["#main", "Menu"]);
   });
 
   test("axe reports nothing", async ({ page }) => {
@@ -2087,6 +2440,142 @@ test.describe("every page (spec 0013, AC-26)", () => {
 
       await expectNoHorizontalScroll(page);
       await expectContained(page.getByRole("main"));
+    });
+  }
+});
+
+/**
+ * Spec 0013, AC-23 and AC-26, feature 28: the *Sign in wait* scenario.
+ *
+ * Playwright's build points Clerk at a fake development instance, so Clerk's
+ * form never draws here and only the placeholder can be held. Every request
+ * to Clerk's development host is held unanswered, as verify's hang walk did,
+ * rather than left to whatever that host answers today: the case needs no
+ * network, and Clerk stays at `loading`, so our timer is what ends the wait.
+ * `page.clock` runs it past 20 seconds instead of waiting them out. The form
+ * replacing the placeholder, before and after the failure line, is walked by
+ * hand in the sandbox.
+ */
+test.describe("the sign in wait (spec 0013, AC-23, AC-26)", () => {
+  const STEPS = [
+    {
+      path: "/sign-in",
+      loading: "Loading sign in…",
+      failed: "Sign in did not load. Check your connection, then reload this page.",
+    },
+    {
+      path: "/sign-up",
+      loading: "Loading sign up…",
+      failed: "Sign up did not load. Check your connection, then reload this page.",
+    },
+  ] as const;
+
+  /**
+   * Opens `path` with Clerk's host never answering, so Clerk never loads and
+   * never says why. A fresh browser on a development instance is first sent
+   * to Clerk's handshake, a redirect `page.route` cannot catch, so the context
+   * carries a development browser cookie, as a second visit would, and the
+   * page renders. With Clerk's script held the load event never comes, so the
+   * page is read once its document has arrived.
+   */
+  async function waitingOn(page: Page, path: string): Promise<void> {
+    await page
+      .context()
+      .addCookies([
+        { name: "__clerk_db_jwt", value: "dvb_e2efake", domain: "localhost", path: "/" },
+      ]);
+    await page.route("https://*.clerk.accounts.dev/**", () => new Promise(() => {}));
+    await page.goto(path, { waitUntil: "domcontentloaded" });
+  }
+
+  const placeholder = (page: Page) => page.getByTestId("clerk-wait");
+
+  for (const { path, loading, failed } of STEPS) {
+    /** Beside the panel from `md`, 400 pixels wide; under it below, full width. */
+    for (const [width, beside] of [
+      [1280, true],
+      [800, true],
+      [390, false],
+    ] as const) {
+      test(`${path}: holds Clerk's card's place ${beside ? "beside" : "under"} the panel at ${width} pixels, saying "${loading}"`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await waitingOn(page, path);
+
+        const line = placeholder(page).getByRole("status");
+        await expect(line).toHaveText(loading);
+        const spinner = placeholder(page).getByTestId("spinner");
+        await expect(spinner).toHaveAttribute("aria-hidden", "true");
+        expect(await cssSize(spinner)).toEqual({ width: "40px", height: "40px" });
+
+        const panel = page.getByTestId("sign-in-panel");
+        const [card, panelBox, grid] = [
+          await rectOf(placeholder(page)),
+          await rectOf(panel),
+          await rectOf(panel.locator("xpath=..")),
+        ];
+        // 25rem tall at the default text size.
+        expect(card.bottom - card.top).toBeGreaterThanOrEqual(400);
+        if (beside) {
+          expect(card.right - card.left).toBe(400);
+          expect(card.left).toBeGreaterThanOrEqual(panelBox.right);
+        } else {
+          expect(card.top).toBeGreaterThanOrEqual(panelBox.bottom);
+          expect(card.left).toBe(grid.left);
+          expect(card.right).toBe(grid.right);
+          expect(card.right - card.left).toBeLessThanOrEqual(400);
+        }
+      });
+    }
+
+    test(`${path}: says it did not load once 20 seconds of ours pass, in the same status line, and axe reports nothing either side`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.clock.install();
+      await waitingOn(page, path);
+      const line = placeholder(page).getByRole("status");
+      await expect(line).toHaveText(loading);
+      await expectNoAxeViolations(page);
+      const node = await line.elementHandle();
+
+      // The timer starts when the page has hydrated, which a page load does
+      // not wait for, so the clock moves on until the line changes.
+      await expect(async () => {
+        await page.clock.fastForward(20_000);
+        await expect(line).toHaveText(failed, { timeout: 1_000 });
+      }).toPass();
+
+      expect(await node?.evaluate((element) => element.isConnected)).toBe(true);
+      expect(await node?.evaluate((element) => element.textContent)).toBe(failed);
+      await expect(placeholder(page).getByTestId("spinner")).toHaveCount(0);
+      await expect(placeholder(page).getByRole("button")).toHaveCount(0);
+      await expectNoAxeViolations(page);
+    });
+
+    test(`${path}: axe reports nothing at 320 pixels while it waits, with no sideways scroll`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 320, height: 640 });
+      await waitingOn(page, path);
+      await expect(placeholder(page).getByRole("status")).toHaveText(loading);
+
+      await expectNoHorizontalScroll(page);
+      await expectNoAxeViolations(page);
+    });
+
+    test(`${path}: clips nothing while it waits with the root font size doubled`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await waitingOn(page, path);
+      await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+      await expect(placeholder(page).getByRole("status")).toHaveText(loading);
+
+      await expectNoHorizontalScroll(page);
+      await expectContained(page.getByRole("main"));
+      await expectContained(placeholder(page));
     });
   }
 });

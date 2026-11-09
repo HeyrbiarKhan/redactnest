@@ -19,6 +19,12 @@ export interface FeatureItem {
  * from `lg`. The icon is decoration, so it is hidden from assistive
  * technology; the title is a heading at the level the caller's outline needs,
  * so a screen reader can jump between them.
+ *
+ * Below `md`, where the items stack in one column, each is centred, the icon
+ * over its title and line, so the stack reads as three equal points rather
+ * than a list hugging the left edge. Side by side they line up at the start
+ * again. Every caller gets this, feature 15's search pages included (spec
+ * 0013, AC-10, as feature 28 builds it).
  */
 export function FeatureList({
   items,
@@ -32,7 +38,10 @@ export function FeatureList({
   return (
     <ul role="list" className="grid gap-8 md:grid-cols-3">
       {items.map(({ icon, title, body }) => (
-        <li key={title} className="flex flex-col gap-3 lg:flex-row lg:gap-4">
+        <li
+          key={title}
+          className="flex flex-col items-center gap-3 text-center md:items-start md:text-start lg:flex-row lg:gap-4"
+        >
           <IconCircle icon={icon} tone="accent" />
           <div className="flex flex-col gap-1">
             <Heading className="text-heading text-ink">{title}</Heading>

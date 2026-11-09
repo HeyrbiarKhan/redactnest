@@ -17,12 +17,15 @@ import { FOOTER_LINK_CLASS } from "./footer-link";
  * Pricing's Free card's, which follow it), and `redactPdf` is the footer's
  * Product link, which names the page by its title as the Legal links name
  * theirs. There is no nav item for the tool: the button is the way in.
+ * `menu` names the button that holds those links on a small screen (feature
+ * 28, amending AC-7).
  */
 export const NAV_TEXT = Object.freeze({
   pricing: "Pricing",
   account: "Account",
   tryFree: "Try it free",
   redactPdf: "Redact a PDF",
+  menu: "Menu",
 });
 
 /**
@@ -64,13 +67,16 @@ function currentIf(item: NavItem, current: NavItem | undefined) {
  *
  * Plain links, never `next/link`, so nothing prefetches a page and `/tool`
  * sends no request beyond the entitlement (spec 0002, AC-3).
+ *
+ * A column below `sm`, where it shows only in the header's menu, and a row
+ * from `sm`, in the header's own row (feature 28).
  */
 export function SiteNav({ current }: { readonly current?: NavItem }) {
   if (!config.billingEnabled) return null;
 
   return (
     <nav aria-label="Site">
-      <ul className="flex flex-wrap items-center gap-x-6 gap-y-1">
+      <ul className="flex flex-col items-start gap-x-6 gap-y-1 sm:flex-row sm:flex-wrap sm:items-center">
         <li>
           <a
             href={PRICING_PATH}
@@ -108,19 +114,28 @@ export function AccountLink({ current }: { readonly current?: NavItem }) {
  * own content security policy (spec 0003, INV-10); on `/tool` every header
  * link is a real page load too, so spec 0007's leave warning still guards
  * ticked work.
+ *
+ * With billing on, the nav goes in with the menu button's words, so on a small
+ * screen the header folds its links into a menu (feature 28). With billing off
+ * there is no nav and no Account, so there is no menu either: the header is
+ * the lockup and the button, as before.
  */
 export function PageHeader({ current }: { readonly current?: NavItem }) {
+  const action =
+    current === "tool" ? undefined : (
+      <Button href={TOOL_PATH} reload>
+        {NAV_TEXT.tryFree}
+      </Button>
+    );
+
+  if (!config.billingEnabled) return <SiteHeader action={action} />;
+
   return (
     <SiteHeader
       nav={<SiteNav current={current} />}
+      menuLabel={NAV_TEXT.menu}
       account={<AccountLink current={current} />}
-      action={
-        current === "tool" ? undefined : (
-          <Button href={TOOL_PATH} reload>
-            {NAV_TEXT.tryFree}
-          </Button>
-        )
-      }
+      action={action}
     />
   );
 }

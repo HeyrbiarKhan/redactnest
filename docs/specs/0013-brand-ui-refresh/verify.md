@@ -74,3 +74,55 @@ _From the scope's Done when for feature 26; AC-11, AC-14 and AC-16 describe it a
 
 ### Acceptance-criteria coverage
 - AC-11: the three `/` steps, the home page component test and the band's browser tests · AC-14: the 900 px step and the stacked layout browser test · AC-16: the 1280 px open, the opened layout step and the tool layout tests · AC-17: the sticky step and the existing sticky tests · AC-20: the screen reader step and the same node component test
+
+## Feature 28: UI polish 2 · added 2026-11-09
+_From the scope's Done when for feature 28, with the failure rule you set on 2026-11-09: the line shows when Clerk reports `error` or after 20 s of ours, and the form still replaces it if Clerk loads later. AC-16 and AC-23 describe it as built since 2026-11-09. Where Feature 26's 1280 px step puts the spinner beside the phase line under the file bar, these steps replace it. Reworded after verify on 2026-11-09: the "Checking your plan" step, the two refused start steps and the sandbox load step now say what the walks showed._
+
+### UI / manual
+- [x] `/tool` at 1280 px, choose a PDF with the engine held (`page.route("**/engine/**", () => {})`) → the file bar across the top; a 40 px spinner centred across the left column, the phase line centred under it, both centred down the room beside the rail; the plan card and lock line in the rail → AC-16
+- [x] The same open at 900 px → the file bar, then the spinner and line centred across the column, then the plan card and lock line → AC-14, AC-16
+- [x] The same open at 1280 px with the rail made taller than the line → `area-live` is as tall as the rail and the line's centre is its centre → AC-16
+- [x] Step through an open's phases → one line at a time, in the same `area-live` node, and focus stays on Choose another PDF → AC-20
+- [x] Choose a file while "Checking your plan" shows at idle → the line goes, the region is empty and hidden for a moment (under 50 ms in verify's walks), then "Loading the PDF engine…" arrives stacked in the left column, in a new `progress` node; `area-live` is the same node throughout and each line is heard once, never twice (an existing behaviour, older than feature 28; Follow-up in `index.md`) → AC-16, AC-20
+- [x] Once the document opens, then during a run → the list on the left, the region heading the rail with the document card, and the small spinner beside the run's line, as before → AC-16
+- [x] `/sign-in` at 1280, 800 and 390 px with Clerk's host held → a white card where Clerk's card draws (400 px wide from `md`, 25rem tall), the 40 px spinner and "Loading sign in…" in a `role="status"` line; the spinner is `aria-hidden` → AC-23
+- [x] `/sign-up` the same → "Loading sign up…" → AC-23
+- [x] Clerk's start refused (`/v1/environment` and `/v1/client` answered 400) → Clerk's status stays `loading`, so "Loading sign in…" stays until our timer: at about 20 s the spinner goes and "Sign in did not load. Check your connection, then reload this page." shows in `danger-ink`, in the same status node → AC-23
+- [x] Every request to Clerk's host hung → still "Loading sign up…" at 14 s, the failure line at about 20 s, the same status node → AC-23
+- [x] Clerk's script held past 20 s, then released → the failure line shows, then the form replaces it and the placeholder is gone → AC-23
+- [x] In the Clerk sandbox, a normal load → the form replaces the placeholder in the same place, and the panel beside it moves only a few pixels: 12 px on `/sign-in` and 23 px on `/sign-up` in development, with Clerk's Development mode band on its card; about 4 and 7 px in production, without that band, where 25rem sits between the two card heights → AC-23 (verify's measurements on 2026-11-09)
+- [x] With a screen reader on `/sign-in` while it waits → the line is read, the spinner is not; the failure line is heard when it replaces the loading line → AC-23 (the loading line heard once in Narrator on the dev server, then the form; the failure line read in Chromium's accessibility tree, the same `role="status"` node, by your call on 2026-11-09)
+- [x] Playwright's build (the fake Clerk instance), `/sign-in` → the loading line, then the failure line at about 20 s, from our timer (the fake host answers Clerk's start 400, which leaves Clerk at `loading`); axe clean in both states, and at 320 px and 200% text → AC-23, AC-26
+
+### Commands
+- [x] `pnpm exec vitest run --project component tests/component/ui/spinner.test.tsx` → 7 pass, `lg` at `size-10`, hidden, still under reduced motion, axe clean → AC-16, AC-23
+- [x] `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm test:e2e` → pass → AC-14, AC-16, AC-20, AC-23
+
+### Acceptance-criteria coverage
+- AC-14: the 900 px step · AC-16: the 1280 px open, the taller rail step, the opened and run step, and the spinner test · AC-20: the phases step and the "Checking your plan" step · AC-23: the seven sign in and sign up steps, the sandbox step and the Playwright build step · AC-26: the axe, 320 px and 200% text checks in the Playwright build step
+
+## Feature 28 reopened: the small screen fixes · added 2026-11-09
+_From the scope's Done when for the three reopened items, built on `feat/ui-polish-2`: the home page's points, the header menu and `/tool`'s idle rail. The widths below are the windows to probe, never closer than 20 px to a switch. AC-7, AC-10 and AC-15 describe these as built since `/architect` recorded them on 2026-11-09._
+
+### UI / manual
+- [x] `/` at 320 and 390 px, billing on → the lockup and a "Menu" button on one row; Pricing, Account and Try it free not shown → AC-7
+- [x] Tab to Menu and press Enter → the menu opens beneath the header, Pricing, Account and Try it free stacked in page order; focus stays on the button and the next Tab reaches Pricing; Chromium's accessibility tree shows the button expanded, and collapsed again once it closes (the browser's own popover state, not an `aria-expanded` attribute) → AC-7
+- [x] With focus on a menu link, press Escape → the menu closes and focus is back on Menu; a press outside the open menu closes it too, and pressing Menu twice opens and closes it → AC-7
+- [x] `/pricing` at 320 px with the menu open → Pricing carries `aria-current="page"` and its bar; `/tool` → the menu holds Pricing and Account only → AC-7, AC-20
+- [x] From the open menu on `/`, follow Try it free → a full page load into `/tool`, every menu link a plain `a` → AC-7 (spec 0003, INV-10; spec 0012, INV-10) (verify on 2026-11-09 followed Pricing and Account the same way: each a new document request, a `navigate` entry and the page's own state gone)
+- [x] `/` at 660 and 1280 px → no Menu button, and the lockup, Pricing, Account and Try it free on one row as before → AC-7
+- [x] A billing off build at 320 px → no Menu button and no menu; the lockup alone on the first row and Try it free beneath it, as before → AC-7 (verify's build set the seven billing values blank, so `.env.local`'s keys never reached it; `/pricing` answered 404, and axe was clean)
+- [x] Open the menu at 390 px, then widen the window to 844 px → the Menu button stays and the links show in one row in the panel; close it → the button goes and the links sit in the header's row → AC-7
+- [x] In the Clerk sandbox at 390 px, `/sign-in`, `/sign-up` and `/account` → the menu opens, closes and marks Account current on the account pages, as on the other pages (Playwright's build cannot show these pages in a browser) → AC-7, AC-24 (verify on 2026-11-09: Account current on `/account` only, and on nothing on sign in or sign up, as AC-7 lists; Try it free from `/account` a full page load with no Clerk left on `/tool`)
+- [x] `/` at 390 and 700 px → each of the three points centred, its icon over its title and line; at 800 and 1280 px → side by side, lined up at the start as before → AC-10
+- [x] `/tool` idle at 390 and 800 px, and at 1280 px with 200% text → the steps list centred as a block, its circles in one line with the joins meeting them, and the lock line centred under it; at 1280 px at the default size → both at the start of the rail, as before → AC-15 (each join 4 px below one circle and 4 px above the next, 8 px at 200% text)
+- [x] `/tool` with a document open, below the grid's `lg` → the rail's lock line and the action panel's lock line as before, neither newly centred → AC-15, AC-16 (walked at 390 and 800 px on `two-pages.pdf` with the engine held and on `detect-email.pdf` in review; `action-panel.tsx` and `lock-line.tsx` match main)
+- [x] axe on `/`, `/pricing` and `/tool` at 320 px with the menu shut and open, on `/` in forced colours with it open, and on `/tool` idle at 390 px → no violations → AC-26 (forced colours walked at 320 px)
+
+### Commands
+- [x] `pnpm exec vitest run --project component tests/component/ui/layout.test.tsx tests/component/app/site-nav.test.tsx` → pass, the menu cases among them → AC-7
+- [x] `pnpm exec playwright test tests/e2e/shell.spec.ts tests/e2e/design-system.spec.ts --project=chromium` → pass, "folds the links into a menu at 320 pixels" and the target size checks among them → AC-7, AC-26
+- [x] `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm test:e2e` → pass → AC-7, AC-10, AC-15, AC-26 (verify on 2026-11-09: 414 e2e passed; `pnpm test` passed but for one phone detector stopwatch in `detect-adversarial.test.ts`, 2188 ms against 2000 under the parallel pool, which passed alone, 1563 of 1563, with nothing under `src/detect` changed on this branch)
+
+### Acceptance-criteria coverage
+- AC-7: the eight header steps, the sandbox step and both test commands · AC-10: the points step · AC-15: the two idle rail steps · AC-16: the open document step · AC-20: the current page step · AC-24: the sandbox step · AC-26: the axe step and the e2e command

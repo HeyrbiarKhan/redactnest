@@ -59,6 +59,7 @@ describe("NAV_TEXT", () => {
       account: "Account",
       tryFree: "Try it free",
       redactPdf: "Redact a PDF",
+      menu: "Menu",
     });
     expect(Object.isFrozen(NAV_TEXT)).toBe(true);
   });
@@ -237,7 +238,11 @@ describe("the footer's Product group (AC-8)", () => {
 describe("SiteHeader with the real nav", () => {
   it("passes axe with every slot filled", async () => {
     const { container } = render(
-      <SiteHeader nav={<SiteNav />} account={<AccountLink />} />,
+      <SiteHeader
+        nav={<SiteNav />}
+        menuLabel={NAV_TEXT.menu}
+        account={<AccountLink />}
+      />,
     );
 
     await expectNoAxeViolations(container);
