@@ -102,7 +102,7 @@ _From the scope's Done when for feature 28, with the failure rule you set on 202
 - AC-14: the 900 px step · AC-16: the 1280 px open, the taller rail step, the opened and run step, and the spinner test · AC-20: the phases step and the "Checking your plan" step · AC-23: the seven sign in and sign up steps, the sandbox step and the Playwright build step · AC-26: the axe, 320 px and 200% text checks in the Playwright build step
 
 ## Feature 28 reopened: the small screen fixes · added 2026-11-09
-_From the scope's Done when for the three reopened items, built on `feat/ui-polish-2`: the home page's points, the header menu and `/tool`'s idle rail. The widths below are the windows to probe, never closer than 20 px to a switch. AC-7, AC-10 and AC-15 still describe the old behaviour until `/architect` records these as built._
+_From the scope's Done when for the three reopened items, built on `feat/ui-polish-2`: the home page's points, the header menu and `/tool`'s idle rail. The widths below are the windows to probe, never closer than 20 px to a switch. AC-7, AC-10 and AC-15 describe these as built since `/architect` recorded them on 2026-11-09._
 
 ### UI / manual
 - [ ] `/` at 320 and 390 px, billing on → the lockup and a "Menu" button on one row; Pricing, Account and Try it free not shown → AC-7

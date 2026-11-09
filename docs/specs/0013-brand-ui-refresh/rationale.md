@@ -343,6 +343,31 @@ Walked in the Clerk development sandbox on 2026-11-09:
 
 - **Fail a refused start at once** (runner up): tell a refused start from a slow one by watching for Clerk's 400s, and show the line straight away. It needs a watch of our own on Clerk's requests, which the account pages do not have, for a case a visitor rarely meets, so the 20 seconds stays, your call.
 
+### Recorded after feature 28's reopened items
+
+You reopened feature 28 on 2026-11-09 for three small screen fixes, visual only and within this spec, with how the menu opens left to the build. They were built on `feat/ui-polish-2` (commits `de300df`, `84ff267` and `f0f0b81`) and are recorded here the same day, before `/check verify`. The runners up below were weighed for this record against what the build's code and comments say it chose.
+
+**The header menu (AC-7).** Below `sm` the header's links used to wrap onto ragged rows beneath the lockup. Now, with billing on, the lockup and a Menu button share one row, and the links wait in the browser's own popover (`popover="auto"`), which the button opens through `popovertarget`. The popover gives the button its expanded state, closes on Escape (returning focus to the button) or on a press outside, and moves no focus when it opens, so Tab runs from the button into the links. From `sm` the popover has no box (`display: contents`), so the very same links sit in the header's row. The button is drawn only where the browser supports popovers; elsewhere the links show stacked beneath the lockup. With billing off there is no nav, so `PageHeader` passes none and there is no menu.
+
+- **A disclosure button of our own** (runner up): a client component holding `aria-expanded`, with our own Escape and outside press handling. It would put a client component on Pricing and the home page, which spec 0012's AC-13 and this spec's AC-13 keep static, and it is code that does what the browser already does.
+- **`details` and `summary`** (runner up): no script either, but it gives no Escape, which the scope's Done when asked for, and no closing on a press outside.
+- **Two sets of links**, one for the row and one for the menu (runner up): each link twice in the page, so one copy has to be hidden from everyone at every width, and two places to keep the current page's mark in step.
+- **Keep the wrap** (runner up): no new parts, but the ragged rows were what you called out.
+
+**The three points (AC-10).** Below `md`, where `FeatureList` stacks its items, each is centred, its icon above its title and line; from `md` they line up at the start as before.
+
+- **Centre only on the home page**, through a prop (runner up): feature 15's search pages reuse `FeatureList`, and the scope asked that every caller inherit the change, so they cannot drift from the home page.
+
+**The idle rail (AC-15).** Where the tool's areas stack, `StepList` is centred as a block (`mx-auto w-fit`) and the lock line under it (`justify-center`), in the idle rail only, and both return to the start at the tool grid's own `lg`. `StepList` takes a layout only `className` for this.
+
+- **Centre each step's text** (runner up): the circles would move with each line's length and the joins between them would no longer meet them.
+- **The window's `lg`** (runner up): at 200% text the tool grid stacks while the window is still past `lg`, so the steps would sit at the start while stacked. The grid's own container query (`@min-[61rem]`) switches exactly when the areas do.
+- **Centre the lock line everywhere it stacks** (runner up): inside the action panel it belongs under Redact, and once a document is open the rail is no longer a short centred block, so the scope kept it to the idle rail.
+
+**The brand pictures.** Every brand picture is drawn at desktop width, where none of the three changes shows, so the build left `scripts/make-brand.mjs` alone.
+
+**Left over.** At 320 pixels with 200% text, `/`'s main content scrolls sideways, with the menu shut or open. The build found it older than the branch, so it is a Follow-up in `index.md`, not part of these items.
+
 ### What each reference gave, and what stayed out
 
 | Reference | Kept | Left out, and why |
