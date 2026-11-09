@@ -921,8 +921,18 @@ export function ToolClient() {
             />
           )}
 
-          {/* AC-15: while nothing is open, what happens next, in three steps. */}
-          {!compact && <StepList steps={IDLE_STEPS} />}
+          {/*
+          AC-15: while nothing is open, what happens next, in three steps.
+          Where the areas stack the list is centred as a block, so its circles
+          stay in one line with the joins between them; beside the drop zone
+          it fills the rail as before (feature 28).
+        */}
+          {!compact && (
+            <StepList
+              steps={IDLE_STEPS}
+              className="mx-auto w-fit @min-[61rem]:mx-0 @min-[61rem]:w-auto"
+            />
+          )}
 
           {session.state === "lost" && (
             <FailureCallout
@@ -1004,8 +1014,19 @@ export function ToolClient() {
             />
           )}
 
-          {/* Inside the action panel while it shows; at the rail's foot otherwise. */}
-          {!acting && <LockLine />}
+          {/*
+          Inside the action panel while it shows; at the rail's foot otherwise.
+          In the idle rail it is centred under the steps where the areas stack,
+          and only there: once a document is open it stays as it was (feature
+          28).
+        */}
+          {!acting && (
+            <LockLine
+              className={
+                compact ? undefined : "justify-center @min-[61rem]:justify-start"
+              }
+            />
+          )}
         </div>
 
         {/*

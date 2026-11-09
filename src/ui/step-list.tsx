@@ -40,10 +40,21 @@ const GAP = "gap-6";
  * `accent-strong` digits on an `accent-soft` circle, a pairing already in the
  * contrast contract (5.66:1); in forced colours the fill drops and the digits
  * stay, as plain text.
+ *
+ * `className` places the list as a whole (a caller centres it with `w-fit` and
+ * `mx-auto`), never its steps: the steps stay aligned at the start inside it,
+ * so the circles keep to one line and the joins still meet them.
  */
-export function StepList({ steps }: { readonly steps: readonly string[] }) {
+export function StepList({
+  steps,
+  className,
+}: {
+  readonly steps: readonly string[];
+  /** Layout only (margins, alignment, placement). Never colour or size. */
+  readonly className?: string;
+}) {
   return (
-    <ol role="list" className={cx("flex flex-col", GAP)}>
+    <ol role="list" className={cx("flex flex-col", GAP, className)}>
       {steps.map((step, index) => (
         <li key={step} className={cx("relative flex items-start gap-3 text-ink", LINE)}>
           <span
