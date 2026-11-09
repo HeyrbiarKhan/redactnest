@@ -19,7 +19,7 @@ import { LinkGroup } from "@/ui/link-group";
 import { IconCircle } from "@/ui/icon-circle";
 import { PageContainer } from "@/ui/page-container";
 import { SiteFooter } from "@/ui/site-footer";
-import { SiteHeader } from "@/ui/site-header";
+import { SITE_MENU_ID, SiteHeader } from "@/ui/site-header";
 import { SkipLink } from "@/ui/skip-link";
 import { Spinner } from "@/ui/spinner";
 import { SummaryList } from "@/ui/summary-list";
@@ -205,6 +205,7 @@ describe("SiteHeader", () => {
             <a href="/pricing">Pricing</a>
           </nav>
         }
+        menuLabel="Menu"
         account={<a href="/account">Account</a>}
         action={<Button href="/tool">Try it free</Button>}
       />,
@@ -229,6 +230,55 @@ describe("SiteHeader", () => {
     expect(home.parentElement).toHaveClass("w-full", "sm:w-auto");
     expect(screen.getByRole("link", { name: "Account" }).parentElement).toHaveClass(
       "sm:ml-auto",
+    );
+  });
+
+  /**
+   * Feature 28, amending AC-7: with a nav, the nav, the account link and the
+   * action sit in the browser's own popover, which the menu button opens; from
+   * `sm` the popover has no box, so they sit in the header's row.
+   */
+  it("puts the nav, the account link and the action in a menu its button opens", () => {
+    render(
+      <SiteHeader
+        nav={
+          <nav aria-label="Site">
+            <a href="/pricing">Pricing</a>
+          </nav>
+        }
+        menuLabel="Menu"
+        account={<a href="/account">Account</a>}
+        action={<Button href="/tool">Try it free</Button>}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Menu" });
+    expect(button).toHaveAttribute("popovertarget", SITE_MENU_ID);
+    expect(button.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+
+    const menu = document.getElementById(SITE_MENU_ID);
+    expect(menu).toHaveAttribute("popover", "auto");
+    expect(menu).toHaveClass("sm:not-open:contents");
+    expect(
+      within(menu as HTMLElement)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["Pricing", "Account", "Try it free"]);
+    // The button comes before the menu, so Tab goes from it into the links.
+    expect(
+      button.compareDocumentPosition(menu as HTMLElement) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("has no menu without a nav, as with billing off", () => {
+    render(<SiteHeader action={<Button href="/tool">Try it free</Button>} />);
+
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(document.getElementById(SITE_MENU_ID)).toBeNull();
+    expect(screen.getByRole("link", { name: "RedactNest" }).parentElement).toHaveClass(
+      "w-full",
+      "sm:w-auto",
     );
   });
 

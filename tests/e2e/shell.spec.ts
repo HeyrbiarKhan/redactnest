@@ -367,24 +367,48 @@ test.describe("the header", () => {
   }
 
   /**
-   * Below `sm` the lockup sits alone on the first row and everything else
-   * wraps beneath it in page order, so focus never moves back up the screen.
+   * Below `sm`, with billing on, the lockup and the menu button share one row
+   * and the links wait in the menu; the button opens it beneath the header,
+   * the links stacked in page order, so focus never moves back up the screen
+   * (feature 28, amending AC-7).
    */
-  test("wraps below the lockup in page order at 320 pixels, with no sideways scroll", async ({
+  test("folds the links into a menu at 320 pixels, with no sideways scroll", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 320, height: 640 });
     await page.goto("/");
     const header = page.getByRole("banner");
+    const links = ["Pricing", "Account", "Try it free"].map((name) =>
+      header.getByRole("link", { name, exact: true }),
+    );
 
+    const lockup = await header
+      .getByRole("link", { name: "RedactNest", exact: true })
+      .boundingBox();
+    const button = await header
+      .getByRole("button", { name: "Menu", exact: true })
+      .boundingBox();
+    if (lockup === null || button === null) throw new Error("the row has no box");
+    expect(
+      Math.abs(lockup.y + lockup.height / 2 - (button.y + button.height / 2)),
+    ).toBeLessThan(2);
+    expect(button.x).toBeGreaterThan(lockup.x + lockup.width);
+    for (const link of links) await expect(link).toBeHidden();
+
+    await header.getByRole("button", { name: "Menu", exact: true }).click();
+    const bar = await header.boundingBox();
     const tops: number[] = [];
-    for (const name of ["RedactNest", "Pricing", "Account", "Try it free"]) {
-      const box = await header.getByRole("link", { name, exact: true }).boundingBox();
-      tops.push(box?.y ?? Number.NaN);
+    for (const link of links) {
+      await expect(link).toBeVisible();
+      tops.push((await link.boundingBox())?.y ?? Number.NaN);
     }
-    const [lockup = Number.NaN, ...rest] = tops;
-    for (const top of rest) expect(top).toBeGreaterThan(lockup);
-    expect(rest).toEqual([...rest].sort((a, b) => a - b));
+    for (const top of tops) {
+      expect(top).toBeGreaterThanOrEqual((bar?.y ?? 0) + (bar?.height ?? 0));
+    }
+    tops.reduce((above, top) => {
+      expect(top).toBeGreaterThan(above);
+      return top;
+    });
 
     const scroll = await page.evaluate(() => ({
       width: document.documentElement.scrollWidth,

@@ -19,6 +19,27 @@ import { afterEach, expect } from "vitest";
 // document and queries start matching the previous test's markup.
 afterEach(cleanup);
 
+/*
+ * jsdom loads none of the site's CSS, so every class is ignored and a component
+ * test reads the page with nothing hidden, as it lays out from `sm`. jsdom does
+ * apply the browser's own rule that hides a popover while it is shut, though,
+ * and the header's small screen menu is one (feature 28): without this, its
+ * links would be hidden here, where from `sm` the header's own
+ * `sm:not-open:contents` shows them in its row. So this restores that one rule
+ * for that one element, and the header reads as it does from `sm`. The shut
+ * menu below `sm`, its links hidden until the button opens it, is the browser
+ * suite's to check.
+ *
+ * The id is written out rather than imported from `@/ui/site-header`, because
+ * importing it here would load `Button` and the real `next/link` before a test
+ * file's own `vi.mock("next/link")` could apply. It is `SITE_MENU_ID`; if that
+ * changes, the header's links hide here and its tests fail, so they cannot
+ * drift apart quietly.
+ */
+const headerFromSm = document.createElement("style");
+headerFromSm.textContent = "#site-menu:not(:popover-open) { display: contents; }";
+document.head.append(headerFromSm);
+
 /** Spec 0003, AC-18: the same rule tags the browser suite runs. */
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 

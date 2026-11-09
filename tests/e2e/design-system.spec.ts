@@ -374,13 +374,14 @@ async function targetBoxes(page: Page): Promise<TargetBox[]> {
  * AC-7. At least 24 by 24 for every target, and 40px tall for every button.
  *
  * Some elements are visually hidden on purpose and so have no box to measure:
- * the skip link until it is focused, and on the tool page the file input, which
- * is not a tab stop at all. Anything else hidden that way is a control nobody
- * can see.
+ * the skip link until it is focused, on the tool page the file input, which
+ * is not a tab stop at all, and at these desktop widths the header's Menu
+ * button, which shows only below `sm`, where the links fold into its menu
+ * (feature 28). Anything else hidden that way is a control nobody can see.
  */
 async function expectTargetSizes(
   page: Page,
-  hiddenOnPurpose: readonly string[] = ["#main", "file-input"],
+  hiddenOnPurpose: readonly string[] = ["#main", "file-input", "Menu"],
 ): Promise<void> {
   const boxes = await targetBoxes(page);
   const hidden = boxes.filter((box) => box.width <= 1 || box.height <= 1);
@@ -1958,7 +1959,7 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     expect(header?.height).toBe(40);
     expect(main?.height).toBe(48);
 
-    await expectTargetSizes(page, ["#main"]);
+    await expectTargetSizes(page, ["#main", "Menu"]);
   });
 
   test("axe reports nothing", async ({ page }) => {
