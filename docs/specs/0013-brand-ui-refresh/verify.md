@@ -76,27 +76,27 @@ _From the scope's Done when for feature 26; AC-11, AC-14 and AC-16 describe it a
 - AC-11: the three `/` steps, the home page component test and the band's browser tests · AC-14: the 900 px step and the stacked layout browser test · AC-16: the 1280 px open, the opened layout step and the tool layout tests · AC-17: the sticky step and the existing sticky tests · AC-20: the screen reader step and the same node component test
 
 ## Feature 28: UI polish 2 · added 2026-11-09
-_From the scope's Done when for feature 28, with the failure rule you set on 2026-11-09: the line shows when Clerk reports `error` or after 20 s of ours, and the form still replaces it if Clerk loads later. AC-16 and AC-23 describe it as built since 2026-11-09. Where Feature 26's 1280 px step puts the spinner beside the phase line under the file bar, these steps replace it. Reworded after verify on 2026-11-09: the "Checking your plan" step and the two refused start steps now say what the walks showed._
+_From the scope's Done when for feature 28, with the failure rule you set on 2026-11-09: the line shows when Clerk reports `error` or after 20 s of ours, and the form still replaces it if Clerk loads later. AC-16 and AC-23 describe it as built since 2026-11-09. Where Feature 26's 1280 px step puts the spinner beside the phase line under the file bar, these steps replace it. Reworded after verify on 2026-11-09: the "Checking your plan" step, the two refused start steps and the sandbox load step now say what the walks showed._
 
 ### UI / manual
-- [ ] `/tool` at 1280 px, choose a PDF with the engine held (`page.route("**/engine/**", () => {})`) → the file bar across the top; a 40 px spinner centred across the left column, the phase line centred under it, both centred down the room beside the rail; the plan card and lock line in the rail → AC-16
-- [ ] The same open at 900 px → the file bar, then the spinner and line centred across the column, then the plan card and lock line → AC-14, AC-16
-- [ ] The same open at 1280 px with the rail made taller than the line → `area-live` is as tall as the rail and the line's centre is its centre → AC-16
-- [ ] Step through an open's phases → one line at a time, in the same `area-live` node, and focus stays on Choose another PDF → AC-20
-- [ ] Choose a file while "Checking your plan" shows at idle → the line goes, the region is empty and hidden for a moment (6 to 48 ms in verify's walks), then "Loading the PDF engine…" arrives stacked in the left column, in a new `progress` node; `area-live` is the same node throughout and each line is heard once, never twice (an existing behaviour, older than feature 28; Follow-up in `index.md`) → AC-16, AC-20
-- [ ] Once the document opens, then during a run → the list on the left, the region heading the rail with the document card, and the small spinner beside the run's line, as before → AC-16
-- [ ] `/sign-in` at 1280, 800 and 390 px with Clerk's host held → a white card where Clerk's card draws (400 px wide from `md`, 25rem tall), the 40 px spinner and "Loading sign in…" in a `role="status"` line; the spinner is `aria-hidden` → AC-23
-- [ ] `/sign-up` the same → "Loading sign up…" → AC-23
-- [ ] Clerk's start refused (`/v1/environment` and `/v1/client` answered 400) → Clerk's status stays `loading`, so "Loading sign in…" stays until our timer: at about 20 s the spinner goes and "Sign in did not load. Check your connection, then reload this page." shows in `danger-ink`, in the same status node → AC-23
-- [ ] Every request to Clerk's host hung → still "Loading sign up…" at 14 s, the failure line at about 20 s, the same status node → AC-23
-- [ ] Clerk's script held past 20 s, then released → the failure line shows, then the form replaces it and the placeholder is gone → AC-23
-- [ ] In the Clerk sandbox, a normal load → the form replaces the placeholder in the same place, and the panel beside it stays put (12 px in development, from Clerk's development band; about none in production) → AC-23
-- [ ] With a screen reader on `/sign-in` while it waits → the line is read, the spinner is not; the failure line is heard when it replaces the loading line → AC-23
-- [ ] Playwright's build (the fake Clerk instance), `/sign-in` → the loading line, then the failure line at about 20 s, from our timer (the fake host answers Clerk's start 400, which leaves Clerk at `loading`); axe clean in both states, and at 320 px and 200% text → AC-23, AC-26
+- [x] `/tool` at 1280 px, choose a PDF with the engine held (`page.route("**/engine/**", () => {})`) → the file bar across the top; a 40 px spinner centred across the left column, the phase line centred under it, both centred down the room beside the rail; the plan card and lock line in the rail → AC-16
+- [x] The same open at 900 px → the file bar, then the spinner and line centred across the column, then the plan card and lock line → AC-14, AC-16
+- [x] The same open at 1280 px with the rail made taller than the line → `area-live` is as tall as the rail and the line's centre is its centre → AC-16
+- [x] Step through an open's phases → one line at a time, in the same `area-live` node, and focus stays on Choose another PDF → AC-20
+- [x] Choose a file while "Checking your plan" shows at idle → the line goes, the region is empty and hidden for a moment (under 50 ms in verify's walks), then "Loading the PDF engine…" arrives stacked in the left column, in a new `progress` node; `area-live` is the same node throughout and each line is heard once, never twice (an existing behaviour, older than feature 28; Follow-up in `index.md`) → AC-16, AC-20
+- [x] Once the document opens, then during a run → the list on the left, the region heading the rail with the document card, and the small spinner beside the run's line, as before → AC-16
+- [x] `/sign-in` at 1280, 800 and 390 px with Clerk's host held → a white card where Clerk's card draws (400 px wide from `md`, 25rem tall), the 40 px spinner and "Loading sign in…" in a `role="status"` line; the spinner is `aria-hidden` → AC-23
+- [x] `/sign-up` the same → "Loading sign up…" → AC-23
+- [x] Clerk's start refused (`/v1/environment` and `/v1/client` answered 400) → Clerk's status stays `loading`, so "Loading sign in…" stays until our timer: at about 20 s the spinner goes and "Sign in did not load. Check your connection, then reload this page." shows in `danger-ink`, in the same status node → AC-23
+- [x] Every request to Clerk's host hung → still "Loading sign up…" at 14 s, the failure line at about 20 s, the same status node → AC-23
+- [x] Clerk's script held past 20 s, then released → the failure line shows, then the form replaces it and the placeholder is gone → AC-23
+- [x] In the Clerk sandbox, a normal load → the form replaces the placeholder in the same place, and the panel beside it moves only a few pixels: 12 px on `/sign-in` and 23 px on `/sign-up` in development, with Clerk's Development mode band on its card; about 4 and 7 px in production, without that band, where 25rem sits between the two card heights → AC-23 (verify's measurements on 2026-11-09)
+- [x] With a screen reader on `/sign-in` while it waits → the line is read, the spinner is not; the failure line is heard when it replaces the loading line → AC-23 (the loading line heard once in Narrator on the dev server, then the form; the failure line read in Chromium's accessibility tree, the same `role="status"` node, by your call on 2026-11-09)
+- [x] Playwright's build (the fake Clerk instance), `/sign-in` → the loading line, then the failure line at about 20 s, from our timer (the fake host answers Clerk's start 400, which leaves Clerk at `loading`); axe clean in both states, and at 320 px and 200% text → AC-23, AC-26
 
 ### Commands
-- [ ] `pnpm exec vitest run --project component tests/component/ui/spinner.test.tsx` → 7 pass, `lg` at `size-10`, hidden, still under reduced motion, axe clean → AC-16, AC-23
-- [ ] `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm test:e2e` → pass → AC-14, AC-16, AC-20, AC-23
+- [x] `pnpm exec vitest run --project component tests/component/ui/spinner.test.tsx` → 7 pass, `lg` at `size-10`, hidden, still under reduced motion, axe clean → AC-16, AC-23
+- [x] `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm test:e2e` → pass → AC-14, AC-16, AC-20, AC-23
 
 ### Acceptance-criteria coverage
 - AC-14: the 900 px step · AC-16: the 1280 px open, the taller rail step, the opened and run step, and the spinner test · AC-20: the phases step and the "Checking your plan" step · AC-23: the seven sign in and sign up steps, the sandbox step and the Playwright build step · AC-26: the axe, 320 px and 200% text checks in the Playwright build step
