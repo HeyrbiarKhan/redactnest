@@ -76,6 +76,30 @@ describe("StepList", () => {
     }
   });
 
+  /**
+   * AC-15, as feature 28 builds it: the tool centres the idle steps as a block
+   * where its areas stack. The caller's `className` places the list as a
+   * whole and never reaches a step, so the steps stay aligned at the start
+   * inside it and the circles keep to one line with the joins meeting them.
+   */
+  it("puts the caller's className on the list, never on a step", () => {
+    const { unmount } = render(<StepList steps={STEPS} />);
+    const plain = screen.getAllByRole("listitem").map((item) => item.className);
+    unmount();
+
+    render(<StepList steps={STEPS} className="mx-auto w-fit" />);
+
+    const list = screen.getByRole("list");
+    expect(list).toHaveClass("flex", "flex-col", "gap-6", "mx-auto", "w-fit");
+    const items = screen.getAllByRole("listitem");
+    expect(items.map((item) => item.className)).toEqual(plain);
+    for (const item of items) {
+      expect(item).not.toHaveClass("mx-auto");
+      expect(item).not.toHaveClass("w-fit");
+      expect(item).toHaveClass("items-start");
+    }
+  });
+
   it("renders a step as text, never as markup", () => {
     const { container } = render(<StepList steps={["<b>bold</b>"]} />);
 

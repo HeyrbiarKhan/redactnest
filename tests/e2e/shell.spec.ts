@@ -436,8 +436,93 @@ test.describe("the header", () => {
       for (const middle of middles) expect(Math.abs(middle - middles[0])).toBeLessThan(2);
       const lefts = boxes.map(({ x }) => x);
       expect(lefts).toEqual([...lefts].sort((a, b) => a - b));
+      // Feature 28: from `sm` the links are in the row, so no Menu button.
+      await expect(
+        header.getByRole("button", { name: "Menu", exact: true }),
+      ).toBeHidden();
     });
   }
+
+  /**
+   * Feature 28, amending AC-7: the open menu marks the current page as the
+   * row does, and on `/tool`, which offers no Try it free, holds Pricing and
+   * Account only.
+   */
+  test("marks the current page in the open menu, and holds no Try it free on the tool", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    const header = page.getByRole("banner");
+    const menu = header.locator("[popover]");
+
+    await page.goto("/pricing");
+    await header.getByRole("button", { name: "Menu", exact: true }).click();
+    const current = menu.locator('[aria-current="page"]');
+    await expect(current).toHaveText(["Pricing"]);
+    await expect(current).toBeVisible();
+    const bar = await current.evaluate((link) => {
+      const after = getComputedStyle(link, "::after");
+      return { width: after.borderBottomWidth, style: after.borderBottomStyle };
+    });
+    expect(bar).toEqual({ width: "2px", style: "solid" });
+
+    await page.goto("/tool");
+    await header.getByRole("button", { name: "Menu", exact: true }).click();
+    await expect(menu.getByRole("link")).toHaveText(["Pricing", "Account"]);
+    for (const link of await menu.getByRole("link").all())
+      await expect(link).toBeVisible();
+    await expect(menu.locator('[aria-current="page"]')).toHaveCount(0);
+  });
+
+  /**
+   * Feature 28, amending AC-7: a menu still open when the window widens past
+   * `sm` (a phone turned sideways) keeps its button and shows its links in one
+   * row beneath the header until it is closed; then the button goes and the
+   * links sit in the header's own row.
+   */
+  test("keeps a menu left open as the window widens, its links in one row, until it is closed", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    const header = page.getByRole("banner");
+    const button = header.getByRole("button", { name: "Menu", exact: true });
+    const lockup = header.getByRole("link", { name: "RedactNest", exact: true });
+    const links = ["Pricing", "Account", "Try it free"].map((name) =>
+      header.getByRole("link", { name, exact: true }),
+    );
+    const middles = async () => {
+      const found: number[] = [];
+      for (const link of links) {
+        const box = await link.boundingBox();
+        if (box === null) throw new Error("a link has no box");
+        found.push(box.y + box.height / 2);
+      }
+      return found;
+    };
+
+    await button.click();
+    await page.setViewportSize({ width: 844, height: 390 });
+
+    await expect(button).toBeVisible();
+    const bar = await header.boundingBox();
+    const open = await middles();
+    for (const middle of open) {
+      expect(Math.abs(middle - (open[0] ?? 0))).toBeLessThan(2);
+      expect(middle).toBeGreaterThan((bar?.y ?? 0) + (bar?.height ?? 0));
+    }
+
+    await button.click();
+
+    await expect(button).toBeHidden();
+    const home = await lockup.boundingBox();
+    const closed = await middles();
+    for (const middle of closed) {
+      expect(Math.abs(middle - ((home?.y ?? 0) + (home?.height ?? 0) / 2))).toBeLessThan(
+        2,
+      );
+    }
+  });
 
   /**
    * The current item in semibold `ink` over its `accent` bar, the others in

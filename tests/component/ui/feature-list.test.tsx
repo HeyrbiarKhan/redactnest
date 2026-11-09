@@ -57,6 +57,35 @@ describe("FeatureList", () => {
     expect(screen.getByRole("list")).toHaveClass("grid", "md:grid-cols-3");
   });
 
+  /**
+   * AC-10, as feature 28 builds it: where the items stack (below `md`) each is
+   * centred, the icon over its title and line; side by side (from `md`) they
+   * line up at the start again. jsdom lays nothing out, so this holds the
+   * classes and `design-system.spec.ts` measures the boxes in a real browser.
+   * The rule lives in the primitive, so every caller gets it, the h3 callers
+   * (feature 15's search pages) as much as the home page's h2s.
+   */
+  for (const headingLevel of [2, 3] as const) {
+    it(`centres each item while they stack and lines it up at the start from md, with h${headingLevel} titles`, () => {
+      render(<FeatureList items={ITEMS} headingLevel={headingLevel} />);
+
+      for (const item of screen.getAllByRole("listitem")) {
+        expect(item).toHaveClass(
+          "flex-col",
+          "items-center",
+          "text-center",
+          "md:items-start",
+          "md:text-start",
+        );
+        // The icon comes first, so stacked it sits above the words.
+        expect(item.firstElementChild).toHaveAttribute("aria-hidden", "true");
+        expect(item.lastElementChild).toContainElement(
+          within(item).getByRole("heading", { level: headingLevel }),
+        );
+      }
+    });
+  }
+
   it("passes axe", async () => {
     const { container } = render(<FeatureList items={ITEMS} />);
 

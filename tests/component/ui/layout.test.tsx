@@ -271,6 +271,36 @@ describe("SiteHeader", () => {
     ).toBeTruthy();
   });
 
+  /**
+   * Feature 28, amending AC-7: the button is drawn only where the browser has
+   * popovers, so no browser offers a button that does nothing (one without
+   * them shows the links beneath the lockup instead); and from `sm` only
+   * while the menu is still open, so a phone turned sideways can still close
+   * it. Every browser the suite drives has popovers, so it can never see the
+   * first half; this holds the rule itself, and `shell.spec.ts` the rest.
+   */
+  it("draws the menu button only where popovers work, and from sm only while the menu is open", () => {
+    render(
+      <SiteHeader
+        nav={
+          <nav aria-label="Site">
+            <a href="/pricing">Pricing</a>
+          </nav>
+        }
+        menuLabel="Menu"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Menu" }).parentElement).toHaveClass(
+      "hidden",
+      "supports-[selector(:popover-open)]:flex",
+      "sm:hidden",
+      "sm:group-has-[:popover-open]:flex",
+    );
+    // `group-has` reads the header, so the header has to be the group.
+    expect(screen.getByRole("banner")).toHaveClass("group");
+  });
+
   it("has no menu without a nav, as with billing off", () => {
     render(<SiteHeader action={<Button href="/tool">Try it free</Button>} />);
 

@@ -2558,6 +2558,79 @@ describe("the redact flow (spec 0007)", () => {
     });
 
     /**
+     * AC-15, as feature 28 builds it: where the areas stack (below the grid's
+     * own `lg`, the `@min-[61rem]` container query, so 200% text on a wide
+     * window counts too) the idle steps sit centred as a block and the lock
+     * line centred under them; from that width both sit at the start of the
+     * rail, as before. A failed open is laid out as idle, so it centres too.
+     * jsdom lays nothing out, so this holds the classes and
+     * `design-system.spec.ts` measures the boxes.
+     */
+    it("centres the idle steps and the lock line until the grid is wide, after a failed open too", async () => {
+      mocks.openSession.mockRejectedValue(new EngineError("corrupt"));
+      render(<ToolClient />);
+      const expectCentred = () => {
+        expect(within(screen.getByTestId("area-rail")).getByRole("list")).toHaveClass(
+          "mx-auto",
+          "w-fit",
+          "@min-[61rem]:mx-0",
+          "@min-[61rem]:w-auto",
+        );
+        expect(screen.getByTestId("lock-line")).toHaveClass(
+          "justify-center",
+          "@min-[61rem]:justify-start",
+        );
+      };
+
+      expectCentred();
+
+      await chooseFile(pdfFile());
+      await screen.findByTestId("error");
+
+      expectCentred();
+    });
+
+    /**
+     * AC-15 and AC-16: only the idle rail centres. Once a document is open,
+     * the lock line at the rail's foot (while it opens, and after the result
+     * card) sits at the start, and the one inside the action panel keeps its
+     * own rule, following Redact as it did before feature 28: centred under
+     * the full width button on a phone and in the wide rail, at the start
+     * between. Neither takes the idle rail's centring.
+     */
+    it("leaves the rail's lock line at the start while a document opens", async () => {
+      mocks.openSession.mockImplementation(hangsAt("opening"));
+      render(<ToolClient />);
+
+      await chooseFile(pdfFile());
+      await screen.findByTestId("progress");
+
+      const line = screen.getByTestId("lock-line");
+      expect(screen.getByTestId("area-rail").lastElementChild).toBe(line);
+      expect(line.className).not.toMatch(/justify-/);
+    });
+
+    it("keeps the action panel's lock line under Redact, and the one after the result card at the start", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+
+      const inPanel = screen.getByTestId("lock-line");
+      expect(screen.getByTestId("action-panel")).toContainElement(inPanel);
+      expect(inPanel).toHaveClass(
+        "justify-center",
+        "sm:justify-start",
+        "@min-[61rem]:justify-center",
+      );
+      expect(inPanel).not.toHaveClass("@min-[61rem]:justify-start");
+
+      await userEvent.setup().click(screen.getByTestId("redact"));
+      await run.finish();
+
+      expect(screen.getByTestId("result")).toBeInTheDocument();
+      expect(screen.getByTestId("lock-line").className).not.toMatch(/justify-/);
+    });
+
+    /**
      * AC-15: "Checking your plan" in the polite region at the head of the
      * rail, as today. The file is not chosen until the answer comes, so the
      * page is still laid out as idle, with the region over B only while it

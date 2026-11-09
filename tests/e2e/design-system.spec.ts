@@ -753,6 +753,88 @@ test.describe("the tool page's layout (spec 0013)", () => {
       .getByTestId(testId)
       .evaluate((element) => element.lastElementChild?.getBoundingClientRect().bottom);
 
+  /** Each idle step's circle and the line it draws to the next (AC-15). */
+  const stepLines = (page: Page) =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('[data-testid="area-rail"] ol > li')].map((li) => {
+        const after = getComputedStyle(li, "::after");
+        const step = li.getBoundingClientRect();
+        const circle = (li.firstElementChild as Element).getBoundingClientRect();
+        const width = parseFloat(after.borderLeftWidth);
+        return {
+          drawn: after.content !== "none" && after.borderLeftStyle === "solid",
+          width: after.borderLeftWidth,
+          colour: after.borderLeftColor,
+          length: parseFloat(after.height),
+          height: step.height,
+          top: step.top + parseFloat(after.top),
+          bottom: step.bottom - parseFloat(after.bottom),
+          centre: step.left + parseFloat(after.left) + width / 2,
+          circle: {
+            left: circle.left,
+            top: circle.top,
+            bottom: circle.bottom,
+            centre: circle.left + circle.width / 2,
+          },
+          rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
+        };
+      }),
+    );
+
+  /**
+   * AC-15: a 2 pixel line on every step but the last, at least 16 pixels
+   * long, centred under its circle and 0.25rem clear of it and of the next.
+   */
+  const expectStepsJoined = async (page: Page) => {
+    const steps = await stepLines(page);
+    expect(steps.map((step) => step.drawn)).toEqual([true, true, false]);
+    for (const [index, step] of steps.slice(0, -1).entries()) {
+      const next = steps[index + 1];
+      expect(step.width).toBe("2px");
+      expect(step.length).toBeGreaterThanOrEqual(16);
+      expect(step.top - step.circle.bottom).toBeCloseTo(step.rem * 0.25, 0);
+      expect((next?.circle.top ?? 0) - step.bottom).toBeCloseTo(step.rem * 0.25, 0);
+      expect(Math.abs(step.centre - step.circle.centre)).toBeLessThanOrEqual(0.5);
+    }
+    return steps;
+  };
+
+  /**
+   * The idle rail's column, its steps list, and the lock line's drawn content
+   * (the lock and the words), which `justify-center` moves while the line's
+   * own box keeps the column's width.
+   */
+  const idleRail = (page: Page) =>
+    page.getByTestId("area-rail").evaluate((rail) => {
+      const rect = (element: Element) => {
+        const { left, right, top, bottom } = element.getBoundingClientRect();
+        return { left, right, top, bottom };
+      };
+      const list = rail.querySelector(":scope > ol");
+      const lock = rail.querySelector(':scope > [data-testid="lock-line"]');
+      if (list === null || lock === null) throw new Error("the rail is not idle");
+      const drawn = [...lock.children].map(rect);
+      return {
+        rail: rect(rail),
+        list: rect(list),
+        lock: rect(lock),
+        lockContent: {
+          left: Math.min(...drawn.map((part) => part.left)),
+          right: Math.max(...drawn.map((part) => part.right)),
+          top: Math.min(...drawn.map((part) => part.top)),
+          bottom: Math.max(...drawn.map((part) => part.bottom)),
+        },
+      };
+    });
+
+  /** How far the lock line's lock sits from the line's own start edge. */
+  const lockIndent = (lockLine: Locator) =>
+    lockLine.evaluate(
+      (line) =>
+        (line.firstElementChild as Element).getBoundingClientRect().left -
+        line.getBoundingClientRect().left,
+    );
+
   test("sets the drop zone left of the rail while nothing is open, and first in the page", async ({
     page,
   }) => {
@@ -786,44 +868,7 @@ test.describe("the tool page's layout (spec 0013)", () => {
   test("joins the idle steps with a line between each pair of circles", async ({
     page,
   }) => {
-    const lines = () =>
-      page.evaluate(() =>
-        [...document.querySelectorAll('[data-testid="area-rail"] ol > li')].map((li) => {
-          const after = getComputedStyle(li, "::after");
-          const step = li.getBoundingClientRect();
-          const circle = (li.firstElementChild as Element).getBoundingClientRect();
-          const width = parseFloat(after.borderLeftWidth);
-          return {
-            drawn: after.content !== "none" && after.borderLeftStyle === "solid",
-            width: after.borderLeftWidth,
-            colour: after.borderLeftColor,
-            length: parseFloat(after.height),
-            height: step.height,
-            top: step.top + parseFloat(after.top),
-            bottom: step.bottom - parseFloat(after.bottom),
-            centre: step.left + parseFloat(after.left) + width / 2,
-            circle: {
-              top: circle.top,
-              bottom: circle.bottom,
-              centre: circle.left + circle.width / 2,
-            },
-            rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
-          };
-        }),
-      );
-    const expectJoined = async () => {
-      const steps = await lines();
-      expect(steps.map((step) => step.drawn)).toEqual([true, true, false]);
-      for (const [index, step] of steps.slice(0, -1).entries()) {
-        const next = steps[index + 1];
-        expect(step.width).toBe("2px");
-        expect(step.length).toBeGreaterThanOrEqual(16);
-        expect(step.top - step.circle.bottom).toBeCloseTo(step.rem * 0.25, 0);
-        expect((next?.circle.top ?? 0) - step.bottom).toBeCloseTo(step.rem * 0.25, 0);
-        expect(Math.abs(step.centre - step.circle.centre)).toBeLessThanOrEqual(0.5);
-      }
-      return steps;
-    };
+    const expectJoined = () => expectStepsJoined(page);
 
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/tool");
@@ -847,6 +892,122 @@ test.describe("the tool page's layout (spec 0013)", () => {
           step.drawn && step.height > step.circle.bottom - step.circle.top + step.rem,
       ),
     ).toBe(true);
+  });
+
+  /**
+   * Spec 0013, AC-15, as feature 28 builds it. Where the areas stack (below
+   * the grid's own `lg`, a container query, so 200% text on a wide window
+   * counts too), the idle steps list sits centred in the column as a block,
+   * its steps still at the start inside it, so the circles keep one left edge
+   * and the joins still meet them; the lock line is centred under it. The
+   * widths are those verify walked, each well clear of the grid's switch.
+   */
+  for (const [label, width, doubled] of [
+    ["at 390 pixels", 390, false],
+    ["at 800 pixels", 800, false],
+    ["at 1280 pixels with 200% text", 1280, true],
+  ] as const) {
+    test(`centres the idle steps and the lock line where the areas stack, ${label}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/tool");
+      if (doubled) {
+        await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+      }
+      await planAnswered(page);
+
+      // Stacked: the drop zone above the rail, not beside it.
+      expect((await box(page, "area-document")).bottom).toBeLessThanOrEqual(
+        (await box(page, "area-rail")).top,
+      );
+      const { rail, list, lockContent } = await idleRail(page);
+      expectNear(middle(list).x, middle(rail).x);
+      // A block narrower than the column, not a full width list.
+      expect(list.right - list.left).toBeLessThan(rail.right - rail.left - 1);
+
+      const steps = await expectStepsJoined(page);
+      for (const step of steps) expectNear(step.circle.left, steps[0]?.circle.left ?? 0);
+
+      expectNear(middle(lockContent).x, middle(rail).x);
+      expect(lockContent.top).toBeGreaterThanOrEqual(list.bottom);
+    });
+  }
+
+  test("keeps the idle steps and the lock line at the start of the rail beside the drop zone", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/tool");
+    await planAnswered(page);
+
+    const { rail, list, lockContent } = await idleRail(page);
+    expectNear(list.left, rail.left);
+    expectNear(list.right, rail.right);
+    expectNear(lockContent.left, rail.left);
+    expect(await lockIndent(page.getByTestId("lock-line"))).toBeLessThanOrEqual(1);
+  });
+
+  /**
+   * AC-15 and AC-16: only the idle rail centres. With a document open where
+   * the areas stack, the lock line at the rail's foot (while it opens) sits at
+   * the start, as before feature 28.
+   */
+  for (const width of [390, 800]) {
+    test(`leaves the rail's lock line at the start while a document opens, at ${width} pixels`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/tool");
+      await planAnswered(page);
+      await openingHeld(page);
+
+      const line = page.getByTestId("lock-line");
+      await expect(line).toHaveCount(1);
+      await expect(page.getByTestId("area-rail").getByTestId("lock-line")).toBeVisible();
+      expect(await lockIndent(line)).toBeLessThanOrEqual(1);
+    });
+  }
+
+  /**
+   * AC-15 and AC-16: the action panel's lock line keeps its own rule, as
+   * before feature 28. It follows Redact: centred under the full width button
+   * on a phone, at the start under the button's own width between `sm` and
+   * the grid's `lg`. The idle rail's centring never reaches it.
+   */
+  test("leaves the action panel's lock line under Redact where the areas stack", async ({
+    page,
+  }) => {
+    const lockLine = page.getByTestId("action-panel").getByTestId("lock-line");
+    const drawn = () =>
+      lockLine.evaluate((line) => {
+        const parts = [...line.children].map((part) => part.getBoundingClientRect());
+        return {
+          left: Math.min(...parts.map((part) => part.left)),
+          right: Math.max(...parts.map((part) => part.right)),
+          top: Math.min(...parts.map((part) => part.top)),
+          bottom: Math.max(...parts.map((part) => part.bottom)),
+        };
+      });
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.goto("/tool");
+    await planAnswered(page);
+    await openDocument(page);
+
+    // The lock line's own box is the panel's width inside its padding.
+    let redact = await rectOf(page.getByTestId("redact"));
+    let row = await rectOf(lockLine);
+    expectNear(redact.left, row.left);
+    expectNear(redact.right, row.right);
+    expectNear(middle(await drawn()).x, middle(redact).x);
+
+    await page.setViewportSize({ width: 800, height: 800 });
+
+    redact = await rectOf(page.getByTestId("redact"));
+    row = await rectOf(lockLine);
+    expect(redact.right).toBeLessThan(row.right - 1);
+    expectNear(redact.left, row.left);
+    expect(await lockIndent(lockLine)).toBeLessThanOrEqual(1);
   });
 
   test("draws the found items left of the rail, while the rail comes first in the page", async ({
@@ -1866,6 +2027,91 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     const picture = await shot.boundingBox();
     expect((text?.x ?? 0) + (text?.width ?? 0)).toBeLessThanOrEqual(picture?.x ?? 0);
   });
+
+  /**
+   * Spec 0013, AC-10, as feature 28 builds it. Each point's icon circle, and
+   * its title and line as the text itself (a range over the words, since the
+   * heading's own box is as wide as its column whatever the alignment).
+   */
+  const points = (page: Page) =>
+    page
+      .getByRole("main")
+      .getByRole("list")
+      .filter({ has: page.getByRole("heading", { name: "Stays on your device" }) })
+      .evaluate((list) => {
+        const box = (rect: DOMRect) => ({
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+        });
+        const words = (element: Element | null) => {
+          if (element === null) throw new Error("a point has lost its words");
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          return box(range.getBoundingClientRect());
+        };
+        return [...list.children].map((item) => ({
+          item: box(item.getBoundingClientRect()),
+          icon: box((item.firstElementChild as Element).getBoundingClientRect()),
+          title: words(item.querySelector("h2")),
+          line: words(item.querySelector("p")),
+        }));
+      });
+
+  /** Where they stack (below `md`), each point centred, its icon above its words. */
+  for (const width of [390, 700]) {
+    test(`centres each of the three points where they stack, at ${width} pixels`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/");
+
+      const trio = await points(page);
+      expect(trio).toHaveLength(3);
+      for (const [index, { item, icon, title, line }] of trio.entries()) {
+        if (index > 0)
+          expect(item.top).toBeGreaterThanOrEqual(trio[index - 1]?.item.bottom ?? 0);
+        expect(icon.bottom).toBeLessThanOrEqual(title.top);
+        expectNear(middle(icon).x, middle(item).x);
+        expectNear(middle(title).x, middle(item).x);
+        expectNear(middle(line).x, middle(item).x);
+      }
+    });
+  }
+
+  /**
+   * Side by side (from `md`) the three line up at the start again: the icon
+   * above the words until `lg`, and beside them from it.
+   */
+  for (const [width, beside] of [
+    [800, false],
+    [1280, true],
+  ] as const) {
+    test(`sets the three points side by side at the start, at ${width} pixels`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/");
+
+      const trio = await points(page);
+      expect(trio).toHaveLength(3);
+      for (const [index, { item, icon, title, line }] of trio.entries()) {
+        expectNear(item.top, trio[0]?.item.top ?? 0);
+        if (index > 0)
+          expect(item.left).toBeGreaterThanOrEqual(trio[index - 1]?.item.right ?? 0);
+        expectNear(icon.left, item.left);
+        expectNear(line.left, title.left);
+        if (beside) {
+          expect(title.left).toBeGreaterThanOrEqual(icon.right);
+          expect(title.top).toBeLessThan(icon.bottom);
+        } else {
+          expect(icon.bottom).toBeLessThanOrEqual(title.top);
+          expectNear(title.left, item.left);
+        }
+      }
+    });
+  }
 
   test("puts the text before the shot below lg", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 900 });
