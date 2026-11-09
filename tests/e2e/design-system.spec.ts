@@ -302,6 +302,42 @@ async function expectContained(box: Locator): Promise<void> {
   expect(size.scrollHeight).toBeLessThanOrEqual(size.clientHeight);
 }
 
+interface Rect {
+  readonly left: number;
+  readonly right: number;
+  readonly top: number;
+  readonly bottom: number;
+}
+
+/**
+ * Where an element sits in the window. A turning spinner's box is its rotated
+ * one, up to 1.41 times its size, but its centre stays put, so read a
+ * spinner's place here and its size with `cssSize`.
+ */
+async function rectOf(locator: Locator): Promise<Rect> {
+  return locator.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+  });
+}
+
+function middle(rect: Rect): { readonly x: number; readonly y: number } {
+  return { x: (rect.left + rect.right) / 2, y: (rect.top + rect.bottom) / 2 };
+}
+
+/** An element's laid out size, which a rotation leaves alone. */
+async function cssSize(locator: Locator): Promise<{ width: string; height: string }> {
+  return locator.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { width: style.width, height: style.height };
+  });
+}
+
+/** Within a pixel, since centring can land on a half pixel. */
+function expectNear(actual: number, expected: number): void {
+  expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1);
+}
+
 interface TargetBox {
   readonly name: string;
   readonly tag: string;
@@ -923,6 +959,76 @@ test.describe("the tool page's layout (spec 0013)", () => {
     expect(live.right).toBeLessThanOrEqual(rail.left);
     expect(live.top).toBe(rail.top);
     expect(document.top).toBeLessThan(live.top);
+  });
+
+  /**
+   * AC-14 and AC-16, feature 28: the *Opening layout* scenario. While a
+   * document opens, the polite region holds the left column, so a 40 pixel
+   * spinner is centred across it with the line centred under it: beside the
+   * rail at 1280, and between the file bar and the rail at 900, where the
+   * areas stack.
+   */
+  for (const width of [1280, 900] as const) {
+    test(`centres a 40 pixel spinner across the left column, the line under it, while a document opens at ${width} pixels`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/tool");
+      await planAnswered(page);
+      await openingHeld(page);
+
+      const live = page.getByTestId("area-live");
+      const progress = live.getByTestId("progress");
+      const spinner = progress.getByTestId("spinner");
+      const [area, turning, words, fileBar, rail] = [
+        await rectOf(live),
+        await rectOf(spinner),
+        await rectOf(progress.locator("span")),
+        await rectOf(page.getByTestId("file-bar")),
+        await rectOf(page.getByTestId("area-rail")),
+      ];
+      expect(await cssSize(spinner)).toEqual({ width: "40px", height: "40px" });
+      expectNear(middle(turning).x, middle(area).x);
+      expectNear(middle(words).x, middle(area).x);
+      // The line under the spinner: below its centre by at least half its size.
+      expect(words.top).toBeGreaterThanOrEqual(middle(turning).y + 20);
+      expect(fileBar.bottom).toBeLessThanOrEqual(area.top);
+      if (width === 1280) {
+        expect(area.right).toBeLessThanOrEqual(rail.left);
+      } else {
+        expect(area.bottom).toBeLessThanOrEqual(rail.top);
+      }
+    });
+  }
+
+  /**
+   * AC-16, feature 28: from `lg` the grid stretches the region to the rail's
+   * height, and the region centres its line in that room. The rail is made
+   * taller than the line here, as verify's walk did, so the centring has room
+   * to show; at its own height the rail can be about the line's.
+   */
+  test("centres the opening line down the room beside a rail taller than it", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/tool");
+    await planAnswered(page);
+    await page.addStyleTag({
+      content: '[data-testid="area-rail"] { min-height: 40rem; }',
+    });
+    await openingHeld(page);
+
+    const live = page.getByTestId("area-live");
+    const [area, line, rail] = [
+      await rectOf(live),
+      await rectOf(live.getByTestId("progress")),
+      await rectOf(page.getByTestId("area-rail")),
+    ];
+    // The rail really is the taller, or the centring proves nothing.
+    expect(rail.bottom - rail.top).toBeGreaterThan(line.bottom - line.top + 100);
+    expect(area.top).toBe(rail.top);
+    expect(area.bottom).toBe(rail.bottom);
+    expectNear(middle(line).y, middle(area).y);
   });
 
   /**
@@ -2087,6 +2193,142 @@ test.describe("every page (spec 0013, AC-26)", () => {
 
       await expectNoHorizontalScroll(page);
       await expectContained(page.getByRole("main"));
+    });
+  }
+});
+
+/**
+ * Spec 0013, AC-23 and AC-26, feature 28: the *Sign in wait* scenario.
+ *
+ * Playwright's build points Clerk at a fake development instance, so Clerk's
+ * form never draws here and only the placeholder can be held. Every request
+ * to Clerk's development host is held unanswered, as verify's hang walk did,
+ * rather than left to whatever that host answers today: the case needs no
+ * network, and Clerk stays at `loading`, so our timer is what ends the wait.
+ * `page.clock` runs it past 20 seconds instead of waiting them out. The form
+ * replacing the placeholder, before and after the failure line, is walked by
+ * hand in the sandbox.
+ */
+test.describe("the sign in wait (spec 0013, AC-23, AC-26)", () => {
+  const STEPS = [
+    {
+      path: "/sign-in",
+      loading: "Loading sign in…",
+      failed: "Sign in did not load. Check your connection, then reload this page.",
+    },
+    {
+      path: "/sign-up",
+      loading: "Loading sign up…",
+      failed: "Sign up did not load. Check your connection, then reload this page.",
+    },
+  ] as const;
+
+  /**
+   * Opens `path` with Clerk's host never answering, so Clerk never loads and
+   * never says why. A fresh browser on a development instance is first sent
+   * to Clerk's handshake, a redirect `page.route` cannot catch, so the context
+   * carries a development browser cookie, as a second visit would, and the
+   * page renders. With Clerk's script held the load event never comes, so the
+   * page is read once its document has arrived.
+   */
+  async function waitingOn(page: Page, path: string): Promise<void> {
+    await page
+      .context()
+      .addCookies([
+        { name: "__clerk_db_jwt", value: "dvb_e2efake", domain: "localhost", path: "/" },
+      ]);
+    await page.route("https://*.clerk.accounts.dev/**", () => new Promise(() => {}));
+    await page.goto(path, { waitUntil: "domcontentloaded" });
+  }
+
+  const placeholder = (page: Page) => page.getByTestId("clerk-wait");
+
+  for (const { path, loading, failed } of STEPS) {
+    /** Beside the panel from `md`, 400 pixels wide; under it below, full width. */
+    for (const [width, beside] of [
+      [1280, true],
+      [800, true],
+      [390, false],
+    ] as const) {
+      test(`${path}: holds Clerk's card's place ${beside ? "beside" : "under"} the panel at ${width} pixels, saying "${loading}"`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await waitingOn(page, path);
+
+        const line = placeholder(page).getByRole("status");
+        await expect(line).toHaveText(loading);
+        const spinner = placeholder(page).getByTestId("spinner");
+        await expect(spinner).toHaveAttribute("aria-hidden", "true");
+        expect(await cssSize(spinner)).toEqual({ width: "40px", height: "40px" });
+
+        const panel = page.getByTestId("sign-in-panel");
+        const [card, panelBox, grid] = [
+          await rectOf(placeholder(page)),
+          await rectOf(panel),
+          await rectOf(panel.locator("xpath=..")),
+        ];
+        // 25rem tall at the default text size.
+        expect(card.bottom - card.top).toBeGreaterThanOrEqual(400);
+        if (beside) {
+          expect(card.right - card.left).toBe(400);
+          expect(card.left).toBeGreaterThanOrEqual(panelBox.right);
+        } else {
+          expect(card.top).toBeGreaterThanOrEqual(panelBox.bottom);
+          expect(card.left).toBe(grid.left);
+          expect(card.right).toBe(grid.right);
+          expect(card.right - card.left).toBeLessThanOrEqual(400);
+        }
+      });
+    }
+
+    test(`${path}: says it did not load once 20 seconds of ours pass, in the same status line, and axe reports nothing either side`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.clock.install();
+      await waitingOn(page, path);
+      const line = placeholder(page).getByRole("status");
+      await expect(line).toHaveText(loading);
+      await expectNoAxeViolations(page);
+      const node = await line.elementHandle();
+
+      // The timer starts when the page has hydrated, which a page load does
+      // not wait for, so the clock moves on until the line changes.
+      await expect(async () => {
+        await page.clock.fastForward(20_000);
+        await expect(line).toHaveText(failed, { timeout: 1_000 });
+      }).toPass();
+
+      expect(await node?.evaluate((element) => element.isConnected)).toBe(true);
+      expect(await node?.evaluate((element) => element.textContent)).toBe(failed);
+      await expect(placeholder(page).getByTestId("spinner")).toHaveCount(0);
+      await expect(placeholder(page).getByRole("button")).toHaveCount(0);
+      await expectNoAxeViolations(page);
+    });
+
+    test(`${path}: axe reports nothing at 320 pixels while it waits, with no sideways scroll`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 320, height: 640 });
+      await waitingOn(page, path);
+      await expect(placeholder(page).getByRole("status")).toHaveText(loading);
+
+      await expectNoHorizontalScroll(page);
+      await expectNoAxeViolations(page);
+    });
+
+    test(`${path}: clips nothing while it waits with the root font size doubled`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await waitingOn(page, path);
+      await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+      await expect(placeholder(page).getByRole("status")).toHaveText(loading);
+
+      await expectNoHorizontalScroll(page);
+      await expectContained(page.getByRole("main"));
+      await expectContained(placeholder(page));
     });
   }
 });
