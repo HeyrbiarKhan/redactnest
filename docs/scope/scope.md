@@ -38,7 +38,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 25 | More date forms | Release 3 | done |
 | 26 | UI polish | Release 3 | done |
 | 27 | Detector and fixture gates | Release 3 | done |
-| 28 | UI polish 2 | Release 3 | in-progress |
+| 28 | UI polish 2 | Release 3 | done |
 
 ## Foundations
 
@@ -359,7 +359,7 @@ spec [0016](../specs/0016-telemetry-error-monitoring/index.md) · code in `src/t
 - [x] Test it: `/test telemetry & error monitoring`
 - [x] Review it (fresh model): `/check review telemetry & error monitoring` (first review done, [2026-11-04](../reviews/2026-11-04-feat-telemetry.md); for the first review's fix, [second review](../reviews/2026-11-04-feat-telemetry-second.md))
 
-### 28. UI polish 2 · in-progress · from spec 0013
+### 28. UI polish 2 · done · from spec 0013
 Two visual fixes, no new design (your call, 2026-11-09). On `/tool`, while a document opens, the spinner is small and sits at the top left of the left column, with the phase line beside it. On `/sign-in` and `/sign-up`, Clerk's form takes a moment to appear, and its place in the page looks empty meanwhile.
 **Done when:** on `/tool`, while a document opens, a larger spinner sits centred across and down in the left column's empty area beside the rail, with the phase line centred under it (centred across where the areas stack below `lg`), and the polite region is still one region, the same node throughout, each phase heard once and focus never moved (spec 0013, AC-14, AC-16, AC-20). On `/sign-in` and `/sign-up`, the same spinner with a short line naming the step (such as "Loading sign in…") holds the form's place until Clerk has loaded, then the form replaces it with the panel beside it unchanged; a screen reader hears the line, not the spinner; and if Clerk never loads, the spinner gives way to a short line saying so rather than turning for ever.
 **Also owed here:** `Spinner` in `src/ui` gains a larger size (today it has 16 and 20 pixels only) with its component test, and the loading line's words stay in the `(account)` group with the panel's, never in `src/ui` (spec 0003, INV-7). Playwright's build points Clerk at a fake instance where the form never loads, so a browser test can hold only the loading state; the change to the form is walked in the Clerk sandbox. Spec 0013's AC-16 (the opening state's layout) and AC-23 (the sign in pages) amended as built, and `scripts/make-brand.mjs` rerun only if the change shows in a brand picture (feature 26 changed the same opening state and left the product shot alone).
@@ -368,7 +368,7 @@ spec [0013](../specs/0013-brand-ui-refresh/index.md) · code in `src/ui/spinner.
   - [x] The opening phase line: `Spinner` gains `lg` (40 pixels) with its component test; while the polite region holds the left column (a file opening, or the worker lost), `StatusLine` is stacked, the large spinner centred and the line centred under it, and `area-live` centres it down the room beside the rail, which the grid stretches it to fill from `lg`; only classes change, the same three elements in both forms, so the region never remounts; "Checking your plan" is not heard twice as a file is chosen, though the open replaces that line with the first phase's in a new node, as before this feature (spec 0013 Follow-up); the idle, run and reload lines unchanged; no brand picture shows the opening state, so no `make-brand.mjs` rerun · AC-14, AC-16, AC-20
   - [x] The sign in wait: `ClerkWait` passed as Clerk's own `fallback` on both pages, which Clerk drops once its card has drawn: a white `Card` 400 pixels wide from `md` and 25rem tall, the large spinner and a polite line, "Loading sign in…" or "Loading sign up…"; the line becomes a `danger-ink` failure line once Clerk reports `error` or after `CLERK_WAIT_MS`, 20 s of ours for a start that hangs or is refused (your call, 2026-11-09), and the form still replaces it if Clerk loads later; the words in `CLERK_WAIT_TEXT` beside it in the account group; walked in the dev sandbox: the placeholder where the card draws at 1280, 800 and 390, the panel still (12 pixels only, from Clerk's development band), a hang shown at 20.4 s and a refused start at about 20 s, both by our timer (verify found a start answered 400 leaves Clerk's status at `loading`, so the build's 0.5 s did not hold), and a load held past 20 s replacing the line · AC-23
 - [x] Verify it: `/check verify UI polish 2`
-- [ ] Test it: `/test UI polish 2`
+- [x] Test it: `/test UI polish 2`
 
 ## Release 4: First paid capability
 
