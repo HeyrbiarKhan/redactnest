@@ -105,24 +105,24 @@ _From the scope's Done when for feature 28, with the failure rule you set on 202
 _From the scope's Done when for the three reopened items, built on `feat/ui-polish-2`: the home page's points, the header menu and `/tool`'s idle rail. The widths below are the windows to probe, never closer than 20 px to a switch. AC-7, AC-10 and AC-15 describe these as built since `/architect` recorded them on 2026-11-09._
 
 ### UI / manual
-- [ ] `/` at 320 and 390 px, billing on → the lockup and a "Menu" button on one row; Pricing, Account and Try it free not shown → AC-7
-- [ ] Tab to Menu and press Enter → the menu opens beneath the header, Pricing, Account and Try it free stacked in page order; focus stays on the button and the next Tab reaches Pricing; Chromium's accessibility tree shows the button expanded, and collapsed again once it closes (the browser's own popover state, not an `aria-expanded` attribute) → AC-7
-- [ ] With focus on a menu link, press Escape → the menu closes and focus is back on Menu; a press outside the open menu closes it too, and pressing Menu twice opens and closes it → AC-7
-- [ ] `/pricing` at 320 px with the menu open → Pricing carries `aria-current="page"` and its bar; `/tool` → the menu holds Pricing and Account only → AC-7, AC-20
-- [ ] From the open menu on `/`, follow Try it free → a full page load into `/tool`, every menu link a plain `a` → AC-7 (spec 0003, INV-10; spec 0012, INV-10)
-- [ ] `/` at 660 and 1280 px → no Menu button, and the lockup, Pricing, Account and Try it free on one row as before → AC-7
-- [ ] A billing off build at 320 px → no Menu button and no menu; the lockup alone on the first row and Try it free beneath it, as before → AC-7
-- [ ] Open the menu at 390 px, then widen the window to 844 px → the Menu button stays and the links show in one row in the panel; close it → the button goes and the links sit in the header's row → AC-7
-- [ ] In the Clerk sandbox at 390 px, `/sign-in`, `/sign-up` and `/account` → the menu opens, closes and marks Account current on the account pages, as on the other pages (Playwright's build cannot show these pages in a browser) → AC-7, AC-24
-- [ ] `/` at 390 and 700 px → each of the three points centred, its icon over its title and line; at 800 and 1280 px → side by side, lined up at the start as before → AC-10
-- [ ] `/tool` idle at 390 and 800 px, and at 1280 px with 200% text → the steps list centred as a block, its circles in one line with the joins meeting them, and the lock line centred under it; at 1280 px at the default size → both at the start of the rail, as before → AC-15
-- [ ] `/tool` with a document open, below the grid's `lg` → the rail's lock line and the action panel's lock line as before, neither newly centred → AC-15, AC-16
-- [ ] axe on `/`, `/pricing` and `/tool` at 320 px with the menu shut and open, on `/` in forced colours with it open, and on `/tool` idle at 390 px → no violations → AC-26
+- [x] `/` at 320 and 390 px, billing on → the lockup and a "Menu" button on one row; Pricing, Account and Try it free not shown → AC-7
+- [x] Tab to Menu and press Enter → the menu opens beneath the header, Pricing, Account and Try it free stacked in page order; focus stays on the button and the next Tab reaches Pricing; Chromium's accessibility tree shows the button expanded, and collapsed again once it closes (the browser's own popover state, not an `aria-expanded` attribute) → AC-7
+- [x] With focus on a menu link, press Escape → the menu closes and focus is back on Menu; a press outside the open menu closes it too, and pressing Menu twice opens and closes it → AC-7
+- [x] `/pricing` at 320 px with the menu open → Pricing carries `aria-current="page"` and its bar; `/tool` → the menu holds Pricing and Account only → AC-7, AC-20
+- [x] From the open menu on `/`, follow Try it free → a full page load into `/tool`, every menu link a plain `a` → AC-7 (spec 0003, INV-10; spec 0012, INV-10) (verify on 2026-11-09 followed Pricing and Account the same way: each a new document request, a `navigate` entry and the page's own state gone)
+- [x] `/` at 660 and 1280 px → no Menu button, and the lockup, Pricing, Account and Try it free on one row as before → AC-7
+- [x] A billing off build at 320 px → no Menu button and no menu; the lockup alone on the first row and Try it free beneath it, as before → AC-7 (verify's build set the seven billing values blank, so `.env.local`'s keys never reached it; `/pricing` answered 404, and axe was clean)
+- [x] Open the menu at 390 px, then widen the window to 844 px → the Menu button stays and the links show in one row in the panel; close it → the button goes and the links sit in the header's row → AC-7
+- [x] In the Clerk sandbox at 390 px, `/sign-in`, `/sign-up` and `/account` → the menu opens, closes and marks Account current on the account pages, as on the other pages (Playwright's build cannot show these pages in a browser) → AC-7, AC-24 (verify on 2026-11-09: Account current on `/account` only, and on nothing on sign in or sign up, as AC-7 lists; Try it free from `/account` a full page load with no Clerk left on `/tool`)
+- [x] `/` at 390 and 700 px → each of the three points centred, its icon over its title and line; at 800 and 1280 px → side by side, lined up at the start as before → AC-10
+- [x] `/tool` idle at 390 and 800 px, and at 1280 px with 200% text → the steps list centred as a block, its circles in one line with the joins meeting them, and the lock line centred under it; at 1280 px at the default size → both at the start of the rail, as before → AC-15 (each join 4 px below one circle and 4 px above the next, 8 px at 200% text)
+- [x] `/tool` with a document open, below the grid's `lg` → the rail's lock line and the action panel's lock line as before, neither newly centred → AC-15, AC-16 (walked at 390 and 800 px on `two-pages.pdf` with the engine held and on `detect-email.pdf` in review; `action-panel.tsx` and `lock-line.tsx` match main)
+- [x] axe on `/`, `/pricing` and `/tool` at 320 px with the menu shut and open, on `/` in forced colours with it open, and on `/tool` idle at 390 px → no violations → AC-26 (forced colours walked at 320 px)
 
 ### Commands
-- [ ] `pnpm exec vitest run --project component tests/component/ui/layout.test.tsx tests/component/app/site-nav.test.tsx` → pass, the menu cases among them → AC-7
-- [ ] `pnpm exec playwright test tests/e2e/shell.spec.ts tests/e2e/design-system.spec.ts --project=chromium` → pass, "folds the links into a menu at 320 pixels" and the target size checks among them → AC-7, AC-26
-- [ ] `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm test:e2e` → pass → AC-7, AC-10, AC-15, AC-26
+- [x] `pnpm exec vitest run --project component tests/component/ui/layout.test.tsx tests/component/app/site-nav.test.tsx` → pass, the menu cases among them → AC-7
+- [x] `pnpm exec playwright test tests/e2e/shell.spec.ts tests/e2e/design-system.spec.ts --project=chromium` → pass, "folds the links into a menu at 320 pixels" and the target size checks among them → AC-7, AC-26
+- [x] `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm test:e2e` → pass → AC-7, AC-10, AC-15, AC-26 (verify on 2026-11-09: 414 e2e passed; `pnpm test` passed but for one phone detector stopwatch in `detect-adversarial.test.ts`, 2188 ms against 2000 under the parallel pool, which passed alone, 1563 of 1563, with nothing under `src/detect` changed on this branch)
 
 ### Acceptance-criteria coverage
 - AC-7: the eight header steps, the sandbox step and both test commands · AC-10: the points step · AC-15: the two idle rail steps · AC-16: the open document step · AC-20: the current page step · AC-24: the sandbox step · AC-26: the axe step and the e2e command
