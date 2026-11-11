@@ -1,0 +1,170 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [10 0 R 12 0 R 14 0 R 16 0 R 18 0 R 20 0 R 22 0 R] /Count 7 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<<  /Length 347 >>
+stream
+/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def
+/CMapName /Adobe-Identity-UCS def
+/CMapType 2 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+1 beginbfrange
+<0000> <FFFF> <0000>
+endbfrange
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end
+
+endstream
+endobj
+6 0 obj
+<< /Type /FontDescriptor /FontName /RedactNestUnicode /FontBBox [0 -200 1000 800] /Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 /ItalicAngle 0 /Flags 4 >>
+endobj
+7 0 obj
+<< /Type /Font /Subtype /CIDFontType2 /BaseFont /RedactNestUnicode /CIDToGIDMap /Identity /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor 6 0 R /DW 600 /W [1611 1618 0 1456 1479 0] >>
+endobj
+8 0 obj
+<< /Type /Font /Subtype /Type0 /BaseFont /RedactNestUnicode /Encoding /Identity-H /DescendantFonts [7 0 R] /ToUnicode 5 0 R >>
+endobj
+9 0 obj
+<<  /Length 579 >>
+stream
+BT /F1 12 Tf 72 740 Td (Paid to JOSE today, and Herr Müller wrote back.) Tj ET
+BT /F1 12 Tf 72 722 Td (Acme Ltd signed the lease on time.) Tj ET
+BT /F1 12 Tf 72 704 Td (The tenant is Acme) Tj ET
+BT /F1 12 Tf 72 686 Td (Ltd from May onwards.) Tj ET
+BT /F1 12 Tf 72 668 Td (The landlord Smith-) Tj ET
+BT /F1 12 Tf 72 650 Td (son agreed, and Jean-) Tj ET
+BT /F1 12 Tf 72 632 Td (Luc witnessed it.) Tj ET
+BT /F1 11 Tf 72 560 Td (The deposit is paid by) Tj ET
+BT /F1 11 Tf 72 546 Td (Acme) Tj ET
+BT /F1 11 Tf 360 560 Td (Ltd in full) Tj ET
+BT /F1 11 Tf 360 546 Td (before May.) Tj ET
+
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R >>  >> /Contents 9 0 R >>
+endobj
+11 0 obj
+<<  /Length 625 >>
+stream
+BT /F1 12 Tf 72 740 Td (JohnSmith signed, and SmithDate was set.) Tj ET
+BT /F1 12 Tf 72 722 Td (Smithson and SMITHSON are other people.) Tj ET
+BT /F1 12 Tf 72 704 Td (Annual planning starts in May.) Tj ET
+BT /F1 12 Tf 72 686 Td (Call 0958Mobile or write to Smith2026.) Tj ET
+BT /F1 12 Tf 72 668 Td (Smith Jones and SmithJones both came.) Tj ET
+BT /F1 12 Tf 72 650 Td (Invoice INV 2026 0042 and INV20260042 were paid.) Tj ET
+BT /F1 12 Tf 72 632 Td (Mc Donald, S M I T H, OBrien and O Brien signed.) Tj ET
+BT /F1 12 Tf 72 614 Td (J Smith and the landlord Smith) Tj ET
+BT /F1 12 Tf 72 596 Td (son, whose hyphen was lost.) Tj ET
+
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R >>  >> /Contents 11 0 R >>
+endobj
+13 0 obj
+<<  /Length 202 >>
+stream
+BT /U 14 Tf 72 740 Td <06450648064a064406270020062f0651064e0645064e062d064f06450020064406270642> Tj ET
+BT /U 14 Tf 72 710 Td <05dd05dc05d505db05dc002005dd05b905d505dc05b805c105e9002005e805de05d0> Tj ET
+
+endstream
+endobj
+14 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R /U 8 0 R >>  >> /Contents 13 0 R >>
+endobj
+15 0 obj
+<<  /Length 417 >>
+stream
+BT /F1 12 Tf 72 740 Td (Covered: Acme Ltd here.) Tj ET
+0 0 0 rg 124 735 50.7 19 re f
+BT /F1 12 Tf 72 700 Td (Contact: ) Tj /Span << /ActualText (Smith) >> BDC (Smlth) Tj EMC ( today.) Tj ET
+BT /F1 12 Tf 72 660 Td (See ) Tj /Span << /ActualText (Figure 2) >> BDC (Jane Doe) Tj EMC ( below.) Tj ET
+BT /F1 12 Tf 72 620 Td (Write to ) Tj /Span << /ActualText (ann@example.com) >> BDC (Ann Lee here) Tj EMC ( soon.) Tj ET
+
+endstream
+endobj
+16 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R >>  >> /Contents 15 0 R >>
+endobj
+17 0 obj
+<<  /Length 119 >>
+stream
+BT /F1 12 Tf 72 740 Td (Page five holds one more line.) Tj ET
+BT /F1 12 Tf 72 722 Td (The rent was paid to Acme) Tj ET
+
+endstream
+endobj
+18 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R >>  >> /Contents 17 0 R >>
+endobj
+19 0 obj
+<<  /Length 147 >>
+stream
+BT /F1 12 Tf 72 740 Td (Ltd on the first of May.) Tj ET
+BT /F1 12 Tf 72 722 Td (The last payee is Acme) Tj ET
+BT /F1 9 Tf 300 40 Td (Page 6) Tj ET
+
+endstream
+endobj
+20 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R >>  >> /Contents 19 0 R >>
+endobj
+21 0 obj
+<<  /Length 60 >>
+stream
+BT /F1 12 Tf 72 740 Td (Ltd again, after the footer.) Tj ET
+
+endstream
+endobj
+22 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R >>  >> /Contents 21 0 R >>
+endobj
+xref
+0 23
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000158 00000 n 
+0000000255 00000 n 
+0000000350 00000 n 
+0000000749 00000 n 
+0000000924 00000 n 
+0000001165 00000 n 
+0000001307 00000 n 
+0000001938 00000 n 
+0000002077 00000 n 
+0000002755 00000 n 
+0000002895 00000 n 
+0000003150 00000 n 
+0000003299 00000 n 
+0000003769 00000 n 
+0000003909 00000 n 
+0000004081 00000 n 
+0000004221 00000 n 
+0000004421 00000 n 
+0000004561 00000 n 
+0000004673 00000 n 
+trailer
+<< /Size 23 /Root 1 0 R >>
+startxref
+4813
+%%EOF
