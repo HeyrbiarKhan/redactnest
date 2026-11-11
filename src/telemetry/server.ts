@@ -64,8 +64,9 @@ export const TELEMETRY_USER_AGENT =
 /**
  * Umami's limit on an event's properties: "Objects: Max of 50 properties",
  * docs.umami.is/docs/tracker-functions, read 30 October 2026. The largest
- * event, `redaction-completed` with every kind present, flattens to 38, so it
- * is sent whole and never split (AC-21).
+ * event, `redaction-completed` with every kind present, flattens to 43 (38
+ * before spec 0017 added `term` to its three by kind fields, `terms` and
+ * `termsSetAside`), so it is sent whole and never split (AC-21).
  */
 export const UMAMI_MAX_PROPERTIES = 50;
 

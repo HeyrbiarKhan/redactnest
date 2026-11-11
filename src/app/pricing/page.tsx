@@ -63,6 +63,8 @@ export default function PricingPage() {
               <PlanFeatures
                 items={[
                   `Up to ${config.maxPages} pages a document`,
+                  // Spec 0017, AC-26: Pro does this now, its cap from config.
+                  `Custom terms: up to ${config.maxCustomTerms} names, numbers or phrases, found wherever they appear`,
                   `Everything in ${FREE_PLAN.name}`,
                 ]}
               />

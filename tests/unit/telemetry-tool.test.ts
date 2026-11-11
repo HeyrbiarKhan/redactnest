@@ -72,6 +72,8 @@ const match = (
   tickedByDefault: blocked === null,
   blocked,
   concealed: null,
+  term: null,
+  termNotes: [],
 });
 
 const MATCHES: readonly ReviewMatch[] = [
@@ -88,7 +90,7 @@ const run = (start: ToolSession, ...actions: SessionAction[]): ToolSession =>
   actions.reduce(sessionReducer, start);
 
 const chosen = (entitlement: EntitlementSnapshot = FREE) =>
-  run(IDLE, { type: "file-chosen", jobId: "job-1", file: FILE, entitlement });
+  run(IDLE, { type: "file-chosen", jobId: "job-1", file: FILE, entitlement, terms: [] });
 
 const reviewing = (entitlement: EntitlementSnapshot = FREE) =>
   run(chosen(entitlement), { type: "opened", summary: SUMMARY, matches: MATCHES });
@@ -169,7 +171,11 @@ describe("an open", () => {
 
 describe("a run", () => {
   it("that completes sends redaction-completed from the result card's counts", () => {
-    const ticked = run(redacting(), { type: "redacted", outcome: OUTCOME });
+    const ticked = run(redacting(), {
+      type: "redacted",
+      outcome: OUTCOME,
+      removedByTerm: [],
+    });
     expect(toolEvents(redacting(), ticked)).toEqual([
       {
         name: "redaction-completed",
@@ -178,6 +184,9 @@ describe("a run", () => {
         blockedByKind: { date: "1" },
         blockedByReason: { "replacement-text": "1" },
         stripped: ["xmp-metadata", "annotations"],
+        // Spec 0017, AC-24: no term searched or set aside in this job.
+        terms: "0",
+        termsSetAside: "0",
         tier: "free",
         account: "none",
       },
@@ -190,15 +199,22 @@ describe("a run", () => {
       { type: "tick-toggled", id: asMatchId("c") },
       { type: "redact-started" },
     );
-    const [event] = toolEvents(start, run(start, { type: "redacted", outcome: OUTCOME }));
+    const [event] = toolEvents(
+      start,
+      run(start, { type: "redacted", outcome: OUTCOME, removedByTerm: [] }),
+    );
     expect(event).toMatchObject({ unticked: { phone: "1" } });
   });
 
   it("sends again on a rerun", () => {
-    const complete = run(redacting(), { type: "redacted", outcome: OUTCOME });
+    const complete = run(redacting(), {
+      type: "redacted",
+      outcome: OUTCOME,
+      removedByTerm: [],
+    });
     const rerun = run(complete, { type: "downloaded" }, { type: "rerun" });
     expect(toolEvents(complete, rerun)).toEqual([]);
-    const again = run(rerun, { type: "redacted", outcome: OUTCOME });
+    const again = run(rerun, { type: "redacted", outcome: OUTCOME, removedByTerm: [] });
     expect(toolEvents(rerun, again)).toHaveLength(1);
   });
 
@@ -242,7 +258,7 @@ describe("a lost worker", () => {
   });
 
   it("sends nothing on the silent retry, whose two actions land in one render", () => {
-    const retried = run(chosen(), { type: "worker-lost" }, { type: "retry" });
+    const retried = run(chosen(), { type: "worker-lost" }, { type: "retry", terms: [] });
     expect(retried.state).toBe("opening");
     expect(toolEvents(chosen(), retried)).toEqual([]);
   });
@@ -250,7 +266,7 @@ describe("a lost worker", () => {
   it("sends once, not again while it stays lost or as it retries", () => {
     const lost = run(reviewing(), { type: "worker-lost" });
     expect(toolEvents(lost, lost)).toEqual([]);
-    expect(toolEvents(lost, run(lost, { type: "retry" }))).toEqual([]);
+    expect(toolEvents(lost, run(lost, { type: "retry", terms: [] }))).toEqual([]);
   });
 });
 
@@ -270,7 +286,11 @@ describe("everything else", () => {
     [
       "a download",
       () => {
-        const complete = run(redacting(), { type: "redacted", outcome: OUTCOME });
+        const complete = run(redacting(), {
+          type: "redacted",
+          outcome: OUTCOME,
+          removedByTerm: [],
+        });
         return [complete, run(complete, { type: "downloaded" })];
       },
     ],
@@ -284,6 +304,7 @@ describe("everything else", () => {
           jobId: "job-2",
           file: FILE,
           entitlement: FREE,
+          terms: [],
         }),
       ],
     ],
@@ -295,7 +316,11 @@ describe("everything else", () => {
 
 describe("what an event can hold", () => {
   it("parses, and holds no file name, no document text and no match", () => {
-    const complete = run(redacting(), { type: "redacted", outcome: OUTCOME });
+    const complete = run(redacting(), {
+      type: "redacted",
+      outcome: OUTCOME,
+      removedByTerm: [],
+    });
     const events = [
       ...toolEvents(chosen(), reviewing()),
       ...toolEvents(redacting(), complete),
