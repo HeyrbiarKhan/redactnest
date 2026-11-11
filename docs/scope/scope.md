@@ -23,7 +23,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 10 | Billing & paid plan | Release 2 | done |
 | 11 | Telemetry & error monitoring | Release 3 | done |
 | 12 | Remaining detectors | Release 3 | done |
-| 13 | Custom terms | Release 4 | planned |
+| 13 | Custom terms | Release 4 | in-progress |
 | 14 | Manual rectangle redaction | Release 5 | planned |
 | 15 | Marketing site | Release 6 | planned |
 | 16 | Security & how it works page | Release 6 | planned |
@@ -376,10 +376,18 @@ spec [0013](../specs/0013-brand-ui-refresh/index.md) · code in `src/ui/spinner.
 
 ## Release 4: First paid capability
 
-### 13. Custom terms · needs a decision
+### 13. Custom terms · in-progress
 Type the names, reference numbers or phrases to remove and they go everywhere they appear. The first paid capability with real substance behind it.
 **Done when:** a paid user can enter terms and every occurrence is removed from the content stream, including matches broken across line breaks and hyphenation, and the summary reports how many were removed.
-- [ ] Design it (spec): `/architect custom terms`
+spec [0017](../specs/0017-custom-terms/index.md)
+- [x] Design it (spec): `/architect custom terms`
+- [ ] Build it: `/develop custom terms`
+  - [ ] A term found and removed: the protocol's `MatchKind` and `find-terms`, the fold module, the exact matcher, terms in the find step, the worker's search and gate, the session's term states, the panel and term groups, the result card per term, and the privacy test · AC-1, AC-3 to AC-5, AC-7 to AC-9, AC-12 to AC-16, AC-18, AC-19, AC-21 to AC-23, AC-27, AC-32
+  - [ ] Never half found: the joined, spaced and marks notes, matches carried across a page break, the adversarial budget, and `terms.pdf` · AC-10 to AC-12, AC-21, AC-29, AC-30, AC-32, AC-33
+  - [ ] The tab's list: kept across files with the kept line, the locked Free panel, not searched and Set aside, failed searches, paste with grouped refusals, and Remove all · AC-2 to AC-6, AC-9, AC-17, AC-18, AC-20, AC-22
+  - [ ] Measured, counted and said: the open and paste budgets, telemetry, claims C3 and C14, Pricing's line, the amends to older specs, and your read of every word · AC-24 to AC-26, AC-28, AC-31
+- [ ] Verify it: `/check verify custom terms`
+- [ ] Test it: `/test custom terms`
 
 ## Release 5: Second paid capability
 
@@ -453,6 +461,9 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **A natural text corpus for detector noise**: spec 0015's noise figures come from synthetic shapes and token soup; a corpus of made up but natural documents would tighten them, the two digit year and numbered list figures first · needs a decision · from spec 0015
 - **Read the first month of counts**: once feature 11 has run for a month (it went live on 2026-11-08, so from about 2026-12-08), bring its numbers to `/architect` for spec 0006's thresholds and `off-page-picture`, spec 0005's `replacement-text` refusals and spec 0007's named refused item (*Name the item behind a refused run*, above) · needs a decision · from spec 0016
 - **Automated browsers in the counts**: if page visits look inflated, measure, then consider skipping `navigator.webdriver`, keeping the e2e flag so the privacy proof still runs · needs a decision · from spec 0016
+- **A custom term split by a running footer**: spec 0017 carries a page's end into the next page, so a term split by a page break is found, but text drawn between the two parts in reading order (a running footer or a page number) still keeps them apart. Measure how often real documents do this before any design · needs a decision · from spec 0017
+- **Patterns in a custom term**: a term today is literal text; a reference number's shape (`INV-` and any four digits) or a wildcard would be a decision of its own, with its own noise measured · needs a decision · from spec 0017
+- **An all capitals edge for custom terms**: `SMITHDate` lists nothing for `Smith`, because no case change marks the edge (spec 0017, AC-10). Measure the noise on natural text before any rule widens · needs a decision · from spec 0017
 - **Cookie consent banner**: deliberately not built. The only cookies are the strictly necessary auth ones and analytics is cookieless, so no consent is required. Kept here so it does not get added later out of habit.
 
 ## Legend
