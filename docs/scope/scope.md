@@ -39,6 +39,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 26 | UI polish | Release 3 | done |
 | 27 | Detector and fixture gates | Release 3 | done |
 | 28 | UI polish 2 | Release 3 | done |
+| 29 | Home page reflow | Release 6 | planned |
 
 ## Foundations
 
@@ -396,12 +397,19 @@ A small set of pages on what this audience actually searches for, since search i
 **Also owed here:** the search pages reuse the shell, `FeatureList` and the social card's composition (spec 0013). Per page social cards, and whether a manifest is worth a policy change, are this feature's calls.
 - [ ] Design it (spec): `/architect marketing site`
 
+### 29. Home page reflow · from spec 0013
+At 320 pixels wide with text at 200%, the home page's main content scrolls sideways, with the header's menu shut or open. It is older than feature 28, whose menu is not the cause. Spec 0013's AC-26 checks 320 pixels and 200% text apart, so no criterion asks for both at once, but a visitor who needs both meets it. Built beside feature 15, since the search pages reuse the same shell and `FeatureList` (your call, 2026-11-11).
+**Done when:** at 320 pixels with 200% text, `/` has no sideways scroll with the menu shut or open; the element that was wider than the window wraps or shrinks rather than being clipped; wider screens look as today; and a browser test holds 320 pixels and 200% text together on `/`, which feature 15's search pages can join.
+**Also owed here:** find the wide element first, with `/debug` if it is not obvious. Spec 0013's AC-26 amended to name the combined case, and `scripts/make-brand.mjs` rerun only if a brand picture changes (each is drawn at desktop width, so none should).
+- [ ] Build it: `/develop home page reflow`
+
 ### 16. Security & how it works page · Alpha
 The page that closes the sale for HR, legal and healthcare buyers: what in memory processing means, what the logs do and do not hold, and why covering text with a box is not redaction.
 **Done when:** the page describes the real implementation accurately, with no claim the code does not support.
 **Also owed here:** a sticky note or a file attachment that shows in the source is flattened into the page like any other visible annotation (spec 0004, AC-22), so its icon stays as a mark on the page even though the note's text and the attached file are gone. Say so plainly, so the page does not suggest every trace of them was removed.
 **Also owed here:** the honest limits from spec 0006. A picture reaching past the crop keeps its hidden pixels, and text a clip hides wholly stays in the file. Both are warned about and the file is named partly redacted, but neither is removed. The page warnings lean toward saying too much, so a brochure photo or a thin legal line can raise one.
 **Also owed here:** the plan check (claim C5) and why the page cap is honesty based (spec 0012), linking the privacy policy's claims rather than restating them (spec 0011).
+**Also owed here:** what the counts and error reports hold, and what they never hold (spec 0016), linking claims C14 to C16 rather than restating them.
 - [ ] Build it: `/develop security & how it works page`
 
 ### 23. Legal review · needs a decision · Alpha · from spec 0011
@@ -412,7 +420,7 @@ The lawyer questions launch left open, asked once RedactNest has 100+ users, on 
 ### 17. Data processing agreement · Prototype
 Something a business buyer can sign, ready before somebody asks for it under time pressure.
 **Done when:** a DPA is available, reflects the no storage reality, and lists any subprocessors.
-**Also owed here:** it lists every entry in `OUTSIDE_SERVICES` (spec 0011), with Clerk and Polar as processors, as Polar's own DPA says (spec 0012). Feature 23's answer on Polar may change Polar's role.
+**Also owed here:** it lists every entry in `OUTSIDE_SERVICES` (spec 0011), Umami and Sentry included since spec 0016, with Clerk and Polar as processors, as Polar's own DPA says (spec 0012). Feature 23's answer on Polar may change Polar's role.
 - [ ] Build it: `/develop data processing agreement`
 
 ## Deferred
@@ -443,7 +451,7 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **A date piece that starts with punctuation**: a new date a higher kind's row holds in part is listed as its free pieces, and the piece rule trims whitespace only, so `212 918 8665 1119 21. June 2014` lists `. June 2014` (pinned in `detect.test.ts`). Harmless to the bar, but the row reads oddly in the checklist and removes the full stop. Trim a date piece's leading punctuation, measured through `detect` against main first (the review's third Minor) · needs a decision · from spec 0015
 - **Date variants still missed after feature 25**: `A.D.` or `in the year` before a year, number words (`twenty-seventh day`), a day range in a new form (`3-5 Jan-2026`), a written year first date with spaces (`2026 Sep 27`), uneven spacing round a separator, an ordinal or mixed dashes in a flush form, a space before a comma, a number right before a month first date read as a two digit year (`19 December, 16 2015`), and two dates joined where one is unseparated (`20260927-20260928`, which main misses too). Bring one to `/architect` when a review or a visitor meets it, measured through `detect` against main · needs a decision · from spec 0015
 - **A natural text corpus for detector noise**: spec 0015's noise figures come from synthetic shapes and token soup; a corpus of made up but natural documents would tighten them, the two digit year and numbered list figures first · needs a decision · from spec 0015
-- **Read the first month of counts**: once feature 11 has run for a month, bring its numbers to `/architect` for spec 0006's thresholds and `off-page-picture`, spec 0005's `replacement-text` refusals and spec 0007's named refused item (*Name the item behind a refused run*, above) · needs a decision · from spec 0016
+- **Read the first month of counts**: once feature 11 has run for a month (it went live on 2026-11-08, so from about 2026-12-08), bring its numbers to `/architect` for spec 0006's thresholds and `off-page-picture`, spec 0005's `replacement-text` refusals and spec 0007's named refused item (*Name the item behind a refused run*, above) · needs a decision · from spec 0016
 - **Automated browsers in the counts**: if page visits look inflated, measure, then consider skipping `navigator.webdriver`, keeping the e2e flag so the privacy proof still runs · needs a decision · from spec 0016
 - **Cookie consent banner**: deliberately not built. The only cookies are the strictly necessary auth ones and analytics is cookieless, so no consent is required. Kept here so it does not get added later out of habit.
 
