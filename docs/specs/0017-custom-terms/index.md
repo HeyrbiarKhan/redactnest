@@ -1,7 +1,7 @@
 # 0017. Custom terms
 
 **Date**: 2026-11-11
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 

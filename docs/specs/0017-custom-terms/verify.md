@@ -36,3 +36,18 @@ Run the tool at `/tool` against a production build with Playwright's environment
 - [ ] The telemetry type gate and parser cover `term` in the by kind fields and `terms` and `termsSetAside`; no event field holds a term or a `TermId` → AC-24
 - [ ] The privacy page's C3 and C14 read as AC-25 says, `policy-changes.ts` has the dated entry, and both policies are byte for byte as before; Pricing's Pro card has the custom terms line with the cap from `config` → AC-25, AC-26
 - [ ] The amended specs read as *Amends* says → AC-31
+
+## As built · updated 2026-11-11
+
+_Added by `/develop`: what the build found and where its own checks live, for `/check verify` to start from._
+
+- [ ] `pnpm exec playwright test tests/e2e/terms.spec.ts` → five cases pass: a Pro term found, removed and read back from the download; Remove and focus on the field; not found; a refused term kept in the field; the locked Free panel, axe clean throughout → AC-1 to AC-3, AC-5, AC-14 to AC-16, AC-21, AC-22
+- [ ] `pnpm exec playwright test tests/e2e/privacy.spec.ts -g "typed custom term"` → passes → AC-23
+- [ ] `pnpm exec vitest run tests/component/terms-flow.test.tsx` → the kept list across files, Start over and its kept line, a 55 line paste's grouped refusals, the Free job's not searched terms holding Make until set aside (axe clean), and a failed search with Try again → AC-2 to AC-6, AC-17 to AC-20, AC-27
+- [ ] `pnpm exec vitest run tests/unit/terms-engine.test.ts tests/unit/detect-terms.test.ts tests/unit/session-terms.test.ts tests/unit/engine-worker.test.ts` → the matcher's examples, `terms.pdf` page by page through the real MuPDF (20 ticked rows redacted alone and together, the two page break parts, a term inside an address counted once under each kind), every session edge, and the worker's gate → AC-7 to AC-13, AC-21, AC-27, AC-30, AC-32, AC-33
+- [ ] `pnpm exec playwright test --project=speed --no-deps` → as measured on 2026-11-11: opens with 50 kept terms of 2,809 ms (50 unfound terms of 100 characters), 2,665 ms (the found words) and 2,264 ms (`Jo` alone), against 2,353 ms with no terms; a pasted batch of the found words 1,236 ms; slowest read 46 ms at open and 12 ms in a search → AC-28
+- [ ] AC-28's found list: `detect-dense.pdf` holds 27 distinct words of 4 to 12 letters, not 50, so the case uses all 27; and its most frequent two letter word, `Jo`, lists 55 rows, not thousands. A denser list needs a fixture of its own (a decision for `/architect`)
+- [ ] AC-8 as built: each hyphen right before a line break is read both ways as two linear readings, so a match is always its term's length long and its start comes in one step (AC-29). One match that needs one such hyphen read as nothing and another read as a hyphen is not read exactly: the spaced reading lists it unticked, never missed. Check `Jean-` then `Luc Smith-` then `son` for `Jean-Luc Smithson` lists a spaced row
+- [ ] AC-21 as built: the four joined rows on `terms.pdf` page 2 each redact alone without an overreach refusal (`tests/unit/terms-engine.test.ts` does not tick them; the scratch probe did). A joined row's refusal remains possible on other layouts
+- [ ] AC-29 as built: `tests/unit/detect-adversarial.test.ts`'s term case covers six shapes, the slowest (hyphenated terms on lines ending in a hyphen) about 0.5 s of CPU alone
+- [ ] Stopwatches in the full parallel `pnpm test`: the phone detector's random groups case and `cost.test.ts` failed under load on 2026-11-11 and passed alone, as they do on main
