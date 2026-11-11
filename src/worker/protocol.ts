@@ -119,6 +119,63 @@ export const DETECTOR_KINDS = [
 export type DetectorKind = (typeof DETECTOR_KINDS)[number];
 
 /**
+ * Every kind a checklist row can be: each detector's, and `term`, a place a
+ * custom term the visitor typed was found. Spec 0017, INV-10: `term` is a
+ * `MatchKind`, never a `DetectorKind`, so every record over the detectors
+ * (`DETECTORS`, `PRECEDENCE`, `DETECTOR_LABELS`, `lookedFor`) stays as it
+ * was, and only what counts rows or removals by kind moves to this list.
+ */
+export const MATCH_KINDS = Object.freeze([...DETECTOR_KINDS, "term"] as const);
+
+export type MatchKind = (typeof MATCH_KINDS)[number];
+
+/**
+ * Why a term row was left unticked. Spec 0017, AC-10, AC-11, AC-32 and
+ * AC-33. A ticked term row is an exact whole word match (INV-4); every other
+ * match is listed unticked with one or more of these, in this order:
+ * `joined` (glued to other text where a word break was likely lost),
+ * `spaced` (equal only once spacing, hyphens, apostrophes and full stops are
+ * left out), `marks` (vowel signs or other marks differ, outside Latin, Greek
+ * and Cyrillic) and `page-break` (one part of a match split across a page
+ * break). A closed set, so a note says which rule held and nothing more.
+ */
+export const TERM_NOTES = Object.freeze([
+  "joined",
+  "spaced",
+  "marks",
+  "page-break",
+] as const);
+
+export type TermNote = (typeof TERM_NOTES)[number];
+
+declare const termIdBrand: unique symbol;
+
+/**
+ * A custom term's name, minted on the page with `crypto.randomUUID()` (spec
+ * 0017, *Data model sketch*). Opaque like `MatchId`: the worker keys its rows
+ * by it and never learns anything from it.
+ */
+export type TermId = string & { readonly [termIdBrand]: "TermId" };
+
+/** Mint one. Only the page's list calls this. */
+export function asTermId(value: string): TermId {
+  return value as TermId;
+}
+
+/**
+ * One term as the page hands it to the worker. Spec 0017, *API surface*.
+ *
+ * `text` is the visitor's own words, as typed, trimmed, with inner whitespace
+ * collapsed (`prepareTerm`). It lives in the worker's request for one read and
+ * is never stored, logged or posted back (INV-1); what comes back is page text,
+ * as for every row.
+ */
+export interface TermQuery {
+  readonly id: TermId;
+  readonly text: string;
+}
+
+/**
  * Why a found match cannot be ticked. Spec 0005, AC-8.
  *
  * Each names a refusal the engine would make if the match were ticked, checked
@@ -211,7 +268,19 @@ export function asMatchId(value: string): MatchId {
  */
 export interface ReviewMatch {
   readonly id: MatchId;
-  readonly type: DetectorKind;
+  /** A detector's kind, or `term` for a custom term's row (spec 0017). */
+  readonly type: MatchKind;
+  /**
+   * The term this row was searched under, or `null` for a detector's row.
+   * The page's own id, echoed back, so the checklist can group the row under
+   * the term and drop it when the term is removed (spec 0017, AC-5).
+   */
+  readonly term: TermId | null;
+  /**
+   * Why a term row was left unticked, in `TERM_NOTES` order. Empty for an
+   * exact term row and for every detector row (spec 0017, AC-11).
+   */
+  readonly termNotes: readonly TermNote[];
   /** One based, for display. Converted in the worker. */
   readonly page: number;
   readonly text: string;
@@ -250,7 +319,7 @@ export interface ReviewMatch {
  * Counts and enumerated kinds only, so feature 11 may log it.
  */
 export interface DetectionCounts {
-  readonly foundByType: Readonly<Partial<Record<DetectorKind, number>>>;
+  readonly foundByType: Readonly<Partial<Record<MatchKind, number>>>;
   readonly blockedByReason: Readonly<Partial<Record<BlockedReason, number>>>;
 }
 
@@ -264,11 +333,11 @@ export interface DetectionCounts {
  */
 export interface ResultCounts {
   /** From `outcome.removedByType`. */
-  readonly removedByType: Readonly<Partial<Record<DetectorKind, number>>>;
+  readonly removedByType: Readonly<Partial<Record<MatchKind, number>>>;
   /** Tickable matches left unticked, by kind. */
-  readonly untickedByType: Readonly<Partial<Record<DetectorKind, number>>>;
+  readonly untickedByType: Readonly<Partial<Record<MatchKind, number>>>;
   /** Blocked matches, by kind. They stay in the file whatever was ticked. */
-  readonly blockedByType: Readonly<Partial<Record<DetectorKind, number>>>;
+  readonly blockedByType: Readonly<Partial<Record<MatchKind, number>>>;
   /** Blocked matches, by reason. */
   readonly blockedByReason: Readonly<Partial<Record<BlockedReason, number>>>;
   /** The sum of `removedByType`. */
@@ -321,6 +390,14 @@ export interface EntitlementSnapshot {
 export interface EngineLimits {
   readonly maxBytes: number;
   readonly maxPages: number;
+  /**
+   * How many custom terms one request may carry: `config.maxCustomTerms` for
+   * a `paid` job, 0 for a `free` one, so the worker refuses terms on a job
+   * whose snapshot allows none (spec 0017, AC-27, INV-2).
+   */
+  readonly maxTerms: number;
+  /** The longest term, in code points: `config.maxTermChars`. */
+  readonly maxTermChars: number;
 }
 
 /**
@@ -385,7 +462,12 @@ export interface DocumentSummary {
  */
 export interface RedactionOutcome {
   readonly pageCount: number;
-  readonly removedByType: Readonly<Partial<Record<DetectorKind, number>>>;
+  /**
+   * Every `MatchKind`, `term` included (spec 0017, AC-21). How many each
+   * term removed travels beside this, never inside it (`removedByTerm`), so
+   * no `TermId` reaches a `LoggablePayload` (INV-9).
+   */
+  readonly removedByType: Readonly<Partial<Record<MatchKind, number>>>;
   /**
    * Pages per finding, from the open summary (spec 0006, AC-28), so feature 11
    * can tell which blind spot is common without a word of content. A finding
@@ -434,6 +516,7 @@ export type LoggablePayload =
   | EngineErrorKind
   | ProgressPhase
   | DetectorKind
+  | MatchKind
   | SanitizedKind
   | PageFinding;
 
@@ -460,6 +543,23 @@ export interface OpenRequest extends Envelope {
   readonly limits: EngineLimits;
   /** `config.matchContextChars`. Never a literal (INV-9). */
   readonly contextChars: number;
+  /**
+   * The tab's kept list, searched in the same pass as detection (spec 0017,
+   * AC-6 and AC-9). Empty for a `free` job, whose `limits.maxTerms` is 0.
+   */
+  readonly terms: readonly TermQuery[];
+}
+
+/**
+ * Search the open document for one batch of terms: one Add, one paste, or
+ * one Try again (spec 0017, AC-9 and AC-20). Each readable page is read once
+ * for the whole batch (INV-8). It joins the session's run queue, so a search
+ * and a redaction never read at once, and `cancel` with its `id` stops it.
+ */
+export interface FindTermsRequest extends Envelope {
+  readonly kind: "find-terms";
+  /** One or more, judged alone against `limits` (AC-27). */
+  readonly terms: readonly TermQuery[];
 }
 
 export interface RedactRequest extends Envelope {
@@ -472,7 +572,8 @@ export interface CancelRequest extends Envelope {
   readonly kind: "cancel";
 }
 
-export type RequestMessage = OpenRequest | RedactRequest | CancelRequest;
+export type RequestMessage =
+  OpenRequest | FindTermsRequest | RedactRequest | CancelRequest;
 
 /* Worker to main thread. */
 
@@ -496,6 +597,31 @@ export interface RedactedMessage extends Envelope {
   /** Transferred. The main thread holds it only until the download is handed over. */
   readonly output: ArrayBuffer;
   readonly outcome: RedactionOutcome;
+  /**
+   * How many ticked rows of each term the engine removed, counted after the
+   * self check like `removedByType` (spec 0017, AC-22). Beside `outcome`,
+   * never inside it, so it can never be logged (INV-9). A term that removed
+   * nothing is left out.
+   */
+  readonly removedByTerm: readonly TermRemoval[];
+}
+
+/** One term's removals in a run. Spec 0017, *Data model sketch*. */
+export interface TermRemoval {
+  readonly term: TermId;
+  readonly removed: number;
+}
+
+/**
+ * A `find-terms` finished. Spec 0017, *API surface*. `terms` is the batch it
+ * was asked for, so the page knows which terms are now searched, found or
+ * not; `matches` holds every row any of them found, with ids minted for this
+ * session.
+ */
+export interface TermsFoundMessage extends Envelope {
+  readonly kind: "terms-found";
+  readonly terms: readonly TermId[];
+  readonly matches: readonly ReviewMatch[];
 }
 
 export interface ProgressMessage extends Envelope {
@@ -510,7 +636,7 @@ export interface ErrorMessage extends Envelope {
 }
 
 export type ResponseMessage =
-  ResultMessage | RedactedMessage | ProgressMessage | ErrorMessage;
+  ResultMessage | TermsFoundMessage | RedactedMessage | ProgressMessage | ErrorMessage;
 
 /**
  * Raised on the main thread when a job fails.

@@ -1,6 +1,6 @@
 import type { Buffer as MuBuffer, Document, PDFDocument, PDFPage } from "mupdf";
 
-import type { DetectorKind } from "@/worker/protocol";
+import type { MatchKind, TermId, TermRemoval } from "@/worker/protocol";
 
 import { recordPage, targetArea, type PageRecord } from "./characters";
 import { checkpoint as yieldThenCheck, EngineFailure } from "./failure";
@@ -182,6 +182,7 @@ export async function redactDocumentWith(
     return {
       output,
       removedByType: countByKind(targets),
+      removedByTerm: countByTerm(targets),
       sanitized,
       trim,
     };
@@ -270,13 +271,32 @@ function takeOutput(written: MuBuffer): ArrayBuffer {
   }
 }
 
-/** Ticked targets per kind. Only ever called once the self check has passed. */
+/**
+ * Ticked targets per kind. Only ever called once the self check has passed.
+ * Two ticked targets over one place each count once, under their own kind
+ * (spec 0017, AC-21).
+ */
 function countByKind(
   targets: readonly RedactionTarget[],
-): Readonly<Partial<Record<DetectorKind, number>>> {
-  const counts: Partial<Record<DetectorKind, number>> = {};
+): Readonly<Partial<Record<MatchKind, number>>> {
+  const counts: Partial<Record<MatchKind, number>> = {};
   for (const target of targets) {
     counts[target.kind] = (counts[target.kind] ?? 0) + 1;
   }
   return Object.freeze(counts);
+}
+
+/**
+ * Ticked term targets per term, in the order each term first appears, once
+ * the self check has passed (spec 0017, AC-22). Ids only: the page puts the
+ * words back from its own list.
+ */
+function countByTerm(targets: readonly RedactionTarget[]): readonly TermRemoval[] {
+  const counts = new Map<TermId, number>();
+  for (const { term } of targets) {
+    if (term !== null) counts.set(term, (counts.get(term) ?? 0) + 1);
+  }
+  return Object.freeze(
+    [...counts].map(([term, removed]) => Object.freeze({ term, removed })),
+  );
 }

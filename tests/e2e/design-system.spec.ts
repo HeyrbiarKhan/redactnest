@@ -607,6 +607,16 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await expect(page.getByTestId("redact")).toBeFocused();
     await expectFocusRing(page.getByTestId("redact"));
 
+    // Spec 0017, AC-1 and AC-2: the custom terms panel sits in the found
+    // items before the groups. This job is Free, so the panel is locked and
+    // its one stop is the link to Pricing; the field and Add are disabled.
+    await page.keyboard.press("Tab");
+    const getPro = page
+      .getByTestId("terms-locked")
+      .getByRole("link", { name: "Get Pro (opens in a new tab)" });
+    await expect(getPro).toBeFocused();
+    await expectFocusRing(getPro);
+
     await page.keyboard.press("Tab");
     const summary = page.locator("summary", { hasText: "Email addresses" });
     await expect(summary).toBeFocused();
@@ -639,6 +649,13 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("redact")).toBeFocused();
     await expectFocusRing(page.getByTestId("redact"));
+    // The locked custom terms panel's link to Pricing (spec 0017, AC-2).
+    await page.keyboard.press("Tab");
+    await expect(
+      page
+        .getByTestId("terms-locked")
+        .getByRole("link", { name: "Get Pro (opens in a new tab)" }),
+    ).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.locator("summary", { hasText: "Email addresses" })).toBeFocused();
     await page.keyboard.press("Tab");

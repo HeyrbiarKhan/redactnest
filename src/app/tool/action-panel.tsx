@@ -1,4 +1,4 @@
-import type { Ref } from "react";
+import { useId, type Ref } from "react";
 
 import { Button } from "@/ui/button";
 import { Card } from "@/ui/card";
@@ -12,6 +12,12 @@ interface ActionPanelProps {
   readonly label: string;
   /** A run is under way, so Cancel takes the main action's place (AC-10). */
   readonly running: boolean;
+  /**
+   * Why the main action cannot run yet, or null (spec 0017, AC-18): a custom
+   * term still searching, or not searched. The button stays in place, cannot
+   * run and is described by this line.
+   */
+  readonly waiting?: string | null;
   readonly onRedact: () => void;
   readonly onCancel: () => void;
   readonly redactRef?: Ref<HTMLButtonElement>;
@@ -39,16 +45,23 @@ export function ActionPanel({
   line,
   label,
   running,
+  waiting = null,
   onRedact,
   onCancel,
   redactRef,
   cancelRef,
 }: ActionPanelProps) {
+  const waitingId = useId();
   return (
     <Card data-testid="action-panel" className="@min-[61rem]:sticky @min-[61rem]:top-6">
       {line !== null && (
         <p data-testid="tick-count" className="text-ink">
           {line}
+        </p>
+      )}
+      {waiting !== null && (
+        <p id={waitingId} data-testid="make-waits" className="text-small text-ink">
+          {waiting}
         </p>
       )}
       {/* Full width on a phone and in the rail; its own width between. */}
@@ -68,6 +81,8 @@ export function ActionPanel({
           ref={redactRef}
           size="lg"
           data-testid="redact"
+          unavailable={waiting !== null}
+          aria-describedby={waiting !== null ? waitingId : undefined}
           onClick={onRedact}
           className="w-full sm:w-auto sm:self-start @min-[61rem]:w-full"
         >

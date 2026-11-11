@@ -167,14 +167,10 @@ const noDetectDependencies = {
   group: [
     "@/ui",
     "@/ui/*",
-    "@/lib",
-    "@/lib/*",
     "@/config",
     "@/config/*",
     "../ui",
     "../ui/*",
-    "../lib",
-    "../lib/*",
     "../config",
     "../config/*",
     "react",
@@ -198,6 +194,29 @@ const noWorkerButProtocol = {
   regex: String.raw`^(@|\.\.)/worker(?!/protocol$)(/.*)?$`,
   message: DETECT_ZONE_MESSAGE,
 };
+
+/**
+ * Every `@/lib` module but `term-text`, the one `src/detect` may take (spec
+ * 0017, INV-5): it imports nothing, so nothing crosses the wall with it. A
+ * regex for the same reason as the worker's: a bare `@/lib` in gitignore
+ * syntax excludes the directory, and nothing under it could be let back in.
+ */
+const noLibButTermText = {
+  regex: String.raw`^(@|\.\.)/lib(?!/term-text$)(/.*)?$`,
+  message: DETECT_ZONE_MESSAGE,
+};
+
+const TERM_TEXT_MESSAGE =
+  "src/lib/term-text.ts imports nothing (spec 0017, INV-5). It is the one " +
+  "module src/detect may take from @/lib, so anything it imported would cross " +
+  "the detector wall with it, into the worker's chunk.";
+
+/** Any import at all, static, dynamic or as a type. */
+const noImportAtAll = { regex: ".*", message: TERM_TEXT_MESSAGE };
+const noImportAtAllAnywhere = [
+  { selector: "ImportExpression", message: TERM_TEXT_MESSAGE },
+  { selector: "TSImportType", message: TERM_TEXT_MESSAGE },
+];
 
 const noDetectDependenciesAnywhere = [
   {
@@ -665,6 +684,7 @@ const eslintConfig = defineConfig([
           noEngineImport,
           noDetectImport,
           noDetectDependencies,
+          noLibButTermText,
           noWorkerButProtocol,
           noToolClientImport,
           ...BILLING_IMPORTS,
@@ -700,6 +720,14 @@ const eslintConfig = defineConfig([
         },
       ],
     },
+  },
+  {
+    // The term text rules (spec 0017, INV-5). The page's list, the worker's
+    // gate and the matcher behind the detector wall all read them, so the
+    // module imports nothing at all and can cross that wall alone.
+    name: "redactnest/term-text",
+    files: ["src/lib/term-text.ts"],
+    rules: zone([noImportAtAll], [...noImportAtAllAnywhere]),
   },
   {
     // The worker and its protocol make no count (spec 0016, AC-24): the

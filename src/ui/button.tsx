@@ -48,6 +48,13 @@ type AsButton = Omit<ComponentPropsWithRef<"button">, keyof ButtonOwnProps> & {
    * words as `children`, so the name is what the button shows (WCAG 2.5.3).
    */
   readonly busy?: boolean;
+  /**
+   * The button cannot act yet, for a reason the caller says beside it and
+   * names in `aria-describedby` (spec 0017, AC-18). It stays in place and in
+   * the tab order, `aria-disabled` rather than `disabled`, takes the disabled
+   * look every control shares, and drops every press before `onClick`.
+   */
+  readonly unavailable?: boolean;
 };
 
 type AsLink = Omit<
@@ -57,6 +64,7 @@ type AsLink = Omit<
   readonly href: string;
   readonly reload?: undefined;
   readonly busy?: undefined;
+  readonly unavailable?: undefined;
 };
 
 /**
@@ -68,6 +76,7 @@ type AsPageLoad = Omit<ComponentPropsWithoutRef<"a">, keyof ButtonOwnProps | "hr
   readonly href: string;
   readonly reload: true;
   readonly busy?: undefined;
+  readonly unavailable?: undefined;
 };
 
 export type ButtonProps = ButtonOwnProps & (AsButton | AsLink | AsPageLoad);
@@ -145,6 +154,18 @@ const SIZE: Readonly<Record<ButtonVariant, Readonly<Record<ButtonSize, string>>>
     "danger-secondary": BOXED_SIZE,
   });
 
+/**
+ * An unavailable button's look: the disabled one, without the `disabled:`
+ * prefix, since the button is never `disabled` (spec 0017, AC-18).
+ */
+const UNAVAILABLE: Readonly<Record<ButtonVariant, string>> = Object.freeze({
+  primary: cx(BOX, "border-border bg-subtle text-ink-muted"),
+  secondary: cx(BOX, "border-border bg-subtle text-ink-muted"),
+  link: "inline-flex items-center gap-1.5 rounded-sm text-ink-muted underline decoration-1 underline-offset-4",
+  danger: cx(BOX, "border-border bg-subtle text-ink-muted"),
+  "danger-secondary": cx(BOX, "border-border bg-subtle text-ink-muted"),
+});
+
 /** A busy button's answer to every press: nothing, not even a form submit. */
 function dropPress(event: MouseEvent<HTMLButtonElement>) {
   event.preventDefault();
@@ -160,13 +181,14 @@ export function Button({
   fullWidth = false,
   icon: Icon,
   busy = false,
+  unavailable = false,
   className,
   children,
   ...native
 }: ButtonProps) {
   const classes = cx(
-    VARIANT[variant],
-    !busy && HOVER[variant],
+    unavailable ? UNAVAILABLE[variant] : VARIANT[variant],
+    !busy && !unavailable && HOVER[variant],
     SIZE[variant][size],
     // Fill and edge only. `transition-colors` fades `outline-color` too, so the
     // focus ring would arrive in the text colour, white on a filled button (AC-6).
@@ -214,9 +236,9 @@ export function Button({
   return (
     <button
       {...button}
-      aria-disabled={busy || button["aria-disabled"]}
+      aria-disabled={busy || unavailable || button["aria-disabled"]}
       type={type}
-      onClick={busy ? dropPress : onClick}
+      onClick={busy || unavailable ? dropPress : onClick}
       className={classes}
     >
       {content}

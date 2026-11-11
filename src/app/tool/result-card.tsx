@@ -5,10 +5,14 @@ import {
   DOWNLOADED_LINE,
   leftLine,
   removedLine,
+  RESULT_SET_ASIDE,
   RESULT_TERMS,
   resultTitle,
+  setAsideLine,
   strippedLine,
+  type TermResult,
 } from "@/lib/flow-text";
+import type { NotSearchedReason } from "@/lib/session";
 import {
   DOWNLOAD_WARNING_TITLE,
   isPartly,
@@ -25,6 +29,16 @@ import { SummaryList } from "@/ui/summary-list";
 interface ResultCardProps {
   /** From `resultCounts`, the only source of Removed and Left in the file. */
   readonly counts: ResultCounts;
+  /**
+   * Each term this job searched, in list order, with what the engine removed
+   * for it and what it left (spec 0017, AC-22).
+   */
+  readonly terms?: readonly TermResult[];
+  /** Each term set aside in this job, with why it was not searched (AC-22). */
+  readonly setAside?: readonly {
+    readonly text: string;
+    readonly reason: NotSearchedReason;
+  }[];
   readonly summary: DocumentSummary | null;
   /** The name Download offers, settled at `redacted`. Read, never shown. */
   readonly outputName: string;
@@ -55,6 +69,8 @@ interface ResultCardProps {
  */
 export function ResultCard({
   counts,
+  terms = [],
+  setAside = [],
   summary,
   outputName,
   downloaded,
@@ -76,8 +92,11 @@ export function ResultCard({
       <SummaryList
         data-testid="outcome"
         items={[
-          { term: RESULT_TERMS.removed, description: removedLine(counts) },
-          { term: RESULT_TERMS.left, description: leftLine(counts) },
+          { term: RESULT_TERMS.removed, description: removedLine(counts, terms) },
+          { term: RESULT_TERMS.left, description: leftLine(counts, terms) },
+          ...(setAside.length > 0
+            ? [{ term: RESULT_SET_ASIDE, description: setAsideLine(setAside) }]
+            : []),
           { term: RESULT_TERMS.stripped, description: strippedLine(counts.sanitized) },
         ]}
       />

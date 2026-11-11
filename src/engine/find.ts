@@ -1,7 +1,22 @@
 import type { PDFDocument, PDFPage } from "mupdf";
 
-import { detect, readsJoinAsNothing, type Span } from "@/detect";
-import type { BlockedReason, Concealment } from "@/worker/protocol";
+import {
+  detect,
+  findTerms,
+  HYPHEN,
+  readsJoinAsNothing,
+  tailFrom,
+  termReach,
+  type TermInput,
+} from "@/detect";
+import type {
+  BlockedReason,
+  Concealment,
+  MatchKind,
+  TermId,
+  TermNote,
+  TermQuery,
+} from "@/worker/protocol";
 
 import {
   EXTRACTION_OPTIONS,
@@ -34,14 +49,16 @@ import type {
 } from "./types";
 
 /**
- * The find step. Spec 0005, *The find step*.
+ * The find step. Spec 0005, *The find step*, as spec 0017 widens it.
  *
  * Reads each prepared review page's characters through the one character
  * reader, builds the page's text as detection sees it, hands each text block to
- * `@/detect`, and turns every span back into the characters it came from:
- * their quads, one per line, with the same geometry `page.search()` gives, and
- * their raw code points as the target's `text`. A match the engine would refuse
- * is still listed, blocked, with no target (AC-8, INV-2).
+ * `@/detect`, and the whole page text to the custom terms (spec 0017), and
+ * turns every span back into the characters it came from: their quads, one per
+ * line, with the same geometry `page.search()` gives, and their raw code points
+ * as the target's `text`. A match the engine would refuse is still listed,
+ * blocked, with no target (AC-8, INV-2). A term's match takes exactly the same
+ * path (spec 0017, INV-6).
  *
  * A short stretch of glyphs off its line and glued to the text, such as a
  * footnote marker, is not part of the text a detector reads, a target's text
@@ -50,7 +67,10 @@ import type {
  *
  * Nothing here calls `search()` (INV-11), so MuPDF.js's 500 quad cap on search
  * can never drop a match (AC-25). Document text lives in here for the length
- * of one page and is never logged, stored or sent (INV-5).
+ * of one page and is never logged, stored or sent (INV-5), with one exception
+ * spec 0017 makes: the tail of a page, at most the longest term's length in
+ * characters that are not separators, is carried into the next page's term
+ * matching and dropped once that page is matched (AC-33, INV-12).
  */
 
 /** A text block's place in the page text, and where its lines were joined. */
@@ -68,6 +88,12 @@ interface BlockText {
  * `left` marks, over `characters`, each one of an off line stretch that left
  * the text (spec 0014, AC-4), whitespace inside the stretch included, so a
  * span's quads can be parted round it (AC-7).
+ *
+ * `breaks` holds the position of every synthetic space that stands for a line
+ * or block break, and `lineBreaks` the line breaks among them (spec 0017, *The
+ * find step*), recorded as they are written. A space an off line stretch left
+ * is in neither, and reads as an ordinary space. `lineAt` marks each line
+ * break position with 1, so a term row's text can drop one after a hyphen.
  */
 interface PageText {
   readonly characters: readonly Character[];
@@ -75,36 +101,165 @@ interface PageText {
   readonly source: Int32Array;
   readonly blocks: readonly BlockText[];
   readonly left: Uint8Array;
+  readonly breaks: readonly number[];
+  readonly lineBreaks: readonly number[];
+  readonly lineAt: Uint8Array;
 }
 
-/** A match before the checks decide whether it can be ticked. */
+/**
+ * A place to list on one page, before the checks decide whether it can be
+ * ticked: a detector's span, or a custom term's (spec 0017). Offsets are code
+ * points into the page text, end exclusive.
+ */
+interface Place {
+  readonly start: number;
+  readonly end: number;
+  readonly kind: MatchKind;
+  readonly term: TermId | null;
+  readonly notes: readonly TermNote[];
+  readonly tickedByDefault: boolean;
+}
+
+/** A place, back on the page as characters, quads and a target. */
 interface Candidate {
-  readonly span: Span;
+  readonly place: Place;
   readonly text: string;
   /** The characters it covers, in extraction order, each once. */
   readonly characters: readonly Character[];
   readonly target: RedactionTarget;
 }
 
+/**
+ * The end of one page's text, carried into the next page's term matching
+ * (spec 0017, AC-33). `from` is where it starts in its page's text; `breaks`
+ * and `lineBreaks` are relative to it. Never more than the longest searched
+ * term's length in characters that are not separators (INV-12).
+ */
+interface Tail {
+  readonly from: number;
+  readonly points: readonly string[];
+  readonly breaks: readonly number[];
+  readonly lineBreaks: readonly number[];
+}
+
+/** One page's tails, one per extraction mode, both carried (AC-33). */
+interface Carry {
+  readonly page: number;
+  readonly ordinary: Tail;
+  readonly ignoring: Tail;
+}
+
+/** What one page's read hands on. */
+interface PageRead {
+  readonly rows: readonly FoundMatch[];
+  /**
+   * The first parts of matches across this page's start, as places on the
+   * page before, checked there once this page is closed (AC-33).
+   */
+  readonly held: {
+    readonly ordinary: readonly Place[];
+    readonly ignoring: readonly Place[];
+  };
+  readonly carry: Carry | null;
+}
+
+/** What a read looks for. */
+interface Search {
+  readonly detectors: boolean;
+  readonly terms: readonly TermQuery[];
+  /** The longest term's length in characters that are not separators. */
+  readonly reach: number;
+}
+
 const WHITESPACE = /^\s$/u;
 
 /**
  * Every match on every page that holds a readable character, by page, then in
- * reading order (AC-3). Any other page is not read at all (AC-12, as spec
- * 0006 rewords it), so a scanned page's stamp is still searched and a blank
- * page costs nothing.
+ * reading order (AC-3), the detectors' and the custom terms' alike (spec 0017,
+ * AC-9). Any other page is not read at all (AC-12, as spec 0006 rewords it),
+ * so a scanned page's stamp is still searched and a blank page costs nothing.
  */
-export async function findMatchesIn(
+export function findMatchesIn(
   doc: PDFDocument,
   pages: readonly Pick<PageInspection, "readable" | "concealed">[],
   options: FindOptions,
 ): Promise<readonly FoundMatch[]> {
-  const found: FoundMatch[] = [];
+  return findIn(doc, pages, options, true);
+}
+
+/**
+ * Every place the custom terms appear, with no detector: one review search
+ * batch (spec 0017, AC-9). The same reads and checks as `findMatchesIn`.
+ */
+export function findTermsIn(
+  doc: PDFDocument,
+  pages: readonly Pick<PageInspection, "readable" | "concealed">[],
+  options: FindOptions,
+): Promise<readonly FoundMatch[]> {
+  return findIn(doc, pages, options, false);
+}
+
+/**
+ * Each readable page once (spec 0017, INV-8), carrying its tail into the next
+ * page's term matching when that page is readable too, and nothing past a page
+ * that is not (AC-33). A match across a break lists its second part with the
+ * page it ends on; its first part is checked on the page before, loaded again
+ * alone once the later page is closed, and listed with that page's rows.
+ */
+async function findIn(
+  doc: PDFDocument,
+  pages: readonly Pick<PageInspection, "readable" | "concealed">[],
+  options: FindOptions,
+  detectors: boolean,
+): Promise<readonly FoundMatch[]> {
+  const terms = options.terms ?? [];
+  const search: Search = {
+    detectors,
+    terms,
+    reach: terms.reduce((longest, { text }) => Math.max(longest, termReach(text)), 0),
+  };
+
+  const rows: FoundMatch[][] = pages.map(() => []);
+  let carry: Carry | null = null;
   for (let index = 0; index < pages.length; index += 1) {
-    if (!pages[index].readable) continue;
-    found.push(...(await findOnPage(doc, index, options, pages[index].concealed)));
+    if (!pages[index].readable) {
+      carry = null;
+      continue;
+    }
+    const read: PageRead = await findOnPage(
+      doc,
+      index,
+      options,
+      pages[index].concealed,
+      search,
+      carry,
+    );
+    rows[index].push(...read.rows);
+
+    if (
+      carry !== null &&
+      (read.held.ordinary.length > 0 || read.held.ignoring.length > 0)
+    ) {
+      const before = carry.page;
+      rows[before].push(
+        ...(await onLoadedPage(doc, before, options, (page, ordinary, ignoring) =>
+          listPlaces(
+            page,
+            before,
+            ordinary,
+            ignoring,
+            read.held,
+            options,
+            concealmentOf(pages[before].concealed),
+          ),
+        )),
+      );
+    }
+    // The tail of the page before is dropped here, once this page is matched
+    // (INV-12).
+    carry = read.carry;
   }
-  return found;
+  return rows.flat();
 }
 
 /**
@@ -130,23 +285,18 @@ function concealmentOf(
 }
 
 /**
- * One page: three reads, the checks, and the context. Spec 0005, *The find
- * step*, steps 1 to 7.
- *
- * After each read (ordinary extraction, extraction with replacement text
- * ignored, and the image pass) it yields and asks whether to stop (AC-11), so
- * a cancel or a replacement open is noticed within one read of work. The page
- * is destroyed on every path out; each read destroys its own structured text.
+ * Load a page, read it in both extraction modes, and hand both readings to
+ * `readPage`, yielding and asking whether to stop after each read (AC-11). The
+ * page is destroyed on every path out; each read destroys its own structured
+ * text.
  */
-async function findOnPage(
+async function onLoadedPage<T>(
   doc: PDFDocument,
   index: number,
-  { contextChars, isCancelled }: FindOptions,
-  concealed: readonly ConcealedGlyph[],
-): Promise<readonly FoundMatch[]> {
-  const concealedIn = concealmentOf(concealed);
+  { isCancelled }: FindOptions,
+  readPage: (page: PDFPage, ordinary: PageText, ignoring: PageText) => Promise<T>,
+): Promise<T> {
   const page = readable(() => doc.loadPage(index));
-
   try {
     const ordinary = readable(() => pageText(page, EXTRACTION_OPTIONS[0]));
     await checkpoint(isCancelled);
@@ -154,88 +304,276 @@ async function findOnPage(
     const ignoring = readable(() => pageText(page, EXTRACTION_OPTIONS[1]));
     await checkpoint(isCancelled);
 
-    const found = candidatesIn(ordinary, index);
-    const targets = found.map(({ target }) => target);
-
-    // The image pass answers for every match at once, so a page with none
-    // skips it.
-    let overreach: readonly boolean[] = [];
-    if (found.length > 0) {
-      overreach = readable(() => imageReachVerdicts(page, targets));
-      await checkpoint(isCancelled);
-    }
-
-    // AC-8's reasons, in its order, through the predicates target validation
-    // asks (INV-3). The first that applies is the one given.
-    const checks: readonly (readonly [BlockedReason, readonly boolean[]])[] = [
-      ["unsound-outline", unsoundTargetsIn(ordinary.characters, targets)],
-      ["replacement-text", replacedTargets(ordinary, ignoring, targets)],
-      ["slanted-text", slantedTargets(targets)],
-      ["image-overreach", overreach],
-    ];
-
-    const context = contextReader(ordinary.points, contextChars);
-    const listed = found.map(({ span, text, target, characters }, at): FoundMatch => {
-      const around = {
-        page: index,
-        kind: span.kind,
-        text,
-        ...context(target),
-        concealed: concealedIn(characters),
-      };
-      const blocked = checks.find(([, failed]) => failed[at])?.[0] ?? null;
-      return blocked === null
-        ? { ...around, tickedByDefault: span.tickedByDefault, blocked, target }
-        : { ...around, tickedByDefault: false, blocked, target: null };
-    });
-
-    // AC-9: glyphs hidden behind unrelated replacement text are found only
-    // with it ignored. Each is listed, blocked, never skipped, unless it sits
-    // where a match from ordinary extraction already does, so one place on
-    // the page is one row. Listed after the page's ordinary matches, in their
-    // own reading order.
-    //
-    // Only sound quads say where an ordinary match sits: an unsound one has no
-    // inside worth asking about, so a point test against it could hide a
-    // hidden match that sits somewhere else. A match found only with
-    // replacement text ignored, at a place whose ordinary match has unsound
-    // quads, is therefore listed too, as two blocked rows for one place. That
-    // has no safety effect, since neither row can be ticked (spec 0014,
-    // AC-10, the pattern detection review's Minor 1).
-    const covering = targets.flatMap(({ quads }) => quads.filter(isSoundQuad));
-    const hiddenContext = contextReader(ignoring.points, contextChars);
-    const hidden = candidatesIn(ignoring, index)
-      .filter(({ characters }) =>
-        characters.every(
-          (character) =>
-            !covering.some((quad) => containsPoint(quad, quadCentre(character.quad))),
-        ),
-      )
-      .map(({ span, text, target, characters }): FoundMatch => ({
-        page: index,
-        kind: span.kind,
-        text,
-        ...hiddenContext(target),
-        concealed: concealedIn(characters),
-        tickedByDefault: false,
-        blocked: "replacement-text",
-        target: null,
-      }));
-
-    return [...listed, ...hidden];
+    return await readPage(page, ordinary, ignoring);
   } finally {
     page.destroy();
   }
 }
 
-/** Every span on a page, back on the page as characters, quads and a target. */
-function candidatesIn(page: PageText, pageIndex: number): readonly Candidate[] {
+/**
+ * One page: two reads, the detectors and the terms, the checks, and the
+ * context. Spec 0005, *The find step*, steps 1 to 7, with spec 0017's whole
+ * page term text beside the per block text the detectors read.
+ */
+function findOnPage(
+  doc: PDFDocument,
+  index: number,
+  options: FindOptions,
+  concealed: readonly ConcealedGlyph[],
+  search: Search,
+  carry: Carry | null,
+): Promise<PageRead> {
+  return onLoadedPage(doc, index, options, async (page, ordinary, ignoring) => {
+    const ordinaryTerms = termPlaces(ordinary, search.terms, carry?.ordinary ?? null);
+    const ignoringTerms = termPlaces(ignoring, search.terms, carry?.ignoring ?? null);
+
+    const rows = await listPlaces(
+      page,
+      index,
+      ordinary,
+      ignoring,
+      {
+        ordinary: [
+          ...(search.detectors ? detectorPlaces(ordinary) : []),
+          ...ordinaryTerms.here,
+        ],
+        ignoring: [
+          ...(search.detectors ? detectorPlaces(ignoring) : []),
+          ...ignoringTerms.here,
+        ],
+      },
+      options,
+      concealmentOf(concealed),
+    );
+
+    return {
+      rows,
+      held: { ordinary: ordinaryTerms.before, ignoring: ignoringTerms.before },
+      carry:
+        search.reach > 0
+          ? {
+              page: index,
+              ordinary: tailOf(ordinary, search.reach),
+              ignoring: tailOf(ignoring, search.reach),
+            }
+          : null,
+    };
+  });
+}
+
+/**
+ * The places on one page read in both modes, checked and listed. Spec 0005,
+ * *The find step*, steps 3 to 7.
+ *
+ * After the image pass it yields and asks whether to stop (AC-11), so a
+ * cancel or a replacement open is noticed within one read of work.
+ */
+async function listPlaces(
+  page: PDFPage,
+  index: number,
+  ordinary: PageText,
+  ignoring: PageText,
+  places: { readonly ordinary: readonly Place[]; readonly ignoring: readonly Place[] },
+  { contextChars, isCancelled }: FindOptions,
+  concealedIn: (characters: readonly Character[]) => Concealment | null,
+): Promise<readonly FoundMatch[]> {
+  const found = places.ordinary.map((place) => candidate(ordinary, index, place));
+  const targets = found.map(({ target }) => target);
+
+  // The image pass answers for every match at once, so a page with none
+  // skips it.
+  let overreach: readonly boolean[] = [];
+  if (found.length > 0) {
+    overreach = readable(() => imageReachVerdicts(page, targets));
+    await checkpoint(isCancelled);
+  }
+
+  // AC-8's reasons, in its order, through the predicates target validation
+  // asks (INV-3). The first that applies is the one given.
+  const checks: readonly (readonly [BlockedReason, readonly boolean[]])[] = [
+    ["unsound-outline", unsoundTargetsIn(ordinary.characters, targets)],
+    ["replacement-text", replacedTargets(ordinary, ignoring, targets)],
+    ["slanted-text", slantedTargets(targets)],
+    ["image-overreach", overreach],
+  ];
+
+  const context = contextReader(ordinary.points, contextChars);
+  const listed = found.map(({ place, text, target, characters }, at): FoundMatch => {
+    const around = {
+      page: index,
+      kind: place.kind,
+      term: place.term,
+      termNotes: place.notes,
+      text,
+      ...context(target),
+      concealed: concealedIn(characters),
+    };
+    const blocked = checks.find(([, failed]) => failed[at])?.[0] ?? null;
+    return blocked === null
+      ? { ...around, tickedByDefault: place.tickedByDefault, blocked, target }
+      : { ...around, tickedByDefault: false, blocked, target: null };
+  });
+
+  // AC-9: glyphs hidden behind unrelated replacement text are found only
+  // with it ignored. Each is listed, blocked, never skipped, unless it sits
+  // where a match from ordinary extraction already does, so one place on
+  // the page is one row. Listed after the page's ordinary matches, in their
+  // own reading order.
+  //
+  // Only sound quads say where an ordinary match sits: an unsound one has no
+  // inside worth asking about, so a point test against it could hide a
+  // hidden match that sits somewhere else. A match found only with
+  // replacement text ignored, at a place whose ordinary match has unsound
+  // quads, is therefore listed too, as two blocked rows for one place. That
+  // has no safety effect, since neither row can be ticked (spec 0014,
+  // AC-10, the pattern detection review's Minor 1).
+  //
+  // A detector's hidden row yields to the detectors' ordinary rows, as it
+  // always has; a term's yields only to an ordinary row of the same term
+  // (spec 0017, AC-9), so a term never hides a detector's row, nor another
+  // term's.
+  const covering = coveringQuads(targets);
+  const hiddenContext = contextReader(ignoring.points, contextChars);
+  const hidden = places.ignoring
+    .map((place) => candidate(ignoring, index, place))
+    .filter(({ place, characters }) => {
+      const quads = covering(place.term);
+      return characters.every(
+        (character) =>
+          !quads.some((quad) => containsPoint(quad, quadCentre(character.quad))),
+      );
+    })
+    .map(({ place, text, target, characters }): FoundMatch => ({
+      page: index,
+      kind: place.kind,
+      term: place.term,
+      termNotes: place.notes,
+      text,
+      ...hiddenContext(target),
+      concealed: concealedIn(characters),
+      tickedByDefault: false,
+      blocked: "replacement-text",
+      target: null,
+    }));
+
+  return [...listed, ...hidden];
+}
+
+/**
+ * The sound quads a hidden row yields to: the detectors' ordinary targets for
+ * a detector's row (`null`), and one term's own for a term's.
+ */
+function coveringQuads(
+  targets: readonly RedactionTarget[],
+): (term: TermId | null) => readonly Quad[] {
+  const byTerm = new Map<TermId | null, Quad[]>();
+  for (const { term, quads } of targets) {
+    const sound = quads.filter(isSoundQuad);
+    const held = byTerm.get(term);
+    if (held) held.push(...sound);
+    else byTerm.set(term, [...sound]);
+  }
+  return (term) => byTerm.get(term) ?? [];
+}
+
+/** Every detector span on a page, as places in the page text. */
+function detectorPlaces(page: PageText): readonly Place[] {
   return page.blocks.flatMap((block) =>
     detect({
       text: page.points.slice(block.start, block.end).join(""),
       joins: block.joins,
-    }).map((span) => candidate(page, pageIndex, block.start, span)),
+    }).map((span): Place => ({
+      start: block.start + span.start,
+      end: block.start + span.end,
+      kind: span.kind,
+      term: null,
+      notes: [],
+      tickedByDefault: span.tickedByDefault,
+    })),
   );
+}
+
+/**
+ * Every custom term's span on a page, as places (spec 0017, AC-9, AC-33).
+ *
+ * The page's whole text, with the tail of the page before and the page break
+ * standing between them, read as a line break. A span wholly on this page is
+ * a place `here`. One that crosses the break is two parts, each trimmed of the
+ * whitespace at the break so its edge there is the break itself: the second
+ * `here`, the first `before`, as a place on the page the tail came from.
+ * Exact rows alone are ticked (INV-4).
+ */
+function termPlaces(
+  page: PageText,
+  terms: readonly TermQuery[],
+  tail: Tail | null,
+): { readonly here: readonly Place[]; readonly before: readonly Place[] } {
+  if (terms.length === 0) return { here: [], before: [] };
+
+  const offset = tail === null ? 0 : tail.points.length + 1;
+  const input: TermInput =
+    tail === null
+      ? {
+          text: page.points.join(""),
+          breaks: page.breaks,
+          lineBreaks: page.lineBreaks,
+          pageStart: 0,
+        }
+      : {
+          text: `${tail.points.join("")} ${page.points.join("")}`,
+          breaks: [
+            ...tail.breaks,
+            tail.points.length,
+            ...page.breaks.map((at) => at + offset),
+          ],
+          lineBreaks: [
+            ...tail.lineBreaks,
+            tail.points.length,
+            ...page.lineBreaks.map((at) => at + offset),
+          ],
+          pageStart: offset,
+        };
+
+  const here: Place[] = [];
+  const before: Place[] = [];
+  for (const span of findTerms(input, terms)) {
+    const place = (start: number, end: number): Place => ({
+      start,
+      end,
+      kind: "term",
+      term: span.term,
+      notes: span.notes,
+      tickedByDefault: span.notes.length === 0,
+    });
+    if (tail === null || span.start >= offset) {
+      here.push(place(span.start - offset, span.end - offset));
+      continue;
+    }
+
+    let firstEnd = tail.points.length;
+    while (firstEnd > span.start && WHITESPACE.test(tail.points[firstEnd - 1])) {
+      firstEnd -= 1;
+    }
+    let secondStart = 0;
+    while (secondStart < span.end - offset && WHITESPACE.test(page.points[secondStart])) {
+      secondStart += 1;
+    }
+    before.push(place(tail.from + span.start, tail.from + firstEnd));
+    here.push(place(secondStart, span.end - offset));
+  }
+  return { here, before };
+}
+
+/** The tail this page carries into the next (AC-33, INV-12). */
+function tailOf(page: PageText, reach: number): Tail {
+  const from = tailFrom(page.points, reach);
+  const within = (at: number) => at >= from;
+  return {
+    from,
+    points: page.points.slice(from),
+    breaks: page.breaks.filter(within).map((at) => at - from),
+    lineBreaks: page.lineBreaks.filter(within).map((at) => at - from),
+  };
 }
 
 /**
@@ -314,18 +652,22 @@ function readable<T>(read: () => T): T {
  * Each text block's characters in order, the lines inside a block joined by
  * one synthetic space and blocks joined the same way, with no space added
  * where either side is already whitespace. Image blocks carry no characters,
- * so the reader never visits them.
+ * so the reader never visits them. Each join space is recorded as it is
+ * written, a block's in `breaks` and a line's in both `breaks` and
+ * `lineBreaks`, so the custom terms can read a hyphen before a line break
+ * (spec 0017, *The find step*).
  *
  * Step 1b (spec 0014, AC-4 and AC-5): each short off line stretch glued to
  * the text, such as a footnote marker or an ordinal's raised letters, leaves
  * it, and one synthetic space stands in its place, not listed in `joins`, so
- * the email rejoin never reads it as a line break. None stands where either
- * side is already whitespace, or where the stretch opens or closes its line
- * and the line join stands instead. That is the one reading under which
- * `27ᵗʰ September 2026` reads `27 September 2026` and `1980¹on` reads
- * `1980 on`: dropped with no space the next word would glue on, and kept as
- * text the marker glues to the value. The stretch only takes positions out,
- * never adds a character or widens what a span can cover (INV-4).
+ * the email rejoin never reads it as a line break, nor in `breaks`. None
+ * stands where either side is already whitespace, or where the stretch opens
+ * or closes its line and the line join stands instead. That is the one
+ * reading under which `27ᵗʰ September 2026` reads `27 September 2026` and
+ * `1980¹on` reads `1980 on`: dropped with no space the next word would glue
+ * on, and kept as text the marker glues to the value. The stretch only takes
+ * positions out, never adds a character or widens what a span can cover
+ * (INV-4).
  */
 function pageText(page: PDFPage, options: string): PageText {
   const characters: Character[] = [];
@@ -335,6 +677,8 @@ function pageText(page: PDFPage, options: string): PageText {
   const points: string[] = [];
   const source: number[] = [];
   const blocks: BlockText[] = [];
+  const breaks: number[] = [];
+  const lineBreaks: number[] = [];
   let block: { start: number; joins: number[] } | null = null;
   // The block and line of the last character written, which a stretch that
   // left can stand between.
@@ -362,11 +706,16 @@ function pageText(page: PDFPage, options: string): PageText {
 
     if (block === null || character.block !== blockOf) {
       if (block !== null) blocks.push({ ...block, end: points.length });
-      if (joinable(normalised[0])) space();
+      if (joinable(normalised[0])) {
+        breaks.push(points.length);
+        space();
+      }
       block = { start: points.length, joins: [] };
     } else if (character.line !== line) {
       if (joinable(normalised[0])) {
         block.joins.push(points.length - block.start);
+        breaks.push(points.length);
+        lineBreaks.push(points.length);
         space();
       }
     } else if (spaceDue && joinable(normalised[0])) {
@@ -385,7 +734,19 @@ function pageText(page: PDFPage, options: string): PageText {
   }
   if (block !== null) blocks.push({ ...block, end: points.length });
 
-  return { characters, points, source: Int32Array.from(source), blocks, left };
+  const lineAt = new Uint8Array(points.length);
+  for (const at of lineBreaks) lineAt[at] = 1;
+
+  return {
+    characters,
+    points,
+    source: Int32Array.from(source),
+    blocks,
+    left,
+    breaks,
+    lineBreaks,
+    lineAt,
+  };
 }
 
 /**
@@ -541,22 +902,22 @@ function rawText(code: number): string {
 }
 
 /**
- * A span, back on the page. Spec 0005, *The find step*, step 3.
+ * A place, back on the page. Spec 0005, *The find step*, step 3.
  *
- * The display `text` is the NFKC page text between the span's offsets; the
+ * The display `text` is the NFKC page text between the place's offsets; the
  * target's `text` is the raw code points of the characters it covers, which is
- * what validation compares (spec 0004, AC-27). A line join is one space in
- * both, or nothing where the detector read it as nothing (AC-4).
+ * what validation compares (spec 0004, AC-27). A detector's line join is one
+ * space in both, or nothing where the detector read it as nothing (AC-4). A
+ * term's break is one space, except a line break right after a hyphen, which
+ * is nothing, so `Smith-` then `son` reads `Smith-son` (spec 0017, AC-13).
  */
-function candidate(
-  page: PageText,
-  pageIndex: number,
-  blockStart: number,
-  span: Span,
-): Candidate {
-  const start = blockStart + span.start;
-  const end = blockStart + span.end;
-  const joinAsNothing = readsJoinAsNothing(span.kind);
+function candidate(page: PageText, pageIndex: number, place: Place): Candidate {
+  const { start, end } = place;
+  const joinAsNothing = place.kind !== "term" && readsJoinAsNothing(place.kind);
+  const breakAsNothing = (at: number) =>
+    place.kind === "term"
+      ? page.lineAt[at] === 1 && at > 0 && HYPHEN.test(page.points[at - 1])
+      : joinAsNothing;
 
   let text = "";
   let raw = "";
@@ -565,7 +926,7 @@ function candidate(
   for (let at = start; at < end; at += 1) {
     const from = page.source[at];
     if (from < 0) {
-      if (!joinAsNothing) {
+      if (!breakAsNothing(at)) {
         text += " ";
         raw += " ";
       }
@@ -581,7 +942,7 @@ function candidate(
 
   const characters = covered.map((from) => page.characters[from]);
   return {
-    span,
+    place,
     text,
     characters,
     target: {
@@ -589,7 +950,8 @@ function candidate(
       quads: lineQuads(page, covered),
       start,
       end,
-      kind: span.kind,
+      kind: place.kind,
+      term: place.term,
       text: raw,
     },
   };

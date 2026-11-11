@@ -728,6 +728,81 @@ test("a detected redaction sends, stores and logs no match text or context", asy
 });
 
 /**
+ * Spec 0017, AC-23 and INV-1. A custom term is the visitor's own words, as
+ * sensitive as the document: typed, searched, redacted and downloaded, and
+ * neither it nor the page text it found reaches a request, a store or the
+ * console. The field keeps no form history and asks no spelling service.
+ */
+test("a typed custom term is sent, stored and logged nowhere", async ({ page }) => {
+  test.setTimeout(180_000);
+
+  await page.route("**/api/entitlement", (route) =>
+    route.fulfill({
+      json: { tier: "paid", pageCap: 50, maxFileBytes: 26_214_400, account: "signed-in" },
+    }),
+  );
+  await watchStorage(page);
+  const requests = recordRequests(page);
+  const logged: string[] = [];
+  page.on("console", (message) => logged.push(message.text()));
+
+  await page.goto("/tool");
+  await page.getByTestId("file-input").setInputFiles({
+    name: FILE_NAME,
+    mimeType: "application/pdf",
+    buffer: readFileSync(resolve("tests/fixtures/terms.pdf")),
+  });
+
+  const field = page.getByRole("textbox", { name: "Add a name, number or phrase" });
+  await expect(field).toBeVisible({ timeout: ENGINE_TIMEOUT });
+  for (const [name, value] of [
+    ["autocomplete", "off"],
+    ["autocorrect", "off"],
+    ["autocapitalize", "off"],
+    ["spellcheck", "false"],
+  ] as const) {
+    await expect(field).toHaveAttribute(name, value);
+  }
+  await expect(field).not.toHaveAttribute("name");
+  expect(await field.evaluate((input) => (input as HTMLInputElement).form)).toBeNull();
+
+  const typed = ["Acme Ltd", "Zephyrine Quill"];
+  for (const term of typed) {
+    await field.fill(term);
+    await field.press("Enter");
+    await expect(page.getByTestId("terms-add")).not.toHaveAttribute(
+      "aria-disabled",
+      "true",
+      { timeout: ENGINE_TIMEOUT },
+    );
+  }
+  await expect(page.getByTestId("checklist")).toContainText("signed the lease");
+
+  await page.getByTestId("redact").click();
+  await expect(page.getByTestId("download")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+  const downloading = page.waitForEvent("download");
+  await page.getByTestId("download").click();
+  await (await downloading).path();
+
+  const secret = [...typed, "signed the lease", "The rent was paid to"];
+  for (const request of requests) {
+    const sent = `${request.url()}\n${request.postData() ?? ""}`;
+    for (const text of secret) {
+      expect(sent, `a request carried "${text}"`).not.toContain(text);
+      expect(sent, `a request carried "${text}", encoded`).not.toContain(
+        encodeURIComponent(text),
+      );
+    }
+  }
+  expect(await page.evaluate(() => window.__redactnestWrites ?? [])).toEqual([]);
+  for (const line of logged) {
+    for (const text of secret) {
+      expect(line, `the console printed "${text}"`).not.toContain(text);
+    }
+  }
+});
+
+/**
  * Spec 0006, AC-28. A document whose pages carry warnings: the readings cross
  * to the main thread as closed kinds, and nothing of the page, not its text,
  * not what a finding said about it, reaches a request, a store or the console,

@@ -4,7 +4,7 @@ import { PAGE_FINDINGS, type DocumentSummary, type PageFinding } from "@/worker/
 
 import { refuseAtTheDoor } from "./door";
 import { EngineFailure } from "./failure";
-import { findMatchesIn } from "./find";
+import { findMatchesIn, findTermsIn } from "./find";
 import { inspectPages, readsAsNothing } from "./inspect";
 import { loadEngine, type MuPdf } from "./load";
 import { prepareDocument } from "./prepare";
@@ -235,6 +235,13 @@ function holdOpen(
       // session a replacement could close.
       if (closed) throw new EngineFailure("unsupported");
       return findMatchesIn(doc, inspections, options);
+    },
+    async findTerms(options) {
+      // The worker queues a review search on the session, and a replacement
+      // closes the document only once that queue has settled, so this is a
+      // guard that never fires in use (spec 0017, *API surface*).
+      if (closed) throw new EngineFailure("unsupported");
+      return findTermsIn(doc, inspections, options);
     },
     close() {
       if (closed) return;

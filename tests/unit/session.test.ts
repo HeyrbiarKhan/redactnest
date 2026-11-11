@@ -91,6 +91,8 @@ const MATCHES: readonly ReviewMatch[] = [
     tickedByDefault: true,
     blocked: null,
     concealed: null,
+    term: null,
+    termNotes: [],
   },
   {
     id: OFF,
@@ -104,6 +106,8 @@ const MATCHES: readonly ReviewMatch[] = [
     tickedByDefault: false,
     blocked: null,
     concealed: null,
+    term: null,
+    termNotes: [],
   },
 ];
 
@@ -120,6 +124,8 @@ const BLOCKED: ReviewMatch = {
   tickedByDefault: false,
   blocked: "slanted-text",
   concealed: null,
+  term: null,
+  termNotes: [],
 };
 
 /** The same, as if a detector had recommended it anyway. */
@@ -138,6 +144,7 @@ const CHOOSE: SessionAction = {
   jobId: "job-1",
   file: file(),
   entitlement: FREE,
+  terms: [],
 };
 
 /** Replay actions from idle, which is how every case builds its starting point. */
@@ -160,7 +167,7 @@ const AT: Record<Exclude<SessionState, "idle">, () => ToolSession> = {
       CHOOSE,
       { type: "opened", summary: SUMMARY, matches: MATCHES },
       { type: "redact-started" },
-      { type: "redacted", outcome: OUTCOME },
+      { type: "redacted", outcome: OUTCOME, removedByTerm: [] },
     ),
   failed: () => drive(CHOOSE, { type: "failed", failure: "corrupt" }),
   lost: () => drive(CHOOSE, { type: "worker-lost" }),
@@ -310,7 +317,7 @@ describe("the output name", () => {
         CHOOSE,
         { type: "opened", summary: SCANNED, matches: MATCHES },
         { type: "worker-lost" },
-        { type: "retry" },
+        { type: "retry", terms: [] },
       ),
     );
     expect(session.outputName).toBe("quarterly-report-redacted.pdf");
@@ -351,7 +358,7 @@ describe("the output name", () => {
         CHOOSE,
         { type: "opened", summary, matches: MATCHES },
         { type: "redact-started" },
-        { type: "redacted", outcome },
+        { type: "redacted", outcome, removedByTerm: [] },
       ),
     );
     expect(session.outputName).toBe(expected);
@@ -371,10 +378,10 @@ describe("the output name", () => {
         CHOOSE,
         { type: "opened", summary: SCANNED, matches: MATCHES },
         { type: "redact-started" },
-        { type: "redacted", outcome: OUTCOME },
+        { type: "redacted", outcome: OUTCOME, removedByTerm: [] },
         { type: "downloaded" },
         { type: "rerun" },
-        { type: "redacted", outcome: OUTCOME },
+        { type: "redacted", outcome: OUTCOME, removedByTerm: [] },
       ),
     );
     expect(session.outputName).toBe("quarterly-report-partly-redacted.pdf");
@@ -550,7 +557,7 @@ describe("a refused run", () => {
   /** A lost worker is not a refusal, and its retry starts the review over. */
   it("clears when the worker is lost, and stays clear through the retry", () => {
     const lost = live(sessionReducer(refused(), { type: "worker-lost" }));
-    const retried = live(sessionReducer(lost, { type: "retry" }));
+    const retried = live(sessionReducer(lost, { type: "retry", terms: [] }));
 
     expect(lost.runFailure).toBeNull();
     expect(retried.runFailure).toBeNull();
@@ -703,10 +710,10 @@ describe("running again after a download", () => {
         CHOOSE,
         { type: "opened", summary: SUMMARY, matches: MATCHES },
         { type: "redact-started" },
-        { type: "redacted", outcome: OUTCOME },
+        { type: "redacted", outcome: OUTCOME, removedByTerm: [] },
         { type: "downloaded" },
         { type: "rerun" },
-        { type: "redacted", outcome: OUTCOME },
+        { type: "redacted", outcome: OUTCOME, removedByTerm: [] },
       ),
     );
 
@@ -733,7 +740,7 @@ describe("after a download", () => {
         CHOOSE,
         { type: "opened", summary: SUMMARY, matches: MATCHES },
         { type: "redact-started" },
-        { type: "redacted", outcome: OUTCOME },
+        { type: "redacted", outcome: OUTCOME, removedByTerm: [] },
         { type: "downloaded" },
         { type: "tick-toggled", id: OFF },
       ),
@@ -751,7 +758,7 @@ describe("after a download", () => {
         CHOOSE,
         { type: "opened", summary: SUMMARY, matches: MATCHES },
         { type: "redact-started" },
-        { type: "redacted", outcome: OUTCOME },
+        { type: "redacted", outcome: OUTCOME, removedByTerm: [] },
         { type: "downloaded" },
         { type: "tick-toggled", id: OFF },
       ),
@@ -790,7 +797,9 @@ describe("a worker that dies", () => {
   });
 
   it("re-enters at opening on a retry", () => {
-    const session = live(drive(CHOOSE, { type: "worker-lost" }, { type: "retry" }));
+    const session = live(
+      drive(CHOOSE, { type: "worker-lost" }, { type: "retry", terms: [] }),
+    );
 
     expect(session.state).toBe("opening");
     expect(session.failure).toBeNull();
@@ -809,7 +818,7 @@ describe("a worker that dies", () => {
         { type: "opened", summary: SUMMARY, matches: MATCHES },
         { type: "tick-toggled", id: OFF },
         { type: "worker-lost" },
-        { type: "retry" },
+        { type: "retry", terms: [] },
       ),
     );
 
@@ -851,12 +860,12 @@ describe("actions that do not belong in a state", () => {
     ["idle", { type: "opened", summary: SUMMARY, matches: MATCHES }],
     ["idle", { type: "progress", phase: "opening" }],
     ["idle", { type: "redact-started" }],
-    ["idle", { type: "redacted", outcome: OUTCOME }],
+    ["idle", { type: "redacted", outcome: OUTCOME, removedByTerm: [] }],
     ["idle", { type: "downloaded" }],
     ["idle", { type: "cancelled" }],
     ["idle", { type: "failed", failure: "corrupt" }],
     ["idle", { type: "worker-lost" }],
-    ["idle", { type: "retry" }],
+    ["idle", { type: "retry", terms: [] }],
     ["idle", { type: "tick-toggled", id: ON }],
     ["idle", { type: "ticks-set", ids: [OFF], on: true }],
     ["idle", { type: "rerun" }],
@@ -865,20 +874,20 @@ describe("actions that do not belong in a state", () => {
     ["opening", { type: "tick-toggled", id: ON }],
     ["opening", { type: "ticks-set", ids: [OFF], on: true }],
     ["opening", { type: "redact-started" }],
-    ["opening", { type: "redacted", outcome: OUTCOME }],
+    ["opening", { type: "redacted", outcome: OUTCOME, removedByTerm: [] }],
     ["opening", { type: "downloaded" }],
     ["opening", { type: "rerun" }],
     ["opening", { type: "cancelled" }],
-    ["opening", { type: "retry" }],
+    ["opening", { type: "retry", terms: [] }],
     // Reviewing is main thread only. Nothing arrives from the worker here.
     ["reviewing", { type: "opened", summary: SUMMARY, matches: MATCHES }],
     ["reviewing", { type: "progress", phase: "redacting" }],
-    ["reviewing", { type: "redacted", outcome: OUTCOME }],
+    ["reviewing", { type: "redacted", outcome: OUTCOME, removedByTerm: [] }],
     ["reviewing", { type: "downloaded" }],
     ["reviewing", { type: "rerun" }],
     ["reviewing", { type: "cancelled" }],
     ["reviewing", { type: "failed", failure: "corrupt" }],
-    ["reviewing", { type: "retry" }],
+    ["reviewing", { type: "retry", terms: [] }],
     // A tick cannot be changed while the removal it describes is running.
     ["redacting", { type: "tick-toggled", id: ON }],
     ["redacting", { type: "ticks-set", ids: [OFF], on: true }],
@@ -886,34 +895,34 @@ describe("actions that do not belong in a state", () => {
     ["redacting", { type: "redact-started" }],
     ["redacting", { type: "downloaded" }],
     ["redacting", { type: "rerun" }],
-    ["redacting", { type: "retry" }],
+    ["redacting", { type: "retry", terms: [] }],
     // A finished job does not re-finish, and nothing restarts it in place
     // until its file has been handed over.
-    ["complete", { type: "redacted", outcome: OUTCOME }],
+    ["complete", { type: "redacted", outcome: OUTCOME, removedByTerm: [] }],
     ["complete", { type: "redact-started" }],
     ["complete", { type: "rerun" }],
     ["complete", { type: "progress", phase: "writing" }],
     ["complete", { type: "cancelled" }],
     ["complete", { type: "failed", failure: "corrupt" }],
-    ["complete", { type: "retry" }],
+    ["complete", { type: "retry", terms: [] }],
     // Terminal for that document. Only a new file or a release moves it.
     ["failed", { type: "opened", summary: SUMMARY, matches: MATCHES }],
     ["failed", { type: "progress", phase: "opening" }],
     ["failed", { type: "tick-toggled", id: ON }],
     ["failed", { type: "ticks-set", ids: [OFF], on: true }],
     ["failed", { type: "redact-started" }],
-    ["failed", { type: "redacted", outcome: OUTCOME }],
+    ["failed", { type: "redacted", outcome: OUTCOME, removedByTerm: [] }],
     ["failed", { type: "downloaded" }],
     ["failed", { type: "rerun" }],
     ["failed", { type: "cancelled" }],
-    ["failed", { type: "retry" }],
+    ["failed", { type: "retry", terms: [] }],
     // Lost takes a retry or a release, and nothing else.
     ["lost", { type: "opened", summary: SUMMARY, matches: MATCHES }],
     ["lost", { type: "progress", phase: "opening" }],
     ["lost", { type: "tick-toggled", id: ON }],
     ["lost", { type: "ticks-set", ids: [OFF], on: true }],
     ["lost", { type: "redact-started" }],
-    ["lost", { type: "redacted", outcome: OUTCOME }],
+    ["lost", { type: "redacted", outcome: OUTCOME, removedByTerm: [] }],
     ["lost", { type: "downloaded" }],
     ["lost", { type: "rerun" }],
     ["lost", { type: "cancelled" }],
@@ -1033,7 +1042,10 @@ describe("a blocked match", () => {
       CHOOSE,
       { type: "opened", summary: SUMMARY, matches: WITH_BLOCKED },
       ...(state === "complete"
-        ? ([{ type: "redact-started" }, { type: "redacted", outcome: OUTCOME }] as const)
+        ? ([
+            { type: "redact-started" },
+            { type: "redacted", outcome: OUTCOME, removedByTerm: [] },
+          ] as const)
         : []),
     );
 

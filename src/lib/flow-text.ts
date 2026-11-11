@@ -13,9 +13,11 @@
  */
 
 import { config } from "@/config";
-import { countedKinds, lookedFor } from "@/lib/detectors";
+import { countedKinds, lookedFor, TERM_GROUP_NOUN } from "@/lib/detectors";
 import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
 import { PRICING_PATH, SIGN_IN_PATH } from "@/lib/routes";
+import type { NotSearchedReason } from "@/lib/session";
+import { TERM_MIN_CHARS, termLength, type TermRefusal } from "@/lib/term-text";
 import type {
   EngineErrorKind,
   EntitlementAccount,
@@ -458,20 +460,66 @@ export const RESULT_TERMS = Object.freeze({
   stripped: "Also stripped",
 });
 
-/** Removed: what the engine reported, by kind (AC-11, INV-4). */
-export function removedLine(counts: ResultCounts): string {
-  const kinds = countedKinds(counts.removedByType);
-  return kinds.length === 0 ? "Nothing" : LIST.format(kinds);
+/**
+ * One custom term's counts on the result card (spec 0017, AC-22): its words
+ * from the tab's list, how many of its rows the engine removed
+ * (`removedByTerm`), and how many it left unticked or could not remove.
+ */
+export interface TermResult {
+  readonly text: string;
+  readonly removed: number;
+  readonly unticked: number;
+  readonly blocked: number;
+}
+
+/** `3 matches for Acme Ltd`: a term's count, by `TERM_GROUP_NOUN`. */
+function termCount(count: number, text: string): string {
+  return `${count} ${count === 1 ? TERM_GROUP_NOUN.one : TERM_GROUP_NOUN.other} for ${text}`;
+}
+
+/** Each term with a count, as words, in list order. */
+function termCounts(
+  terms: readonly TermResult[],
+  count: (term: TermResult) => number,
+): readonly string[] {
+  return terms.flatMap((term) =>
+    count(term) > 0 ? [termCount(count(term), term.text)] : [],
+  );
+}
+
+/**
+ * Removed: what the engine reported, by kind (AC-11, INV-4), then each term
+ * by what the engine removed for it, in list order (spec 0017, AC-22).
+ */
+export function removedLine(
+  counts: ResultCounts,
+  terms: readonly TermResult[] = [],
+): string {
+  const parts = [
+    ...countedKinds(counts.removedByType),
+    ...termCounts(terms, ({ removed }) => removed),
+  ];
+  return parts.length === 0 ? "Nothing" : LIST.format(parts);
 }
 
 /**
  * Left in the file: up to two sentences, what was left unticked and what could
- * not be removed (AC-11). Each blocked row already says why, so the reasons
- * are not repeated here.
+ * not be removed (AC-11), each term named beside the detector kinds (spec
+ * 0017, AC-22). Each blocked row already says why, so the reasons are not
+ * repeated here.
  */
-export function leftLine(counts: ResultCounts): string {
-  const unticked = countedKinds(counts.untickedByType);
-  const blocked = countedKinds(counts.blockedByType);
+export function leftLine(
+  counts: ResultCounts,
+  terms: readonly TermResult[] = [],
+): string {
+  const unticked = [
+    ...countedKinds(counts.untickedByType),
+    ...termCounts(terms, ({ unticked: count }) => count),
+  ];
+  const blocked = [
+    ...countedKinds(counts.blockedByType),
+    ...termCounts(terms, ({ blocked: count }) => count),
+  ];
   const sentences = [
     ...(unticked.length > 0 ? [`${LIST.format(unticked)} you left unticked.`] : []),
     ...(blocked.length > 0
@@ -510,3 +558,208 @@ export function strippedLine(sanitized: readonly SanitizedKind[]): string {
 
 /** Once Download has handed the file over (AC-13). */
 export const DOWNLOADED_LINE = "Your browser has the file.";
+
+/* Custom terms (spec 0017). */
+
+/** A term as the visitor typed it, in curly quotes, as every line names one. */
+function quoted(text: string): string {
+  return `“${text}”`;
+}
+
+/** `term` or `terms`, for a count. */
+function termWord(count: number): string {
+  return count === 1 ? "term" : "terms";
+}
+
+/**
+ * The words the custom terms panel, its chips, its groups and the action
+ * panel show (AC-1 to AC-6, AC-14, AC-15, AC-17 to AC-20). A term's own text
+ * is the visitor's words, never the document's, so a line may carry it
+ * (spec 0007, INV-3 and INV-4, as spec 0017 amends them).
+ */
+export const TERMS_TEXT = Object.freeze({
+  heading: "Custom terms",
+  label: "Add a name, number or phrase",
+  add: "Add",
+  /** Add's busy words while a search runs (AC-19; spec 0013, AC-34). */
+  adding: "Searching",
+  removeAll: "Remove all terms",
+  remove: (text: string) => `Remove ${text}`,
+  searchingOne: (text: string) => `Searching for ${text}…`,
+  searchingMany: (count: number) => `Searching for ${count} terms…`,
+  /** A chip's state while its search runs. */
+  searching: "Searching",
+  /** A chip's count once found, by AC-14's noun. */
+  matches: (count: number) =>
+    `${count} ${count === 1 ? TERM_GROUP_NOUN.one : TERM_GROUP_NOUN.other}`,
+  notFound: "Not found in this document",
+  notFoundPartly: "Not found on the pages RedactNest could read",
+  notSearched: Object.freeze({
+    "free-plan": "Not searched: this file opened on the Free plan",
+    "search-failed": "Not searched: the search could not finish",
+  }) satisfies Readonly<Record<NotSearchedReason, string>>,
+  setAside: "Set aside for this file",
+  /** A set aside term's chip and group (AC-17). */
+  setAsideState: "Set aside for this file",
+  tryAgain: "Try again",
+  recheck: "Check my plan and open it again",
+  /** Beside the full drop zone while the list holds terms (AC-6). */
+  kept: (count: number) =>
+    `${count} custom ${termWord(count)} ${count === 1 ? "is" : "are"} kept for this tab`,
+});
+
+/**
+ * The polite line once a search lands (AC-19): how many matches each term
+ * found, or that it was not found, heard once.
+ */
+export function termsFoundLine(
+  found: readonly { readonly text: string; readonly count: number }[],
+  partly: boolean,
+): string {
+  const notFound = (
+    partly ? TERMS_TEXT.notFoundPartly : TERMS_TEXT.notFound
+  ).toLowerCase();
+  return found
+    .map(({ text, count }) =>
+      count > 0 ? `Found ${termCount(count, text)}.` : `${quoted(text)}: ${notFound}.`,
+    )
+    .join(" ");
+}
+
+/** The polite line while a search runs (AC-19). */
+export function termsSearchingLine(texts: readonly string[]): string {
+  return texts.length === 1
+    ? TERMS_TEXT.searchingOne(texts[0])
+    : TERMS_TEXT.searchingMany(texts.length);
+}
+
+/** The polite line when a review search fails (AC-20). */
+export function termsFailedLine(texts: readonly string[]): string {
+  const names = LIST.format(texts.map(quoted));
+  const them = texts.length === 1 ? "it" : "them";
+  return `${names} could not be searched. ${TERMS_TEXT.tryAgain}, set aside or remove ${them}.`;
+}
+
+/**
+ * Why a term was not added (AC-4), a record over the refusal kinds, so a kind
+ * added without its words fails `pnpm typecheck`. The caps come from `config`
+ * and the term rules, never a literal.
+ */
+export const TERM_REFUSAL_TEXT: Readonly<Record<TermRefusal, string>> = Object.freeze({
+  "too-short": `too short, at least ${TERM_MIN_CHARS} characters`,
+  "too-long": `too long, at most ${config.maxTermChars} characters`,
+  "no-letter-or-digit": "no letter or number in it",
+  duplicate: "already in your list",
+  "list-full": `your list is full at ${config.maxCustomTerms} terms`,
+});
+
+/**
+ * How many refused lines a paste names, and how much of each (AC-4). Rules
+ * about the line, not caps on the visitor: past these the line would bury
+ * the reasons, and each reason still says how many more it refused.
+ */
+const REFUSED_NAMED = 20;
+const REFUSED_NAME_CHARS = 60;
+
+/** A refused line, named in full up to 60 code points, a longer one cut, with its length. */
+function refusedName(text: string): string {
+  const points = Array.from(text);
+  if (points.length <= REFUSED_NAME_CHARS) return quoted(text);
+  const cut = `${points.slice(0, REFUSED_NAME_CHARS).join("")}…`;
+  return `${quoted(cut)} (${termLength(text)} characters)`;
+}
+
+/**
+ * The panel's line for what was not added (AC-4, INV-11): one refused term
+ * named with its reason; otherwise one line per reason, in `order`, with its
+ * count, the first 20 refused lines named across them, and how many more
+ * each reason refused. No refused line passes unsaid.
+ */
+export function refusalLines(
+  refused: readonly { readonly text: string; readonly reason: TermRefusal }[],
+  order: readonly TermRefusal[],
+): readonly string[] {
+  if (refused.length === 0) return [];
+  if (refused.length === 1) {
+    const [{ text, reason }] = refused;
+    return [`${refusedName(text)} not added: ${TERM_REFUSAL_TEXT[reason]}.`];
+  }
+  const named = new Set(refused.slice(0, REFUSED_NAMED));
+  return order.flatMap((reason) => {
+    const these = refused.filter((each) => each.reason === reason);
+    if (these.length === 0) return [];
+    const names = these
+      .filter((each) => named.has(each))
+      .map(({ text }) => refusedName(text));
+    const more = these.length - names.length;
+    const listed = [...names, ...(more > 0 ? [`${more} more`] : [])];
+    return [
+      `${these.length} not added, ${TERM_REFUSAL_TEXT[reason]}: ${LIST.format(listed)}.`,
+    ];
+  });
+}
+
+/** The locked panel's words and way forward, by the job's account (AC-2). */
+export interface TermsLocked {
+  readonly line: string;
+  readonly link: PlanLink | null;
+  readonly recheck: string | null;
+}
+
+const LOCKED_PRO_LINE = `Custom terms come with ${PRO_PLAN.name}: add names, numbers or phrases and every place they appear is found.`;
+const LOCKED_UNCONFIRMED_LINE = `This file opened on the ${FREE_PLAN.name} plan because your plan could not be confirmed, so custom terms are off for it.`;
+
+/**
+ * The locked panel on a `free` job (AC-2), a record over the account kinds:
+ * Pricing, in a new tab, for an anonymous visitor or a signed in Free one;
+ * the unconfirmed line and Check my plan and open it again where the plan
+ * could not be confirmed (spec 0012, AC-6).
+ */
+export const TERMS_LOCKED_TEXT: Readonly<Record<EntitlementAccount, TermsLocked>> =
+  Object.freeze({
+    none: Object.freeze({ line: LOCKED_PRO_LINE, link: GET_PRO, recheck: null }),
+    "signed-in": Object.freeze({ line: LOCKED_PRO_LINE, link: GET_PRO, recheck: null }),
+    "sign-in-needed": Object.freeze({
+      line: LOCKED_UNCONFIRMED_LINE,
+      link: null,
+      recheck: RECHECK,
+    }),
+    unknown: Object.freeze({
+      line: LOCKED_UNCONFIRMED_LINE,
+      link: null,
+      recheck: RECHECK,
+    }),
+  });
+
+/**
+ * Why Make a cleaned copy waits (AC-18), or null when it may run: still
+ * searching, or which terms were not searched and how to go ahead.
+ */
+export function makeWaitsLine(
+  searching: boolean,
+  notSearched: readonly string[],
+): string | null {
+  if (searching) return "Your custom terms are still being searched, so the run waits.";
+  if (notSearched.length === 0) return null;
+  const names = LIST.format(notSearched.map(quoted));
+  const one = notSearched.length === 1;
+  return `${names} ${one ? "was" : "were"} not searched. ${TERMS_TEXT.tryAgain}, set aside or remove ${one ? "it" : "them"} to go ahead.`;
+}
+
+/** The result card's term for the set aside line (AC-22). */
+export const RESULT_SET_ASIDE = "Not searched";
+
+/** The set aside terms, each with why it was not searched (AC-22). */
+export function setAsideLine(
+  setAside: readonly { readonly text: string; readonly reason: NotSearchedReason }[],
+): string {
+  return LIST.format(
+    setAside.map(({ text, reason }) => {
+      const why =
+        reason === "free-plan"
+          ? "this file opened on the Free plan"
+          : "its search could not finish";
+      return `${quoted(text)}, set aside because ${why}`;
+    }),
+  );
+}

@@ -30,7 +30,7 @@ import type { DetectorKind } from "@/worker/protocol";
 export { CARD_BRANDS, CARD_GROUP_DIGITS, type CardBrand } from "./card";
 export { ADDED_DATE_LABELS, BIRTH_WORDS, DATE_LABELS, MONTHS } from "./date";
 export { IBAN_LENGTHS } from "./iban";
-export { KEYWORD_REACH } from "./text";
+export { HYPHEN, KEYWORD_REACH } from "./text";
 export { NI_PREFIX_RULES } from "./uk-nino";
 export { SSN_WORDS } from "./us-ssn";
 export {
@@ -43,6 +43,7 @@ export {
   type PhoneReading,
 } from "./phone";
 export type { Detector, DetectInput, Span } from "./types";
+export { findTerms, tailFrom, termReach, type TermInput, type TermSpan } from "./terms";
 
 /**
  * Every kind's detector. A record over `DetectorKind`, so a kind added to the

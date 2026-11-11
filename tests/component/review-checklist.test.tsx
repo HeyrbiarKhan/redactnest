@@ -41,6 +41,8 @@ function match(
     tickedByDefault: true,
     blocked: null,
     concealed: null,
+    term: null,
+    termNotes: [],
     ...overrides,
   };
 }

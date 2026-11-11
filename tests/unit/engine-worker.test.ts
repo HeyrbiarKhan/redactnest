@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FindOptions, FoundMatch, RedactionTarget } from "@/engine";
+import { RunCancelled } from "@/engine";
 import {
   asMatchId,
+  asTermId,
   type DocumentSummary,
   type ErrorMessage,
   type RedactedMessage,
@@ -111,6 +113,9 @@ function fakeDocument(found: readonly FoundMatch[] = []) {
     findMatches: vi.fn<(options: FindOptions) => Promise<readonly FoundMatch[]>>(
       async () => found,
     ),
+    findTerms: vi.fn<(options: FindOptions) => Promise<readonly FoundMatch[]>>(
+      async () => [],
+    ),
   };
 }
 
@@ -122,8 +127,9 @@ function openRequest(
     jobId: overrides.jobId ?? "job-1",
     kind: "open",
     bytes: overrides.bytes ?? new ArrayBuffer(64),
-    limits: { maxBytes: 26_214_400, maxPages: 3 },
+    limits: { maxBytes: 26_214_400, maxPages: 3, maxTerms: 0, maxTermChars: 100 },
     contextChars: 40,
+    terms: [],
   };
 }
 
@@ -147,6 +153,7 @@ function engineResult() {
   return {
     output: new ArrayBuffer(128),
     removedByType: {},
+    removedByTerm: [],
     sanitized: ["document-info", "annotations"],
     // One per page of SUMMARY, agreeing with it: neither page was trimmed.
     trim: [UNTRIMMED, UNTRIMMED],
@@ -203,7 +210,7 @@ describe("opening a document", () => {
 
     expect(openDocument).toHaveBeenCalledWith(
       expect.any(ArrayBuffer),
-      { maxBytes: 26_214_400, maxPages: 3 },
+      { maxBytes: 26_214_400, maxPages: 3, maxTerms: 0, maxTermChars: 100 },
       { onPhase: expect.any(Function), isCancelled: expect.any(Function) },
     );
   });
@@ -292,6 +299,7 @@ describe("detecting", () => {
     start: 9,
     end: 25,
     kind: "email",
+    term: null,
     text: "jane@example.com",
   });
 
@@ -299,6 +307,7 @@ describe("detecting", () => {
     {
       page: 0,
       kind: "email",
+      term: null,
       text: "jane@example.com",
       before: "Contact: ",
       after: " or call",
@@ -307,6 +316,7 @@ describe("detecting", () => {
       tickedByDefault: true,
       blocked: null,
       concealed: null,
+      termNotes: [],
       target: TARGET,
     },
     {
@@ -320,6 +330,8 @@ describe("detecting", () => {
       tickedByDefault: true,
       blocked: "slanted-text",
       concealed: null,
+      term: null,
+      termNotes: [],
       target: null,
     },
   ]);
@@ -342,9 +354,11 @@ describe("detecting", () => {
   it("asks the engine with the context window the open carried", async () => {
     const doc = await openWith();
 
+    // Spec 0017, AC-9: the kept list rides in the same read (none here).
     expect(doc.findMatches).toHaveBeenCalledWith({
       contextChars: 40,
       isCancelled: expect.any(Function),
+      terms: [],
     });
   });
 
@@ -361,6 +375,9 @@ describe("detecting", () => {
       "concealed",
       "id",
       "page",
+      // Spec 0017: the term it was searched under, and its notes.
+      "term",
+      "termNotes",
       "text",
       "tickedByDefault",
       "type",
@@ -881,6 +898,8 @@ describe("a redaction run", () => {
       "kind",
       "outcome",
       "output",
+      // Spec 0017, AC-22 and INV-9: beside the outcome, never inside it.
+      "removedByTerm",
     ]);
   });
 
@@ -1328,5 +1347,212 @@ describe("a rejection that escapes every handler", () => {
     await startWorker();
 
     expect(scope.rejectUnhandled().defaultPrevented).toBe(true);
+  });
+});
+
+/**
+ * Spec 0017, AC-27 and INV-2. The worker keeps no list: it judges each
+ * request's terms alone against the job's frozen limits, so a Free job may
+ * carry none, and a review search joins the session's queue.
+ */
+describe("custom terms", () => {
+  const PAID_LIMITS = {
+    maxBytes: 26_214_400,
+    maxPages: 50,
+    maxTerms: 50,
+    maxTermChars: 100,
+  };
+  const ACME = { id: asTermId("t-acme"), text: "Acme Ltd" };
+
+  function paidOpen(
+    terms: readonly { id: ReturnType<typeof asTermId>; text: string }[] = [],
+  ) {
+    return { ...openRequest(), limits: PAID_LIMITS, terms } as RequestMessage;
+  }
+
+  function findTerms(terms: readonly unknown[], id = "op-3"): RequestMessage {
+    return { id, jobId: "job-1", kind: "find-terms", terms } as RequestMessage;
+  }
+
+  const TERM_ROW: FoundMatch = {
+    page: 0,
+    kind: "term",
+    term: ACME.id,
+    termNotes: [],
+    text: "Acme Ltd",
+    before: "Paid to ",
+    after: " today",
+    beforeCut: false,
+    afterCut: false,
+    tickedByDefault: true,
+    concealed: null,
+    blocked: null,
+    target: {
+      page: 0,
+      quads: [[72, 700, 120, 700, 72, 712, 120, 712]],
+      start: 8,
+      end: 16,
+      kind: "term",
+      term: ACME.id,
+      text: "Acme Ltd",
+    },
+  };
+
+  it("refuses an open that carries terms on a free job, before anything is parsed", async () => {
+    await startWorker();
+    scope.send({ ...openRequest(), terms: [ACME] } as RequestMessage);
+    await settle();
+
+    expect(scope.of("error")).toEqual([
+      { id: "op-1", jobId: "job-1", kind: "error", errorKind: "unsupported" },
+    ]);
+    expect(openDocument).not.toHaveBeenCalled();
+  });
+
+  it("hands the kept list to detection at open on a paid job", async () => {
+    const doc = fakeDocument();
+    openDocument.mockResolvedValue(doc);
+    await startWorker();
+    scope.send(paidOpen([ACME]));
+    await settle();
+
+    expect(doc.findMatches).toHaveBeenCalledWith(
+      expect.objectContaining({ terms: [ACME] }),
+    );
+  });
+
+  it("answers a hand made find-terms on a free job with unsupported", async () => {
+    const doc = fakeDocument();
+    openDocument.mockResolvedValue(doc);
+    await startWorker();
+    scope.send(openRequest());
+    await settle();
+    scope.send(findTerms([ACME]));
+    await settle();
+
+    expect(scope.of("error")).toEqual([
+      { id: "op-3", jobId: "job-1", kind: "error", errorKind: "unsupported" },
+    ]);
+    expect(doc.findTerms).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["no session", null],
+    ["an empty batch", []],
+    ["a term the list would prepare differently", [{ id: "t-1", text: " Acme Ltd" }]],
+    ["a term too short", [{ id: "t-1", text: "A" }]],
+    ["a term too long", [{ id: "t-1", text: "x".repeat(101) }]],
+    ["a term with no letter or digit", [{ id: "t-1", text: "--" }]],
+    [
+      "a repeat within the request",
+      [
+        { id: "t-1", text: "José" },
+        { id: "t-2", text: "JOSE" },
+      ],
+    ],
+    [
+      "one id named twice",
+      [
+        { id: "t-1", text: "Acme" },
+        { id: "t-1", text: "Jones" },
+      ],
+    ],
+    ["a term that is not text", [{ id: "t-1", text: 42 }]],
+    [
+      "more terms than the job allows",
+      Array.from({ length: 51 }, (_, index) => ({
+        id: `t-${index}`,
+        text: `Term ${index}`,
+      })),
+    ],
+  ] as const)("refuses %s", async (_case, terms) => {
+    const doc = fakeDocument();
+    openDocument.mockResolvedValue(doc);
+    await startWorker();
+    if (terms !== null) {
+      scope.send(paidOpen());
+      await settle();
+    }
+    scope.send(findTerms(terms ?? [ACME]));
+    await settle();
+
+    expect(
+      scope.of("error").map((message) => (message as ErrorMessage).errorKind),
+    ).toEqual(["unsupported"]);
+    expect(doc.findTerms).not.toHaveBeenCalled();
+  });
+
+  it("searches a paid session's batch and posts its rows, with ids minted here", async () => {
+    const doc = fakeDocument();
+    doc.findTerms.mockResolvedValue([TERM_ROW]);
+    openDocument.mockResolvedValue(doc);
+    await startWorker();
+    scope.send(paidOpen());
+    await settle();
+    scope.send(findTerms([ACME]));
+    await settle();
+
+    const [found] = scope.of("terms-found");
+    expect(found).toMatchObject({ id: "op-3", jobId: "job-1", terms: [ACME.id] });
+    const [row] = (found as Extract<ResponseMessage, { kind: "terms-found" }>).matches;
+    expect(row).toMatchObject({ type: "term", term: ACME.id, text: "Acme Ltd", page: 1 });
+    expect(row).not.toHaveProperty("target");
+
+    // The row's target joined the session's map, so a redact may name it.
+    scope.send({
+      ...redactRequest({ id: "op-4" }),
+      matchIds: [row.id],
+    } as RequestMessage);
+    await settle();
+    expect(redactDocument).toHaveBeenCalledWith(
+      expect.any(ArrayBuffer),
+      [TERM_ROW.target],
+      expect.anything(),
+    );
+  });
+
+  it("posts nothing for a search that was cancelled", async () => {
+    const doc = fakeDocument();
+    const reading = gate<readonly FoundMatch[]>();
+    doc.findTerms.mockReturnValue(reading.promise);
+    openDocument.mockResolvedValue(doc);
+    await startWorker();
+    scope.send(paidOpen());
+    await settle();
+    scope.send(findTerms([ACME]));
+    await settle();
+    scope.send({ id: "op-3", jobId: "job-1", kind: "cancel" });
+    reading.reject(new RunCancelled());
+    await settle();
+
+    expect(scope.of("terms-found")).toEqual([]);
+    expect(scope.of("error")).toEqual([]);
+  });
+
+  it("closes the review copy only once a search reading it has stopped", async () => {
+    const first = fakeDocument();
+    const second = fakeDocument();
+    const reading = gate<readonly FoundMatch[]>();
+    first.findTerms.mockReturnValue(reading.promise);
+    openDocument.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    await startWorker();
+    scope.send(paidOpen());
+    await settle();
+    scope.send(findTerms([ACME]));
+    await settle();
+
+    // A replacement ends the session and cancels the search, but the search
+    // still holds a page of the review copy until it notices.
+    scope.send({ ...paidOpen(), id: "op-5", jobId: "job-2" } as RequestMessage);
+    await settle();
+    expect(first.close).not.toHaveBeenCalled();
+    const [{ isCancelled }] = first.findTerms.mock.calls[0];
+    expect(isCancelled?.()).toBe(true);
+
+    reading.reject(new RunCancelled());
+    await settle();
+    await settle();
+    expect(first.close).toHaveBeenCalledTimes(1);
+    expect(scope.of("terms-found")).toEqual([]);
   });
 });
