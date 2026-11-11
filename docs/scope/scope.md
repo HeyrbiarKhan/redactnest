@@ -376,7 +376,7 @@ spec [0013](../specs/0013-brand-ui-refresh/index.md) · code in `src/ui/spinner.
 
 ## Release 4: First paid capability
 
-### 13. Custom terms · in-progress
+### 13. Custom terms · in-progress · Beta + review
 Type the names, reference numbers or phrases to remove and they go everywhere they appear. The first paid capability with real substance behind it.
 **Done when:** a paid user can enter terms and every occurrence is removed from the content stream, including matches broken across line breaks and hyphenation, and the summary reports how many were removed.
 spec [0017](../specs/0017-custom-terms/index.md)
@@ -388,6 +388,7 @@ spec [0017](../specs/0017-custom-terms/index.md)
   - [ ] Measured, counted and said: the open and paste budgets, telemetry, claims C3 and C14, Pricing's line, the amends to older specs, and your read of every word · AC-24 to AC-26, AC-28, AC-31
 - [ ] Verify it: `/check verify custom terms`
 - [ ] Test it: `/test custom terms`
+- [ ] Review it (fresh model): `/check review custom terms`
 
 ## Release 5: Second paid capability
 
