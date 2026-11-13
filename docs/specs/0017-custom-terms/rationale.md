@@ -227,6 +227,44 @@ With no trace, every session's median of its first five presses each way sat at 
 - No trace for the whole `speed` project: it would move the figures specs 0007 and 0012 recorded under a trace, for no line that is failing. Their stopwatches still time under the trace and sit far inside their lines (a tick at 15 to 31 ms against 200 ms); if one of them nears its line, the trace is the first thing to rule out.
 - A faster select all in the page (rendering the group's rows in batches, or virtual scrolling): the page is no slower than main, and 3,000 rows press in about 78 ms. Spec 0007 keeps virtual scrolling for a group that is slow on its own.
 
+### AC-28's select all line, as built (measured 2026-11-13)
+
+`tests/e2e/terms-speed.spec.ts` as task 18 amends it (`2f0a4ce`): `test.use({ trace: "off" })` at the top of the file, and the second test's select all pressed ten times by turns, starting with a clear, 300 ms apart, the ticked rows counted after each (none, then all 3,000), the median each way held to 200 ms and every press to 500 ms. One production build made with Playwright's environment (the app as at `95b9ea3`, since only the test changed), served on port 3000 with nothing else listening there, and `pnpm exec playwright test --project=speed --no-deps` run three times on it, one run after another. Every case passed in all three.
+
+| Run | Ten presses, in order, clear first (ms) | Median clear | Median tick | Slowest press |
+|---|---|---|---|---|
+| 1 | 131, 87, 82, 77, 88, 79, 83, 95, 71, 71 | 83 ms | 79 ms | 131 ms, the first |
+| 2 | 100, 84, 79, 75, 76, 80, 73, 75, 81, 72 | 79 ms | 75 ms | 100 ms, the first |
+| 3 | 100, 82, 78, 78, 75, 77, 73, 75, 79, 72 | 78 ms | 77 ms | 100 ms, the first |
+
+The medians, 75 to 83 ms, sit inside the 75 to 91 ms the decision expected, about 2.4 times under the 200 ms line. The first press after the open was the slowest in every run, as the decision found, and once a little past the "about 120 ms" of the scratch sessions; every press stayed under a third of the 500 ms ceiling.
+
+Both tests in the file now run with no trace. Their other figures, in the same three runs:
+
+| Case | Three runs | Budget |
+|---|---|---|
+| `detect-dense.pdf`, open with 50 terms found nowhere | 2,541 to 2,587 ms | 5,000 ms |
+| `detect-dense.pdf`, open with its 27 found words | 2,449 to 2,479 ms | 5,000 ms |
+| `detect-dense.pdf`, open with `Jo` alone | 2,108 to 2,136 ms | 5,000 ms |
+| The 27 found words pasted during review | 1,126 to 1,154 ms | 3,000 ms |
+| `terms-dense.pdf`, open with `JK` kept | 2,258 to 2,329 ms | 5,000 ms |
+| `JK` pasted during review | 1,102 to 1,125 ms | 3,000 ms |
+| Slowest single read, at open | 29 to 34 ms | 1,000 ms |
+| Slowest single read, in a search | 9 to 11 ms | 1,000 ms |
+
+In line with the traced figures above, so the trace weighed on the select all alone. The checklist's and the paid cap's stopwatches, still traced, passed in the same runs (a tick at 11 to 29 ms).
+
+**The ceiling holds on its own.** A scratch copy of the test, its first test skipped, added a click listener that held the main thread for 600 ms on the third press alone (a clear), and ran under `retain-on-failure`, the trace setting `playwright.config.ts` uses. Its presses: 99, 81, 686, 76, 75, 74, 72, 73, 78 and 88 ms. Both medians passed (78 ms clearing, 76 ms ticking), and the run failed on "select all, press 3 (clearing)" at 686 ms. The failure kept no trace, only Playwright's `error-context.md`, so the file's `test.use` turns the trace off even where the config would keep one.
+
+**Main beside custom terms, again.** By the method of the decided section: main (`9cbb4c3`) and this build, each built with Playwright's environment and served side by side, each in a browser of its own, `detect-dense.pdf` opened with `paid` routed, its email group's select all (1,100 rows) pressed by turns, the order swapped every round, 300 ms between presses, no trace. Two runs of 15 rounds:
+
+| Build | Clear | Medians | Tick | Medians |
+|---|---|---|---|---|
+| main | 26 to 43 ms | 33 and 28 ms | 27 to 36 ms | 30 and 30 ms |
+| custom terms | 26 to 54 ms | 30 and 30 ms | 29 to 42 ms | 34 and 35 ms |
+
+The same within noise. Custom terms' tick medians sat 4 to 5 ms above main's in both runs this time, where earlier the same day they sat level (main 34 and 30 ms, custom terms 34 and 33 ms). Across the four runs, main's tick medians span 30 to 34 ms and custom terms' 33 to 35 ms: a few microseconds a row at most, and nothing a visitor could see.
+
 ### AC-8 and AC-29, as built (2026-11-11)
 
 - **Mixed line end hyphens.** Each hyphen before a line break is read both ways by two whole readings of the page (all such hyphens as nothing, then all as hyphens), which keeps every reading linear and every match its term's length, so its start comes in one step (AC-29). Checked through `findTerms` on 2026-11-13: `Jean-` then `Luc Smithson`, and `Jean-Luc Smith-` then `son`, are each exact for `Jean-Luc Smithson`; `Jean-` then `Luc Smith-` then `son`, which needs the first hyphen kept and the second dropped, lists one row with the `spaced` note. It is listed unticked, never missed.
