@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /**
  * The names and addresses `detect-dense.pdf` holds, as `denseRow` in
@@ -25,11 +25,25 @@ function denseRow(index: number): { name: string; email: string } {
 }
 
 /**
+ * What `terms-dense.pdf` holds, as `TERMS_DENSE` in
+ * `scripts/lib/terms-fixtures.mjs` writes it, written out for the same
+ * reason: the initials every line names twice, and how many places that makes.
+ */
+const DENSE_TERM = "JK";
+const DENSE_TERM_ROWS = 3_000;
+
+/**
  * Spec 0017, AC-28. Custom terms on the paid cap's dense document, in a real
  * browser: an open with 50 kept terms, from the file input's `change` to the
  * rows committed, the engine's load included, for three lists; a pasted batch
  * during review, from the paste to its rows committed; and the slowest single
  * read in any of them. The page break carry (AC-33) is on throughout.
+ *
+ * Then one group of thousands, on `terms-dense.pdf`: the open with `JK` kept,
+ * `JK` pasted during review, and the group's select all, pressed to clear all
+ * 3,000 rows and again to tick them, each press timed from the click to the
+ * next paint, as `checklist-speed.spec.ts` times a tick, against spec 0007's
+ * line for one (AC-8 there).
  *
  * Each list is kept the way a visitor keeps one: pasted into the review of a
  * small file, then Start over, which ends the worker and keeps the list, so
@@ -46,11 +60,14 @@ function denseRow(index: number): { name: string; email: string } {
  */
 
 const DENSE = resolve("tests/fixtures/detect-dense.pdf");
+const TERMS_DENSE = resolve("tests/fixtures/terms-dense.pdf");
 const SMALL = resolve("tests/fixtures/text-page.pdf");
 
 const OPEN_BUDGET_MS = 5_000;
 const PASTE_BUDGET_MS = 3_000;
 const READ_BUDGET_MS = 1_000;
+/** Spec 0007's line for a single tick, which a select all is held to (AC-28). */
+const PRESS_BUDGET_MS = 200;
 
 const CHANNEL = "redactnest-terms-speed";
 const WORKER_BOOTSTRAP = /\/_next\/static\/chunks\/turbopack-worker-[^/?]+\.js(\?|$)/;
@@ -268,8 +285,8 @@ async function watchSearchEnd(page: Page): Promise<void> {
   });
 }
 
-/** Keep `terms` for the tab, end the worker, then time the dense open. */
-async function timedOpen(page: Page, terms: readonly string[]) {
+/** Keep `terms` for the tab, end the worker, then time the open of `file`. */
+async function timedOpen(page: Page, terms: readonly string[], file = DENSE) {
   await page.goto("/tool");
   await page.getByTestId("file-input").setInputFiles(SMALL);
   await expect(page.getByTestId("terms-panel")).toBeVisible({ timeout: 120_000 });
@@ -287,7 +304,7 @@ async function timedOpen(page: Page, terms: readonly string[]) {
   await expect(page.getByTestId("terms-kept")).toBeVisible();
 
   const before = await page.evaluate(() => window.__redactnestTerms?.notes.length ?? 0);
-  await page.getByTestId("file-input").setInputFiles(DENSE);
+  await page.getByTestId("file-input").setInputFiles(file);
   await expect
     .poll(() => page.evaluate(() => window.__redactnestTerms?.shownAt != null), {
       timeout: 150_000,
@@ -305,6 +322,45 @@ async function timedOpen(page: Page, terms: readonly string[]) {
     ...readsBetween(notes, "detecting", "result"),
   ];
   return { openMs: timing.shownAt - timing.chosenAt, slowestReadMs: Math.max(...reads) };
+}
+
+/**
+ * Open `file` with no list kept, then paste `lines` during review and time it
+ * from the paste to the rows committed, with the slowest read in the search.
+ */
+async function timedPaste(page: Page, file: string, lines: readonly string[]) {
+  await page.goto("/tool");
+  await page.getByTestId("file-input").setInputFiles(file);
+  await expect(page.getByTestId("terms-panel")).toBeVisible({ timeout: 150_000 });
+  const before = await page.evaluate(() => window.__redactnestTerms?.notes.length ?? 0);
+  await watchSearchEnd(page);
+  const pastedAt = await paste(page, lines);
+  await searched(page, lines.filter((line) => line !== "").length);
+  const landedAt = await page.evaluate(() => window.__redactnestTerms?.searchEndAt ?? 0);
+  await expect
+    .poll(() => page.evaluate(() => window.__redactnestTerms?.notes.length ?? 0))
+    .toBeGreaterThan(before);
+  const notes = (await page.evaluate(() => window.__redactnestTerms?.notes.at(-1))) ?? [];
+  const reads = readsBetween(notes, "received-find-terms", "terms-found");
+  return { pasteMs: landedAt - pastedAt, slowestReadMs: Math.max(...reads) };
+}
+
+/** How many rows in the checklist are ticked, select alls left out. */
+async function tickedRows(page: Page): Promise<number> {
+  return page.getByTestId("checklist").locator('input[id^="match-"]:checked').count();
+}
+
+/**
+ * Press a checkbox and time it from the click to the next paint, as
+ * `checklist-speed.spec.ts` times a tick.
+ */
+async function timedPress(box: Locator): Promise<number> {
+  return box.evaluate(async (element) => {
+    const start = performance.now();
+    (element as HTMLInputElement).click();
+    await new Promise((done) => requestAnimationFrame(() => setTimeout(done, 0)));
+    return performance.now() - start;
+  });
 }
 
 test("50 kept terms open with the dense document within AC-28's bar, and a pasted batch lands within it", async ({
@@ -338,28 +394,72 @@ test("50 kept terms open with the dense document within AC-28's bar, and a paste
 
   // A pasted batch during review: the found words, on the dense document
   // opened with no list kept, from the paste to the rows committed.
-  await page.goto("/tool");
-  await page.getByTestId("file-input").setInputFiles(DENSE);
-  await expect(page.getByTestId("terms-panel")).toBeVisible({ timeout: 150_000 });
-  const before = await page.evaluate(() => window.__redactnestTerms?.notes.length ?? 0);
-  await watchSearchEnd(page);
-  const pastedAt = await paste(page, found);
-  await searched(page, found.length);
-  const landedAt = await page.evaluate(() => window.__redactnestTerms?.searchEndAt ?? 0);
-  await expect
-    .poll(() => page.evaluate(() => window.__redactnestTerms?.notes.length ?? 0))
-    .toBeGreaterThan(before);
-  const notes = (await page.evaluate(() => window.__redactnestTerms?.notes.at(-1))) ?? [];
-  const pasteReads = readsBetween(notes, "received-find-terms", "terms-found");
-  const pasteMs = landedAt - pastedAt;
+  const { pasteMs, slowestReadMs } = await timedPaste(page, DENSE, found);
   report.paste = {
     pasteMs: Math.round(pasteMs),
-    slowestReadMs: Math.round(Math.max(...pasteReads)),
+    slowestReadMs: Math.round(slowestReadMs),
   };
 
   test.info().annotations.push({ type: "timing", description: JSON.stringify(report) });
   console.log(`terms timing ${JSON.stringify(report)}`);
 
   expect(pasteMs).toBeLessThanOrEqual(PASTE_BUDGET_MS);
-  expect(Math.max(...pasteReads)).toBeLessThanOrEqual(READ_BUDGET_MS);
+  expect(slowestReadMs).toBeLessThanOrEqual(READ_BUDGET_MS);
+});
+
+test("one group of 3,000 rows opens, lands from a paste and takes its select all within AC-28's lines", async ({
+  page,
+}) => {
+  await routePaid(page);
+  await installProbe(page);
+
+  const open = await timedOpen(page, [DENSE_TERM], TERMS_DENSE);
+  // The term's group is the checklist's only group, and every one of its
+  // 3,000 rows is listed and ticked (the fixture holds no digit and no `@`).
+  const checklist = page.getByTestId("checklist");
+  await expect(checklist.locator("details")).toHaveCount(1);
+  await expect(checklist.locator("details summary")).toContainText(DENSE_TERM);
+  await expect(checklist.locator('input[id^="match-"]')).toHaveCount(DENSE_TERM_ROWS);
+  expect(await tickedRows(page)).toBe(DENSE_TERM_ROWS);
+
+  // Let the work queued after the first paint finish, as the checklist's own
+  // stopwatch does, then press the group's select all to clear every row and
+  // again to tick every row.
+  await page.waitForTimeout(1_000);
+  const selectAll = checklist.locator('input[id^="select-all-term-"]');
+  const clearMs = await timedPress(selectAll);
+  expect(await tickedRows(page)).toBe(0);
+  await page.waitForTimeout(300);
+  const tickMs = await timedPress(selectAll);
+  expect(await tickedRows(page)).toBe(DENSE_TERM_ROWS);
+
+  // The term pasted during review, as one line ending in a line break so the
+  // paste adds it at once (AC-3), on the file opened with no list kept.
+  const paste = await timedPaste(page, TERMS_DENSE, [DENSE_TERM, ""]);
+  expect(await tickedRows(page)).toBe(DENSE_TERM_ROWS);
+
+  const report = {
+    open: {
+      openMs: Math.round(open.openMs),
+      slowestReadMs: Math.round(open.slowestReadMs),
+    },
+    selectAllMs: { clear: Math.round(clearMs), tick: Math.round(tickMs) },
+    paste: {
+      pasteMs: Math.round(paste.pasteMs),
+      slowestReadMs: Math.round(paste.slowestReadMs),
+    },
+  };
+  test.info().annotations.push({ type: "timing", description: JSON.stringify(report) });
+  console.log(`terms dense timing ${JSON.stringify(report)}`);
+
+  expect(open.openMs, "the open").toBeLessThanOrEqual(OPEN_BUDGET_MS);
+  expect(open.slowestReadMs, "the slowest read at open").toBeLessThanOrEqual(
+    READ_BUDGET_MS,
+  );
+  expect(clearMs, "select all, clearing").toBeLessThanOrEqual(PRESS_BUDGET_MS);
+  expect(tickMs, "select all, ticking").toBeLessThanOrEqual(PRESS_BUDGET_MS);
+  expect(paste.pasteMs, "the paste").toBeLessThanOrEqual(PASTE_BUDGET_MS);
+  expect(paste.slowestReadMs, "the slowest read in the search").toBeLessThanOrEqual(
+    READ_BUDGET_MS,
+  );
 });

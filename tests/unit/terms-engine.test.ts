@@ -9,7 +9,7 @@ import {
 } from "@/engine";
 import { asTermId, type TermQuery } from "@/worker/protocol";
 
-import { TERMS_PDF } from "../../scripts/lib/terms-fixtures.mjs";
+import { TERMS_DENSE, TERMS_PDF } from "../../scripts/lib/terms-fixtures.mjs";
 import { fixture } from "../support/bytes";
 import { documentText, LIMITS, mupdf } from "../support/mupdf";
 
@@ -306,4 +306,30 @@ describe("removing term rows (AC-21)", () => {
     expect(removedByType).toEqual({ email: 1, term: 3 });
     expect(removedByTerm).toEqual([{ term: "Morgan", removed: 3 }]);
   });
+});
+
+describe("terms-dense.pdf, one group of thousands (AC-28)", () => {
+  // The fixture's promise, held outside the stopwatch: the speed project times
+  // this group, so it must be exactly this group, every row exact and ticked,
+  // with nothing else listed beside it.
+  it(
+    "lists the initials 60 times a page, 3,000 exact rows in all, and nothing else",
+    { timeout: 60_000 },
+    async () => {
+      const { term, pages, places } = TERMS_DENSE;
+      const found = await search("terms-dense.pdf", [term]);
+      expect(found).toHaveLength(places);
+      expect(found.every((match) => match.kind === "term" && match.term === term)).toBe(
+        true,
+      );
+      expect(found.every((match) => match.text === term)).toBe(true);
+      expect(found.every((match) => match.termNotes.length === 0)).toBe(true);
+      expect(found.every((match) => match.tickedByDefault && match.target !== null)).toBe(
+        true,
+      );
+      const perPage = new Map<number, number>();
+      for (const { page } of found) perPage.set(page, (perPage.get(page) ?? 0) + 1);
+      expect([...perPage.values()]).toEqual(Array(pages).fill(places / pages));
+    },
+  );
 });

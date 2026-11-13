@@ -190,3 +190,73 @@ export function termsPdf() {
     ];
   });
 }
+
+/**
+ * What `terms-dense.pdf` holds, for the tests to name. `tests/e2e/terms-speed.spec.ts`
+ * writes the term and the count out again, because Playwright cannot import
+ * this script; change them together.
+ */
+export const TERMS_DENSE = Object.freeze({
+  /** The reviewer's initials every line names twice, each as a whole word. */
+  term: "JK",
+  pages: 50,
+  linesPerPage: 30,
+  /** Two places a line, 60 a page, 3,000 in all, every one exact. */
+  places: 3_000,
+});
+
+/*
+ * The words around the initials. None holds a `j`, so nothing else on the
+ * page folds to `jk`, spaced or joined; none holds a digit or an `@`, so no
+ * detector lists anything. Six, seven and five words, so the lines cycle
+ * through 210 different sentences before one repeats.
+ */
+const DENSE_FIRST = Object.freeze([
+  "Drafted",
+  "Prepared",
+  "Written",
+  "Revised",
+  "Collated",
+  "Summarised",
+]);
+const DENSE_SECOND = Object.freeze([
+  "checked",
+  "approved",
+  "signed",
+  "countersigned",
+  "reviewed",
+  "initialled",
+  "filed",
+]);
+const DENSE_TOPIC = Object.freeze([
+  "the supplier notes",
+  "the site visit",
+  "the board minutes",
+  "the staff survey",
+  "the lease terms",
+]);
+
+/**
+ * Spec 0017, AC-28: one group of thousands of rows. A 50 page review log,
+ * each page a heading and 30 lines, each line naming the initials twice as
+ * whole words, so `JK` lists 3,000 exact rows, every one ticked, and its
+ * group is the checklist's only group. `detect-dense.pdf` stays as it is,
+ * because specs 0007, 0012 and 0017 recorded their figures on it.
+ */
+export function termsDense() {
+  const { term, pages, linesPerPage } = TERMS_DENSE;
+  return document(() =>
+    Array.from({ length: pages }, (_, page) => {
+      let content = line("F1", 14, 72, 760, "Review log");
+      for (let row = 0; row < linesPerPage; row += 1) {
+        const index = page * linesPerPage + row;
+        const text =
+          `${DENSE_FIRST[index % DENSE_FIRST.length]} by ${term} and ` +
+          `${DENSE_SECOND[index % DENSE_SECOND.length]} by ${term}: ` +
+          `${DENSE_TOPIC[index % DENSE_TOPIC.length]}`;
+        content += line("F1", 10, 72, 730 - row * 22, text);
+      }
+      return { content };
+    }),
+  );
+}
