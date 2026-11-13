@@ -23,7 +23,27 @@ test.describe.configure({ timeout: ENGINE_TIMEOUT * 3 });
 
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
+/**
+ * Axe reads each colour as it is drawn. When a search lands, Make and the
+ * field turn back on and their fill fades for 150 ms (spec 0013's controls),
+ * and the steps before a check take less than that, so axe would read a
+ * colour between two tokens and pass or fail by timing. Each check waits until
+ * no transition runs, so it reads the page at rest. The fade itself stays: it
+ * is the visitor's, and reduced motion already turns it off.
+ */
+async function atRest(page: Page): Promise<void> {
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every(
+        (animation) =>
+          !(animation instanceof CSSTransition) || animation.playState === "finished",
+      ),
+  );
+}
+
 async function expectNoAxeViolations(page: Page): Promise<void> {
+  await atRest(page);
   const { violations } = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
   expect(
     violations,
