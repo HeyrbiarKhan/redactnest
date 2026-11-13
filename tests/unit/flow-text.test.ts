@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   BLOCKED_REASON_TEXT,
+  countText,
   COVERAGE_NOTE,
   COVERAGE_NOTE_PARTLY,
+  coverageNoteWithTerms,
   NOTHING_FOUND,
   NOTHING_FOUND_PARTLY,
 } from "@/lib/detectors";
@@ -14,9 +16,11 @@ import {
   isTickCaused,
   leftLine,
   LOST_TEXT,
+  makeWaitsLine,
   PHASE_TEXT,
   phaseLine,
   redactLabel,
+  refusalLines,
   removedLine,
   RESULT_TERMS,
   resultTitle,
@@ -24,6 +28,9 @@ import {
   runRefusalText,
   SANITIZED_TEXT,
   strippedLine,
+  TERMS_TEXT,
+  termsFoundLine,
+  termsSearchingLine,
   tickCountLine,
   TICKS_WONT_HELP,
 } from "@/lib/flow-text";
@@ -588,6 +595,203 @@ describe("the plan's words (spec 0012, AC-5 and AC-6)", () => {
       expect(failureText("too-many-pages", at("signed-in")).body).toBe(
         "The free plan handles up to 3 pages. Pro handles up to 40.",
       );
+    });
+  });
+});
+
+/**
+ * Spec 0017's words, as the owner read them on 2026-11-13: a term quoted
+ * wherever a sentence names it, counts of 1,000 and more with a separator,
+ * the ways on named by reason, set aside said plainly, refusals that read
+ * alone and grouped, and the terms as the last part of the coverage note's
+ * one list.
+ */
+describe("the custom terms words (spec 0017)", () => {
+  const TERM_REFUSALS = [
+    "too-short",
+    "too-long",
+    "no-letter-or-digit",
+    "duplicate",
+    "list-full",
+  ] as const;
+
+  it("writes 1,000 and more with a British thousands separator", () => {
+    expect(countText(999)).toBe("999");
+    expect(countText(1_000)).toBe("1,000");
+    expect(countText(3_000)).toBe("3,000");
+    expect(countText(1_234_567)).toBe("1,234,567");
+  });
+
+  it("quotes a term inside a sentence, and leaves the chip's own words bare", () => {
+    expect(termsSearchingLine(["to"])).toBe("Searching for “to”…");
+    expect(termsSearchingLine(["Acme Ltd", "to"])).toBe("Searching for 2 terms…");
+    expect(
+      termsFoundLine(
+        [
+          { text: "to", count: 3_000 },
+          { text: "Acme Ltd", count: 1 },
+          { text: "zzqx", count: 0 },
+        ],
+        false,
+      ),
+    ).toBe(
+      "Found 3,000 matches for “to”. Found 1 match for “Acme Ltd”. “zzqx”: not found in this document.",
+    );
+    expect(TERMS_TEXT.matches(3_000)).toBe("3,000 matches");
+    expect(TERMS_TEXT.matches(1)).toBe("1 match");
+    expect(TERMS_TEXT.remove("to")).toBe("Remove to");
+    expect(TERMS_TEXT.kept(1)).toBe("1 custom term is kept for this tab");
+    expect(TERMS_TEXT.kept(2)).toBe("2 custom terms are kept for this tab");
+  });
+
+  it("quotes each term and separates each count on the result card", () => {
+    const terms = [
+      { text: "to", removed: 2_400, unticked: 1_200, blocked: 0 },
+      { text: "Acme Ltd", removed: 1, unticked: 0, blocked: 2 },
+    ];
+    expect(removedLine(counts({ removedByType: { email: 1_100 } }), terms)).toBe(
+      "1,100 email addresses, 2,400 matches for “to” and 1 match for “Acme Ltd”",
+    );
+    expect(leftLine(counts(), terms)).toBe(
+      "1,200 matches for “to” you left unticked. 2 matches for “Acme Ltd” RedactNest couldn't remove.",
+    );
+  });
+
+  it("names the terms as the last part of the coverage note's one list", () => {
+    const detectors =
+      "email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers, National Insurance numbers";
+    expect(coverageNoteWithTerms(3, false)).toBe(
+      `RedactNest looked for ${detectors} and your 3 custom terms. Anything else stays in the file.`,
+    );
+    expect(coverageNoteWithTerms(1, true)).toBe(
+      `RedactNest looked for ${detectors} and your 1 custom term on the pages it could read. Anything else stays in the file.`,
+    );
+  });
+
+  it("says a set aside term was not searched in this file, in words of its own", () => {
+    expect(TERMS_TEXT.setAside).toBe("Set aside for this file");
+    expect(TERMS_TEXT.setAsideState).toBe("Set aside: not searched in this file");
+    expect(TERMS_TEXT.setAsideGroup).toEqual({
+      "free-plan":
+        "Set aside: not searched in this file because it opened on the Free plan",
+      "search-failed":
+        "Set aside: not searched in this file because the search could not finish",
+    });
+    expect(TERMS_TEXT.notSearched).toEqual({
+      "free-plan": "Not searched: this file opened on the Free plan",
+      "search-failed": "Not searched: the search could not finish",
+    });
+  });
+
+  describe("why Make waits (AC-18)", () => {
+    it("says a search is still running, and nothing once every term was searched", () => {
+      expect(makeWaitsLine(true, [], true)).toBe(
+        "Your custom terms are still being searched, so the run waits.",
+      );
+      expect(makeWaitsLine(false, [], true)).toBeNull();
+    });
+
+    it("offers Try again where the search failed", () => {
+      expect(
+        makeWaitsLine(false, [{ text: "Acme Ltd", reason: "search-failed" }], true),
+      ).toBe(
+        "“Acme Ltd” was not searched because the search could not finish. Try again, set aside or remove it to go ahead.",
+      );
+      expect(
+        makeWaitsLine(
+          false,
+          [
+            { text: "Acme Ltd", reason: "search-failed" },
+            { text: "to", reason: "search-failed" },
+          ],
+          false,
+        ),
+      ).toBe(
+        "“Acme Ltd” and “to” were not searched because the search could not finish. Try again, set aside or remove them to go ahead.",
+      );
+    });
+
+    it("offers Check my plan only where the job's account does, on the Free plan", () => {
+      const free = [{ text: "Acme Ltd", reason: "free-plan" }] as const;
+      expect(makeWaitsLine(false, free, true)).toBe(
+        "“Acme Ltd” was not searched because this file opened on the Free plan. Set aside or remove it to go ahead, or check your plan and open the file again.",
+      );
+      expect(makeWaitsLine(false, free, false)).toBe(
+        "“Acme Ltd” was not searched because this file opened on the Free plan. Set aside or remove it to go ahead.",
+      );
+      expect(makeWaitsLine(false, free, false)).not.toContain("Try again");
+    });
+
+    it("says each reason with its own ways on when the reasons are mixed", () => {
+      expect(
+        makeWaitsLine(
+          false,
+          [
+            { text: "to", reason: "search-failed" },
+            { text: "Acme Ltd", reason: "free-plan" },
+            { text: "Jane Doe", reason: "free-plan" },
+          ],
+          false,
+        ),
+      ).toBe(
+        "“Acme Ltd” and “Jane Doe” were not searched because this file opened on the Free plan. Set aside or remove them to go ahead. " +
+          "“to” was not searched because the search could not finish. Try again, set aside or remove it to go ahead.",
+      );
+    });
+  });
+
+  describe("refusals (AC-4)", () => {
+    it("names one refused term with a reason that reads alone", () => {
+      expect(refusalLines([{ text: "a", reason: "too-short" }], TERM_REFUSALS)).toEqual([
+        "“a” not added because it is too short (at least 2 characters).",
+      ]);
+      expect(
+        refusalLines([{ text: "---", reason: "no-letter-or-digit" }], TERM_REFUSALS),
+      ).toEqual(["“---” not added because it has no letter or number."]);
+    });
+
+    it("groups several by reason, each line reading as naturally as one alone", () => {
+      expect(
+        refusalLines(
+          [
+            { text: "a", reason: "too-short" },
+            { text: "Acme", reason: "duplicate" },
+            { text: "b", reason: "too-short" },
+            { text: "c", reason: "too-short" },
+            { text: "One more", reason: "list-full" },
+            { text: "Two more", reason: "list-full" },
+          ],
+          TERM_REFUSALS,
+        ),
+      ).toEqual([
+        "3 not added because they are too short (at least 2 characters): “a”, “b” and “c”.",
+        "“Acme” not added because it is already in your list.",
+        "2 not added because your list is full at 50 terms: “One more” and “Two more”.",
+      ]);
+    });
+
+    it("counts past the first 20 named, with a separator, and names a long line by its start and length", () => {
+      const short = Array.from({ length: 1_200 }, (_, index) => ({
+        text: String.fromCodePoint(0x61 + (index % 26)),
+        reason: "too-short" as const,
+      }));
+      const long = { text: "x".repeat(1_500), reason: "too-long" as const };
+      const dupes = [
+        { text: "Acme", reason: "duplicate" as const },
+        { text: "Jane", reason: "duplicate" as const },
+      ];
+      const [tooShort, tooLong, duplicate] = refusalLines(
+        [long, ...short, ...dupes],
+        TERM_REFUSALS,
+      );
+      expect(tooShort).toMatch(
+        /^1,200 not added because they are too short \(at least 2 characters\): “a”, .* and 1,181 more\.$/,
+      );
+      expect(tooLong).toBe(
+        `“${"x".repeat(60)}…” (1,500 characters) not added because it is too long (at most 100 characters).`,
+      );
+      // None of these is among the first 20, so the reason counts them only.
+      expect(duplicate).toBe("2 not added because they are already in your list.");
     });
   });
 });

@@ -200,7 +200,7 @@ const START_OVER_WARNING =
   "You have unsaved work on the document that is open. Starting over will discard it. Continue?";
 
 const REOPEN_WARNING =
-  "You have unsaved work on the document that is open. Opening it again will discard it. Continue?";
+  "You have unsaved work on the document that is open. Checking your plan opens this file again, which discards your work on it. Continue?";
 
 /** The caps the tab's list is judged by (spec 0017, AC-4), from `config` alone. */
 const TERM_CAPS = Object.freeze({
@@ -1001,9 +1001,9 @@ export function ToolClient() {
       state === undefined ? [] : [{ id, text, state }],
     );
     const searching = groups.some(({ state }) => state.state === "searching");
-    const notSearched = groups
-      .filter(({ state }) => state.state === "not-searched")
-      .map(({ text }) => text);
+    const notSearched = groups.flatMap(({ text, state }) =>
+      state.state === "not-searched" ? [{ text, reason: state.reason }] : [],
+    );
 
     const results: readonly TermResult[] = groups
       .filter(({ state }) => state.state === "searched")
@@ -1323,7 +1323,11 @@ export function ToolClient() {
               waiting={
                 termView === null
                   ? null
-                  : makeWaitsLine(termView.searching, termView.notSearched)
+                  : makeWaitsLine(
+                      termView.searching,
+                      termView.notSearched,
+                      TERMS_LOCKED_TEXT[session.entitlement.account].recheck !== null,
+                    )
               }
               onRedact={() => void runRedaction("redact-started")}
               onCancel={handleCancel}

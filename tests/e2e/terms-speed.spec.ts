@@ -421,12 +421,20 @@ test("one group of 3,000 rows opens, lands from a paste and takes its select all
   await expect(checklist.locator("details summary")).toContainText(DENSE_TERM);
   await expect(checklist.locator('input[id^="match-"]')).toHaveCount(DENSE_TERM_ROWS);
   expect(await tickedRows(page)).toBe(DENSE_TERM_ROWS);
+  // Counts of 1,000 and more carry a separator, on the chip and the select all.
+  // The label is read as text: with its accessible name read here instead, the
+  // presses below measured up to about 110 ms slower than the same build's
+  // presses without it (2026-11-13), so nothing before them asks for one.
+  const selectAll = checklist.locator('input[id^="select-all-term-"]');
+  await expect(checklist.locator('[id^="select-all-term-"][id$="-label"]')).toHaveText(
+    "Select all 3,000 matches",
+  );
+  await expect(page.getByTestId("term-chip")).toContainText("3,000 matches");
 
   // Let the work queued after the first paint finish, as the checklist's own
   // stopwatch does, then press the group's select all to clear every row and
   // again to tick every row.
   await page.waitForTimeout(1_000);
-  const selectAll = checklist.locator('input[id^="select-all-term-"]');
   const clearMs = await timedPress(selectAll);
   expect(await tickedRows(page)).toBe(0);
   await page.waitForTimeout(300);

@@ -78,7 +78,7 @@ test("a Pro visitor adds a term, sees every place it appears, and the run remove
 
   // AC-19: the polite line says how many were found, and the chip too.
   await expect(page.getByTestId("terms-status")).toContainText(
-    "Found 6 matches for Acme Ltd.",
+    "Found 6 matches for “Acme Ltd”.",
   );
   await expect(page.getByTestId("term-chip")).toContainText("6 matches");
 
@@ -95,15 +95,18 @@ test("a Pro visitor adds a term, sees every place it appears, and the run remove
   await expect(group).toContainText("split across a page break");
 
   // AC-16: the coverage note names the custom terms by count.
-  await expect(page.getByTestId("coverage")).toContainText("and your 1 custom term");
+  await expect(page.getByTestId("coverage")).toContainText(
+    // terms.pdf has a page with a warning, so the note speaks for the rest.
+    "National Insurance numbers and your 1 custom term on the pages it could read. Anything else stays in the file.",
+  );
   await expectNoAxeViolations(page);
 
   // AC-21 and AC-22: the run removes the ticked rows, and the card names the term.
   await page.getByTestId("redact").click();
   await expect(page.getByTestId("download")).toBeVisible({ timeout: ENGINE_TIMEOUT });
-  await expect(page.getByTestId("outcome")).toContainText("4 matches for Acme Ltd");
+  await expect(page.getByTestId("outcome")).toContainText("4 matches for “Acme Ltd”");
   await expect(page.getByTestId("outcome")).toContainText(
-    "2 matches for Acme Ltd you left unticked",
+    "2 matches for “Acme Ltd” you left unticked",
   );
   await expectNoAxeViolations(page);
 
@@ -153,7 +156,7 @@ test("a refused term stays in the field and the line says why", async ({ page })
   await field.press("Enter");
   await expect(field).toHaveValue("a");
   await expect(page.getByTestId("terms-status")).toContainText(
-    "“a” not added: too short",
+    "“a” not added because it is too short (at least 2 characters).",
   );
 });
 

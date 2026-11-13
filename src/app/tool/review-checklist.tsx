@@ -3,6 +3,7 @@ import { memo, useMemo, type ReactNode } from "react";
 
 import {
   BLOCKED_REASON_TEXT,
+  countText,
   COVERAGE_NOTE,
   COVERAGE_NOTE_PARTLY,
   coverageNoteWithTerms,
@@ -312,8 +313,11 @@ function TermStateRow({
       className="flex flex-col items-start gap-3 px-3 py-3 text-small text-ink"
     >
       <p>
-        {TERMS_TEXT.notSearched[state.reason]}
-        {notSearched ? "." : `. ${TERMS_TEXT.setAsideState}.`}
+        {`${
+          notSearched
+            ? TERMS_TEXT.notSearched[state.reason]
+            : TERMS_TEXT.setAsideGroup[state.reason]
+        }.`}
       </p>
       {actions && (
         <div className="flex flex-wrap items-center gap-3">
@@ -428,7 +432,7 @@ const SelectAllRow = memo(function SelectAllRow({
     <ChecklistSelectAll
       id={`select-all-${name}`}
       data-testid={`select-all-${name}`}
-      label={`Select all ${ids.length} ${noun}`}
+      label={`Select all ${countText(ids.length)} ${noun}`}
       state={state}
       disabled={disabled}
       onChange={(on) => onTicksSet(ids, on)}

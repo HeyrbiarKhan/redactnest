@@ -112,9 +112,25 @@ export const BLOCKED_REASON_TEXT: Readonly<Record<BlockedReason, string>> = Obje
  * once feature 12 makes it three or more (spec 0007, Follow-up nit 4).
  */
 export function lookedFor(type: "conjunction" | "disjunction"): string {
-  return new Intl.ListFormat("en-GB", { type }).format(
-    DETECTOR_KINDS.map((kind) => DETECTOR_LABELS[kind].noun.other),
-  );
+  return new Intl.ListFormat("en-GB", { type }).format(detectorNouns());
+}
+
+/** Every kind looked for, as plural nouns, in `DETECTOR_KINDS` order. */
+function detectorNouns(): readonly string[] {
+  return DETECTOR_KINDS.map((kind) => DETECTOR_LABELS[kind].noun.other);
+}
+
+const COUNT = new Intl.NumberFormat("en-GB");
+
+/**
+ * A count as the page writes it: British, so 1,000 and more take a thousands
+ * separator (`3,000`). Every custom terms line and every group's select all
+ * name their counts through it, and so does the result card's Removed and Left
+ * in the file, which name term counts and detector counts in one sentence
+ * (spec 0017, as built; spec 0007, AC-7 and AC-11, as spec 0017 amends them).
+ */
+export function countText(count: number): string {
+  return COUNT.format(count);
 }
 
 /**
@@ -138,13 +154,18 @@ export const COVERAGE_NOTE_PARTLY = `RedactNest looked for ${lookedFor("conjunct
 
 /**
  * The coverage note when this job searched custom terms (spec 0017, AC-16):
- * the detectors and the terms by count, and still that everything else stays
- * in the file. `lookedFor` and the detectors it names are unchanged.
+ * the detectors and the terms by count, the terms the last part of the one
+ * list, and still that everything else stays in the file. `lookedFor` and the
+ * detectors it names are unchanged.
  */
 export function coverageNoteWithTerms(searched: number, partly: boolean): string {
-  const terms = `your ${searched} custom ${searched === 1 ? "term" : "terms"}`;
+  const terms = `your ${countText(searched)} custom ${searched === 1 ? "term" : "terms"}`;
+  const looked = new Intl.ListFormat("en-GB", { type: "conjunction" }).format([
+    ...detectorNouns(),
+    terms,
+  ]);
   const where = partly ? " on the pages it could read" : "";
-  return `RedactNest looked for ${lookedFor("conjunction")} and ${terms}${where}. Anything else stays in the file.`;
+  return `RedactNest looked for ${looked}${where}. Anything else stays in the file.`;
 }
 
 export const NOTHING_FOUND_PARTLY = Object.freeze({
@@ -185,7 +206,7 @@ export function countedKinds(
     const count = byType[kind] ?? 0;
     if (count === 0) return [];
     const { noun } = DETECTOR_LABELS[kind];
-    return [`${count} ${count === 1 ? noun.one : noun.other}`];
+    return [`${countText(count)} ${count === 1 ? noun.one : noun.other}`];
   });
 }
 

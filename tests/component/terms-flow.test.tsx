@@ -14,9 +14,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToolClient } from "@/app/tool/tool-client";
 import {
+  asMatchId,
   EngineError,
   type DocumentSummary,
   type EntitlementSnapshot,
+  type ReviewMatch,
   type TermQuery,
 } from "@/worker/protocol";
 import type { OpenedSession, TermSearch, TermsFound } from "@/worker/client";
@@ -101,11 +103,14 @@ function searching(
   }));
 }
 
-function session(findTerms = searching()): OpenedSession {
+function session(
+  findTerms = searching(),
+  matches: readonly ReviewMatch[] = [],
+): OpenedSession {
   return {
     jobId: "job",
     summary: SUMMARY,
-    matches: [],
+    matches,
     redact: vi.fn(),
     findTerms,
     cancel: vi.fn(),
@@ -126,6 +131,23 @@ async function choose(file = pdf()): Promise<void> {
 }
 
 const field = () => screen.getByRole("textbox", { name: "Add a name, number or phrase" });
+
+/** One address found at open, ticked, so an untick is unsaved work. */
+const EMAIL: ReviewMatch = Object.freeze({
+  id: asMatchId("m1"),
+  type: "email",
+  page: 1,
+  text: "jane@example.com",
+  before: "Contact ",
+  after: " today",
+  beforeCut: true,
+  afterCut: true,
+  tickedByDefault: true,
+  blocked: null,
+  concealed: null,
+  term: null,
+  termNotes: Object.freeze([]),
+});
 
 async function type(term: string): Promise<void> {
   await userEvent.type(field(), `${term}{Enter}`);
@@ -214,16 +236,16 @@ describe("the tab's list (AC-3, AC-6)", () => {
     expect(await screen.findAllByTestId("term-chip")).toHaveLength(50);
     const status = screen.getByTestId("terms-status");
     expect(status).toHaveTextContent(
-      "1 not added, already in your list: “term NUMBER 3”.",
+      "“a” not added because it is too short (at least 2 characters).",
     );
     expect(status).toHaveTextContent(
-      "1 not added, too short, at least 2 characters: “a”.",
+      `“${"x".repeat(60)}…” (101 characters) not added because it is too long (at most 100 characters).`,
     );
     expect(status).toHaveTextContent(
-      `1 not added, too long, at most 100 characters: “${"x".repeat(60)}…” (101 characters).`,
+      "“term NUMBER 3” not added because it is already in your list.",
     );
     expect(status).toHaveTextContent(
-      "2 not added, your list is full at 50 terms: “Two more” and “Three more”.",
+      "2 not added because your list is full at 50 terms: “Two more” and “Three more”.",
     );
     expect(field()).toHaveValue("");
   });
@@ -236,7 +258,7 @@ describe("the tab's list (AC-3, AC-6)", () => {
     await type("a");
     expect(field()).toHaveValue("a");
     expect(screen.getByTestId("terms-status")).toHaveTextContent(
-      "“a” not added: too short, at least 2 characters.",
+      "“a” not added because it is too short (at least 2 characters).",
     );
   });
 
@@ -278,8 +300,10 @@ describe("a job that opened on the Free plan (AC-2, AC-17, AC-18)", () => {
 
     const make = screen.getByTestId("redact");
     expect(make).toHaveAttribute("aria-disabled", "true");
+    // The ways on for a term not searched on the Free plan: no Try again,
+    // and Check my plan because this account offers it (AC-2, AC-17).
     expect(screen.getByTestId("make-waits")).toHaveTextContent(
-      "“Acme Ltd” was not searched.",
+      "“Acme Ltd” was not searched because this file opened on the Free plan. Set aside or remove it to go ahead, or check your plan and open the file again.",
     );
     expect(screen.getByTestId("term-recheck")).toBeInTheDocument();
     await expectNoAxeViolations(document.body);
@@ -287,7 +311,42 @@ describe("a job that opened on the Free plan (AC-2, AC-17, AC-18)", () => {
     await userEvent.click(screen.getByTestId("term-set-aside"));
     expect(screen.queryByTestId("make-waits")).not.toBeInTheDocument();
     expect(screen.getByTestId("redact")).not.toHaveAttribute("aria-disabled");
-    expect(screen.getByTestId("term-chip")).toHaveTextContent("Set aside for this file");
+    expect(screen.getByTestId("term-chip")).toHaveTextContent(
+      "Set aside: not searched in this file",
+    );
+    expect(screen.getByTestId("term-chip")).not.toHaveTextContent(
+      "Set aside for this file",
+    );
+    expect(
+      screen.getByText(
+        "Set aside: not searched in this file because it opened on the Free plan.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("asks before Check my plan reopens a file with unsaved work, and a cancelled ask changes nothing", async () => {
+    render(<ToolClient />);
+    await choose();
+    await screen.findByTestId("terms-panel");
+    await type("Acme Ltd");
+    await screen.findByTestId("term-not-found");
+
+    mocks.getEntitlement.mockResolvedValue(UNCONFIRMED);
+    mocks.openSession.mockResolvedValue(session(searching(), [EMAIL]));
+    await choose(pdf("second.pdf"));
+    await screen.findByTestId("terms-locked");
+    const opens = mocks.openSession.mock.calls.length;
+
+    // An untick is unsaved work (spec 0002, AC-1).
+    await userEvent.click(screen.getByRole("checkbox", { name: EMAIL.text }));
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await userEvent.click(screen.getByTestId("term-recheck"));
+
+    expect(confirm).toHaveBeenCalledWith(
+      "You have unsaved work on the document that is open. Checking your plan opens this file again, which discards your work on it. Continue?",
+    );
+    expect(mocks.openSession).toHaveBeenCalledTimes(opens);
+    expect(screen.getByRole("checkbox", { name: EMAIL.text })).not.toBeChecked();
   });
 });
 
@@ -337,7 +396,7 @@ describe("a search that fails (AC-19, AC-20)", () => {
     expect(screen.getByTestId("terms-add")).toHaveAttribute("aria-disabled", "true");
     expect(field()).toHaveAttribute("readonly");
     expect(screen.getByTestId("terms-status")).toHaveTextContent(
-      "Searching for Acme Ltd",
+      "Searching for “Acme Ltd”…",
     );
     expect(screen.getByTestId("make-waits")).toHaveTextContent("still being searched");
 

@@ -421,6 +421,27 @@ describe("select all", () => {
     expect(container.querySelector("summary")).toHaveTextContent("3 email addresses");
   });
 
+  // Spec 0017, as built: one group can list thousands (AC-28), and spec 0007's
+  // label (AC-7) names its count the way every terms line does. The fewest rows
+  // that show a separator, with room to render them all beside the parallel
+  // suite, as the long checklist's own render test has.
+  it(
+    "writes a count of 1,000 or more with a thousands separator",
+    { timeout: 60_000 },
+    () => {
+      const { container } = show({
+        matches: Array.from({ length: 1_000 }, (_, index) =>
+          match(`e${index}`, "email", `staff.${index}@example.com`),
+        ),
+        ticked: [],
+      });
+      // By its id, since asking for a role by name reads all 1,001 boxes' names.
+      expect(container.querySelector("#select-all-email")).toHaveAccessibleName(
+        "Select all 1,000 email addresses",
+      );
+    },
+  );
+
   it.each([
     ["clear", [], false, false],
     ["mixed", [P1], false, true],
