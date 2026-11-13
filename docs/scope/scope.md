@@ -381,12 +381,12 @@ Type the names, reference numbers or phrases to remove and they go everywhere th
 **Done when:** a paid user can enter terms and every occurrence is removed from the content stream, including matches broken across line breaks and hyphenation, and the summary reports how many were removed.
 spec [0017](../specs/0017-custom-terms/index.md) · code in `src/detect/terms.ts`, `src/lib/term-text.ts`, `src/lib/terms.ts`, `src/engine/find.ts`, `src/worker`, `src/lib/session.ts`, `src/app/tool` (`terms-panel.tsx`), `src/ui` (`text-field.tsx`, `chip.tsx`), `scripts/lib/terms-fixtures.mjs`
 - [x] Design it (spec): `/architect custom terms`
-- [ ] Build it: `/develop custom terms`
+- [x] Build it: `/develop custom terms`
   - [x] A term found and removed: the protocol's `MatchKind` and `find-terms`, the fold module, the exact matcher, terms in the find step, the worker's search and gate, the session's term states, the panel and term groups, the result card per term, and the privacy test · AC-1, AC-3 to AC-5, AC-7 to AC-9, AC-12 to AC-16, AC-18, AC-19, AC-21 to AC-23, AC-27, AC-32
   - [x] Never half found: the joined, spaced and marks notes, matches carried across a page break, the adversarial budget, and `terms.pdf` · AC-10 to AC-12, AC-21, AC-29, AC-30, AC-32, AC-33
   - [x] The tab's list: kept across files with the kept line, the locked Free panel, not searched and Set aside, failed searches, paste with grouped refusals, and Remove all · AC-2 to AC-6, AC-9, AC-17, AC-18, AC-20, AC-22
   - [x] Measured, counted and said: the open and paste budgets, and select all on one group of 3,000 rows (`terms-dense.pdf`), telemetry, claims C3 and C14, Pricing's line, the amends to older specs, and your read of every word · AC-24 to AC-26, AC-28, AC-31
-  - [ ] AC-28's select all line, as amended 2026-11-13: `terms-speed.spec.ts` with no trace, the select all pressed ten times, the median each way within 200 ms and every press within 500 ms, three local runs and the first CI run recorded · AC-28
+  - [x] AC-28's select all line, as amended 2026-11-13: `terms-speed.spec.ts` with no trace, the select all pressed ten times, the median each way within 200 ms and every press within 500 ms, three local runs and the first CI run recorded · AC-28
 - [ ] Verify it: `/check verify custom terms`
 - [ ] Test it: `/test custom terms`
 - [ ] Review it (fresh model): `/check review custom terms`

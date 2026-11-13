@@ -265,6 +265,14 @@ In line with the traced figures above, so the trace weighed on the select all al
 
 The same within noise. Custom terms' tick medians sat 4 to 5 ms above main's in both runs this time, where earlier the same day they sat level (main 34 and 30 ms, custom terms 34 and 33 ms). Across the four runs, main's tick medians span 30 to 34 ms and custom terms' 33 to 35 ms: a few microseconds a row at most, and nothing a visitor could see.
 
+**The first CI run.** Run 43487059078 on `c8e1e81` (2026-11-13), the first after the change, passed on its first attempt with no retry, every other test passing beside it:
+
+| CI run (commit) | Attempt | Ten presses, in order, clear first (ms) | Median clear | Median tick | Slowest press |
+|---|---|---|---|---|---|
+| 43487059078 (`c8e1e81`) | first | 176, 140, 137, 123, 131, 128, 142, 126, 121, 115 | 137 ms | 126 ms | 176 ms, the first |
+
+With no trace, CI pressed about 60 ms faster than its traced 177 to 206 ms. It took about 1.7 times as long as this machine, more than the 1.5 times the decision read from the traced runs, so its medians sat near 130 ms rather than the 120 ms expected: under the line with about 1.5 times the room, and the slowest press about a third of the ceiling. Its other figures: opens 2,565 to 3,238 ms, pastes 1,359 and 1,382 ms, the slowest read 49 ms at open and 12 ms in a search.
+
 ### AC-8 and AC-29, as built (2026-11-11)
 
 - **Mixed line end hyphens.** Each hyphen before a line break is read both ways by two whole readings of the page (all such hyphens as nothing, then all as hyphens), which keeps every reading linear and every match its term's length, so its start comes in one step (AC-29). Checked through `findTerms` on 2026-11-13: `Jean-` then `Luc Smithson`, and `Jean-Luc Smith-` then `son`, are each exact for `Jean-Luc Smithson`; `Jean-` then `Luc Smith-` then `son`, which needs the first hyphen kept and the second dropped, lists one row with the `spaced` note. It is listed unticked, never missed.
