@@ -633,19 +633,26 @@ export const TERMS_TEXT = Object.freeze({
 
 /**
  * The polite line once a search lands (AC-19): how many matches each term
- * found, or that it was not found, heard once.
+ * found, then the terms not found, heard once. Two sentences at most, so a
+ * 50 term paste is not 50 sentences. The not found words lead their own
+ * sentence and keep their case, so "RedactNest" stays a name.
  */
 export function termsFoundLine(
   found: readonly { readonly text: string; readonly count: number }[],
   partly: boolean,
 ): string {
-  const notFound = (
-    partly ? TERMS_TEXT.notFoundPartly : TERMS_TEXT.notFound
-  ).toLowerCase();
-  return found
-    .map(({ text, count }) =>
-      count > 0 ? `Found ${termCount(count, text)}.` : `${quoted(text)}: ${notFound}.`,
-    )
+  const counted = found.filter(({ count }) => count > 0);
+  const missing = found.filter(({ count }) => count === 0);
+  const notFound = partly ? TERMS_TEXT.notFoundPartly : TERMS_TEXT.notFound;
+  return [
+    counted.length > 0
+      ? `Found ${LIST.format(counted.map(({ text, count }) => termCount(count, text)))}.`
+      : null,
+    missing.length > 0
+      ? `${notFound}: ${LIST.format(missing.map(({ text }) => quoted(text)))}.`
+      : null,
+  ]
+    .filter((sentence) => sentence !== null)
     .join(" ");
 }
 

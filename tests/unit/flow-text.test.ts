@@ -639,13 +639,52 @@ describe("the custom terms words (spec 0017)", () => {
         false,
       ),
     ).toBe(
-      "Found 3,000 matches for “to”. Found 1 match for “Acme Ltd”. “zzqx”: not found in this document.",
+      "Found 3,000 matches for “to” and 1 match for “Acme Ltd”. Not found in this document: “zzqx”.",
     );
     expect(TERMS_TEXT.matches(3_000)).toBe("3,000 matches");
     expect(TERMS_TEXT.matches(1)).toBe("1 match");
     expect(TERMS_TEXT.remove("to")).toBe("Remove to");
     expect(TERMS_TEXT.kept(1)).toBe("1 custom term is kept for this tab");
     expect(TERMS_TEXT.kept(2)).toBe("2 custom terms are kept for this tab");
+  });
+
+  it("says what a search found in two sentences at most, and keeps RedactNest's name when some pages could not be read", () => {
+    expect(
+      termsFoundLine(
+        [
+          { text: "zzqx", count: 0 },
+          { text: "Acme Ltd", count: 4 },
+          { text: "Jane Doe", count: 0 },
+          { text: "qqzz", count: 0 },
+        ],
+        true,
+      ),
+    ).toBe(
+      "Found 4 matches for “Acme Ltd”. Not found on the pages RedactNest could read: “zzqx”, “Jane Doe” and “qqzz”.",
+    );
+    expect(
+      termsFoundLine(
+        [
+          { text: "zzqx", count: 0 },
+          { text: "qqzz", count: 0 },
+        ],
+        false,
+      ),
+    ).toBe("Not found in this document: “zzqx” and “qqzz”.");
+    expect(termsFoundLine([{ text: "Acme Ltd", count: 6 }], false)).toBe(
+      "Found 6 matches for “Acme Ltd”.",
+    );
+
+    // A 50 term paste is still two sentences, each term named once.
+    const pasted = Array.from({ length: 50 }, (_, index) => ({
+      text: `term ${index + 1}`,
+      count: index % 2,
+    }));
+    const line = termsFoundLine(pasted, false);
+    expect(line.split(". ")).toHaveLength(2);
+    for (const { text } of pasted) {
+      expect(line.split(`“${text}”`)).toHaveLength(2);
+    }
   });
 
   it("quotes each term and separates each count on the result card", () => {
