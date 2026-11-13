@@ -53,3 +53,21 @@ _Added by `/develop`: what the build found and where its own checks live, for `/
 - [ ] AC-21 as built: the four joined rows on `terms.pdf` page 2 each redact alone without an overreach refusal (`tests/unit/terms-engine.test.ts` does not tick them; the scratch probe did). A joined row's refusal remains possible on other layouts
 - [ ] AC-29 as built: `tests/unit/detect-adversarial.test.ts`'s term case covers six shapes, the slowest (hyphenated terms on lines ending in a hyphen) about 0.5 s of CPU alone
 - [ ] Stopwatches in the full parallel `pnpm test`: the phone detector's random groups case and `cost.test.ts` failed under load on 2026-11-11 and passed alone, as they do on main
+
+## As built · updated 2026-11-13
+
+_Added by `/develop`: task 18 on `terms-dense.pdf`, and the owner's read of the words, for `/check verify` to start from._
+
+- [ ] `node scripts/make-fixture.mjs` writes `tests/fixtures/terms-dense.pdf` from `termsDense()` (`scripts/lib/terms-fixtures.mjs`, what it holds in `TERMS_DENSE`) and leaves every other fixture byte for byte as it was; `pnpm exec vitest run tests/unit/fixtures.test.ts` passes → AC-28
+- [ ] `pnpm exec vitest run tests/unit/terms-engine.test.ts -t "terms-dense"` → `JK` lists 3,000 rows through the real engine, 60 a page, each exact (no note), ticked and with a target, and nothing else is listed → AC-28
+- [ ] `pnpm exec playwright test --project=speed --no-deps tests/e2e/terms-speed.spec.ts` → both tests pass; the second, on `terms-dense.pdf`: one group, headed `JK`, 3,000 rows all ticked, its select all labelled "Select all 3,000 matches" and its chip "3,000 matches"; as measured on 2026-11-13, the open 2,296 to 2,596 ms, the paste 1,128 to 1,237 ms, select all 111 to 151 ms clearing and 136 to 160 ms ticking, slowest read 54 ms at open and 12 ms in the search (`rationale.md`) → AC-28
+- [ ] The select all line has about 1.4 times the room on this machine, not twice: a slower hour on 2026-11-13 put the earlier build's select all at up to 268 ms and `detect-dense.pdf`'s found list open at 6.1 s. A CI run over a line comes back to `/architect` with its figure → AC-28
+- [ ] The words, as the owner asked on 2026-11-13, each held in `tests/unit/flow-text.test.ts` (*the custom terms words*), and on the page by `tests/component/terms-flow.test.tsx` and `tests/e2e/terms.spec.ts`:
+  - Make waits names the ways on by reason: Try again for a failed search; for the Free plan, set aside or remove, and check your plan and open the file again only where the job's account offers it; each reason its own sentences when they are mixed → AC-17, AC-18
+  - The coverage note names the terms as the last part of its one list ("… National Insurance numbers and your 3 custom terms.") → AC-16
+  - A set aside chip says "Set aside: not searched in this file", and its place in the list adds the reason; only the button says "Set aside for this file" → AC-17
+  - Refusals read alone and grouped: "“a” not added because it is too short (at least 2 characters)." and "3 not added because they are too short (at least 2 characters): “a”, “b” and “c”." → AC-4
+  - A term is quoted wherever a sentence names it (the searching and found lines, the result card's Removed and Left in the file); chips, group headings and the remove button's name show it as typed → AC-14, AC-19, AC-22
+  - Counts of 1,000 and more take a separator in every terms line, a group's select all (detector groups too) and the result card's Removed and Left in the file, detector counts included, since one sentence names both (spec 0007, AC-7 and AC-11, as amended) → AC-14, AC-22
+  - Check my plan and open it again asks "You have unsaved work on the document that is open. Checking your plan opens this file again, which discards your work on it. Continue?" when there is unsaved work, and a cancelled ask changes nothing → AC-2, AC-17
+- [ ] Still showing a count without a separator on the same screen: the Found items badge and each group's count badge, the action panel's "{n} of {m} found items will be removed." and "Redact {n} items" (spec 0007, AC-6 and AC-7's badge; spec 0003's `CountBadge`), outside the terms lines this read covered
