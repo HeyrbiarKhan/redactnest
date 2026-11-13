@@ -106,6 +106,7 @@ The rest follows from the forces. Per term counts on the result card come from t
 - **Two primitives in `src/ui`.** `TextField` and `Chip` are presentation only, with their own component and axe tests, so the panel stays composition. Runner up: markup in `terms-panel.tsx`, which would leave the site's first text field outside the design system.
 - **Telemetry fields.** `terms` and `termsSetAside` on `redaction-completed`: how much the capability is used, and how often a kept list meets a Free job. Runner up: a new event per search, more volume and a new event to keep in step with the parser.
 - **AC-28's third list on a fixture of its own** (2026-11-13). One group of thousands is measured on `terms-dense.pdf`, where `JK` lists 3,000 rows, with its select all held to spec 0007's 200 ms tick line. Runner up: growing `detect-dense.pdf` until one word lists thousands, which would change the lists specs 0007, 0012 and 0017 recorded on it. The reasons and the measurement are in Evidence.
+- **AC-28's select all held by the median, with a ceiling, timed with no trace** (2026-11-13; the median and the ceiling are the owner's preference). Ten presses, five each way: the median each way within 200 ms, every press within 500 ms, in a test file that records no Playwright trace. Runner up: the median and the ceiling with the trace kept, which on CI would sit on the line, since every traced press there measured 177 to 206 ms. The reasons and the measurement are in Evidence (*AC-28's select all line*).
 - **Words.** Panel, refusal, not searched and result words in `src/lib/flow-text.ts`; row notes and the group noun in `src/lib/detectors.ts`, beside the checklist's other copy; all proposed in `index.md` for the owner's read.
 
 ## Evidence
@@ -153,20 +154,7 @@ As built, no term on `detect-dense.pdf` lists more than 1,150 rows, so one group
 
 **The select all budget.** 200 ms from the click to the next paint, each way, spec 0007's line for a single tick (AC-8 there). To the visitor a select all is one press, like a tick, and 200 ms is where a press stops feeling immediate (spec 0007's own reason for the line). Runner up: spec 0007's 1 s line for the checklist's first render, on the grounds that a select all renders every row in the group again, as a first render does. Declined: a visitor waits for an open but expects a press to answer, and 1 s would hide a select all five times slower than today's. A line that grows with the group was declined too, because it would grow with the very cost it is meant to hold.
 
-**Measured on a scratch copy** (2026-11-13). The candidate fixture was drawn in the session scratchpad from the same page builders, served from the 2026-11-11 production build (built with Playwright's environment), and timed in Chromium three times on this machine, with `paid` routed and the methods of `terms-speed.spec.ts` (the open, the paste, the reads) and `checklist-speed.spec.ts` (a press, from the click to the next paint).
-
-| Case | Measured | Budget |
-|---|---|---|
-| Open, `JK` kept (3,000 rows, all ticked) | 2,228 and 2,250 ms | 5,000 ms |
-| The rows' first render, from the worker's `result` to the rows in the page | 148 and 150 ms | none here (spec 0007's line is 1 s) |
-| `JK` pasted during review, to its rows committed | 1,109 to 1,135 ms | 3,000 ms |
-| Slowest single read, at open | 28 and 30 ms | 1,000 ms |
-| Slowest single read, in the search | 9 and 10 ms | 1,000 ms |
-| Select all, 3,000 rows, each way (30 presses) | 70 to 104 ms | 200 ms |
-| A single tick in the 3,000 row group | 13 to 26 ms | 200 ms (spec 0007) |
-| For comparison: select all on `detect-dense.pdf`'s 1,100 email rows | 27 to 44 ms | none |
-
-The first press after the open is the slowest (93 to 104 ms); the rest sit near 80 ms. A select all costs about 30 microseconds a row in both groups measured, so it grows in step with the group, and the 200 ms line would be reached near 6,000 to 7,000 rows on this machine. That leaves about twice the room on this machine. CI runs the `speed` project too, on slower machines, so a select all over the line there comes back to `/architect` with its figure, as AC-28 says, rather than the line being raised.
+**First checked on a scratch copy.** Before the fixture was committed, this decision was checked on a copy drawn in the session scratchpad. Its figures are replaced by the committed fixture's, below (*as built*, and *AC-28's select all line*).
 
 ### AC-28's third list, as built (measured 2026-11-13)
 
@@ -183,11 +171,61 @@ The first press after the open is the slowest (93 to 104 ms); the rest sit near 
 
 The runs: one on the build before the owner's word changes, six on the builds after them (the last after the owner's final three changes), and three more on the earlier build in a same test A/B beside three of those five (earlier build: clear 113 to 116 ms, tick 136 to 160 ms; later build: clear 111 to 151 ms, tick 138 to 140 ms), so the new words cost nothing measurable. The first test, run four times beside these (once before the word changes, three times after), measured `detect-dense.pdf`'s opens at 2,235 to 2,982 ms, its pasted batch at 1,209 to 1,373 ms and its slowest read at 67 ms, in line with the 2026-11-11 table.
 
-**Less room than the scratch copy showed.** The committed test's presses sit near 115 ms clearing and 140 ms ticking, not the scratch copy's 70 to 104 ms, so the 200 ms line has about 1.4 times the room on this machine, not twice.
+**These presses were timed under a trace.** `playwright.config.ts` records a trace for every test, and its recorder watches every change to the page so it can draw its snapshots. A select all changes 3,000 rows at once, so the select all figures above hold the recorder's cost as well as the page's: about 60 ms a press (*AC-28's select all line*, below). They are kept as measured. An earlier reading of them, that the line had about 1.4 times the room on this machine rather than the scratch copy's twice, mistook the recorder for the page.
 
-**A slower hour.** Between those runs this machine ran slower for about an hour, on both builds alike: opens of 3.2 to 4.7 s, pastes of 2.6 to 2.8 s, `detect-dense.pdf`'s found list opening in 5.9 to 6.1 s (over its 5 s line), and the earlier build's select all at 164 to 268 ms, over its line too. It passed, and nothing in the code changed it, but it is what a slower machine does to these lines; a CI run over a line comes back to `/architect` with its figure, as AC-28 says.
+**A slower hour.** Between those runs this machine ran slower for about an hour, on both builds alike: opens of 3.2 to 4.7 s, pastes of 2.6 to 2.8 s, `detect-dense.pdf`'s found list opening in 5.9 to 6.1 s (over its 5 s line), and the earlier build's select all at 164 to 268 ms under the trace, over its line too. It passed, and nothing in the code changed it, but it is what a slower machine does to these lines; a CI run over a line comes back to `/architect` with its figure, as AC-28 says.
 
 **A test may not read an accessible name before the presses.** With the select all's accessible name read just before the presses (to check its words), the presses measured up to about 110 ms slower than the same build's without it. The test reads the label as text instead.
+
+### AC-28's select all line, decided 2026-11-13
+
+**What came back.** Three quiet local runs of the `speed` project on the committed build, once a leftover server on port 3000 was stopped: every open 2.3 to 2.9 s against 5 s, every paste about 1.2 s against 3 s, and `terms-dense.pdf`'s select all at 117 to 120 ms clearing and 141 to 143 ms ticking, with one tick at 226 ms, so a single press crossed the 200 ms line about once in six. CI, in the two runs that held the test, pressed at 177 to 206 ms on every attempt:
+
+| CI run (commit) | Attempt | Clear | Tick |
+|---|---|---|---|
+| `d38a76c` | first | 201 ms | 206 ms |
+| `d38a76c` | retry 1 | 180 ms | 203 ms |
+| `d38a76c` | retry 2 | 198 ms | 204 ms |
+| `f2ff60e` | first | 186 ms | 201 ms |
+| `f2ff60e` | retry 1 | 177 ms | 195 ms |
+
+Four of the five attempts had a press over the line, and the second run passed only on its retry. Every other figure in those runs sat well inside its line: opens 2.6 to 3.3 s, pastes about 1.4 s, the slowest read under 100 ms.
+
+**Custom terms leaves a select all as fast as it was.** Main (`9cbb4c3`) and the custom terms build (`f2ff60e`), both built with Playwright's environment and served side by side, each in a browser of its own, opened `detect-dense.pdf` with `paid` routed. Its email group's select all (1,100 rows) was pressed on each by turns, the order swapped every round, 300 ms between presses, each timed from the click to the next paint, with no trace. Two runs of 15 rounds:
+
+| Build | Clear | Medians | Tick | Medians |
+|---|---|---|---|---|
+| main | 25 to 43 ms | 28 and 32 ms | 27 to 43 ms | 34 and 30 ms |
+| custom terms | 26 to 46 ms | 30 and 29 ms | 26 to 39 ms | 34 and 33 ms |
+
+The same within noise, so there was nothing in the page to fix first.
+
+**Where the time went: the trace.** The custom terms build, `terms-dense.pdf` set up as the test sets it up (`JK` kept, Start over, then the open), a fresh browser for each session, and the group's select all pressed by turns, 300 ms apart:
+
+| Timed | Sessions, presses | Clear | Tick | First clear after the open |
+|---|---|---|---|---|
+| No trace | 9, 132 | 70 to 116 ms (median 79) | 72 to 101 ms (median 77) | 91 to 116 ms |
+| With a trace as `playwright.config.ts` records it (DOM snapshots, no screenshots) | 2, 24 | 111 to 150 ms (median 136) | 135 to 175 ms (median 147) | 111 and 123 ms |
+
+The traced figures match the committed test's (117 to 143 ms, one 226). The trace's recorder watches every change to the page so it can draw its snapshots, and a select all changes 3,000 rows at once, so the recorder adds about 60 ms a press, about 70 percent, which no visitor's browser pays. The test's own open probe, a page wide observer of added and removed nodes that stays attached after the open, cost nothing measurable (two sessions with it, two without, the same figures). So the scratch copy's 70 to 104 ms was the page, and the committed test's figures were the page plus the recorder. With no trace a select all costs about 26 microseconds a row, in a term group as in a detector group.
+
+**The decision.** The 200 ms line stays, held this way:
+
+- **No trace.** `test.use({ trace: "off" })` at the top of `terms-speed.spec.ts`. Playwright 1.63 sets `trace` per worker (asked inside a group of tests, it refuses to load the file), so both tests in the file lose it. Their failures still print every figure, and `terms.spec.ts` keeps traces for the same flows in the `chromium` project.
+- **Ten presses, five each way.** By turns, starting with a clear, 300 ms apart, as the test spaces its two presses now. The first press after the open runs 20 to 50 percent slower than the rest (91 to 116 ms against a median of 76 ms for the later presses), so with five each way the median is a settled press while the first still counts against the ceiling. An odd count has a true middle.
+- **The median each way within 200 ms.** One press is one sample on a shared machine, and the median holds what a select all costs.
+- **Every press within 500 ms.** 200 ms is spec 0007's edge of a responsive press, which is also where Chrome's own measure of a page's responsiveness (Interaction to Next Paint) stops calling a press good; 500 ms is where that measure calls it poor. One press past it fails the run, so a real freeze is never averaged away. The slowest single press measured anywhere so far is 268 ms, under the trace, in the slower hour above.
+
+With no trace, every session's median of its first five presses each way sat at 75 to 91 ms, and its slowest press at 91 to 116 ms, so the rule passes on this machine with more than twice the room. CI's figures with no trace are not measured yet. Under the same trace CI took about 1.5 times as long as this machine, which would put its medians near 120 ms; the first CI run after the change records them, and a CI attempt over a line, retried or not, comes back to `/architect` with its figures.
+
+**Declined.**
+
+- The median and the ceiling with the trace kept: CI's traced presses all measured 177 to 206 ms, so its medians would sit on the line and fail about half its runs.
+- No trace, one press each way: a single sample would still decide the run, and the owner asked for the median.
+- Three presses each way: one slow first press and one noisy press would set the median. Seven: more time for little more.
+- A ceiling of 400 ms, twice the line: arithmetic with no reason behind it. A ceiling of 1 s, spec 0007's first render line: a visitor would see a one second freeze and the test would pass it.
+- No trace for the whole `speed` project: it would move the figures specs 0007 and 0012 recorded under a trace, for no line that is failing. Their stopwatches still time under the trace and sit far inside their lines (a tick at 15 to 31 ms against 200 ms); if one of them nears its line, the trace is the first thing to rule out.
+- A faster select all in the page (rendering the group's rows in batches, or virtual scrolling): the page is no slower than main, and 3,000 rows press in about 78 ms. Spec 0007 keeps virtual scrolling for a group that is slow on its own.
 
 ### AC-8 and AC-29, as built (2026-11-11)
 
