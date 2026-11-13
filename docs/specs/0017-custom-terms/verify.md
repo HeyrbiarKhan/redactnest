@@ -30,7 +30,7 @@ Run the tool at `/tool` against a production build with Playwright's environment
 - [ ] `tests/e2e/privacy.spec.ts` types a term, searches, redacts and downloads, and finds it in no request, no store and no console line; the field has `autocomplete`, `spellcheck`, `autocorrect` and `autocapitalize` off, no `name`, and no `form` ancestor → AC-23
 - [ ] A hand made `find-terms` on a `free` job, past `maxTerms`, or with a one letter term is answered `unsupported` (worker test) → AC-27
 - [ ] `git diff main -- src/detect/index.ts` leaves `DETECTORS` and `PRECEDENCE` as they are; `lookedFor` and `src/lib/home-text.ts` are unchanged; `src/lib/term-text.ts` imports nothing and lint rejects any other `@/lib` import in `src/detect` → AC-16, INV-5, INV-10
-- [ ] `pnpm exec playwright test --project=speed --no-deps` → the three opens (50 unfound terms, the 50 found words, the common two letter word) within 5 s, the pasted batch within 3 s, the slowest read under 1 s, with the page break carry on; the figures are in `rationale.md` → AC-28
+- [ ] `pnpm exec playwright test --project=speed --no-deps` → the three opens (50 unfound terms, the fixture's 27 found words, its most frequent two letter word `Jo`) within 5 s, the pasted batch within 3 s, the slowest read under 1 s, with the page break carry on; the figures are in `rationale.md` → AC-28
 - [ ] Engine tests hold two overlapping ticked targets removed together, each counted once under its own kind and term → AC-21
 - [ ] `pnpm exec vitest run tests/unit/detect-adversarial.test.ts` alone → the term case within 1 s → AC-29
 - [ ] The telemetry type gate and parser cover `term` in the by kind fields and `terms` and `termsSetAside`; no event field holds a term or a `TermId` → AC-24

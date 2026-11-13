@@ -113,6 +113,36 @@ The rest follows from the forces. Per term counts on the result card come from t
 
 On `detect-dense.pdf` with Pro routed: the open 2,471 to 2,719 ms end to end; loading the engine 447 to 580 ms; inspecting 731 to 841 ms; detecting 978 to 1,077 ms; slowest read during detection 8 to 14 ms. A review search reads each page with both extraction modes plus the image pass where it finds something, about the detecting phase's cost, which is why the review budget is 3 s and the open budget (AC-28) 5 s.
 
+### AC-28, as built (measured 2026-11-11, recorded 2026-11-13)
+
+`tests/e2e/terms-speed.spec.ts` in the `speed` project, on `detect-dense.pdf` (50 pages) with `paid` routed and the page break carry on. An open runs from the file input's `change` to the rows committed, the engine's load included.
+
+| Case | Measured | Budget |
+|---|---|---|
+| Open, no terms (for comparison) | 2,353 ms | none |
+| Open, 50 kept terms of 100 characters found nowhere | 2,809 ms | 5,000 ms |
+| Open, the found words (27 kept terms, see below) | 2,665 ms | 5,000 ms |
+| Open, `Jo` alone | 2,264 ms | 5,000 ms |
+| Paste of the found words during review, to the rows committed | 1,236 ms | 3,000 ms |
+| Slowest single read, at open | 46 ms | 1,000 ms |
+| Slowest single read, in a review search | 12 ms | 1,000 ms |
+
+The kept list adds at most about half a second to an open (2,353 ms to 2,809 ms), so reading the kept list in the same pass as detection holds (INV-8).
+
+**Two lists are smaller than AC-28 wrote.** The fixture is a staff directory: 1,100 rows of a name, an address at `example.com` and a phone number, under a `Staff directory` heading on each page. So it has few distinct words:
+
+- The found list. AC-28 asked for the 50 most frequent distinct words of 4 to 12 letters. The fixture holds 27, so the case uses all 27. Through the real engine in Node, they list 3,620 rows between them, every one ticked: `staff` 1,150 (50 headings and 1,100 addresses), `example` 1,100, 15 last names 60 each, 4 first names (`Alex`, `Dana`, `Hana`, `Lior`) 55 each, `directory` 50, and 5 last names 40 each.
+- The two letter word. Its most frequent two letter word is `Jo`, a first name, which lists 55 rows, not thousands.
+
+**No term on this fixture lists thousands of rows.** Counted through the real engine in Node for every word a term could take: `staff` 1,150, `example`, `example.com` and `com` 1,100 each, `020`, `7946` and `020 7946` 1,000 each, `212` and `555` 100 each, `Staff directory` and `directory` 50 each. So 1,150 is the most one group lists here, and one group of thousands is not measured. That needs a fixture of its own (index, Follow-up).
+
+**Rows barely change the worker's cost.** One review search in Node (`OpenDocument.findTerms`, the real MuPDF, two runs each, outside the browser so not comparable with the table above): `Jo` (55 rows) 2,169 and 2,181 ms; `staff` (1,150 rows) 2,268 and 2,286 ms; the 27 found words (3,620 rows) 2,087 and 2,202 ms; 15 terms listing 7,980 rows together, 2,034 ms. The read of each page, not the rows found, sets the cost. So the risk left in a group of thousands is on the page: committing the rows and rendering one group that large. Spec 0007's checklist stopwatch already covers 2,200 rows in two groups of 1,100.
+
+### AC-8 and AC-29, as built (2026-11-11)
+
+- **Mixed line end hyphens.** Each hyphen before a line break is read both ways by two whole readings of the page (all such hyphens as nothing, then all as hyphens), which keeps every reading linear and every match its term's length, so its start comes in one step (AC-29). Checked through `findTerms` on 2026-11-13: `Jean-` then `Luc Smithson`, and `Jean-Luc Smith-` then `son`, are each exact for `Jean-Luc Smithson`; `Jean-` then `Luc Smith-` then `son`, which needs the first hyphen kept and the second dropped, lists one row with the `spaced` note. It is listed unticked, never missed.
+- **The adversarial case.** `tests/unit/detect-adversarial.test.ts`'s term case covers six shapes; the slowest (hyphenated terms on lines that end in a hyphen) takes about 0.5 s of CPU alone, against the 1 s budget.
+
 ### Design conversation (2026-11-11)
 
 The owner's answers, as given:
