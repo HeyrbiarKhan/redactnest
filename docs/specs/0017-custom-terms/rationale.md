@@ -105,6 +105,7 @@ The rest follows from the forces. Per term counts on the result card come from t
 - **No `form` around the field, Enter handled on the field.** A form submission is what browsers take as the moment to save field history. Runner up: a form with its submit prevented, which some browsers still read as a submission.
 - **Two primitives in `src/ui`.** `TextField` and `Chip` are presentation only, with their own component and axe tests, so the panel stays composition. Runner up: markup in `terms-panel.tsx`, which would leave the site's first text field outside the design system.
 - **Telemetry fields.** `terms` and `termsSetAside` on `redaction-completed`: how much the capability is used, and how often a kept list meets a Free job. Runner up: a new event per search, more volume and a new event to keep in step with the parser.
+- **AC-28's third list on a fixture of its own** (2026-11-13). One group of thousands is measured on `terms-dense.pdf`, where `JK` lists 3,000 rows, with its select all held to spec 0007's 200 ms tick line. Runner up: growing `detect-dense.pdf` until one word lists thousands, which would change the lists specs 0007, 0012 and 0017 recorded on it. The reasons and the measurement are in Evidence.
 - **Words.** Panel, refusal, not searched and result words in `src/lib/flow-text.ts`; row notes and the group noun in `src/lib/detectors.ts`, beside the checklist's other copy; all proposed in `index.md` for the owner's read.
 
 ## Evidence
@@ -134,9 +135,38 @@ The kept list adds at most about half a second to an open (2,353 ms to 2,809 ms)
 - The found list. AC-28 asked for the 50 most frequent distinct words of 4 to 12 letters. The fixture holds 27, so the case uses all 27. Through the real engine in Node, they list 3,620 rows between them, every one ticked: `staff` 1,150 (50 headings and 1,100 addresses), `example` 1,100, 15 last names 60 each, 4 first names (`Alex`, `Dana`, `Hana`, `Lior`) 55 each, `directory` 50, and 5 last names 40 each.
 - The two letter word. Its most frequent two letter word is `Jo`, a first name, which lists 55 rows, not thousands.
 
-**No term on this fixture lists thousands of rows.** Counted through the real engine in Node for every word a term could take: `staff` 1,150, `example`, `example.com` and `com` 1,100 each, `020`, `7946` and `020 7946` 1,000 each, `212` and `555` 100 each, `Staff directory` and `directory` 50 each. So 1,150 is the most one group lists here, and one group of thousands is not measured. That needs a fixture of its own (index, Follow-up).
+**No term on this fixture lists thousands of rows.** Counted through the real engine in Node for every word a term could take: `staff` 1,150, `example`, `example.com` and `com` 1,100 each, `020`, `7946` and `020 7946` 1,000 each, `212` and `555` 100 each, `Staff directory` and `directory` 50 each. So 1,150 is the most one group lists here, and one group of thousands is not measured. That needs a fixture of its own, decided on 2026-11-13 (*AC-28's third list* below).
 
 **Rows barely change the worker's cost.** One review search in Node (`OpenDocument.findTerms`, the real MuPDF, two runs each, outside the browser so not comparable with the table above): `Jo` (55 rows) 2,169 and 2,181 ms; `staff` (1,150 rows) 2,268 and 2,286 ms; the 27 found words (3,620 rows) 2,087 and 2,202 ms; 15 terms listing 7,980 rows together, 2,034 ms. The read of each page, not the rows found, sets the cost. So the risk left in a group of thousands is on the page: committing the rows and rendering one group that large. Spec 0007's checklist stopwatch already covers 2,200 rows in two groups of 1,100.
+
+### AC-28's third list, decided 2026-11-13
+
+As built, no term on `detect-dense.pdf` lists more than 1,150 rows, so one group of thousands was never on the page. The worker's cost barely moves with rows (above), so what is left to measure is the page: committing one group that large, and pressing its select all, which changes every row in it at once.
+
+**The fixture.** `tests/fixtures/terms-dense.pdf`, from `scripts/make-fixture.mjs`: a 50 page review log whose every line names one reviewer's initials, `JK`, twice, each as a whole word. That makes 60 places a page and 3,000 in all.
+
+- **Why a fixture of its own.** `detect-dense.pdf`'s lists are recorded in specs 0007, 0012 and 0017 and stay as they are. Growing that file until one word lists thousands would change every figure measured on it.
+- **Why initials.** The two letter term a visitor actually types is someone's initials (*Consequences*). A common short word such as `of` would list thousands too, but nobody removes `of`.
+- **Why every place is exact.** Every row is ticked, so the select all reaches all 3,000 and a press changes every row in the group. A joined or spaced row would be unticked and make the press smaller than the count.
+- **Why no detector rows.** The file holds no digit and no `@`, so the term's group is the only group. The open then measures one group of thousands, not a mix.
+- **Why exactly 3,000.** It is the floor asked for, 2.7 times the largest group measured so far (`staff`'s 1,150), and the test holds the exact count, so a matcher that started dropping places would fail it too.
+
+**The select all budget.** 200 ms from the click to the next paint, each way, spec 0007's line for a single tick (AC-8 there). To the visitor a select all is one press, like a tick, and 200 ms is where a press stops feeling immediate (spec 0007's own reason for the line). Runner up: spec 0007's 1 s line for the checklist's first render, on the grounds that a select all renders every row in the group again, as a first render does. Declined: a visitor waits for an open but expects a press to answer, and 1 s would hide a select all five times slower than today's. A line that grows with the group was declined too, because it would grow with the very cost it is meant to hold.
+
+**Measured on a scratch copy** (2026-11-13). The candidate fixture was drawn in the session scratchpad from the same page builders, served from the 2026-11-11 production build (built with Playwright's environment), and timed in Chromium three times on this machine, with `paid` routed and the methods of `terms-speed.spec.ts` (the open, the paste, the reads) and `checklist-speed.spec.ts` (a press, from the click to the next paint).
+
+| Case | Measured | Budget |
+|---|---|---|
+| Open, `JK` kept (3,000 rows, all ticked) | 2,228 and 2,250 ms | 5,000 ms |
+| The rows' first render, from the worker's `result` to the rows in the page | 148 and 150 ms | none here (spec 0007's line is 1 s) |
+| `JK` pasted during review, to its rows committed | 1,109 to 1,135 ms | 3,000 ms |
+| Slowest single read, at open | 28 and 30 ms | 1,000 ms |
+| Slowest single read, in the search | 9 and 10 ms | 1,000 ms |
+| Select all, 3,000 rows, each way (30 presses) | 70 to 104 ms | 200 ms |
+| A single tick in the 3,000 row group | 13 to 26 ms | 200 ms (spec 0007) |
+| For comparison: select all on `detect-dense.pdf`'s 1,100 email rows | 27 to 44 ms | none |
+
+The first press after the open is the slowest (93 to 104 ms); the rest sit near 80 ms. A select all costs about 30 microseconds a row in both groups measured, so it grows in step with the group, and the 200 ms line would be reached near 6,000 to 7,000 rows on this machine. That leaves about twice the room on this machine. CI runs the `speed` project too, on slower machines, so a select all over the line there comes back to `/architect` with its figure, as AC-28 says, rather than the line being raised.
 
 ### AC-8 and AC-29, as built (2026-11-11)
 
