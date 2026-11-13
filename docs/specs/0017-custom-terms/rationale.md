@@ -172,16 +172,16 @@ The first press after the open is the slowest (93 to 104 ms); the rest sit near 
 
 `tests/e2e/terms-speed.spec.ts`'s second test, on the committed `terms-dense.pdf`, with `paid` routed and the carry on, against production builds made with Playwright's environment, by the methods above. `tests/unit/terms-engine.test.ts` holds the fixture to its promise through the real engine in Node: `JK` lists 3,000 rows, 60 a page, each exact, ticked and with a target, and nothing else is listed.
 
-| Case | Measured (9 runs) | Budget |
+| Case | Measured (10 runs) | Budget |
 |---|---|---|
 | Open, `JK` kept (3,000 rows, all ticked, the only group) | 2,296 to 2,596 ms | 5,000 ms |
 | `JK` pasted during review, to its rows committed | 1,128 to 1,237 ms | 3,000 ms |
-| Slowest single read, at open | 46 to 54 ms | 1,000 ms |
+| Slowest single read, at open | 46 to 59 ms | 1,000 ms |
 | Slowest single read, in the search | 9 to 12 ms | 1,000 ms |
-| Select all, clearing all 3,000 rows | 111 to 151 ms | 200 ms |
+| Select all, clearing all 3,000 rows | 111 to 163 ms | 200 ms |
 | Select all, ticking all 3,000 rows | 136 to 160 ms | 200 ms |
 
-The runs: one on the build before the owner's word changes, five on the build after them, and three more on the earlier build in a same test A/B beside three of those five (earlier build: clear 113 to 116 ms, tick 136 to 160 ms; later build: clear 111 to 151 ms, tick 138 to 140 ms), so the new words cost nothing measurable. The first test, run three times beside these (once before the word changes, twice after), measured `detect-dense.pdf`'s opens at 2,235 to 2,982 ms, its pasted batch at 1,209 to 1,373 ms and its slowest read at 58 ms, in line with the 2026-11-11 table.
+The runs: one on the build before the owner's word changes, six on the builds after them (the last after the owner's final three changes), and three more on the earlier build in a same test A/B beside three of those five (earlier build: clear 113 to 116 ms, tick 136 to 160 ms; later build: clear 111 to 151 ms, tick 138 to 140 ms), so the new words cost nothing measurable. The first test, run four times beside these (once before the word changes, three times after), measured `detect-dense.pdf`'s opens at 2,235 to 2,982 ms, its pasted batch at 1,209 to 1,373 ms and its slowest read at 67 ms, in line with the 2026-11-11 table.
 
 **Less room than the scratch copy showed.** The committed test's presses sit near 115 ms clearing and 140 ms ticking, not the scratch copy's 70 to 104 ms, so the 200 ms line has about 1.4 times the room on this machine, not twice.
 
