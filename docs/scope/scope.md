@@ -387,7 +387,7 @@ spec [0017](../specs/0017-custom-terms/index.md) · code in `src/detect/terms.ts
   - [x] The tab's list: kept across files with the kept line, the locked Free panel, not searched and Set aside, failed searches, paste with grouped refusals, and Remove all · AC-2 to AC-6, AC-9, AC-17, AC-18, AC-20, AC-22
   - [x] Measured, counted and said: the open and paste budgets, and select all on one group of 3,000 rows (`terms-dense.pdf`), telemetry, claims C3 and C14, Pricing's line, the amends to older specs, and your read of every word · AC-24 to AC-26, AC-28, AC-31
   - [x] AC-28's select all line, as amended 2026-11-13: `terms-speed.spec.ts` with no trace, the select all pressed ten times, the median each way within 200 ms and every press within 500 ms, three local runs and the first CI run recorded · AC-28
-- [ ] Verify it: `/check verify custom terms`
+- [x] Verify it: `/check verify custom terms`
 - [ ] Test it: `/test custom terms`
 - [ ] Review it (fresh model): `/check review custom terms`
 
