@@ -576,4 +576,30 @@ describe("the polite line names only listed terms (AC-19)", () => {
     await press(chipRemove("Jane Doe"));
     expect(status).toBeEmptyDOMElement();
   });
+
+  it("drops an already in your list refusal once the term it duplicated is removed, and keeps the rest", async () => {
+    render(<ToolClient />);
+    await choose();
+    await screen.findByTestId("terms-panel");
+    const status = screen.getByTestId("terms-status");
+    const duplicate = "“acme ltd” not added because it is already in your list.";
+    const tooShort = "“a” not added because it is too short (at least 2 characters).";
+
+    await type("Acme Ltd");
+    paste(["acme ltd", "a", "Jane Doe"]);
+    expect(await screen.findAllByTestId("term-chip")).toHaveLength(2);
+    expect(status).toHaveTextContent(duplicate);
+    expect(status).toHaveTextContent(tooShort);
+
+    // Jane Doe was added, not duplicated, so both refusals still hold.
+    await press(chipRemove("Jane Doe"));
+    expect(status).toHaveTextContent(duplicate);
+    expect(status).toHaveTextContent(tooShort);
+
+    // Acme Ltd was the term the refused line duplicated: once it goes, that
+    // refusal is no longer true, and the too short one still is.
+    await press(chipRemove("Acme Ltd"));
+    expect(status).not.toHaveTextContent("already in your list");
+    expect(status).toHaveTextContent(tooShort);
+  });
 });

@@ -799,16 +799,20 @@ describe("the custom terms words (spec 0017)", () => {
   });
 
   describe("refusals (AC-4)", () => {
+    /** The words alone, one line per reason. */
+    const words = (refused: Parameters<typeof refusalLines>[0]) =>
+      refusalLines(refused, TERM_REFUSALS).map(({ text }) => text);
+
     it("names one refused term with a reason that reads alone", () => {
-      expect(refusalLines([{ text: "a", reason: "too-short" }], TERM_REFUSALS)).toEqual([
+      expect(words([{ text: "a", reason: "too-short" }])).toEqual([
         "“a” not added because it is too short (at least 2 characters).",
       ]);
-      expect(
-        refusalLines([{ text: "---", reason: "no-letter-or-digit" }], TERM_REFUSALS),
-      ).toEqual(["“---” not added because it has no letter or number."]);
+      expect(words([{ text: "---", reason: "no-letter-or-digit" }])).toEqual([
+        "“---” not added because it has no letter or number.",
+      ]);
     });
 
-    it("groups several by reason, each line reading as naturally as one alone", () => {
+    it("groups several by reason, each line reading as naturally as one alone, and says its reason", () => {
       expect(
         refusalLines(
           [
@@ -822,9 +826,18 @@ describe("the custom terms words (spec 0017)", () => {
           TERM_REFUSALS,
         ),
       ).toEqual([
-        "3 not added because they are too short (at least 2 characters): “a”, “b” and “c”.",
-        "“Acme” not added because it is already in your list.",
-        "2 not added because your list is full at 50 terms: “One more” and “Two more”.",
+        {
+          reason: "too-short",
+          text: "3 not added because they are too short (at least 2 characters): “a”, “b” and “c”.",
+        },
+        {
+          reason: "duplicate",
+          text: "“Acme” not added because it is already in your list.",
+        },
+        {
+          reason: "list-full",
+          text: "2 not added because your list is full at 50 terms: “One more” and “Two more”.",
+        },
       ]);
     });
 
@@ -838,10 +851,7 @@ describe("the custom terms words (spec 0017)", () => {
         { text: "Acme", reason: "duplicate" as const },
         { text: "Jane", reason: "duplicate" as const },
       ];
-      const [tooShort, tooLong, duplicate] = refusalLines(
-        [long, ...short, ...dupes],
-        TERM_REFUSALS,
-      );
+      const [tooShort, tooLong, duplicate] = words([long, ...short, ...dupes]);
       expect(tooShort).toMatch(
         /^1,200 not added because they are too short \(at least 2 characters\): “a”, .* and 1,181 more\.$/,
       );

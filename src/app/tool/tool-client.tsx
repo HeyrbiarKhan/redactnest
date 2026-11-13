@@ -121,6 +121,15 @@ function loadNeverFinished(session: ToolSession): session is LiveSession {
   );
 }
 
+/**
+ * One line of the custom terms panel's polite line, with the listed terms
+ * it names, so it goes once one of them is removed (spec 0017, AC-5).
+ */
+interface PoliteLine {
+  readonly text: string;
+  readonly names: readonly TermId[];
+}
+
 /** Where focus goes after a step change. Spec 0007, *Focus*. */
 type FocusTarget =
   | "choose"
@@ -317,15 +326,13 @@ export function ToolClient() {
   /**
    * The panel's polite line (spec 0017, AC-19, AC-20): what the search in
    * flight or the last one said, then what the last Add or paste refused
-   * (AC-4), which stays until the next one. The search's line keeps the terms
-   * whose words it shows, so it goes with the first of them removed, and
-   * never names a term the list no longer holds (AC-5).
+   * (AC-4), which stays until the next one. Each line keeps the listed terms
+   * it names (a refusal for a repeat names the term it repeats), so it goes
+   * with the first of them removed, and never names a term the list no
+   * longer holds, or says one is already in it (AC-5).
    */
-  const [searchLine, setSearchLine] = useState<{
-    readonly text: string;
-    readonly names: readonly TermId[];
-  } | null>(null);
-  const [refusedLines, setRefusedLines] = useState<readonly string[]>([]);
+  const [searchLine, setSearchLine] = useState<PoliteLine | null>(null);
+  const [refusedLines, setRefusedLines] = useState<readonly PoliteLine[]>([]);
 
   /**
    * The review search in flight, and its batch (spec 0017, AC-5, AC-19): one
@@ -826,7 +833,15 @@ export function ToolClient() {
       }
       const result = addTerms(termsRef.current, lines, TERM_CAPS, mintTermId);
       setTerms(result.list);
-      setRefusedLines(refusalLines(result.refused, TERM_REFUSALS));
+      const repeated = result.refused.flatMap(({ duplicates }) =>
+        duplicates === null ? [] : [duplicates],
+      );
+      setRefusedLines(
+        refusalLines(result.refused, TERM_REFUSALS).map(({ reason, text }) => ({
+          text,
+          names: reason === "duplicate" ? repeated : [],
+        })),
+      );
       startSearch(result.added);
       return result.refused.length === 0;
     },
@@ -836,7 +851,7 @@ export function ToolClient() {
   /**
    * Remove one term, or every term (spec 0017, AC-5): out of the tab's list
    * and, in the same handler, out of the job with its rows and ticks. A
-   * search whose whole batch is gone is cancelled, and the polite line goes
+   * search whose whole batch is gone is cancelled, and each polite line goes
    * once it names a term that went.
    */
   const handleRemoveTerms = useCallback(
@@ -848,8 +863,10 @@ export function ToolClient() {
         dispatch({ type: "terms-removed", jobId: live.jobId, terms: ids });
       }
       const gone = new Set(ids);
-      setSearchLine((line) =>
-        line !== null && line.names.some((id) => gone.has(id)) ? null : line,
+      const stale = (line: PoliteLine) => line.names.some((id) => gone.has(id));
+      setSearchLine((line) => (line !== null && stale(line) ? null : line));
+      setRefusedLines((lines) =>
+        lines.some(stale) ? lines.filter((line) => !stale(line)) : lines,
       );
       const running = searchRef.current;
       if (running && running.batch.every((id) => !next.some((term) => term.id === id))) {
@@ -1475,7 +1492,7 @@ export function ToolClient() {
                     searching={termView.searching}
                     status={[
                       ...(searchLine === null ? [] : [searchLine.text]),
-                      ...refusedLines,
+                      ...refusedLines.map(({ text }) => text),
                     ]}
                     onAdd={handleAddTerms}
                     onRemove={handleRemoveTerm}

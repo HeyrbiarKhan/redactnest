@@ -722,12 +722,14 @@ function refusedName(text: string): string {
  * reason, in `order`. A reason that refused one line names it, as a typed
  * term is named (`“a” not added because it is too short …`); one that refused
  * several counts them and names those among the first 20 refused lines, then
- * how many more it refused. No refused line passes unsaid.
+ * how many more it refused. No refused line passes unsaid. Each line says
+ * its reason too, so the page can take the duplicate line away once the
+ * term it repeats is removed (AC-5).
  */
 export function refusalLines(
   refused: readonly { readonly text: string; readonly reason: TermRefusal }[],
   order: readonly TermRefusal[],
-): readonly string[] {
+): readonly { readonly reason: TermRefusal; readonly text: string }[] {
   const named = new Set(refused.slice(0, REFUSED_NAMED));
   return order.flatMap((reason) => {
     const these = refused.filter((each) => each.reason === reason);
@@ -736,14 +738,15 @@ export function refusalLines(
     const names = these
       .filter((each) => named.has(each))
       .map(({ text }) => refusedName(text));
+    const line = (text: string) => [Object.freeze({ reason, text })];
     if (these.length === 1 && names.length === 1) {
-      return [`${names[0]} not added because ${why.one}.`];
+      return line(`${names[0]} not added because ${why.one}.`);
     }
     const counted = `${countText(these.length)} not added because ${these.length === 1 ? why.one : why.other}`;
-    if (names.length === 0) return [`${counted}.`];
+    if (names.length === 0) return line(`${counted}.`);
     const more = these.length - names.length;
     const listed = [...names, ...(more > 0 ? [`${countText(more)} more`] : [])];
-    return [`${counted}: ${LIST.format(listed)}.`];
+    return line(`${counted}: ${LIST.format(listed)}.`);
   });
 }
 

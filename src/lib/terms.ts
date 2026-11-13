@@ -25,6 +25,11 @@ export type CustomTerm = TermQuery;
 export interface RefusedTerm {
   readonly text: string;
   readonly reason: TermRefusal;
+  /**
+   * For a `duplicate`, the listed term it folds the same as, so its refusal
+   * can go once that term does (AC-5); null for every other reason.
+   */
+  readonly duplicates: TermId | null;
 }
 
 /** What one Add or one paste did to the list. */
@@ -45,7 +50,8 @@ export function linesOf(text: string): readonly string[] {
 /**
  * Add each line as a term, in order, until the list is full (AC-3, AC-4).
  * Each is prepared, then judged by `termRefusal` against the list as it
- * grows, so a paste's own repeats are refused too. An empty line is skipped
+ * grows, so a paste's own repeats are refused too, each naming the listed
+ * term it repeats. An empty line is skipped
  * and never named; every other line is added or refused, never dropped, and
  * no added term is cut short.
  */
@@ -56,6 +62,7 @@ export function addTerms(
   mint: () => TermId,
 ): TermsAdded {
   const folds = new Set(list.map(({ text }) => foldTerm(text)));
+  const owners = new Map(list.map(({ id, text }) => [foldTerm(text), id]));
   const added: CustomTerm[] = [];
   const refused: RefusedTerm[] = [];
 
@@ -64,11 +71,15 @@ export function addTerms(
     if (text === "") continue;
     const reason = termRefusal(text, folds, caps);
     if (reason !== null) {
-      refused.push(Object.freeze({ text, reason }));
+      const duplicates =
+        reason === "duplicate" ? (owners.get(foldTerm(text)) ?? null) : null;
+      refused.push(Object.freeze({ text, reason, duplicates }));
       continue;
     }
-    added.push(Object.freeze({ id: mint(), text }));
+    const term = Object.freeze({ id: mint(), text });
+    added.push(term);
     folds.add(foldTerm(text));
+    owners.set(foldTerm(text), term.id);
   }
 
   return Object.freeze({
