@@ -81,6 +81,7 @@ describe("terms.pdf, read at open (AC-9, AC-30)", () => {
     found = await search("terms.pdf", [
       "José",
       "Muller",
+      "Straße",
       "Acme Ltd",
       "Smithson",
       "Jean-Luc",
@@ -103,6 +104,9 @@ describe("terms.pdf, read at open (AC-9, AC-30)", () => {
     expect(rowsOf(found.filter(({ page }) => page === 0))).toEqual([
       [1, "José", "JOSE", "", true],
       [1, "Muller", "Müller", "", true],
+      // AC-7: one page character, `ß`, folds to two, and the row is still the page's.
+      [1, "Straße", "Straße", "", true],
+      [1, "Straße", "STRASSE", "", true],
       [1, "Acme Ltd", "Acme Ltd", "", true],
       [1, "Acme Ltd", "Acme Ltd", "", true],
       // AC-13: a line break right after a hyphen reads as nothing.
@@ -209,7 +213,16 @@ describe("terms.pdf, read at open (AC-9, AC-30)", () => {
 });
 
 describe("removing term rows (AC-21)", () => {
-  const TERMS = ["José", "Muller", "Acme Ltd", "Smithson", "Jean-Luc", "Smith", "Ltd"];
+  const TERMS = [
+    "José",
+    "Muller",
+    "Straße",
+    "Acme Ltd",
+    "Smithson",
+    "Jean-Luc",
+    "Smith",
+    "Ltd",
+  ];
 
   it(
     "removes every ticked row alone, passing the self check each time",
@@ -219,7 +232,7 @@ describe("removing term rows (AC-21)", () => {
       const ticked = found.filter(
         (match) => match.target !== null && match.tickedByDefault,
       );
-      expect(ticked.length).toBe(20);
+      expect(ticked.length).toBe(22);
       for (const match of ticked) {
         const { removedByType, removedByTerm } = await redact("terms.pdf", [
           match.target!,
@@ -237,10 +250,11 @@ describe("removing term rows (AC-21)", () => {
       targetsOf(found),
     );
     // `Acme Ltd` and `Ltd` overlap: each row counts once under its own term.
-    expect(removedByType).toEqual({ term: 20 });
+    expect(removedByType).toEqual({ term: 22 });
     expect(removedByTerm).toEqual([
       { term: "José", removed: 1 },
       { term: "Muller", removed: 1 },
+      { term: "Straße", removed: 2 },
       { term: "Acme Ltd", removed: 4 },
       { term: "Ltd", removed: 6 },
       { term: "Smithson", removed: 3 },
@@ -249,13 +263,24 @@ describe("removing term rows (AC-21)", () => {
     ]);
 
     const text = documentText(output);
-    for (const gone of ["JOSE", "Müller", "Jean", "SMITHSON", "Acme Ltd"]) {
+    for (const gone of [
+      "JOSE",
+      "Müller",
+      "Straße",
+      "STRASSE",
+      "Jean",
+      "SMITHSON",
+      "Acme Ltd",
+    ]) {
       expect(text).not.toContain(gone);
     }
     for (const kept of [
       "Paid to",
       "today, and Herr",
       "wrote back.",
+      "Mail to the",
+      "office or the",
+      "depot.",
       "signed the lease on time.",
       "The tenant is",
       "from May onwards.",

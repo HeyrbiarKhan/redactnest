@@ -74,6 +74,7 @@ export const TERMS_PDF = Object.freeze({
   /** Page 1: the folds, a line break, a hyphenated break each way, a block break. */
   exact: Object.freeze([
     "Paid to JOSE today, and Herr Müller wrote back.",
+    "Mail to the Straße office or the STRASSE depot.",
     "Acme Ltd signed the lease on time.",
     "The tenant is Acme",
     "Ltd from May onwards.",
@@ -138,7 +139,8 @@ export const TERMS_PDF = Object.freeze({
 /**
  * Spec 0017, AC-30. A line for each case AC-7 to AC-13 names:
  *
- *  1. the folds (`José` finds `JOSE`, `Muller` finds `Müller`), a line break
+ *  1. the folds (`José` finds `JOSE`, `Muller` finds `Müller`, `Straße` finds
+ *     `Straße` and `STRASSE`, so one page character folds to two), a line break
  *     (`Acme` then `Ltd`), a hyphenated break each way (`Smith-` then `son`
  *     for `Smithson`, `Jean-` then `Luc` for `Jean-Luc`), and a block break
  *     (two columns, `Acme` ending the left one and `Ltd` starting the right);
