@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { countText } from "@/lib/count-text";
 import {
   BLOCKED_REASON_TEXT,
-  countText,
   COVERAGE_NOTE,
   COVERAGE_NOTE_PARTLY,
   coverageNoteWithTerms,
@@ -23,6 +23,7 @@ import {
   refusalLines,
   removedLine,
   RESULT_TERMS,
+  setAsideLine,
   resultTitle,
   RUN_REFUSAL_LEAD,
   runRefusalText,
@@ -364,6 +365,8 @@ describe("the action panel (AC-6)", () => {
     [1, 1, 1, "1 of 1 found item will be removed."],
     [0, 3, 3, "Nothing is ticked, so nothing will be removed."],
     [0, 0, 2, "None of the found items can be removed."],
+    [3_000, 3_000, 3_000, "3,000 of 3,000 found items will be removed."],
+    [999, 1_200, 1_250, "999 of 1,200 found items will be removed."],
   ])("counts %i ticked of %i tickable and %i found", (ticked, tickable, found, line) => {
     expect(tickCountLine(ticked, tickable, found)).toBe(line);
   });
@@ -374,6 +377,7 @@ describe("the action panel (AC-6)", () => {
 
   it("labels the action by what it will make", () => {
     expect(redactLabel(4)).toBe("Redact 4 items");
+    expect(redactLabel(3_000)).toBe("Redact 3,000 items");
     expect(redactLabel(1)).toBe("Redact 1 item");
     expect(redactLabel(0)).toBe("Make a cleaned copy");
   });
@@ -664,7 +668,22 @@ describe("the custom terms words (spec 0017)", () => {
       `RedactNest looked for ${detectors} and your 3 custom terms. Anything else stays in the file.`,
     );
     expect(coverageNoteWithTerms(1, true)).toBe(
-      `RedactNest looked for ${detectors} and your 1 custom term on the pages it could read. Anything else stays in the file.`,
+      `RedactNest looked for ${detectors} and your custom term on the pages it could read. Anything else stays in the file.`,
+    );
+    expect(coverageNoteWithTerms(1, false)).toBe(
+      `RedactNest looked for ${detectors} and your custom term. Anything else stays in the file.`,
+    );
+    expect(coverageNoteWithTerms(1_000, false)).toContain("and your 1,000 custom terms.");
+  });
+
+  it("names each set aside term on the result card with the reason in the same words as everywhere else", () => {
+    expect(
+      setAsideLine([
+        { text: "Acme Ltd", reason: "free-plan" },
+        { text: "to", reason: "search-failed" },
+      ]),
+    ).toBe(
+      "“Acme Ltd”, set aside because this file opened on the Free plan and “to”, set aside because the search could not finish",
     );
   });
 

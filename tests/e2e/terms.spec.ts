@@ -97,7 +97,7 @@ test("a Pro visitor adds a term, sees every place it appears, and the run remove
   // AC-16: the coverage note names the custom terms by count.
   await expect(page.getByTestId("coverage")).toContainText(
     // terms.pdf has a page with a warning, so the note speaks for the rest.
-    "National Insurance numbers and your 1 custom term on the pages it could read. Anything else stays in the file.",
+    "National Insurance numbers and your custom term on the pages it could read. Anything else stays in the file.",
   );
   await expectNoAxeViolations(page);
 

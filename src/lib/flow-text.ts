@@ -13,7 +13,8 @@
  */
 
 import { config } from "@/config";
-import { countedKinds, countText, lookedFor, TERM_GROUP_NOUN } from "@/lib/detectors";
+import { countText } from "@/lib/count-text";
+import { countedKinds, lookedFor, TERM_GROUP_NOUN } from "@/lib/detectors";
 import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
 import { PRICING_PATH, SIGN_IN_PATH } from "@/lib/routes";
 import { NOT_SEARCHED_REASONS, type NotSearchedReason } from "@/lib/session";
@@ -407,7 +408,7 @@ export function tickCountLine(
   if (found === 0) return null;
   if (tickable === 0) return "None of the found items can be removed.";
   if (ticked === 0) return "Nothing is ticked, so nothing will be removed.";
-  return `${ticked} of ${tickable} found ${tickable === 1 ? "item" : "items"} will be removed.`;
+  return `${countText(ticked)} of ${countText(tickable)} found ${tickable === 1 ? "item" : "items"} will be removed.`;
 }
 
 /**
@@ -416,7 +417,7 @@ export function tickCountLine(
  */
 export function redactLabel(ticked: number): string {
   if (ticked === 0) return "Make a cleaned copy";
-  return `Redact ${ticked} ${ticked === 1 ? "item" : "items"}`;
+  return `Redact ${countText(ticked)} ${ticked === 1 ? "item" : "items"}`;
 }
 
 /* The rail and the found items column (spec 0013, AC-14 to AC-19). */
@@ -818,12 +819,9 @@ export function setAsideLine(
   setAside: readonly { readonly text: string; readonly reason: NotSearchedReason }[],
 ): string {
   return LIST.format(
-    setAside.map(({ text, reason }) => {
-      const why =
-        reason === "free-plan"
-          ? "this file opened on the Free plan"
-          : "its search could not finish";
-      return `${quoted(text)}, set aside because ${why}`;
-    }),
+    setAside.map(
+      ({ text, reason }) =>
+        `${quoted(text)}, set aside because ${NOT_SEARCHED_WHY[reason]}`,
+    ),
   );
 }

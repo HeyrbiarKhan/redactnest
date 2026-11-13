@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { countText } from "@/lib/count-text";
 import {
   DETECTOR_KINDS,
   MATCH_KINDS,
@@ -120,19 +121,6 @@ function detectorNouns(): readonly string[] {
   return DETECTOR_KINDS.map((kind) => DETECTOR_LABELS[kind].noun.other);
 }
 
-const COUNT = new Intl.NumberFormat("en-GB");
-
-/**
- * A count as the page writes it: British, so 1,000 and more take a thousands
- * separator (`3,000`). Every custom terms line and every group's select all
- * name their counts through it, and so does the result card's Removed and Left
- * in the file, which name term counts and detector counts in one sentence
- * (spec 0017, as built; spec 0007, AC-7 and AC-11, as spec 0017 amends them).
- */
-export function countText(count: number): string {
-  return COUNT.format(count);
-}
-
 /**
  * The note above the checklist (AC-14). Built from `DETECTOR_KINDS`, so it
  * names exactly what was looked for, and says that everything else stays, so
@@ -154,12 +142,13 @@ export const COVERAGE_NOTE_PARTLY = `RedactNest looked for ${lookedFor("conjunct
 
 /**
  * The coverage note when this job searched custom terms (spec 0017, AC-16):
- * the detectors and the terms by count, the terms the last part of the one
- * list, and still that everything else stays in the file. `lookedFor` and the
- * detectors it names are unchanged.
+ * the detectors and the terms, by count once there are two or more, the terms
+ * the last part of the one list, and still that everything else stays in the
+ * file. `lookedFor` and the detectors it names are unchanged.
  */
 export function coverageNoteWithTerms(searched: number, partly: boolean): string {
-  const terms = `your ${countText(searched)} custom ${searched === 1 ? "term" : "terms"}`;
+  const terms =
+    searched === 1 ? "your custom term" : `your ${countText(searched)} custom terms`;
   const looked = new Intl.ListFormat("en-GB", { type: "conjunction" }).format([
     ...detectorNouns(),
     terms,

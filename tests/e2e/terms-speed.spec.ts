@@ -430,6 +430,8 @@ test("one group of 3,000 rows opens, lands from a paste and takes its select all
     "Select all 3,000 matches",
   );
   await expect(page.getByTestId("term-chip")).toContainText("3,000 matches");
+  await expect(checklist.locator("details summary")).toContainText("3,000");
+  await expect(page.getByTestId("redact")).toHaveText("Redact 3,000 items");
 
   // Let the work queued after the first paint finish, as the checklist's own
   // stopwatch does, then press the group's select all to clear every row and

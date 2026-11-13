@@ -3,7 +3,6 @@ import { memo, useMemo, type ReactNode } from "react";
 
 import {
   BLOCKED_REASON_TEXT,
-  countText,
   COVERAGE_NOTE,
   COVERAGE_NOTE_PARTLY,
   coverageNoteWithTerms,
@@ -13,6 +12,7 @@ import {
   TERM_GROUP_NOUN,
   TERM_NOTE_TEXT,
 } from "@/lib/detectors";
+import { countText } from "@/lib/count-text";
 import { FOUND_ITEMS_NOUN, FOUND_ITEMS_TITLE, TERMS_TEXT } from "@/lib/flow-text";
 import { CONCEALED_TEXT } from "@/lib/page-findings";
 import type { TermState } from "@/lib/session";
