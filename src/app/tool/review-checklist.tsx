@@ -1,5 +1,5 @@
 import { SearchCheck, TextSearch } from "lucide-react";
-import { memo, useMemo, type ReactNode } from "react";
+import { memo, useMemo, useRef, type ReactNode } from "react";
 
 import {
   BLOCKED_REASON_TEXT,
@@ -289,6 +289,7 @@ function TermStateRow({
 }) {
   const { state } = term;
   const line = "flex items-center gap-2 px-3 py-3 text-small";
+  const removeRef = useRef<HTMLButtonElement>(null);
 
   if (state.state === "searching") {
     return (
@@ -347,12 +348,20 @@ function TermStateRow({
               variant="secondary"
               data-testid="term-set-aside"
               disabled={running}
-              onClick={() => actions.onSetAside(term.id)}
+              onClick={() => {
+                // Set aside goes with the press, and every way on but Remove
+                // with it, so focus moves to Remove (spec 0017, AC-5, AC-17).
+                // Remove stays in this row before and after, so focus can
+                // move here, ahead of the render that drops the button.
+                actions.onSetAside(term.id);
+                removeRef.current?.focus();
+              }}
             >
               {TERMS_TEXT.setAside}
             </Button>
           )}
           <Button
+            ref={removeRef}
             variant="link"
             data-testid="term-remove"
             disabled={running}

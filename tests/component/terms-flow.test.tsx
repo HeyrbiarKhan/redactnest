@@ -406,3 +406,174 @@ describe("a search that fails (AC-19, AC-20)", () => {
     expect(field()).not.toHaveAttribute("readonly");
   });
 });
+
+/** Press a control from the keyboard, as the visitor who would lose their place does. */
+async function press(control: HTMLElement): Promise<void> {
+  act(() => control.focus());
+  await userEvent.keyboard("{Enter}");
+}
+
+/** A term's own Remove in its group, not its chip's. */
+function groupRemove(text: string): HTMLElement {
+  const button = screen
+    .getAllByTestId("term-remove")
+    .find((each) => each.textContent === `Remove ${text}`);
+  if (!button) throw new Error(`no Remove for ${text} in its group`);
+  return button;
+}
+
+/** A term's chip remove button, not its group's Remove. */
+function chipRemove(text: string): HTMLElement {
+  const chip = screen
+    .getAllByTestId("term-chip")
+    .find((each) => within(each).queryByRole("button", { name: `Remove ${text}` }));
+  if (!chip) throw new Error(`no chip for ${text}`);
+  return within(chip).getByRole("button", { name: `Remove ${text}` });
+}
+
+/** Two terms searched and not found on Pro, then a second file opened on the Free plan. */
+async function keptOnFree(): Promise<void> {
+  render(<ToolClient />);
+  await choose();
+  await screen.findByTestId("terms-panel");
+  paste(["Acme Ltd", "Jane Doe"]);
+  expect(await screen.findAllByTestId("term-not-found")).toHaveLength(2);
+
+  mocks.getEntitlement.mockResolvedValue(UNCONFIRMED);
+  await choose(pdf("second.pdf"));
+  await screen.findByTestId("terms-locked");
+}
+
+/** One term whose review search failed, so its group offers Try again, Set aside and Remove. */
+async function failedSearch(
+  findTerms = searching(() => Promise.reject(new EngineError("unsupported"))),
+): Promise<void> {
+  mocks.openSession.mockResolvedValue(session(findTerms));
+  render(<ToolClient />);
+  await choose();
+  await screen.findByTestId("terms-panel");
+  await type("Acme Ltd");
+  await screen.findByTestId("term-try-again");
+}
+
+describe("focus after a control takes itself away (AC-5)", () => {
+  it("moves to Choose a PDF after Remove all beside the drop zone", async () => {
+    render(<ToolClient />);
+    await choose();
+    await screen.findByTestId("terms-panel");
+    paste(["Acme Ltd", "Jane Doe"]);
+    expect(await screen.findAllByTestId("term-chip")).toHaveLength(2);
+    await userEvent.click(screen.getByTestId("start-over"));
+
+    const kept = await screen.findByTestId("terms-kept");
+    await press(within(kept).getByRole("button", { name: "Remove all terms" }));
+
+    expect(screen.queryByTestId("terms-kept")).not.toBeInTheDocument();
+    expect(screen.getByTestId("choose-file")).toHaveFocus();
+  });
+
+  it("moves from a not searched term's Remove in its group to the next term's, as a chip's does", async () => {
+    await keptOnFree();
+
+    await press(groupRemove("Acme Ltd"));
+    expect(screen.getAllByTestId("term-chip")).toHaveLength(1);
+    expect(chipRemove("Jane Doe")).toHaveFocus();
+  });
+
+  it("moves to the locked line's way on once the last term goes, since the field is off", async () => {
+    await keptOnFree();
+
+    await press(groupRemove("Acme Ltd"));
+    await press(groupRemove("Jane Doe"));
+    expect(screen.queryByTestId("term-chip")).not.toBeInTheDocument();
+    expect(screen.getByTestId("terms-recheck")).toHaveFocus();
+  });
+
+  it("moves to the locked line's way on after a chip's remove or Remove all empties the list", async () => {
+    await keptOnFree();
+    await press(chipRemove("Acme Ltd"));
+    expect(chipRemove("Jane Doe")).toHaveFocus();
+    await press(chipRemove("Jane Doe"));
+    expect(screen.getByTestId("terms-recheck")).toHaveFocus();
+  });
+
+  it("moves to the locked line's way on after the panel's Remove all on a Free job", async () => {
+    await keptOnFree();
+    await press(screen.getByTestId("terms-remove-all"));
+    expect(screen.queryByTestId("term-chip")).not.toBeInTheDocument();
+    expect(screen.getByTestId("terms-recheck")).toHaveFocus();
+  });
+
+  it("moves from Set aside to the term's own Remove, and from a set aside term's Remove to the field", async () => {
+    await failedSearch();
+
+    await press(screen.getByTestId("term-set-aside"));
+    expect(screen.getByTestId("term-chip")).toHaveTextContent(
+      "Set aside: not searched in this file",
+    );
+    expect(groupRemove("Acme Ltd")).toHaveFocus();
+
+    await press(groupRemove("Acme Ltd"));
+    expect(screen.queryByTestId("term-chip")).not.toBeInTheDocument();
+    expect(field()).toHaveFocus();
+  });
+
+  it("moves from a failed term's Remove in its group to the field", async () => {
+    await failedSearch();
+
+    await press(groupRemove("Acme Ltd"));
+    expect(screen.queryByTestId("term-chip")).not.toBeInTheDocument();
+    expect(field()).toHaveFocus();
+  });
+
+  it("moves from Try again to the field while the batch is searched again", async () => {
+    let fail = true;
+    const findTerms = searching((batch) =>
+      fail
+        ? Promise.reject(new EngineError("unsupported"))
+        : Promise.resolve({ terms: batch.map(({ id }) => id), matches: [] }),
+    );
+    await failedSearch(findTerms);
+
+    fail = false;
+    await press(screen.getByTestId("term-try-again"));
+    expect(await screen.findByTestId("term-not-found")).toBeInTheDocument();
+    expect(field()).toHaveFocus();
+  });
+});
+
+describe("the polite line names only listed terms (AC-19)", () => {
+  it("is cleared by Remove all, so it never names the terms that went", async () => {
+    render(<ToolClient />);
+    await choose();
+    await screen.findByTestId("terms-panel");
+    paste(["Acme Ltd", "Jane Doe"]);
+    const status = screen.getByTestId("terms-status");
+    expect(
+      await screen.findByText("Not found in this document: “Acme Ltd” and “Jane Doe”."),
+    ).toBeInTheDocument();
+
+    await press(screen.getByTestId("terms-remove-all"));
+    expect(screen.queryByTestId("term-chip")).not.toBeInTheDocument();
+    expect(status).toBeEmptyDOMElement();
+    expect(field()).toHaveFocus();
+  });
+
+  it("drops a line once a term it names is removed, and keeps one that names none", async () => {
+    render(<ToolClient />);
+    await choose();
+    await screen.findByTestId("terms-panel");
+    const status = screen.getByTestId("terms-status");
+
+    await type("Acme Ltd");
+    await type("Jane Doe");
+    expect(status).toHaveTextContent("Not found in this document: “Jane Doe”.");
+
+    // The line names Jane Doe alone, so removing Acme Ltd leaves it as it is.
+    await press(chipRemove("Acme Ltd"));
+    expect(status).toHaveTextContent("Not found in this document: “Jane Doe”.");
+
+    await press(chipRemove("Jane Doe"));
+    expect(status).toBeEmptyDOMElement();
+  });
+});

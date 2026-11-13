@@ -11,7 +11,7 @@ import {
 
 import { TERMS_TEXT, type TermsLocked } from "@/lib/flow-text";
 import type { TermState } from "@/lib/session";
-import { focusAfterRemoving, linesOf, type CustomTerm } from "@/lib/terms";
+import { linesOf, type CustomTerm } from "@/lib/terms";
 import type { TermId } from "@/worker/protocol";
 import { Button } from "@/ui/button";
 import { Chip } from "@/ui/chip";
@@ -24,6 +24,12 @@ export interface TermChip extends CustomTerm {
   readonly state: TermState | undefined;
   readonly rows: number;
 }
+
+/**
+ * Where focus goes once a term's control has gone with it (AC-5): a term's
+ * remove button on its chip, or the field.
+ */
+export type TermFocus = TermId | "field";
 
 interface TermsPanelProps {
   /** The tab's list, in the order added, each with its state in this job. */
@@ -49,6 +55,12 @@ interface TermsPanelProps {
   readonly onRecheck: () => void;
   /** Where focus goes when the list empties, and after Remove all (AC-5). */
   readonly fieldRef: RefObject<HTMLInputElement | null>;
+  /**
+   * Where focus goes after the next render (AC-5), set by the handler that
+   * takes a control away: a chip's remove or Remove all here, or a term's own
+   * Remove or Try again in its group. The panel moves it and clears it.
+   */
+  readonly focusRef: RefObject<TermFocus | null>;
 }
 
 /**
@@ -75,24 +87,30 @@ export function TermsPanel({
   onRemoveAll,
   onRecheck,
   fieldRef,
+  focusRef,
 }: TermsPanelProps) {
   const fieldId = useId();
   const [value, setValue] = useState("");
   const closed = locked !== null || running;
 
   /**
-   * Where focus goes once a chip is gone (AC-5): the next chip's remove
-   * button, else the previous one's, else the field. Moved after the render
-   * that drops the chip, so it lands on what is on screen.
+   * Where focus goes once a term's control is gone (AC-5): the next chip's
+   * remove button, else the previous one's, else the field. Moved after the
+   * render that drops the control, so it lands on what is on screen. On a
+   * locked panel the field is off and cannot hold focus, so the last stop is
+   * the locked line's way on, the control just above it, never `body`.
    */
   const removeButtons = useRef(new Map<TermId, HTMLButtonElement>());
-  const focusNext = useRef<TermId | "field" | null>(null);
+  const recheckRef = useRef<HTMLButtonElement>(null);
+  const getProRef = useRef<HTMLAnchorElement>(null);
   useLayoutEffect(() => {
-    const target = focusNext.current;
+    const target = focusRef.current;
     if (target === null) return;
-    focusNext.current = null;
-    if (target === "field") fieldRef.current?.focus();
-    else removeButtons.current.get(target)?.focus();
+    focusRef.current = null;
+    const chip = target === "field" ? undefined : removeButtons.current.get(target);
+    if (chip) chip.focus();
+    else if (!closed) fieldRef.current?.focus();
+    else (recheckRef.current ?? getProRef.current)?.focus();
   });
 
   const add = () => {
@@ -117,16 +135,6 @@ export function TermsPanel({
     setValue("");
   };
 
-  const remove = (id: TermId) => {
-    focusNext.current = focusAfterRemoving(terms, id) ?? "field";
-    onRemove(id);
-  };
-
-  const removeAll = () => {
-    focusNext.current = "field";
-    onRemoveAll();
-  };
-
   return (
     <div
       data-testid="terms-panel"
@@ -139,11 +147,20 @@ export function TermsPanel({
           <p className="text-small text-ink">
             {locked.line}{" "}
             {locked.link !== null && (
-              <NewTabLink link={locked.link} className="font-medium" />
+              <NewTabLink
+                link={locked.link}
+                className="font-medium"
+                linkRef={getProRef}
+              />
             )}
           </p>
           {locked.recheck !== null && (
-            <Button variant="secondary" data-testid="terms-recheck" onClick={onRecheck}>
+            <Button
+              ref={recheckRef}
+              variant="secondary"
+              data-testid="terms-recheck"
+              onClick={onRecheck}
+            >
               {locked.recheck}
             </Button>
           )}
@@ -190,7 +207,7 @@ export function TermsPanel({
               {...chipState(term, partly)}
               removeLabel={TERMS_TEXT.remove(term.text)}
               removeDisabled={running}
-              onRemove={() => remove(term.id)}
+              onRemove={() => onRemove(term.id)}
               removeRef={(button) => {
                 if (button) removeButtons.current.set(term.id, button);
                 else removeButtons.current.delete(term.id);
@@ -205,7 +222,7 @@ export function TermsPanel({
           variant="link"
           data-testid="terms-remove-all"
           disabled={running}
-          onClick={removeAll}
+          onClick={onRemoveAll}
           className="self-start"
         >
           {TERMS_TEXT.removeAll}

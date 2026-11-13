@@ -155,6 +155,71 @@ test("removing a term takes its rows away, and focus moves to the field", async 
   ).toBeFocused();
 });
 
+test("a keyboard visitor keeps their place as terms go, and the polite line names none that went", async ({
+  page,
+}) => {
+  // The page asks for the plan again at an open only once its answer is five
+  // minutes old, so the clock moves past that before each change of plan.
+  await page.clock.install();
+  let tier: "paid" | "free" = "paid";
+  await page.route("**/api/entitlement", (route) =>
+    route.fulfill({
+      json: {
+        tier,
+        pageCap: tier === "paid" ? 50 : 3,
+        maxFileBytes: 26_214_400,
+        account: "signed-in",
+      },
+    }),
+  );
+  const replan = async (next: typeof tier) => {
+    tier = next;
+    await page.clock.fastForward(6 * 60_000);
+    await page.getByTestId("file-input").setInputFiles(TEXT_PAGE);
+  };
+  await open(page, TEXT_PAGE);
+  const field = page.getByRole("textbox", { name: "Add a name, number or phrase" });
+  const status = page.getByTestId("terms-status");
+
+  // AC-5 and AC-19: the panel's Remove all leaves no line naming what went.
+  await addTerm(page, "Zephyrine Quill");
+  await addTerm(page, "Quillon Marsh");
+  await expect(status).toContainText("“Quillon Marsh”");
+  await page.getByTestId("terms-remove-all").press("Enter");
+  await expect(page.getByTestId("term-chip")).toHaveCount(0);
+  await expect(status).toBeEmpty();
+  await expect(field).toBeFocused();
+
+  // AC-17: on the Free plan each kept term has its own Remove in its group,
+  // which hands focus on as its chip's does, and the field is off, so the
+  // last one hands it to the locked line's link.
+  await addTerm(page, "Zephyrine Quill");
+  await addTerm(page, "Quillon Marsh");
+  await replan("free");
+  await expect(page.getByTestId("terms-locked")).toBeVisible({ timeout: ENGINE_TIMEOUT });
+  const groupRemove = (text: string) =>
+    page.getByTestId("term-remove").filter({ hasText: `Remove ${text}` });
+  await groupRemove("Zephyrine Quill").press("Enter");
+  await expect(
+    page.getByTestId("term-chip").getByRole("button", { name: "Remove Quillon Marsh" }),
+  ).toBeFocused();
+  await groupRemove("Quillon Marsh").press("Enter");
+  await expect(page.getByTestId("term-chip")).toHaveCount(0);
+  await expect(page.getByTestId("terms-locked").getByRole("link")).toBeFocused();
+
+  // AC-6: beside the full drop zone, Remove all hands focus to Choose a PDF.
+  await replan("paid");
+  await expect(field).toBeEnabled({ timeout: ENGINE_TIMEOUT });
+  await addTerm(page, "Zephyrine Quill");
+  await page.getByTestId("start-over").click();
+  await page
+    .getByTestId("terms-kept")
+    .getByRole("button", { name: "Remove all terms" })
+    .press("Enter");
+  await expect(page.getByTestId("terms-kept")).toHaveCount(0);
+  await expect(page.getByTestId("choose-file")).toBeFocused();
+});
+
 test("a term that is not found says so on its chip and in its place", async ({
   page,
 }) => {

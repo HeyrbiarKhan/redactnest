@@ -66,7 +66,7 @@ import {
 } from "@/lib/session";
 import { getSupport, SUPPORT_GAP_TEXT, type SupportReport } from "@/lib/support";
 import { TERM_REFUSALS } from "@/lib/term-text";
-import { addTerms, removeTerms, type CustomTerm } from "@/lib/terms";
+import { addTerms, focusAfterRemoving, removeTerms, type CustomTerm } from "@/lib/terms";
 import { report } from "@/telemetry/client";
 import { toolEvents } from "@/telemetry/tool";
 
@@ -102,7 +102,7 @@ import { NewTabLink, PlanLine } from "./plan-line";
 import { ResultCard } from "./result-card";
 import { ReviewChecklist, type TermGroupTerm } from "./review-checklist";
 import { TermsNotice } from "./terms-notice";
-import { TermsPanel, type TermChip } from "./terms-panel";
+import { TermsPanel, type TermChip, type TermFocus } from "./terms-panel";
 
 /**
  * Did this session lose its worker before the engine had finished loading?
@@ -317,9 +317,14 @@ export function ToolClient() {
   /**
    * The panel's polite line (spec 0017, AC-19, AC-20): what the search in
    * flight or the last one said, then what the last Add or paste refused
-   * (AC-4), which stays until the next one.
+   * (AC-4), which stays until the next one. The search's line keeps the terms
+   * whose words it shows, so it goes with the first of them removed, and
+   * never names a term the list no longer holds (AC-5).
    */
-  const [searchLine, setSearchLine] = useState<string | null>(null);
+  const [searchLine, setSearchLine] = useState<{
+    readonly text: string;
+    readonly names: readonly TermId[];
+  } | null>(null);
   const [refusedLines, setRefusedLines] = useState<readonly string[]>([]);
 
   /**
@@ -331,6 +336,15 @@ export function ToolClient() {
     readonly batch: readonly TermId[];
   } | null>(null);
   const termFieldRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * Where focus goes once a term's control has gone with it (spec 0017,
+   * AC-5): set by the handler that takes the control away, a chip's remove,
+   * the panel's Remove all, or a term's own Remove or Try again in its group,
+   * and moved by the panel after the render that drops the control. Only set
+   * while the panel shows, so it never waits for a panel that is not there.
+   */
+  const termFocusRef = useRef<TermFocus | null>(null);
 
   /**
    * Ask which plan applies once the page has loaded, rather than on the warm
@@ -729,7 +743,7 @@ export function ToolClient() {
    * start over, a lost worker or the removal of its whole batch posts
    * nothing.
    */
-  const startSearch = useCallback((batch: readonly CustomTerm[]) => {
+  const startSearch = useCallback((batch: readonly CustomTerm[]): boolean => {
     const live = sessionRef.current;
     const opened = openedRef.current;
     if (
@@ -739,12 +753,16 @@ export function ToolClient() {
       (live.state !== "reviewing" && live.state !== "complete") ||
       live.entitlement.tier !== "paid"
     ) {
-      return;
+      return false;
     }
     const { jobId } = live;
     const ids = batch.map(({ id }) => id);
     dispatch({ type: "terms-searching", jobId, terms: ids });
-    setSearchLine(termsSearchingLine(batch.map(({ text }) => text)));
+    // One term is named; a batch is counted, so its line names none.
+    setSearchLine({
+      text: termsSearchingLine(batch.map(({ text }) => text)),
+      names: ids.length === 1 ? ids : [],
+    });
 
     const search = opened.findTerms(batch);
     searchRef.current = { search, batch: ids };
@@ -758,11 +776,16 @@ export function ToolClient() {
         dispatch({ type: "terms-found", jobId, terms: ids, matches });
         const { summary } = sessionRef.current as LiveSession;
         const partly = summary !== null && isPartly(summary);
-        const found = still().map(({ id, text }) => ({
+        const listed = still();
+        const found = listed.map(({ id, text }) => ({
           text,
           count: matches.filter((match) => match.term === id).length,
         }));
-        setSearchLine(found.length > 0 ? termsFoundLine(found, partly) : null);
+        setSearchLine(
+          found.length > 0
+            ? { text: termsFoundLine(found, partly), names: listed.map(({ id }) => id) }
+            : null,
+        );
       },
       (error: unknown) => {
         if (searchRef.current?.search !== search) return;
@@ -773,10 +796,16 @@ export function ToolClient() {
         dispatch({ type: "terms-failed", jobId, terms: ids });
         const failed = still();
         setSearchLine(
-          failed.length > 0 ? termsFailedLine(failed.map(({ text }) => text)) : null,
+          failed.length > 0
+            ? {
+                text: termsFailedLine(failed.map(({ text }) => text)),
+                names: failed.map(({ id }) => id),
+              }
+            : null,
         );
       },
     );
+    return true;
   }, []);
 
   /**
@@ -807,7 +836,8 @@ export function ToolClient() {
   /**
    * Remove one term, or every term (spec 0017, AC-5): out of the tab's list
    * and, in the same handler, out of the job with its rows and ticks. A
-   * search whose whole batch is gone is cancelled.
+   * search whose whole batch is gone is cancelled, and the polite line goes
+   * once it names a term that went.
    */
   const handleRemoveTerms = useCallback(
     (ids: readonly TermId[]) => {
@@ -817,6 +847,10 @@ export function ToolClient() {
       if (live.state !== "idle") {
         dispatch({ type: "terms-removed", jobId: live.jobId, terms: ids });
       }
+      const gone = new Set(ids);
+      setSearchLine((line) =>
+        line !== null && line.names.some((id) => gone.has(id)) ? null : line,
+      );
       const running = searchRef.current;
       if (running && running.batch.every((id) => !next.some((term) => term.id === id))) {
         searchRef.current = null;
@@ -827,15 +861,40 @@ export function ToolClient() {
     [setTerms],
   );
 
+  /**
+   * One term, from its chip or from its own Remove in its group, with
+   * focus to the next term's remove button, else the previous one's, else
+   * the field (AC-5): the same place from both, since both buttons go.
+   */
   const handleRemoveTerm = useCallback(
-    (id: TermId) => handleRemoveTerms([id]),
+    (id: TermId) => {
+      termFocusRef.current = focusAfterRemoving(termsRef.current, id) ?? "field";
+      handleRemoveTerms([id]);
+    },
     [handleRemoveTerms],
   );
 
-  const handleRemoveAllTerms = useCallback(() => {
+  const removeAllTerms = useCallback(() => {
     handleRemoveTerms(termsRef.current.map(({ id }) => id));
     setRefusedLines([]);
   }, [handleRemoveTerms]);
+
+  /** The panel's Remove all, with focus to the field (AC-5). */
+  const handleRemoveAllTerms = useCallback(() => {
+    termFocusRef.current = "field";
+    removeAllTerms();
+  }, [removeAllTerms]);
+
+  /**
+   * Remove all on the kept line beside the full drop zone (AC-6). The line
+   * goes with its button, so focus moves to Choose a PDF, the control just
+   * above it and the next step. That button is on screen before and after,
+   * so focus can move here, ahead of the render that drops the line.
+   */
+  const handleRemoveKeptTerms = useCallback(() => {
+    removeAllTerms();
+    chooseRef.current?.focus();
+  }, [removeAllTerms]);
 
   /** Set aside for this file (spec 0017, AC-17): for this job only. */
   const handleSetAside = useCallback((id: TermId) => {
@@ -846,17 +905,20 @@ export function ToolClient() {
 
   /**
    * Try again (spec 0017, AC-20): every term whose search failed, as one
-   * batch, in list order.
+   * batch, in list order. Its group shows the search in place of the button,
+   * so focus moves to the field, where an Add leaves it while a search runs
+   * (AC-5, AC-19).
    */
   const handleTryAgainTerms = useCallback(() => {
     const live = sessionRef.current;
     if (live.state === "idle") return;
-    startSearch(
+    const started = startSearch(
       termsRef.current.filter(({ id }) => {
         const state = live.terms.get(id);
         return state?.state === "not-searched" && state.reason === "search-failed";
       }),
     );
+    if (started) termFocusRef.current = "field";
   }, [startSearch]);
 
   /**
@@ -1182,7 +1244,7 @@ export function ToolClient() {
                   <Button
                     variant="link"
                     data-testid="terms-kept-remove-all"
-                    onClick={handleRemoveAllTerms}
+                    onClick={handleRemoveKeptTerms}
                   >
                     {TERMS_TEXT.removeAll}
                   </Button>
@@ -1412,7 +1474,7 @@ export function ToolClient() {
                     running={session.state === "redacting"}
                     searching={termView.searching}
                     status={[
-                      ...(searchLine === null ? [] : [searchLine]),
+                      ...(searchLine === null ? [] : [searchLine.text]),
                       ...refusedLines,
                     ]}
                     onAdd={handleAddTerms}
@@ -1420,6 +1482,7 @@ export function ToolClient() {
                     onRemoveAll={handleRemoveAllTerms}
                     onRecheck={handleTermsRecheck}
                     fieldRef={termFieldRef}
+                    focusRef={termFocusRef}
                   />
                 ) : undefined
               }
