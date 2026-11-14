@@ -142,16 +142,33 @@ interface Tail {
   readonly lineBreaks: readonly number[];
 }
 
-/** One page's tails, one per extraction mode, both carried (AC-33). */
+/**
+ * One page's tails, one per extraction mode, both carried (AC-33). One page
+ * only: the tail goes once the next page is matched, so a match across three
+ * pages (its parts on either side of a near empty page) is not found, the
+ * recorded miss where a page between the parts keeps them apart.
+ */
 interface Carry {
   readonly page: number;
   readonly ordinary: Tail;
   readonly ignoring: Tail;
 }
 
+/**
+ * One page's rows: those found in ordinary extraction, then those found only
+ * with replacement text ignored, each in reading order. Kept apart until the
+ * page is done, so the first part of a match across its end (an ordinary
+ * place, the last on the page) lists after the ordinary rows and before the
+ * hidden ones (spec 0005, AC-3; as fixed 2026-11-14).
+ */
+interface PageRows {
+  readonly listed: readonly FoundMatch[];
+  readonly hidden: readonly FoundMatch[];
+}
+
 /** What one page's read hands on. */
 interface PageRead {
-  readonly rows: readonly FoundMatch[];
+  readonly rows: PageRows;
   /**
    * The first parts of matches across this page's start, as places on the
    * page before, checked there once this page is closed (AC-33).
@@ -204,7 +221,8 @@ export function findTermsIn(
  * page's term matching when that page is readable too, and nothing past a page
  * that is not (AC-33). A match across a break lists its second part with the
  * page it ends on; its first part is checked on the page before, loaded again
- * alone once the later page is closed, and listed with that page's rows.
+ * alone once the later page is closed, and listed with that page's rows, after
+ * its ordinary rows and before its hidden ones, since it ends that page.
  */
 async function findIn(
   doc: PDFDocument,
@@ -219,7 +237,10 @@ async function findIn(
     reach: terms.reduce((longest, { text }) => Math.max(longest, termReach(text)), 0),
   };
 
-  const rows: FoundMatch[][] = pages.map(() => []);
+  const rows: { listed: FoundMatch[]; hidden: FoundMatch[] }[] = pages.map(() => ({
+    listed: [],
+    hidden: [],
+  }));
   let carry: Carry | null = null;
   for (let index = 0; index < pages.length; index += 1) {
     if (!pages[index].readable) {
@@ -234,32 +255,33 @@ async function findIn(
       search,
       carry,
     );
-    rows[index].push(...read.rows);
+    rows[index].listed.push(...read.rows.listed);
+    rows[index].hidden.push(...read.rows.hidden);
 
     if (
       carry !== null &&
       (read.held.ordinary.length > 0 || read.held.ignoring.length > 0)
     ) {
       const before = carry.page;
-      rows[before].push(
-        ...(await onLoadedPage(doc, before, options, (page, ordinary, ignoring) =>
-          listPlaces(
-            page,
-            before,
-            ordinary,
-            ignoring,
-            read.held,
-            options,
-            concealmentOf(pages[before].concealed),
-          ),
-        )),
+      const parts = await onLoadedPage(doc, before, options, (page, ordinary, ignoring) =>
+        listPlaces(
+          page,
+          before,
+          ordinary,
+          ignoring,
+          read.held,
+          options,
+          concealmentOf(pages[before].concealed),
+        ),
       );
+      rows[before].listed.push(...parts.listed);
+      rows[before].hidden.push(...parts.hidden);
     }
     // The tail of the page before is dropped here, once this page is matched
     // (INV-12).
     carry = read.carry;
   }
-  return rows.flat();
+  return rows.flatMap(({ listed, hidden }) => [...listed, ...hidden]);
 }
 
 /**
@@ -376,7 +398,7 @@ async function listPlaces(
   places: { readonly ordinary: readonly Place[]; readonly ignoring: readonly Place[] },
   { contextChars, isCancelled }: FindOptions,
   concealedIn: (characters: readonly Character[]) => Concealment | null,
-): Promise<readonly FoundMatch[]> {
+): Promise<PageRows> {
   const found = places.ordinary.map((place) => candidate(ordinary, index, place));
   const targets = found.map(({ target }) => target);
 
@@ -456,7 +478,7 @@ async function listPlaces(
       target: null,
     }));
 
-  return [...listed, ...hidden];
+  return { listed, hidden };
 }
 
 /**

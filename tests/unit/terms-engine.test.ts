@@ -196,6 +196,25 @@ describe("terms.pdf, read at open (AC-9, AC-30)", () => {
     ).toEqual([[6, "Acme Ltd", "Ltd", "page-break", false]]);
   });
 
+  // As fixed 2026-11-14 (the custom terms review's fourth Minor): page 4
+  // ends with `soon.` and page 5 starts with `Page`, and page 4 holds rows
+  // found only with replacement text ignored, which come after its ordinary
+  // rows. The first part of a match across the break is an ordinary place at
+  // the page's end, so it lists after page 4's ordinary rows and before its
+  // hidden ones, in reading order (spec 0005, AC-3).
+  it("lists the first part of a match across a page break in its page's reading order", async () => {
+    const review = await search("terms.pdf", ["Jane Doe", "soon. Page"], "review");
+    expect(
+      review
+        .filter(({ page }) => page === 3 || page === 4)
+        .map(({ page, term, text, blocked }) => [page + 1, term, text, blocked]),
+    ).toEqual([
+      [4, "soon. Page", "soon.", null],
+      [4, "Jane Doe", "Jane Doe", "replacement-text"],
+      [5, "soon. Page", "Page", null],
+    ]);
+  });
+
   it("finds the same term rows in a review search, with no detector", async () => {
     const review = await search(
       "terms.pdf",
