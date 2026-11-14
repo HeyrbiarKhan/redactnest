@@ -3,11 +3,16 @@ import { resolve } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { PRIVACY_SECTIONS, TERMS_SECTIONS } from "../../src/lib/policy-sections";
+import {
+  PRIVACY_SECTIONS,
+  SECURITY_SECTIONS,
+  TERMS_SECTIONS,
+} from "../../src/lib/policy-sections";
 
 /**
  * The privacy policy and the terms of service, in a real browser. Spec 0011, AC-1
- * to AC-5, AC-18 and AC-19.
+ * to AC-5, AC-18 and AC-19. The security page shares their frame and joins
+ * every check they share (spec 0018, AC-1, AC-3, AC-4, AC-9 and AC-10).
  *
  * The component tests render both pages without styles or layout. These prove
  * what only a browser can: the shell and the metadata as Next.js serves them,
@@ -27,9 +32,14 @@ const PAGES = [
     title: "Terms of service",
     sections: Object.values(TERMS_SECTIONS),
   },
+  {
+    path: "/security",
+    title: "Security",
+    sections: Object.values(SECURITY_SECTIONS),
+  },
 ] as const;
 
-const EVERY_ROUTE = ["/", "/tool", "/privacy", "/terms"] as const;
+const EVERY_ROUTE = ["/", "/tool", "/privacy", "/terms", "/security"] as const;
 
 /** Spec 0003, AC-18: the rule tags this product commits to. */
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
@@ -185,17 +195,27 @@ for (const { path, title, sections } of PAGES) {
         overflowY: "auto",
       });
 
-      await page
-        .locator("main h2")
-        .last()
-        .evaluate((heading) => {
-          heading.scrollIntoView({ behavior: "instant", block: "start" });
-        });
+      // A heading mid page, where the list is stuck. At the very end of a long
+      // page its column ends and the list rides up with it, as sticky does, so
+      // the last heading measures the page's length, not the sticking: the
+      // footer gaining a link row (spec 0018, AC-2) moved that by 14 pixels on
+      // the privacy policy.
+      const headings = page.locator("main h2");
+      const middle = headings.nth(Math.floor((await headings.count()) / 2));
+      await middle.evaluate((heading) => {
+        heading.scrollIntoView({ behavior: "instant", block: "start" });
+      });
       const stuck = await nav.boundingBox();
       expect(stuck?.y).toBeCloseTo(24, 0);
       // Beside the text, never over it.
-      const column = await page.locator("main h2").last().boundingBox();
+      const column = await middle.boundingBox();
       expect((stuck?.x ?? 0) + (stuck?.width ?? 0)).toBeLessThanOrEqual(column?.x ?? 0);
+
+      // At the very end it is still wholly in view.
+      await headings.last().evaluate((heading) => {
+        heading.scrollIntoView({ behavior: "instant", block: "start" });
+      });
+      expect((await nav.boundingBox())?.y ?? -1).toBeGreaterThanOrEqual(0);
 
       await page.setViewportSize({ width: 900, height: 800 });
       expect((await style()).position).toBe("static");
@@ -470,6 +490,83 @@ test.describe("the footer's Legal nav", () => {
       await expectNoAxeViolations(page);
     });
   }
+});
+
+/**
+ * Spec 0018, AC-6 and AC-8. What only a browser shows on the security page:
+ * the drawing pairs and stacks by the room it has, its box keeps a colour of
+ * its own in forced colours, and each link to another page's section lands on
+ * a heading there.
+ */
+test.describe("the security page's drawing and links", () => {
+  /** How many columns the drawing's panels take. */
+  async function drawingColumns(page: Page): Promise<number> {
+    return page
+      .locator("main figure > div")
+      .evaluate(
+        (grid) =>
+          getComputedStyle(grid).gridTemplateColumns.split(" ").filter(Boolean).length,
+      );
+  }
+
+  test("pairs the panels at 1280 pixels, and stacks them at 200% text and at 320", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/security");
+    expect(await drawingColumns(page)).toBe(2);
+
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    expect(await drawingColumns(page)).toBe(1);
+    await expectNoHorizontalScroll(page);
+
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto("/security");
+    expect(await drawingColumns(page)).toBe(1);
+    await expectNoHorizontalScroll(page);
+  });
+
+  test("keeps the box in a colour apart from its page in forced colours", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ forcedColors: "active", colorScheme: "dark" });
+    await page.goto("/security");
+
+    const colours = await page
+      .getByTestId("cover-box")
+      .first()
+      .evaluate((box) => ({
+        box: getComputedStyle(box).color,
+        page: getComputedStyle(box.closest("[data-testid='cover-drawing']") ?? box)
+          .backgroundColor,
+      }));
+    expect(colours.box).not.toBe(colours.page);
+    expect(colours.box).not.toBe("rgba(0, 0, 0, 0)");
+  });
+
+  test("lands every link to another page's section on a heading there", async ({
+    page,
+  }) => {
+    await page.goto("/security");
+    const nav = page.getByRole("navigation", { name: "On this page" });
+    const hrefs = await page.locator("main a[href*='#']").evaluateAll(
+      (links, list) => {
+        return links
+          .filter((link) => !list || !list.contains(link))
+          .map((link) => link.getAttribute("href") ?? "");
+      },
+      await nav.elementHandle(),
+    );
+    const targets = [...new Set(hrefs.filter((href) => !href.startsWith("#")))];
+    expect(targets.length).toBeGreaterThan(0);
+
+    for (const href of targets) {
+      await page.goto(href);
+      const id = href.split("#")[1] ?? "";
+      await expect(page.locator(`[id="${id}"]`)).toHaveCount(1);
+      await expect(page.locator(`h2[id="${id}"]`), href).toBeInViewport();
+    }
+  });
 });
 
 /** AC-5. The line under the drop zone on `/tool`. */

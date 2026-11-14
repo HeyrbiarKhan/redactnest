@@ -6,6 +6,7 @@ import {
   isNewestFirst,
   lastUpdated,
   PRIVACY_CHANGES,
+  SECURITY_CHANGES,
   TERMS_CHANGES,
   type PolicyChanges,
 } from "@/lib/policy-changes";
@@ -21,6 +22,8 @@ import {
 const LISTS = [
   ["the privacy policy", PRIVACY_CHANGES],
   ["the terms of service", TERMS_CHANGES],
+  // Spec 0018, AC-3: the security page keeps its list by the same rules.
+  ["the security page", SECURITY_CHANGES],
 ] as const;
 
 describe.each(LISTS)("the change list for %s", (_page, changes) => {

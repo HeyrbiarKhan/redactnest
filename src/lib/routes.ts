@@ -24,6 +24,13 @@ export const PRIVACY_PATH = "/privacy";
 export const TERMS_PATH = "/terms";
 
 /**
+ * The security and how it works page (spec 0018, AC-1). The footer's Product
+ * group links here (AC-2), and the page lives at this path, so the two cannot
+ * drift apart.
+ */
+export const SECURITY_PATH = "/security";
+
+/**
  * The home page, where sign out lands. Spec 0012, AC-12 and INV-13: sign out
  * reaches it as a full page load (`window.location.assign`), so Clerk's
  * script stops with the account pages, and the provider's `afterSignOutUrl`

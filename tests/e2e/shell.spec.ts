@@ -571,9 +571,12 @@ test.describe("the header", () => {
   });
 });
 
-/** Spec 0013, AC-8. The footer's brand column and link groups. */
+/**
+ * Spec 0013, AC-8. The footer's brand column and link groups, with the
+ * security page in the Product group (spec 0018, AC-2).
+ */
 test.describe("the footer", () => {
-  for (const path of ["/", "/tool"]) {
+  for (const path of ["/", "/tool", "/security"]) {
     test(`shows the brand line and both groups on ${path}`, async ({ page }) => {
       await page.goto(path);
       const footer = page.getByRole("contentinfo");
@@ -582,7 +585,12 @@ test.describe("the footer", () => {
       await expect(footer).toContainText("PDF redaction in your browser.");
       await expect(
         footer.getByRole("navigation", { name: "Product" }).getByRole("link"),
-      ).toHaveText(["Redact a PDF", "Pricing"]);
+      ).toHaveText(["Redact a PDF", "Security", "Pricing"]);
+      await expect(
+        footer.getByRole("navigation", { name: "Product" }).getByRole("link", {
+          name: "Security",
+        }),
+      ).toHaveAttribute("href", "/security");
       await expect(
         footer.getByRole("navigation", { name: "Legal" }).getByRole("link"),
       ).toHaveText(["Privacy policy", "Terms of service"]);

@@ -2,7 +2,13 @@ import { Check, FileMinus, Info, ScanSearch, type LucideIcon } from "lucide-reac
 import Image from "next/image";
 
 import { config } from "@/config";
-import { capLine, findsItems, HOME_TEXT, strippedItems } from "@/lib/home-text";
+import {
+  capLine,
+  findsItems,
+  HOME_BAND_ID,
+  HOME_TEXT,
+  strippedItems,
+} from "@/lib/home-text";
 import { PRICING_PATH, TOOL_PATH } from "@/lib/routes";
 import { Button } from "@/ui/button";
 import { Card } from "@/ui/card";
@@ -93,11 +99,11 @@ export default function HomePage() {
             scale (it is this page at 1280 pixels, drawn at 1.5x).
           */}
           <section
-            aria-labelledby="home-band"
+            aria-labelledby={HOME_BAND_ID}
             data-testid="home-band"
             className="flex flex-col gap-7"
           >
-            <h2 id="home-band" className="text-title text-ink">
+            <h2 id={HOME_BAND_ID} className="text-title text-ink">
               {HOME_TEXT.band.title}
             </h2>
             <div className="grid gap-6 md:grid-cols-2">

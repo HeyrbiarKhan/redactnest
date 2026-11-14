@@ -14,7 +14,7 @@ import { render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AccountLink, NAV_TEXT, PageHeader, ProductNav, SiteNav } from "@/app/site-nav";
-import { ACCOUNT_PATH, PRICING_PATH, TOOL_PATH } from "@/lib/routes";
+import { ACCOUNT_PATH, PRICING_PATH, SECURITY_PATH, TOOL_PATH } from "@/lib/routes";
 import { SiteHeader } from "@/ui/site-header";
 
 import { expectNoAxeViolations } from "../../setup/component";
@@ -59,6 +59,7 @@ describe("NAV_TEXT", () => {
       account: "Account",
       tryFree: "Try it free",
       redactPdf: "Redact a PDF",
+      security: "Security",
       menu: "Menu",
     });
     expect(Object.isFrozen(NAV_TEXT)).toBe(true);
@@ -202,11 +203,13 @@ describe("with billing off on this build (AC-7; spec 0012, AC-23)", () => {
 });
 
 describe("the footer's Product group (AC-8)", () => {
-  it("is a nav labelled Product, holding Redact a PDF and Pricing", () => {
+  /** And spec 0018, AC-2: Security between the two. */
+  it("is a nav labelled Product, holding Redact a PDF, Security and Pricing", () => {
     render(<ProductNav />);
 
     expect(linksIn(screen.getByRole("navigation", { name: "Product" }))).toEqual([
       ["Redact a PDF", TOOL_PATH],
+      ["Security", SECURITY_PATH],
       ["Pricing", PRICING_PATH],
     ]);
   });
@@ -225,6 +228,7 @@ describe("the footer's Product group (AC-8)", () => {
 
     expect(linksIn(screen.getByRole("navigation", { name: "Product" }))).toEqual([
       ["Redact a PDF", TOOL_PATH],
+      ["Security", SECURITY_PATH],
     ]);
   });
 

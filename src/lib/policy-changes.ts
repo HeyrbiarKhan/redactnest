@@ -45,6 +45,14 @@ export const TERMS_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
   Object.freeze({ date: "2026-10-06", summary: "First published." }),
 ]);
 
+/**
+ * The security page's list (spec 0018, AC-3). It shares the legal pages' frame,
+ * so a change to what it says adds an entry here the same way.
+ */
+export const SECURITY_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
+  Object.freeze({ date: "2026-11-14", summary: "First published." }),
+]);
+
 /** The newest entry's date, which is what "Last updated" shows (AC-2). */
 export const lastUpdated = (changes: PolicyChanges): string => changes[0].date;
 
