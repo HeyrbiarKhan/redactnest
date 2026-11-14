@@ -245,13 +245,15 @@ export default function SecurityPage() {
         {/* Spec 0004, AC-22 and AC-7; the measurement spec 0018's AC-7 records
             (`tests/fixtures/metadata.pdf`, 2026-11-14, a run with nothing
             ticked: no annotation, note text or attached file left in any
-            object, both icons still drawn). */}
+            object, both icons still drawn). "Can keep": one fixture measured,
+            so the icon is a "can" line, while the text and the file gone is
+            the structure check's gate. */}
         <p>
           The home page notes{" "}
           <a href={HOME_BAND}>how comments and form fields are flattened</a>. A sticky
-          note or a file attachment that shows as an icon keeps that icon as a mark on the
-          page, while what it held but did not show, the note’s text or the attached file,
-          is gone, as the structure check holds.
+          note or a file attachment that shows as an icon can keep that icon as a mark on
+          the page, while what it held but did not show, the note’s text or the attached
+          file, is gone, as the structure check holds.
         </p>
 
         <h3>Passwords and fonts</h3>
@@ -281,9 +283,12 @@ export default function SecurityPage() {
           <a href={HOME_BAND}>kinds of detail the home page lists</a>. It does not look
           for names or postal addresses, and you can add those as custom terms.
         </p>
-        {/* Spec 0005, AC-10 and AC-13. */}
+        {/* Spec 0005, AC-8 (a match RedactNest would refuse starts unticked and
+            cannot be ticked), AC-10 and AC-13. No "only": the row AC-8 blocks
+            is the exception, named here. */}
         <p>
-          Each find is a row with a box, and a row’s starting tick is only a suggestion.
+          Each find is a row with a box. A row’s starting tick is a suggestion: you can
+          tick or untick any row except one RedactNest cannot remove safely.
         </p>
 
         <h3>Custom terms</h3>

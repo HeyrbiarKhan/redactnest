@@ -168,14 +168,15 @@ describe("the security page", () => {
     ["hiddenData", "what RedactNest finds and strips"],
     ["hiddenData", "automatic actions that are not scripts"],
     ["hiddenData", "its links and its accessibility tags"],
-    ["hiddenData", "keeps that icon as a mark on the page"],
+    ["hiddenData", "can keep that icon as a mark on the page"],
     ["hiddenData", "the cleaned copy carries no restriction"],
     ["hiddenData", "never which words they made or in what order"],
     // What it finds (specs 0005 and 0017).
     ["whatItFinds", "kinds of detail the home page lists"],
     ["whatItFinds", "does not look for names or postal addresses"],
     ["whatItFinds", "you can add those as custom terms"],
-    ["whatItFinds", "a row’s starting tick is only a suggestion"],
+    ["whatItFinds", "A row’s starting tick is a suggestion"],
+    ["whatItFinds", "any row except one RedactNest cannot remove safely"],
     ["whatItFinds", "never a pattern or a wildcard"],
     ["whatItFinds", "line breaks, but not all"],
     // What it can miss (specs 0005, 0014, 0015 and 0017).
