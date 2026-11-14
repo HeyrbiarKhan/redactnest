@@ -15,11 +15,25 @@
  */
 
 /**
- * The fewest code points a term may hold. A rule about matching, not a cap on
- * the visitor: a one character whole word floods the list, so it lives here
+ * The fewest characters a term may hold, as a person sees them (`termLength`),
+ * both as typed and once folded. A rule about matching, not a cap on the
+ * visitor: a one character whole word floods the list, so it lives here
  * rather than in `config` (spec 0017, *Matching rules*).
  */
 export const TERM_MIN_CHARS = 2;
+
+/**
+ * The most code points a term may hold for each character `config.maxTermChars`
+ * allows. A rule about matching, not a cap on the visitor: one character as a
+ * person sees it may hold any number of code points (a letter with its marks,
+ * a Hangul syllable in jamo, an emoji sequence), and the matcher's work grows
+ * with the code points, so without this a short term could hold thousands and
+ * the cap would no longer bound a search (AC-29). No script writes a word at
+ * 4 code points a character on average, so only text made to pass the cap
+ * meets it, refused as `too-long`. It also bounds how much of a refused line
+ * the panel shows. Spec 0017, AC-4, as fixed 2026-11-14.
+ */
+export const TERM_POINTS_PER_CHAR = 4;
 
 /**
  * Why a term was not added, in the order they are judged. Spec 0017, AC-4.
@@ -47,6 +61,17 @@ export interface TermCaps {
 const WHITESPACE = /^\s$/u;
 const MARK = /^\p{M}$/u;
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
+// Not anchored, but still one code point with no quantifier: does a cluster
+// hold anything that is not default ignorable?
+const SHOWS = /\P{Default_Ignorable_Code_Point}/u;
+
+/**
+ * Splits text into grapheme clusters, the characters a person sees. A
+ * deliberate module level singleton: it holds no state between calls, and
+ * the page and the worker each build one in the same browser, so they split
+ * a term alike (AC-27). Grapheme rules carry no locale tailoring.
+ */
+const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 /**
  * Hyphen and dash styles: `-`, U+2010 to U+2015 and U+2212 minus. The same
@@ -165,15 +190,56 @@ export function foldTerm(text: string): string {
   return folded.replace(/ +/gu, " ").trim();
 }
 
-/** A term's length in code points, never UTF-16 units. */
+/**
+ * A term's length in characters as a person sees them: grapheme clusters
+ * (`a` and a combining accent is one), leaving out a cluster made only of
+ * default ignorable code points (a soft hyphen or a zero width space on its
+ * own), which shows nothing. Never code points, never UTF-16 units. The
+ * floor, the cap and a refused line's shown length all read it. Spec 0017,
+ * AC-4, as fixed 2026-11-14.
+ */
 export function termLength(text: string): number {
-  return [...text].length;
+  let length = 0;
+  for (const { segment } of GRAPHEMES.segment(text)) {
+    if (SHOWS.test(segment)) length += 1;
+  }
+  return length;
+}
+
+/**
+ * The start of a term, up to `chars` characters as `termLength` counts them,
+ * whole clusters, so a cut never parts a letter from its marks; the whole
+ * text when it fits. Never more than `chars` times `TERM_POINTS_PER_CHAR`
+ * code points, so a line made to pass the count still shows a bounded head:
+ * only there may a cut fall inside a cluster. Spec 0017, AC-4: how a refused
+ * line is named.
+ */
+export function termHead(text: string, chars: number): string {
+  let head = "";
+  let length = 0;
+  let room = chars * TERM_POINTS_PER_CHAR;
+  for (const { segment } of GRAPHEMES.segment(text)) {
+    const shows = SHOWS.test(segment);
+    if (shows && length === chars) break;
+    const points = [...segment];
+    if (points.length > room) return head + points.slice(0, room).join("");
+    head += segment;
+    room -= points.length;
+    if (shows) length += 1;
+  }
+  return head;
 }
 
 /**
  * Why this prepared term may not be added, or `null` when it may. Spec 0017,
  * AC-4, judged in `TERM_REFUSALS` order, so the first that applies is the one
  * given.
+ *
+ * Too short when the term, or its fold, holds fewer than `TERM_MIN_CHARS`
+ * characters: a spacing accent folds to a space (`a´` reads as `a`), and a
+ * term that folds to one letter would list every whole word of it. Too long
+ * past `caps.maxTermChars` characters, or past `TERM_POINTS_PER_CHAR` code
+ * points for each. As fixed 2026-11-14.
  *
  * `listedFolds` is `foldTerm` of every term already listed: the tab's list on
  * the page, or the request's own earlier terms in the worker. Its size is how
@@ -184,11 +250,17 @@ export function termRefusal(
   listedFolds: ReadonlySet<string>,
   caps: TermCaps,
 ): TermRefusal | null {
+  const folded = foldTerm(prepared);
   const length = termLength(prepared);
-  if (length < TERM_MIN_CHARS) return "too-short";
-  if (length > caps.maxTermChars) return "too-long";
+  if (length < TERM_MIN_CHARS || termLength(folded) < TERM_MIN_CHARS) return "too-short";
+  if (
+    length > caps.maxTermChars ||
+    [...prepared].length > caps.maxTermChars * TERM_POINTS_PER_CHAR
+  ) {
+    return "too-long";
+  }
   if (!LETTER_OR_DIGIT.test(prepared)) return "no-letter-or-digit";
-  if (listedFolds.has(foldTerm(prepared))) return "duplicate";
+  if (listedFolds.has(folded)) return "duplicate";
   if (listedFolds.size >= caps.maxTerms) return "list-full";
   return null;
 }

@@ -396,7 +396,7 @@ export interface EngineLimits {
    * whose snapshot allows none (spec 0017, AC-27, INV-2).
    */
   readonly maxTerms: number;
-  /** The longest term, in code points: `config.maxTermChars`. */
+  /** The longest term, in characters as a person sees them: `config.maxTermChars`. */
   readonly maxTermChars: number;
 }
 

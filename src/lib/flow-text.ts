@@ -18,7 +18,7 @@ import { countedKinds, lookedFor, TERM_GROUP_NOUN } from "@/lib/detectors";
 import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
 import { PRICING_PATH, SIGN_IN_PATH } from "@/lib/routes";
 import { NOT_SEARCHED_REASONS, type NotSearchedReason } from "@/lib/session";
-import { TERM_MIN_CHARS, termLength, type TermRefusal } from "@/lib/term-text";
+import { TERM_MIN_CHARS, termHead, termLength, type TermRefusal } from "@/lib/term-text";
 import type {
   EngineErrorKind,
   EntitlementAccount,
@@ -712,12 +712,15 @@ export const TERM_REFUSAL_TEXT: Readonly<
 const REFUSED_NAMED = 20;
 const REFUSED_NAME_CHARS = 60;
 
-/** A refused line, named in full up to 60 code points, a longer one cut, with its length. */
+/**
+ * A refused line, named in full up to 60 characters as a person sees them, a
+ * longer one cut between characters, with its length counted the same way
+ * (AC-4, as fixed 2026-11-14).
+ */
 function refusedName(text: string): string {
-  const points = Array.from(text);
-  if (points.length <= REFUSED_NAME_CHARS) return quoted(text);
-  const cut = `${points.slice(0, REFUSED_NAME_CHARS).join("")}…`;
-  return `${quoted(cut)} (${countText(termLength(text))} characters)`;
+  const head = termHead(text, REFUSED_NAME_CHARS);
+  if (head === text) return quoted(text);
+  return `${quoted(`${head}…`)} (${countText(termLength(text))} characters)`;
 }
 
 /**

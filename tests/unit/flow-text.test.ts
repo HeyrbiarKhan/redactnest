@@ -867,5 +867,18 @@ describe("the custom terms words (spec 0017)", () => {
       // None of these is among the first 20, so the reason counts them only.
       expect(duplicate).toBe("2 not added because they are already in your list.");
     });
+
+    // As fixed 2026-11-14: a refused line is cut and counted in characters as
+    // a person sees them, so a letter never loses its accent to the cut.
+    it("names a long line by whole characters, and counts them as a person sees them", () => {
+      // Sixty letters, each with its accent: 120 code points, named in full.
+      const accented = "e\u0301";
+      expect(words([{ text: accented.repeat(60), reason: "too-long" }])).toEqual([
+        `“${accented.repeat(60)}” not added because it is too long (at most 100 characters).`,
+      ]);
+      expect(words([{ text: accented.repeat(61), reason: "too-long" }])).toEqual([
+        `“${accented.repeat(60)}…” (61 characters) not added because it is too long (at most 100 characters).`,
+      ]);
+    });
   });
 });

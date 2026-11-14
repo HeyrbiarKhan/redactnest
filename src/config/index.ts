@@ -264,9 +264,11 @@ const matchContextChars = readInt(
 
 /**
  * Spec 0017, *Configuration required*. How many custom terms a tab's list
- * holds, and the longest term in code points. The ceilings keep a typo from
- * handing a page a list or a term the matcher was never measured on: raising
- * either default reruns AC-28 (and AC-29 for the term length).
+ * holds, and the longest term in characters as a person sees them (with at
+ * most four code points for each, `TERM_POINTS_PER_CHAR` in `term-text`). The
+ * ceilings keep a typo from handing a page a list or a term the matcher was
+ * never measured on: raising either default reruns AC-28 (and AC-29 for the
+ * term length).
  */
 const TERM_LIST_CEILING = 100;
 const TERM_CHARS_CEILING = 200;
@@ -336,7 +338,7 @@ export const config = Object.freeze({
    * many one request may carry for a `paid` job (AC-27). Pro only.
    */
   maxCustomTerms,
-  /** The longest custom term, in code points (AC-4, AC-27). */
+  /** The longest custom term, in characters as a person sees them (AC-4, AC-27). */
   maxTermChars,
   /** Canonical origin, for metadata and the sitemap. */
   siteUrl: readUrl("NEXT_PUBLIC_SITE_URL", "http://localhost:3000", true),
