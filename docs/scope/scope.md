@@ -410,7 +410,7 @@ spec [0018](../specs/0018-security-page/index.md) (ratified 2026-11-14: one clai
   - [x] The tests: the banned outcome phrases, one pin per AC-7 line, the What we do not do link, the second verify's phrases; the browser and unit suites still green · AC-1 to AC-11
   - [x] `verify.md`'s claim walk to the coverage table, and the change entry dated the day it merges (2026-11-14; `verify.md`'s *Before merge* moves it if the merge falls later) · AC-3, AC-5, AC-7
 - [x] Verify it: `/check verify security & how it works page`
-- [ ] Review it (fresh model): `/check review security & how it works page`
+- [x] Review it (fresh model): `/check review security & how it works page`
 
 ### 15. Marketing site · needs a decision
 A small set of pages on what this audience actually searches for, since search is the acquisition channel for a self serve tool at this price. The landing page itself, the brand and the site wide social preview image are built in feature 22.
