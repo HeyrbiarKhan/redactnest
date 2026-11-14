@@ -1,55 +1,243 @@
 # 0018. Security page
 
-**Status**: Assumed
+**Status**: In Progress
 **Date**: 2026-11-14
 **Authorized by**: Heyrbiar Khan, during /develop
+**Ratified**: 2026-11-14, by /architect. The page, its way in, its frame and the drawing held as built. AC-5 now sets one rule for every claim, AC-6 covers any fact a linkable page already states, and AC-7 names the limits at a buyer's level. Spec 0013's AC-8 now names the footer's Security link.
 
-## Owed decision
+## Summary
 
-The scope recorded that feature 16, the security and how it works page, needs no spec for its content (your call, 2026-11-14): every claim on it is one an earlier spec already records. What no spec settles is the page itself and its way in:
-
-- Spec 0013's AC-8 lists the footer's links exactly ("Redact a PDF" and "Pricing" in Product, "Privacy policy" and "Terms of service" in Legal), and AC-7 the header's, so any link to a new page changes what AC-8 says.
-- The page's path, title, frame and order of sections, and whether it shows a drawing of a box laid over text next to real removal.
-
-## Assumption built on
-
-Your answers during `/develop` on 2026-11-14:
-
-- **Path and title.** The page lives at `/security` (`SECURITY_PATH` in `src/lib/routes.ts`). Its title and `h1` are "Security", and its metadata title is "Security · RedactNest" with a description of its own.
-- **Way in.** The footer's Product group gains "Security" after "Redact a PDF" and before "Pricing" (Pricing still only with billing on), on every page, `/tool` included: a plain link in the same tab, underlined like every footer link, its words in `NAV_TEXT` in `src/app/site-nav.tsx` and its path from `src/lib/routes.ts`. The header does not change. Spec 0013's AC-8 owes a rewording to name it, which ratifying this spec settles.
-- **Frame.** The legal pages' frame (`LegalPage` in `src/app/legal-page.tsx`, spec 0013's AC-25): the `h1`, "Last updated" from the page's own dated change list (`SECURITY_CHANGES` in `src/lib/policy-changes.ts`), the On this page list, and the text in `Prose` in the reading column. A prerendered static server component with no client component and no script of its own, under the standard content security policy, never `/tool`'s.
-- **Sections.** Its `h2` headings live in `SECURITY_SECTIONS` in `src/lib/policy-sections.ts`, in this order: Your document stays in your browser; Removed, not just covered; The check on every file; Hidden data; What it finds; What it can miss; Pages it can’t fully read; When it stops instead; Plans and the page limit; Logs, counts and error reports; Check it yourself; Changes.
-- **The drawing.** Under "Removed, not just covered", a figure of two small page drawings that look the same: a short document whose contact line ends in a black box. Under each, the words a copy of its text gives. The first, "A box drawn over the text", still gives the address under the box; the second, "Removed, then marked", gives the line with nothing after it. A caption says both look the same and only the second took the words out of the file. It is `CoverFigure`, a primitive in `src/ui`, built from the existing tokens with no new colour pairing. The drawings are hidden from assistive technology, and each panel's meaning is in its visible words. Side by side when the reading column has room, stacked when it does not, and at 200% text. The box stays solid in forced colours mode.
-- **Words.** Every word on the page is written in the page file, as the legal pages' are, and the drawing's words are passed to the primitive as props.
-
-## Code area
-
-`src/app/security/page.tsx` (new), `src/ui/cover-figure.tsx` (new), `src/app/site-nav.tsx`, `src/app/legal-page.tsx` (comments), `src/lib/routes.ts`, `src/lib/policy-sections.ts`, `src/lib/policy-changes.ts`, `src/lib/home-text.ts` (the band's anchor), `src/app/page.tsx`, `src/app/globals.css` (a comment); tests in `tests/component/ui/cover-figure.test.tsx` (new), `tests/component/app/security-page.test.tsx` (new), `tests/unit/policy-pages.test.ts`, `tests/unit/policy-sections.test.ts`, `tests/e2e/legal-pages.spec.ts` and `tests/e2e/shell.spec.ts`.
+The security page at `/security` stays as built: a footer link on every page, the legal pages' frame, twelve sections and a drawing of a fake box beside real removal. What changes is how it states limits. Verify failed twice on exact claims the code contradicts, so every claim now holds in every case it covers or says what can happen ("can be missed", "can be found only in part"), limits are stated broadly by kind with advice to look over the document, and anything the privacy policy, the terms, the home page's band or the footer already says is linked, not repeated. The build is a rewrite of the page's words and its tests, listed section by section below.
 
 ## Requirements
 
-Seeds from the scope's *Done when* and *Also owed here* for feature 16 and your notes of 2026-11-14. Each says what happens, never a pixel figure.
+**User stories**:
+- As an HR, legal or healthcare buyer, I want to read how RedactNest handles my document and where it falls short, so I can judge whether it is safe to use, without a claim that turns out false when I test it.
+- As a visitor on any page, I want a plain link to that explanation in the footer.
+
+**Acceptance criteria** (AC-1 to AC-4 and AC-8 to AC-11 unchanged from the assumed spec; AC-5 to AC-7 rewritten at ratification):
 
 - **AC-1**: `/security` answers 200 as a prerendered static page with the shell (the header with "Try it free", `main` with the skip link's target, the footer), one `h1` "Security", the title "Security · RedactNest", its own description, and nothing asking not to be indexed.
 - **AC-2**: Every page's footer, `/tool` included, shows "Security" in the Product group after "Redact a PDF" and before "Pricing" (with billing on), a plain link to `/security` in the same tab, large enough to press, before the licence notice. The footer still has exactly one paragraph, the licence notice.
 - **AC-3**: The page behaves as the legal pages do under spec 0013's AC-25: "Last updated" and every change dated in a machine readable time, the On this page list naming every `h2` in order and landing on each, beside the text on a wide screen and above it otherwise, staying in view on a wide screen and scrolling with the page at 200% text.
 - **AC-4**: The page's `h2` headings are `SECURITY_SECTIONS`, word for word and in order, and the page never skips a heading level.
-- **AC-5**: The page describes the real implementation and makes no claim the code and the specs do not support. Each paragraph's source is named in a comment beside it (a spec and its criterion, invariant or recorded limit, or a measurement), so `/check verify` can walk them.
-- **AC-6**: Where another page already says a thing, the security page links to it rather than restating it: the privacy policy's Your documents (claims C1 to C5, the plan check among them), What we receive when you visit (C10), and Counts and error reports (C14 to C16); the Terms of service's Checking the result is your job; the home page's list of what RedactNest finds and strips; and the footer's source link. Every link to a section lands on a heading that exists.
-- **AC-7**: The page names the honest limits the specs record, in plain words:
-  - In memory processing (spec 0002): where the document lives, how a session ends, that between two documents the first is unreachable rather than erased, the retained file handle, and what no website controls (swap and page files, the browser's memory and crash reports, extensions, the visitor's own disk). No record of documents or redactions is kept, on purpose.
-  - Removal (spec 0004): removed, then marked; the self check on the exact bytes, all or nothing; the stripped kinds the summary never reports; visible comments, notes and form fields flattened, with a sticky note's or a file attachment's icon kept as a mark on the page while the note's text and the attached file are gone (measured on `tests/fixtures/metadata.pdf`, 2026-11-14); what the cleaned copy loses; owner restrictions removed on purpose; layered files refused; embedded fonts keeping the shapes of removed characters, an inventory of which characters the document used and never their order; scan ink beyond the padding.
-  - Detection (specs 0005, 0014, 0015): what is found and what starts ticked; that names and addresses are not looked for; and the recorded misses (a value split across blocks or wrapped, a letter or digit stuck before a value, a plain digit stuck after one, the phone formats read, dates in full with English months only and the forms still not read, a card glued to other digits, two cards sharing a row).
-  - Custom terms (spec 0017): what a term matches, and its known misses (split across a page break with text between the parts, an all capitals word glued to the next, no patterns).
-  - Pages it cannot read (specs 0006, 0008, 0010): words inside a picture; warnings that lean toward saying too much; the partly redacted name; when a picture counts as read and that words text recognition missed stay in the picture; the scans named although recognition may have read them; a picture reaching past the visible edge and text a clip hides wholly, both named and left in the file; text outside the visible area removed; the fake redaction warning.
-  - Refusals (spec 0004): the files refused at open and the items and files a run refuses rather than guess.
-  - The plan check (claim C5) and why the page cap is honesty based (specs 0001, 0012, 0017).
-  - Logs, counts and reports (specs 0011, 0016): our code writes no log, MuPDF's lines are discarded, and the counts and reports are linked, not restated.
-- **AC-8**: The drawing behaves as *Assumption built on* describes: both panels' words reach assistive technology and the drawings do not, nothing in it is told by colour alone, it adds no colour pairing, and the box stays solid in forced colours mode.
+- **AC-5**: Every claim on the page meets one rule, so a claim cannot be broken by a case nobody listed:
+  - **Safe direction.** Every claim about what RedactNest does with a document (finds, finds whole, lists, ticks, removes, blanks, refuses, warns, names) holds in every case it covers, or it is written as what can happen. A limit is always a "can" sentence: a value "can be missed", "can be found only in part", "can stay in the file", "can be listed unticked". An absolute (never, always, every, none, only, is not) appears only where the code has no path the other way: a step that does not exist (no text recognition, no name or address detector), or a gate every file passes (the self check, the tool page's content security policy, a refusal the engine makes on every file it judges that way).
+  - **Breadth.** Limits are stated at a buyer's level, by kind (how a value is written or laid out), never as the exact condition a detector, check or warning applies. An example is a kind of writing ("joined to other letters or digits"), never a quoted value. The exact cases stay in the specs and the source.
+  - **Look over the document.** The detection limits end by telling the visitor to look over the whole document, not only what was found and ticked. This advice is AC-5's own and stays even though the terms state the duty; the pointer beside it names only the terms' section.
+  - **Said once.** Each fact appears once on the page.
+  - **Sourced.** Every paragraph, list item and the drawing has a source comment naming the exact item that says it, in this order: the spec's AC or INV where it has one; else a privacy claim number (C1 to C16); else a *Security model*, *Consequences* or *Decision* bullet named by its opening words; else a dated measurement on a named file in `tests/fixtures`, recorded in this spec. Never a heading alone, and the named item exists and says the thing.
+  - **Held by a test.** `tests/component/app/security-page.test.tsx` fails if the text of `main` contains, as whole words and in any case, "is found", "are found", "found whole", "is read", "are read", "starts ticked", "start ticked" or "never stops".
+- **AC-6**: Where the privacy policy, the Terms of service, the home page's finds and strips band or the footer already states a fact, the security page links to the section that states it and does not state it again. A paragraph may add the mechanism or the limit that section leaves out, and a pointer sentence names the subject, never the fact. Today that means: the privacy policy's Your documents (C1 to C5), What we do not do (C7 to C9), What we receive when you visit (C10) and Counts and error reports (C14 to C16); the terms' Checking the result is your job; the band's lists and its note on flattened comments; and the footer's source link and licence. The home page's hero and the three cards under it have no heading to link and are what this page explains in depth, so the page may cover their subjects. Every link to a section lands on a heading that exists.
+- **AC-7**: The page names these limits and facts, each at the level AC-5 sets, in the section given, and the coverage table below shows which line meets each earlier spec's ask:
+  - **Your document stays in your browser** (specs 0001 and 0002): no server of ours in the tool page's path; where the document lives and that the engine runs there; how a session ends, and that between two documents the first becomes unreachable, its memory released for reuse rather than erased, with no word saying memory is wiped or erased at any point; the cleaned copy waiting until download; the retained file handle; what no website controls.
+  - **Removed, not just covered** and **The check on every file** (spec 0004): removed, then marked; the pictures MuPDF reports under each removed item blanked a little past it, with scan ink further out able to stay visible; a picture drawn only as a pattern or used only as a soft mask able to escape the blanking and the check; MuPDF doing the removing with every setting written out, and a ticked item it cannot remove stopping the run; the check on the exact bytes, all or nothing, each part claimed only as far as the check goes.
+  - **Hidden data** (spec 0004): the band linked; what the band leaves out; a sticky note's or attachment's icon able to stay as a mark (measured on `tests/fixtures/metadata.pdf`, 2026-11-14, a run with nothing ticked: no annotation, note text or attached file left in any object, both icons still drawn); owner restrictions removed on purpose; fonts keeping the shapes of removed characters.
+  - **What it finds** (specs 0005 and 0017): the band's kinds; names and postal addresses not looked for, with custom terms the way to add them; a row's starting tick is a suggestion; a custom term is plain words, read through many differences of writing but not all.
+  - **What it can miss** (specs 0005, 0014, 0015 and 0017): one list of "can" lines covering a value or term broken up, joined to other text, or written in a format, language or script it does not read, and things listed that are not sensitive or sharing a row; then look over the whole document.
+  - **Pages it can’t fully read** (specs 0004, 0006, 0008 and 0010): words that exist only as a picture are not read; page warnings come from rules of thumb that can miss a page and can warn about one that is fine; then one list of what can stay or be misjudged: a scan with recognised text treated as read, so words the recognition missed stay with no warning; a scan named unreadable although recognised text lies over it; a picture's part beyond the visible edge; text a clip hides; drawings outside the visible area. Then the search for fake redactions, which can miss hidden text.
+  - **When it stops instead** (specs 0004, 0005, 0006 and 0007): the refusals at open, among them a file in which RedactNest finds no page it can read; items that can't be removed safely, the row saying so where RedactNest can tell while reading; otherwise a stopped run with a plain reason, no file and the ticks kept; some files stop every run.
+  - **Plans and the page limit** (specs 0001, 0012 and 0017): the plan question linked (C5); what Pro adds (longer documents, custom terms), said here once; the page cap and the custom terms gate rely on honesty.
+  - **Logs, counts and error reports** (specs 0002, 0004 and 0016): no record of your document or its words, on purpose, and why; MuPDF's messages discarded in the worker; C7, C8, C10 and C14 to C16 linked.
+  - **Check it yourself** (specs 0002, 0009 and 0011): the footer's source link, pointed at; a way to watch every request the tool page sends, to check what Your documents says; the contact address.
+- **AC-8**: The drawing behaves as *Page design* describes: both panels' words reach assistive technology and the drawings do not, nothing in it is told by colour alone, it adds no colour pairing, and the box stays solid in forced colours mode.
 - **AC-9**: No cap, no size and no price is written as a number, and no word names the source repository, so the legal pages' browser checks hold here too.
 - **AC-10**: WCAG 2.2 AA as the legal pages hold it: axe reports nothing, every link in the text is underlined and ringed as Tab reaches it, nothing scrolls sideways at 320 CSS pixels or with the root font size doubled.
 - **AC-11**: The page and everything it renders from are server components (`tests/unit/policy-pages.test.ts`).
 
-## Ratify
+## Decision
 
-This decision was recorded by /develop, not deliberated. Run `/architect security & how it works page` to deliberate and ratify it, and to reword spec 0013's AC-8 for the new footer link. Until then it stays flagged as an owed decision; it does not block marking the feature `done`.
+**Chosen option**: Option 2: one claim rule with broad limits.
+
+Every claim holds in every case it covers or says what can happen, limits are stated by kind with advice to look over the document, and nothing another linkable page says is stated again; the specs keep the exact cases.
+
+## Page design
+
+### Kept as built
+
+- **Path and title.** `/security` (`SECURITY_PATH` in `src/lib/routes.ts`). Title and `h1` "Security", metadata title "Security · RedactNest" with its own description. The description holds under AC-5 and stays.
+- **Way in.** The footer's Product group: "Redact a PDF", "Security", then "Pricing" (with billing on), on every page, `/tool` included. A plain link in the same tab, underlined like every footer link, its words in `NAV_TEXT` in `src/app/site-nav.tsx` and its path from `src/lib/routes.ts`. The header does not change.
+- **Frame.** `LegalPage` in `src/app/legal-page.tsx` (spec 0013, AC-25): the `h1`, "Last updated" from `SECURITY_CHANGES` in `src/lib/policy-changes.ts`, On this page, the text in `Prose`. Prerendered static, no client component, no script of its own, under the standard content security policy.
+- **Sections.** `SECURITY_SECTIONS` in `src/lib/policy-sections.ts`, unchanged: Your document stays in your browser; Removed, not just covered; The check on every file; Hidden data; What it finds; What it can miss; Pages it can’t fully read; When it stops instead; Plans and the page limit; Logs, counts and error reports; Check it yourself; Changes. The `h3`s below them are free to change.
+- **The drawing.** `CoverFigure` in `src/ui`, under Removed, not just covered: two page drawings that look the same, a contact line ending in a black box. Under the first, "A box drawn over the text", a copy gives the address; under the second, "Removed, then marked", it gives the line with nothing after "Contact:". A caption says both look the same and only the second took the words out. Existing tokens only. The drawings are hidden from assistive technology and each panel's meaning is in its visible words. Side by side when the column has room, stacked when it does not and at 200% text. The box stays solid in forced colours mode.
+- **Words.** Every word is in the page file, as on the legal pages; the drawing's words reach the primitive as props.
+- **Change list.** The page has not shipped, so this rework adds no entry. The one entry, "First published.", carries the date the branch merges, written as a literal on that day.
+
+### Spec 0013's AC-8, reworded
+
+Its Product group becomes `("Redact a PDF", "Security", and "Pricing" with billing on)`, with a closing note: _Amended by spec 0018: Security joins the Product group, between Redact a PDF and Pricing, on every page, `/tool` included._ Nothing else in AC-8 changes.
+
+### Writing a line under AC-5
+
+| Kind of line | Allowed | Not allowed |
+|---|---|---|
+| A limit | "A value split across columns can be missed, or found only in part." | "A value split across columns is never found." "One wrapped after the @ is found whole." |
+| A gate | "If any part of the check fails, you get no file." | (none: the gate holds on every file) |
+| A tick | "A row's starting tick is a suggestion." | "Email addresses and card numbers start ticked." |
+| A warning | "These warnings can miss a page, and can warn about one that is fine." | "Both are warned about." |
+| An example | "joined to other letters or digits" | "Smith in SMITHDate", "REF-05.12.1980" |
+| A fact another page states | "What the plan question carries is in Your documents." | "When you are signed in, our server asks Polar whether you hold Pro." |
+
+### Page changes, section by section
+
+Line numbers are `src/app/security/page.tsx` at 26d281c. "Source" is the comment the paragraph carries under AC-5. Words in quotes are what a line must say in substance; the build writes the sentence.
+
+**Your document stays in your browser**
+1. The opening paragraph (83 to 89) restates C1 ("opens it on your own device, inside your browser") and, with "comes from our own site like every other file", C9. Keep only the mechanism: the worker in the tab holds the document and MuPDF, built for the browser, runs there. Source: spec 0002, INV-1 and AC-6.
+2. The tool page paragraph (92 to 98) keeps "a fixed file, the same for everyone, so no server of ours takes part in reading your document" and drops "It is locked so that your browser refuses to let it connect to any other site", C1's second paragraph almost word for word. Its pointer to Your documents names the subject only. Source: spec 0001's *Consequences* bullet "`'unsafe-inline'` on the tool route" (static rendering, so no server is in the path); C1 and C5 linked.
+3. When it ends (105 to 110): leaving the page, closing the tab or Start over stops the worker and hands its memory back to the browser at once (the mechanism C4 leaves out); opening a second document ends the first one's session, and once that session has ended nothing in the page can reach the first document, though its memory is only released for reuse. No word says memory is wiped or erased at any point (verify's point on line 107). The reason for "once that session has ended" in place of today's "from then on": a run under way finishes its step before the session ends; the page does not say this. Source: spec 0002, AC-5a, AC-5b and INV-6, and its *Security model* bullet "The two endings are not equally strong".
+4. The cleaned copy paragraph (113 to 115) stays. Source: spec 0002, AC-4 and INV-7; spec 0004, AC-20.
+5. The file handle paragraph (118 to 121) stays. Source: spec 0002, AC-11, and its *Security model* bullet "The `File` handle is worth naming".
+6. What no website can control (126 to 131) drops "Working in memory means RedactNest writes nothing down" (C2 and C8) and keeps the four things no website controls. Your own disk stays among them, framed as something RedactNest cannot control, not as where downloads are saved (C5's last paragraph says that). Source: spec 0002's *Security model* bullet "What this design does not control".
+
+**Removed, not just covered**
+7. The opening paragraph and the drawing stay. Source: this spec's AC-8 for both.
+8. Removed, then marked (151 to 155) stays. Source: spec 0004, AC-4 (the text removed), and its *Decision* bullet "Box pass" (the box drawn last).
+9. The picture paragraph (161 to 167): it blanks the pictures MuPDF reports under each removed item, a little past its edges, and small drawn marks lying wholly inside that area "can" go with it; scan ink further out "can stay visible". "Which clears the ink of a scanned word" goes (a positive claim the scan ink limit breaks), as does "Table lines that only cross it stay" (an exact case no buyer needs). The scan ink sentence moves here from Scans with recognised text, and the pattern and soft mask sentence moves to the check, each said once. Source: spec 0004's *Decision* bullets "Padded area" and "Padded pass", and its *Security model* bullets "Covered line art is removed across the padded area" and "Scan ink further from the OCR text".
+10. The MuPDF paragraph (170 to 173): every setting written out stays; "what MuPDF cannot remove, it refuses" becomes "RedactNest never edits a page itself, and a ticked item MuPDF cannot remove stops the run" (a pattern or soft mask picture is neither blanked nor refused, so the old words were too broad). Source: spec 0004, INV-5, INV-13 and AC-13.
+
+**The check on every file**
+11. The opening and the text item stay, including the second read that ignores replacement text: they describe a gate every file passes. Source: spec 0004, INV-2 and AC-13; spec 0006, AC-17 for the visible area.
+12. The pictures item (197 to 200): "every picture under a removed item is blank there" contradicts its own exception. It says the pictures the check sees under each removed item are blank there, a picture it cannot decode counts as not blank, and a picture drawn only as a repeating pattern or used only as a soft mask can escape both the blanking and this check (the one place the page says so). Source: spec 0004, INV-15, and its *Security model* bullet "The pixel check sees the images structured text reports".
+13. The structure item (206 to 210): "none of the hidden data below is left" contradicts the fonts kept below it. Said by kind: none of the hidden data in the home page's list, no document info, no hidden carriers or scripts anywhere, and a single version. The cross check confirmed `structureIsClean` covers each of the band's seven stripped items (document info by the trailer, XMP, thumbnails and private data by `CARRIER_KEYS`, bookmarks, attachments and named scripts by `CATALOG_KEYS`, annotations by `PAGE_KEYS`, scripts by `/JS` anywhere, earlier versions by the version count); if a later change to `rebuild.ts` drops one, the line names fewer. The identifier sentence and "our tests hold that" go; the identifier is said once, under Hidden data. Links, form fields, layers and tags, which the check also rules out, are named only in item 16. Source: spec 0004, AC-13 and INV-3.
+14. The all or nothing paragraph (213 to 216) keeps "if any part fails, you get no file, only a plain reason" and narrows the rest to "RedactNest stops rather than hand you a file the check could not vouch for". "A file that looks redacted and is not" goes, since a pattern or soft mask picture can escape the check. Source: spec 0004, AC-14.
+
+**Hidden data**
+15. The band pointer (223 to 226) stays.
+16. One paragraph replaces "It also strips" (230 to 233) and What the cleaned copy loses (249 to 253), naming only what the band leaves out: the kinds stripped and never reported (private application data, page labels, viewer preferences, automatic actions that are not scripts, the file's identifier), and the losses the band does not list (links, and accessibility tags, so screen readers read the file less well). Bookmarks, attachments and fillable fields go, because the band lists or notes them, and so does "the result tells you when a file had them". Source: spec 0004, AC-7, its *Feature design* list stripped and never reported, and its *Consequences* bullet "The output is plainer than the source, by design".
+17. Comments, notes and form fields (240 to 245) restates the band's note. It links that note and adds only the icon: a sticky note or file attachment shown as an icon keeps it as a mark on the page, while what it held but did not show (the note's text, the attached file) is gone, which the structure check holds. Source: spec 0004, AC-22 and AC-7; the measurement this spec's AC-7 records (`tests/fixtures/metadata.pdf`, 2026-11-14).
+18. The password item (261 to 266) keeps only owner restrictions removed on purpose; the refusal of a file that needs a password moves to When it stops instead. Source: spec 0004, AC-10, and its *Security model* bullet "Owner password restrictions are removed on purpose".
+19. The layers item (269 to 271) moves to When it stops instead.
+20. The fonts item (274 to 277) stays. Source: spec 0004's *Security model* bullet "Embedded fonts keep the shapes of removed characters".
+
+**What it finds**
+21. The opening paragraph (285 to 289): "they stay in the file unless you add them" is an absolute that something else ticked can break. It says RedactNest does not look for names or postal addresses, and that you can add them as custom terms. Pro is said once, under Plans. Source: spec 0005, AC-14; spec 0017, AC-7 (verify's point on line 283).
+22. The rows paragraph (292 to 297) says one thing: a row's starting tick is a suggestion. The kinds that start ticked go (a card glued to one digit starts unticked, spec 0005, AC-20). "Nothing is removed unless its box is ticked" goes (the band's line), and the row that cannot be ticked moves to When it stops instead. Source: spec 0005, AC-10 and AC-13.
+23. The terms pointer (300 to 303) moves to the end of What it can miss.
+24. Custom terms (310 to 319): a term is plain words, never a pattern or a wildcard; it reads through many differences of case, accents, spacing and line breaks, but not all. The note list, "a match of the whole word starts ticked" and the two rows across a page break go (verify's second failure; the first verify's point on line 282). Its privacy becomes a pointer naming the subject ("what happens to the terms you type"). Source: spec 0017, AC-7 and AC-8; C3 linked.
+
+**What it can miss** (one intro, one list, one closing line; the five `h3` groups go)
+25. The intro says RedactNest finds patterns in the text and does not understand the document, so it can miss a value or a term, or find only part of it and leave the rest in the file. The claim that the line break and column limits are not a custom term's own goes (verify's second failure). Source: spec 0005, AC-14.
+26. The list, every line a "can" sentence about a value or a term:
+    - Broken up across lines, columns, table cells or pages: can be missed, or found only in part. Covers verify's first failure (an email wrapped after the @). Source: spec 0005, AC-4; spec 0017, AC-33 and its *Consequences* bullet on a page break with text between.
+    - Joined to other letters, digits or words: can be missed, found only in part, or listed unticked. Covers the glued card, the plain digit after a value, the letter before or after one and a term glued to the next word (verify's points on lines 352 and 396). Source: spec 0005, AC-20, AC-21 and AC-23; spec 0014, AC-4 and AC-6; spec 0017, AC-10.
+    - Written in a format, language or script RedactNest does not read, such as a phone number in another country's own format, or a date with its month in another language or written in words: can be missed. Source: spec 0005, AC-2 and AC-19; spec 0015's *Consequences* bullet on the forms still not read.
+    - Something that is not sensitive can be listed, and two values close together can share one row, so they stay or go together. Source: spec 0005's *Consequences* bullets on checks passing by chance and two cards in one row.
+27. The closing line tells the visitor to look over the whole document, not only what was found and ticked, before sharing it. The pointer beside it names only "the terms' section on checking the result". Source: this spec's AC-5; the terms' Checking the result is your job linked.
+
+**Pages it can’t fully read** (the opening, the warnings, one list, then fake redactions; the `h3`s Scans with recognised text and Hidden parts it names but leaves go)
+28. The opening (421 to 424): "cannot find or remove them" is too broad, since the blanking can clear words in a picture under a removed item. It says RedactNest does not read words that exist only as a picture, so it cannot find them. Source: spec 0004's *Security model* bullet "Text drawn as vector outlines, or shown only as pixels" (verify's point on line 420).
+29. The warnings paragraph (431 to 439): the rules of thumb stay, as "can" lines (they can miss a page and can warn about one that is fine, a brochure photo or very small print among them). Both file name sentences, partly redacted and cleaned, go (verify's point on lines 431 to 434: a run that only trims is named cleaned). The refusal of a file with no readable page moves to item 32. Source: spec 0006, INV-9, and its *Consequences* bullet on erring toward saying too much.
+30. One list of "can" lines replaces Scans with recognised text (445 to 458) and Hidden parts (464 to 485):
+    - When a scan carries text from recognition run by another tool, RedactNest can treat the picture as read and work from that text alone, so words the recognition missed or misread can stay in the picture with no warning. The exact threshold goes. Source: spec 0008, AC-1 and AC-9.
+    - It can name a scan as a picture it cannot read although recognised text lies over it; treat that page as not checked. The three named kinds go. Source: spec 0010, AC-7, and its *Decision* bullets "MRC pieces and a photo pasted before OCR are recorded limits" and "Dense vertical OCR is a recorded limit".
+    - The part of a picture beyond the page's visible edge can stay in the file. "RedactNest does not clear pictures" goes (verify's point on line 464). Source: spec 0006, AC-15.
+    - Text a clip hides completely can stay in the file without a row. Source: spec 0006, AC-7.
+    - Drawings outside the visible area can stay in the file. Source: spec 0006, AC-14.
+    "Both are warned about", the naming and the trim's text sentences go; the check says no text is left outside the visible area.
+31. Fake redactions: the search and its warning stay. "An item found hidden that way says so in its row" goes (no source names it), as does "Text a clip hides completely is the exception above" (said once, in item 30). The list of what the search misses (499 to 504) becomes one line: the search can miss hidden text, so a file you received can still hold words that look covered, with no warning. Source: spec 0006, AC-6 and INV-9 (verify's point on line 488).
+
+**When it stops instead**
+32. Refusals at open (513 to 516), among others: a file that is not a PDF (judged by its contents), one too damaged to open, one that needs a password and one with layers (both moved from Hidden data), and "a file in which RedactNest finds no page it can read" (moved from item 29; the engine refuses every file it judges that way, so it may be absolute). Source: spec 0004, AC-1 to AC-3; spec 0007, AC-17 for the password refusal's words (verify's point on line 269); spec 0006, AC-10.
+33. Items that can't be removed safely (521 to 525): stated as kinds, such as text set at an angle or inside replacement text, with the row saying so where RedactNest can tell while reading; the row from What it finds that cannot be ticked is this one. "Slanted lettering" and the picture details go (verify's point on line 522). Source: spec 0004, AC-26 to AC-29; spec 0005, AC-8.
+34. The stop paragraph (533 to 541) becomes: otherwise the run stops with a plain reason and no file, your ticks are kept, a run can stop for something it meets only while removing, and some files stop every run. The footnote mark that "never stops a run" goes (a positive absolute under a condition), as do the stamp, the accent and the size change cases (verify's point on line 534). Source: spec 0007, AC-14; spec 0004, AC-13 and AC-26, and its *Security model* bullets on the `'` and `"` operators and the text watermark.
+
+**Plans and the page limit**
+35. The plan paragraph (550 to 554) restates C5. It becomes a pointer: how the tool page learns which plan applies to you, and what that question carries, is in Your documents. Source: C5.
+36. The honesty paragraph (560 to 564) stays, with what Pro adds (longer documents and custom terms) said here once, never promising support. Source: spec 0001's *Consequences* bullet "The paywall is not enforceable" (verify's point on line 561); spec 0012's *Consequences* bullet "The paywall stays unenforceable", and INV-8 as spec 0017's AC-26 amends it (what Pro does today); spec 0017, INV-2.
+
+**Logs, counts and error reports**
+37. The first paragraph (572 to 573) says there is no record of your document or its words, on purpose, because such a record would recreate the exposure RedactNest exists to remove. "What anyone redacted" stays out: the counts do record documents redacted and kinds found, in ranges (C14), and the page's test already bans it. Source: spec 0002's *Security model* bullet "Audit logging, stated plainly".
+38. The second paragraph (577 to 581): "Our own code writes no log" becomes a pointer to What we do not do (C8). MuPDF's messages stay, thrown away inside the worker as the engine loads, without the font or field name example (verify's point on line 577). The host's logs become a pointer to What we receive when you visit. Source: spec 0004, AC-24; C8 and C10 linked.
+39. The third paragraph (585 to 588) restates C7 and C14. It becomes pointers: what we count, what a failure report holds and what neither ever holds is in Counts and error reports, and which scripts run on our pages is in What we do not do. Source: C7 and C14 to C16 (verify's point on line 585).
+
+**Check it yourself**
+40. The source link paragraph becomes a pointer to the source link at the foot of every page, so you can read what runs in your browser. "Under the GNU AGPL" goes (the footer's notice says it). Source: spec 0009, AC-1 and AC-4.
+41. The network panel paragraph keeps the method and drops the fact: open the developer tools on the tool page, redact a file, and the network panel lists every request the page sends, so you can check what Your documents says. Source: spec 0002, AC-3 as C5 amends it; spec 0004, AC-21; C1 and C5 linked.
+42. The contact paragraph stays. Source: spec 0011, AC-16.
+
+**Changes**: unchanged. Source: spec 0011, AC-2.
+
+**Every comment**: rewritten to AC-5's order, including the ones verify named (lines 82, 269, 283, 420, 488, 561, 577 and 585) and any naming a heading that does not exist.
+
+### Coverage of earlier specs' asks
+
+Each earlier spec's Follow-up for this page is met at the level AC-5 sets. The exact case stays in that spec.
+
+| Spec | What it asks the page to say | Where the page says it |
+|---|---|---|
+| 0001 | No server in the tool page's request path | Your document stays (item 2) |
+| 0002 | The retained file handle; what no website controls; unreachable, not erased, and only a release hands memory back | Your document stays (items 3, 5, 6) |
+| 0004 | The box drawn after removal | Removed (item 8) |
+| 0004 | Fonts keep a character inventory; tags and navigation dropped; owner restrictions removed on purpose | Hidden data (items 16, 18, 20) |
+| 0004 | Scan ink beyond the padding; pattern and soft mask pictures not checked | Removed (item 9); the check (item 12) |
+| 0004 | Text no detector matched passes through | What it can miss (items 25 to 27); fake redactions (item 31) |
+| 0004 | Replacement text, text at an angle, an image blanked past its area, an accent drawn as its own glyph, a size change in one text object, a watermark across a match: each refused | When it stops (items 33, 34), as kinds and "a run can stop for something it meets only while removing" |
+| 0004 | Lines shown with the `'` or `"` operators refuse every run | When it stops (item 34), "some files stop every run" |
+| 0004 | Refuses rather than removes words nobody ticked | The check (items 11, 14) |
+| 0004 | Freed working copies unreachable, not erased | Your document stays (item 3) |
+| 0006 | The trim, the fake redaction warning, the limits in INV-9, a picture past the edge and text a clip hides left in the file | Pages it can’t fully read (items 29 to 31); the check (item 11). "Named" is a "can" line, since INV-9 lets a warning miss |
+| 0008 | When a picture counts as read; words recognition missed stay | Pages it can’t fully read (item 30), without the threshold |
+| 0010 | Three kinds of scan named although recognition may have read them; what the line means | Pages it can’t fully read (item 30), without the three kinds |
+| 0011 | Link the claims register rather than restate it | AC-6 |
+| 0012 | The plan check (C5) and why the cap is honesty based | Plans (items 35, 36) |
+| 0016 | What the counts hold, linking C14 to C16 | Logs (item 39) |
+
+### How verify walks AC-5
+
+For each paragraph and list item: read its source comment and confirm the named item exists and says it; for each claim about an outcome, either it holds in every case (try to break it with the real code, through the PDFs in `tests/fixtures` or plain text through `detect` and `findTerms`) or it is a "can" line; and check no fact is said twice or restated from a page AC-6 names. A "can" line that the code sometimes gets right is met, not a failure.
+
+### Value sourcing
+
+| Value shown | Source |
+|---|---|
+| Every word on the page | Written in `src/app/security/page.tsx`, as on the legal pages |
+| Section headings and their `id`s | `SECURITY_SECTIONS` and `sectionId` in `src/lib/policy-sections.ts` |
+| Links to other pages' sections | `PRIVACY_SECTIONS` (now with `whatWeDoNotDo`), `TERMS_SECTIONS`, `HOME_BAND_ID`, paths from `src/lib/routes.ts` |
+| Last updated and the change list | `SECURITY_CHANGES` in `src/lib/policy-changes.ts` |
+| The contact address | `LEGAL.contactEmail` through `ContactLink` |
+| The footer link's words and path | `NAV_TEXT.security`, `SECURITY_PATH` |
+
+### Critical test scenarios
+
+- The page's text holds none of AC-5's banned outcome phrases, matched as whole words in any case (component), verifies **AC-5**.
+- One pinned phrase per AC-7 line, each in its section, so dropping a limit fails (component), verifies **AC-7**.
+- The text links are exactly the set AC-6 names, now with What we do not do, each landing on a heading that exists (component and browser), verifies **AC-6**.
+- The phrases the two verifies found stay absent, the old guard kept and extended with the second verify's (component), verifies **AC-5**.
+- Everything AC-1 to AC-4 and AC-8 to AC-11 already holds, unchanged (component and browser).
+
+## Build plan
+
+The build approach is Skateboard (root `AGENTS.md`). The page already works end to end, so this is one pass over its words, then its tests, then the docs.
+
+1. Rewrite `src/app/security/page.tsx` by *Page changes*, items 1 to 42, every source comment in AC-5's order. Satisfies **AC-5**, **AC-6**, **AC-7**.
+2. In `tests/component/app/security-page.test.tsx`: add the banned outcome phrase test (whole words, any case); replace the AC-7 phrase pins with one per AC-7 line; add `/privacy#what-we-do-not-do` to the link set; keep the two guard tests and add the second verify's phrases ("is found whole", "If a run then removes something", "does not clear pictures", "not wiped"). Satisfies **AC-5**, **AC-6**, **AC-7**.
+3. Run `tests/e2e/legal-pages.spec.ts`, `shell.spec.ts`, `tests/component/ui/cover-figure.test.tsx` and `tests/unit/policy-pages.test.ts`; change them only where a link or `h3` they read moved. Satisfies **AC-1** to **AC-4**, **AC-6**, **AC-8** to **AC-11**.
+4. Rewrite `verify.md`'s claim walk step to *How verify walks AC-5* and the coverage table, in place of walking each earlier spec's Follow-up. Satisfies **AC-5**, **AC-7**.
+5. Date the one change entry the day the branch merges. Satisfies **AC-3**.
+
+## Consequences
+
+**Positive**:
+- A case nobody listed can no longer fail AC-5: a "can" line holds whatever a detector happens to find, and a new exact miss changes no word on the page.
+- The page reads at a buyer's level and gets shorter. "What it can miss" goes from fourteen cases in five groups to four lines and a closing line.
+- One fact, one home: the privacy policy keeps its claims, and the security page stops drifting from them.
+
+**Negative / tradeoffs**:
+- A buyer who wants the exact cases (which phone formats, which date forms) has to read the specs; the page points nowhere more exact, since AC-9 keeps the repository unnamed.
+- "Can be missed" is less reassuring than a precise list, and some buyers may read the broad lines as weaker than the product is.
+- The broad lines lean toward over warning: a "can" line stays on the page even if a later detector closes most of that kind.
+- Absolutes now need a gate behind them, so a future claim about a new check has to show the gate before the page can say "always".
+
+**Neutral**:
+- The banned phrase test can catch an honest sentence ("the address is found in the footer"); reword it rather than loosen the list.
+- A scan for every "never", "always" and "only" was considered and left out: the eight phrases and verify's walk cover the rule without a sentence by sentence allow list.
+
+## Follow-up
+
+- [x] Add one line to each earlier spec's Follow-up for this page (specs 0002, 0004, 0006, 0008, 0010, 0012 and 0016): _Spec 0018 states this at a buyer's level (its AC-7 and coverage table); the exact conditions stay here._
+- [ ] The tool's `off-page-picture` line in `src/lib/page-findings.ts` says "RedactNest doesn't clear pictures", which the page now avoids. Recorded on feature 30 in `docs/scope/scope.md`, beside `removedOffPageLine`, to be reworded together under spec 0006 with their tests.
+
+## Rationale
+
+Reasoning and options: see [rationale.md](rationale.md).
