@@ -254,26 +254,34 @@ export default function SecurityPage() {
             else), can escape both the blanking and this check.
           </li>
           {/* Spec 0004, AC-13 (no `/Info`, only allowlisted keys, no carrier
-              key or `/JS` anywhere, one revision) and INV-3. "Where the PDF
-              format keeps it" is each of the band's seven kinds at the place
-              the format defines for it, and the check rules out every one
-              (spec 0018, *Page changes*, item 13): document info in the
-              trailer's `/Info`, XMP metadata in a `/Metadata` entry on any
-              object and page thumbnails in `/Thumb` (`CARRIER_KEYS`),
-              bookmarks and the attachment and script name trees in the catalog
+              key or `/JS` anywhere, one revision) and INV-3. "A single
+              version" is the version count, a gate every file passes or does
+              not leave. "Looks for" says what the check does and claims
+              nothing about what is left (spec 0018, *Page changes*, item 13):
+              it fails on document info in the trailer's `/Info`, a `/Metadata`
+              or `/Thumb` entry on any object (`CARRIER_KEYS`), bookmarks and
+              the attachment and script name trees in the catalog
               (`CATALOG_KEYS`), attachment annotations in a page's `/Annots`
-              (`PAGE_KEYS`) and associated files in `/AF`, JavaScript in `/JS`
-              anywhere, earlier versions by the version count. A change to
-              `rebuild.ts` that drops one names fewer here. Never "the file's
-              own structure": a key a program invents on another object is
-              copied with it and the check does not look for it (the sixth
-              verify, 2026-11-15, measured: pdfTeX's `/PTEX.InfoDict` kept an
-              author's name), and the bytes a picture stores inside itself are
-              outside it too (the fifth verify). Hidden data says both as "can"
-              lines. */}
+              (`PAGE_KEYS`), an associated file in `/AF` on any object, a `/JS`
+              entry anywhere and a second version. Never "none is left":
+              below the catalog and the pages the rebuild deletes only
+              `CARRIER_KEYS`, so whatever else an object it keeps refers to is
+              copied with it. */}
+          {/* The "can" line is the measurements spec 0018 records (items 13
+              and 15), each run with nothing ticked: on
+              `tests/fixtures/form-xobject.pdf`, an embedded file reached
+              through the figure's `/Ref` or `/OPI` (the seventh verify,
+              2026-11-15) and pdfTeX's `/PTEX.InfoDict` and `/PTEX.FileName`
+              (the sixth verify); on `tests/fixtures/images-under.pdf`, an
+              embedded file through the picture's `/OPI` and the same two
+              program keys (the seventh verify). Each time the self check
+              passed, nothing was reported stripped, and the output kept them.
+              "Can", because a carrier key is deleted wherever it sits. */}
           <li>
-            Structure: none of the hidden data the home page lists is left where the PDF
-            format keeps it, and the file holds a single version.
+            Structure: the file holds a single version, and the check looks for the hidden
+            data the home page lists. Hidden data kept in less common places the PDF
+            format allows, such as a file or details attached to a picture or figure, or
+            in entries a program adds for its own use, can stay.
           </li>
         </ul>
         {/* Spec 0004, AC-14 (no output, one kind); spec 0007, AC-16 (each
@@ -287,14 +295,16 @@ export default function SecurityPage() {
 
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="hiddenData" />
-        {/* Spec 0004, AC-7 (what is stripped) and AC-13 (the self check's
-            structure part, the gate behind "strips"); the band linked, not
-            restated (spec 0018, AC-6). "Where the PDF format keeps it", as the
-            check's line says, never "whenever a file carries it" or "from the
-            file's own structure" (the sixth verify, 2026-11-15). */}
+        {/* The band linked, not restated (spec 0018, AC-6): a plain pointer
+            naming the subject, spec 0004, AC-7 (what is stripped) and AC-13
+            (what the structure check looks for), with no claim of its own.
+            What the check looks for and what can stay are said once, under
+            The check on every file; never "where the PDF format keeps it",
+            "whenever a file carries it" or "from the file's own structure"
+            (the seventh verify, 2026-11-15). */}
         <p>
-          The home page lists the <a href={HOME_BAND}>hidden data RedactNest strips</a>{" "}
-          where the PDF format keeps it.
+          The home page lists the{" "}
+          <a href={HOME_BAND}>hidden data RedactNest looks for and strips</a>.
         </p>
         {/* Spec 0006, AC-29 (every page image in a run's output has the same
             filter and the same bytes as in the source), held by
@@ -305,19 +315,6 @@ export default function SecurityPage() {
         <p>
           Details stored inside a picture’s own data, such as a photo’s camera details,
           can stay.
-        </p>
-        {/* The measurement spec 0018 records (item 15, the sixth verify,
-            2026-11-15): `tests/fixtures/form-xobject.pdf` with pdfTeX's two
-            default keys added in memory to its form XObject, `/PTEX.InfoDict`
-            (an author and a title) and `/PTEX.FileName` (a path), run with
-            nothing ticked: the self check passed, nothing was reported
-            stripped, and the output kept both keys, the author's name and the
-            path. The rebuild's sweep below the catalog and the pages deletes
-            only `CARRIER_KEYS` (`rebuild.ts`), so "can": a key a program
-            invents is kept or not by where it sits. */}
-        <p>
-          Entries a program adds for its own use, such as what LaTeX records about an
-          included figure, can stay.
         </p>
         {/* Spec 0004, AC-7, its *Feature design* sentence "Stripped and never
             reported", and its *Consequences* bullet "The output is plainer than

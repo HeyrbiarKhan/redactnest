@@ -168,15 +168,19 @@ describe("the security page", () => {
     ["theCheck", "none lying in one is left"],
     ["theCheck", "a character crossing the page’s edge can go with what lies outside it"],
     ["theCheck", "can escape both the blanking and this check"],
-    ["theCheck", "is left where the PDF format keeps it"],
+    [
+      "theCheck",
+      "the file holds a single version, and the check looks for the hidden data the home page lists",
+    ],
+    ["theCheck", "less common places the PDF format allows"],
+    ["theCheck", "a file or details attached to a picture or figure"],
+    ["theCheck", "entries a program adds for its own use, can stay"],
     ["theCheck", "If any part fails, you get no file"],
     ["theCheck", "a file the check could not vouch for"],
     // Hidden data (spec 0004).
-    ["hiddenData", "hidden data RedactNest strips where the PDF format keeps it"],
+    ["hiddenData", "hidden data RedactNest looks for and strips"],
     ["hiddenData", "Details stored inside a picture’s own data"],
     ["hiddenData", "a photo’s camera details, can stay"],
-    ["hiddenData", "Entries a program adds for its own use"],
-    ["hiddenData", "what LaTeX records about an included figure, can stay"],
     ["hiddenData", "automatic actions that are not scripts"],
     ["hiddenData", "its links and its accessibility tags"],
     ["hiddenData", "can keep that icon as a mark on the page"],
@@ -428,6 +432,25 @@ describe("the security page", () => {
     expect(text).not.toContain("strips from the file’s own structure");
     expect(text).not.toContain("or a term broken up across pages");
     expect(text).not.toContain("the review then starts over without your ticks");
+  });
+
+  /**
+   * covers: AC-5. Words the seventh verify found claiming more than their gate
+   * (2026-11-15): no hidden data the home page lists left "where the PDF format
+   * keeps it", which an embedded file reached through a figure's `/Ref` or a
+   * picture's `/OPI` breaks (measured: the self check passed and the file
+   * stayed). The structure line now says only what the check does, with one
+   * "can" line for what can stay, said once, so the Hidden data pointer makes
+   * no claim of its own.
+   */
+  it("says what the structure check does, never that nothing is left", () => {
+    render(<SecurityPage />);
+    const text = mainText();
+
+    expect(text).not.toContain("none of the hidden data");
+    expect(text).not.toContain("where the PDF format keeps it");
+    expect(text).not.toContain("what LaTeX records about an included figure");
+    expect(text.split("entries a program adds for its own use").length - 1).toBe(1);
   });
 
   /** covers: AC-9. No cap, size or price as a number, and no repository. */
