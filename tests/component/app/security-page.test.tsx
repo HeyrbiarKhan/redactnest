@@ -1,5 +1,5 @@
 /**
- * The security page, as rendered. Spec 0018 (assumed), AC-1 and AC-3 to AC-9.
+ * The security page, as rendered. Spec 0018, AC-1 and AC-3 to AC-10.
  *
  * A plain server component, so it renders here as it does at build. The
  * browser suite (`tests/e2e/legal-pages.spec.ts`) walks it with the legal
@@ -109,10 +109,12 @@ describe("the security page", () => {
       else expect(href).toBe(`/#${HOME_BAND_ID}`);
     }
 
-    // C1 to C5, C10, C14 to C16, the review duty and the finds and strips list.
+    // AC-6's list: C1 to C5, C7 to C9, C10, C14 to C16, the review duty, and
+    // the finds and strips band with its note.
     expect(new Set(hrefs)).toEqual(
       new Set([
         `/privacy#${sectionId("yourDocuments")}`,
+        `/privacy#${sectionId("whatWeDoNotDo")}`,
         `/privacy#${sectionId("whatWeReceive")}`,
         `/privacy#${sectionId("countsAndReports")}`,
         `/terms#${sectionId("checkingTheResult")}`,
@@ -137,78 +139,119 @@ describe("the security page", () => {
   });
 
   /**
-   * covers: AC-7. The honest limits each spec asks this page to name, pinned
-   * by a phrase each, so an edit that drops one fails here.
+   * covers: AC-7. Every limit and fact AC-7 names, one phrase each, grouped by
+   * its AC-7 line and found in that line's section, so an edit that drops or
+   * moves one fails here. The phrases are the page's own words at a buyer's
+   * level (AC-5's breadth), never a detector's exact case.
    */
   it.each([
-    // Spec 0002: the two endings, the file handle and what no website controls.
-    ["inYourBrowser", "only released for reuse, not wiped"],
+    // Your document stays in your browser (specs 0001 and 0002).
+    ["inYourBrowser", "no server of ours takes part in reading your document"],
+    ["inYourBrowser", "MuPDF built for the browser, runs inside that worker"],
+    ["inYourBrowser", "Leaving the page, closing the tab or pressing Start over stops"],
+    ["inYourBrowser", "nothing in the page can reach the first document"],
+    ["inYourBrowser", "its memory is only released for reuse"],
+    ["inYourBrowser", "The cleaned copy waits in the page until you download it"],
     ["inYourBrowser", "keeps a handle to the file you chose"],
     ["inYourBrowser", "swap or page files"],
-    // Spec 0004: removed, then marked; the check; the stripped extras.
+    // Removed, not just covered, and The check on every file (spec 0004).
     ["removedNotCovered", "removed, then marked"],
+    ["removedNotCovered", "a little past the item’s edges"],
+    ["removedNotCovered", "further out than that can stay visible"],
     ["removedNotCovered", "a change in the engine’s defaults cannot quietly change"],
+    ["removedNotCovered", "a ticked item MuPDF cannot remove stops the run"],
     ["theCheck", "from the exact bytes you will download"],
-    ["theCheck", "inside each page’s visible area, every character you did not tick"],
-    ["theCheck", "used only as a soft mask, is not checked"],
-    ["theCheck", "identifier, which this check does not look at"],
-    ["removedNotCovered", "used only as a soft mask"],
+    ["theCheck", "can escape both the blanking and this check"],
+    ["theCheck", "If any part fails, you get no file"],
+    ["theCheck", "a file the check could not vouch for"],
+    // Hidden data (spec 0004).
+    ["hiddenData", "what RedactNest finds and strips"],
     ["hiddenData", "automatic actions that are not scripts"],
+    ["hiddenData", "its links and its accessibility tags"],
     ["hiddenData", "keeps that icon as a mark on the page"],
     ["hiddenData", "the cleaned copy carries no restriction"],
     ["hiddenData", "never which words they made or in what order"],
-    // Specs 0005, 0014, 0015 and 0017: the recorded misses.
-    ["whatItFinds", "Names and addresses are not among them"],
-    ["whatItFinds", "Arabic, Hebrew or Devanagari, written with different vowel marks"],
-    ["whatItFinds", "except one RedactNest cannot remove safely"],
-    ["whatItFinds", "listed as two rows, one on each page, both unticked"],
-    ["whatItCanMiss", "wrapped at a dot before the @ is found only after the break"],
-    [
-      "whatItCanMiss",
-      "The first three lists are for the details RedactNest finds by itself",
-    ],
-    ["whatItCanMiss", "so those limits are not its own"],
-    ["whatItCanMiss", "split across two blocks of text"],
-    ["whatItCanMiss", "in UK or US national format"],
-    ["whatItCanMiss", "with month names in English"],
-    ["whatItCanMiss", "Smith is not found in SMITHDate"],
-    // Specs 0006, 0008 and 0010: pages it cannot read.
-    ["pagesItCannotRead", "lean toward saying too much"],
-    [
-      "pagesItCannotRead",
-      "If a run then removes something, the new file’s name ends in partly redacted",
-    ],
-    [
-      "pagesItCannotRead",
-      "a run that removes nothing gives a file whose name ends in cleaned",
-    ],
-    [
-      "pagesItCannotRead",
-      "a file from a run that removes something is named partly redacted",
-    ],
-    ["pagesItCannotRead", "a line of very small print on a legal page"],
-    ["pagesItCannotRead", "they can also miss a case"],
-    ["pagesItCannotRead", "This search can miss some hidden text"],
-    ["pagesItCannotRead", "a shape that wraps around a corner of the page, which stays"],
-    ["pagesItCannotRead", "three or more letters or digits over that picture alone"],
-    ["pagesItCannotRead", "a scan stored as several pieces"],
-    ["pagesItCannotRead", "keeps its hidden part"],
-    ["pagesItCannotRead", "Text a clip hides completely stays in the file"],
-    // Spec 0004: refusals; specs 0001, 0012 and 0017: the honesty based cap.
-    ["whenItStops", "your ticks are kept"],
+    // What it finds (specs 0005 and 0017).
+    ["whatItFinds", "kinds of detail the home page lists"],
+    ["whatItFinds", "does not look for names or postal addresses"],
+    ["whatItFinds", "you can add those as custom terms"],
+    ["whatItFinds", "a row’s starting tick is only a suggestion"],
+    ["whatItFinds", "never a pattern or a wildcard"],
+    ["whatItFinds", "line breaks, but not all"],
+    // What it can miss (specs 0005, 0014, 0015 and 0017).
+    ["whatItCanMiss", "broken up across lines, columns, table cells or pages"],
+    ["whatItCanMiss", "joined to other letters, digits or words"],
+    ["whatItCanMiss", "a format, language or script RedactNest does not read"],
+    ["whatItCanMiss", "Something that is not sensitive can be listed"],
+    ["whatItCanMiss", "two values close together can share one row"],
+    ["whatItCanMiss", "look over the whole document"],
+    // Pages it can't fully read (specs 0004, 0006, 0008 and 0010).
+    ["pagesItCannotRead", "does not read words that exist only as a picture"],
+    ["pagesItCannotRead", "can miss a page, and can warn about one that is fine"],
+    ["pagesItCannotRead", "missed or misread can stay in the picture with no warning"],
+    ["pagesItCannotRead", "Treat that page as not checked"],
+    ["pagesItCannotRead", "beyond the page’s visible edge can stay in the file"],
+    ["pagesItCannotRead", "Text a clip hides completely can stay in the file"],
+    ["pagesItCannotRead", "Drawings outside the visible area can stay in the file"],
+    ["pagesItCannotRead", "This search can miss hidden text"],
+    // When it stops instead (specs 0004, 0005, 0006 and 0007).
     ["whenItStops", "one too damaged to open"],
-    ["whenItStops", "within the same piece of text"],
-    ["whenItStops", "as its own piece of text, the way word processors and browsers"],
-    ["plans", "when you are signed in, our server asks Polar"],
-    ["plans", "The page limit relies on honesty"],
+    ["whenItStops", "one that needs a password"],
+    ["whenItStops", "one with layers"],
+    ["whenItStops", "a file in which it finds no page it can read"],
+    ["whenItStops", "the row says the item will stay in the file"],
+    ["whenItStops", "your ticks are kept"],
+    ["whenItStops", "some files stop every run"],
+    // Plans and the page limit (specs 0001, 0012 and 0017).
+    ["plans", "how the tool page learns which plan applies to you"],
     ["plans", "Pro gives you longer documents and custom terms, not a lock"],
-    // Spec 0002, *Security model*, as the counts allow; spec 0004, AC-24; C8.
-    ["logsAndCounts", "nothing records your documents or the words anyone redacted"],
-    ["logsAndCounts", "Our own code writes no log"],
+    ["plans", "The page limit relies on honesty"],
+    ["plans", "custom terms rely on honesty in the same way"],
+    // Logs, counts and error reports (specs 0002, 0004 and 0016).
+    ["logsAndCounts", "there is no record of your document or its words"],
+    ["logsAndCounts", "thrown away inside the worker"],
+    // Check it yourself (specs 0002, 0009 and 0011).
+    ["checkIt", "links to the source code for the version you are using"],
+    ["checkIt", "the network panel lists every request the page sends"],
+    ["checkIt", "please write to"],
   ] as const)("names in %s: %s", (section, phrase) => {
     render(<SecurityPage />);
 
-    expect(sectionText(SECURITY_SECTIONS[section])).toContain(phrase);
+    expect(sectionText(SECURITY_SECTIONS[section]).toLowerCase()).toContain(
+      phrase.toLowerCase(),
+    );
+  });
+
+  /**
+   * covers: AC-5, held by a test. An outcome phrase that claims RedactNest
+   * finds, reads, ticks or carries on in every case, matched as whole words in
+   * any case. A limit is a "can" line instead. An honest sentence this catches
+   * is reworded, never let through (spec 0018, *Consequences*).
+   */
+  it.each([
+    "is found",
+    "are found",
+    "found whole",
+    "is read",
+    "are read",
+    "starts ticked",
+    "start ticked",
+    "never stops",
+  ])("never says %s", (phrase) => {
+    render(<SecurityPage />);
+
+    const words = phrase.split(" ").join("\\s+");
+    expect(mainText()).not.toMatch(new RegExp(`\\b${words}\\b`, "i"));
+  });
+
+  /**
+   * covers: AC-7. A replaced document's memory is released for reuse, never
+   * erased, so no word says memory is wiped or erased at any point.
+   */
+  it("never says memory is wiped or erased", () => {
+    render(<SecurityPage />);
+
+    expect(mainText()).not.toMatch(/\b(wipe[sd]?|wiping|erase[sd]?|erasing)\b/i);
   });
 
   /**
@@ -253,6 +296,24 @@ describe("the security page", () => {
     // Spec 0007, AC-12: a run that removed nothing is named cleaned.
     expect(text).not.toContain("the cleaned file’s name ends in partly redacted");
     expect(text).not.toContain("Both are warned about and named partly redacted");
+  });
+
+  /**
+   * covers: AC-5. Words the second verify found claiming more than the code
+   * does (2026-11-14): an email wrapped after the @ found whole (spec 0005,
+   * AC-4), a file name promised from what a run removed (spec 0007, AC-12, a
+   * run that only trims is named cleaned), pictures never cleared (the
+   * blanking clears some under a removed item), and memory said not wiped,
+   * which reads as though it might be.
+   */
+  it("claims no more than its sources for wraps, file names, pictures and memory", () => {
+    render(<SecurityPage />);
+    const text = mainText();
+
+    expect(text).not.toMatch(/is found whole/i);
+    expect(text).not.toContain("If a run then removes something");
+    expect(text).not.toContain("does not clear pictures");
+    expect(text).not.toContain("not wiped");
   });
 
   /** covers: AC-9. No cap, size or price as a number, and no repository. */

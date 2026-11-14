@@ -561,6 +561,11 @@ test.describe("the security page's drawing and links", () => {
     expect(targets.length).toBeGreaterThan(0);
 
     for (const href of targets) {
+      // A fresh document each time, as following the link from /security
+      // gives. Two targets on one page in a row (What we do not do, then What
+      // we receive) would otherwise be a same document hop, which a visitor
+      // never makes from here.
+      await page.goto("about:blank");
       await page.goto(href);
       const id = href.split("#")[1] ?? "";
       await expect(page.locator(`[id="${id}"]`)).toHaveCount(1);
