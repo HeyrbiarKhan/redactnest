@@ -174,6 +174,18 @@ describe("the security page", () => {
     ["whatItCanMiss", "Smith is not found in SMITHDate"],
     // Specs 0006, 0008 and 0010: pages it cannot read.
     ["pagesItCannotRead", "lean toward saying too much"],
+    [
+      "pagesItCannotRead",
+      "If a run then removes something, the new file’s name ends in partly redacted",
+    ],
+    [
+      "pagesItCannotRead",
+      "a run that removes nothing gives a file whose name ends in cleaned",
+    ],
+    [
+      "pagesItCannotRead",
+      "a file from a run that removes something is named partly redacted",
+    ],
     ["pagesItCannotRead", "a line of very small print on a legal page"],
     ["pagesItCannotRead", "they can also miss a case"],
     ["pagesItCannotRead", "This search can miss some hidden text"],
@@ -220,7 +232,9 @@ describe("the security page", () => {
    * INV-15), every footnote mark refusing (spec 0014), every drawing outside
    * removed (spec 0006, AC-14), warnings that never miss (INV-9), Polar asked
    * for everyone, every wrapped email, a drawn line as the example, every box
-   * changeable, every damaged file refused, and every unticked character kept.
+   * changeable, every damaged file refused, every unticked character kept,
+   * and a partly redacted name even on a run that removed nothing (spec 0007,
+   * AC-12).
    */
   it("claims no more than its sources for pictures, markers, the trim and the plan", () => {
     render(<SecurityPage />);
@@ -236,6 +250,9 @@ describe("the security page", () => {
     expect(text).not.toContain("you can change every one");
     expect(text).not.toContain("a damaged one");
     expect(text).not.toContain("Text: every character you did not tick");
+    // Spec 0007, AC-12: a run that removed nothing is named cleaned.
+    expect(text).not.toContain("the cleaned file’s name ends in partly redacted");
+    expect(text).not.toContain("Both are warned about and named partly redacted");
   });
 
   /** covers: AC-9. No cap, size or price as a number, and no repository. */

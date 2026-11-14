@@ -424,15 +424,18 @@ export default function SecurityPage() {
         </p>
         {/* Spec 0006, AC-10, AC-23, INV-9 (the heuristic findings may miss a
             case) and *Consequences* (erring toward saying too much: the legal
-            line is 0.5 pt print, text under `TINY_TEXT_MAX`, never a drawn rule). */}
+            line is 0.5 pt print, text under `TINY_TEXT_MAX`, never a drawn rule);
+            spec 0007, AC-12 and INV-2 as spec 0017 amends it (`outputFormFor`:
+            a run that removed nothing is cleaned, whatever the pages hold). */}
         <p>
           When RedactNest sees that a page holds something it cannot check, it says so for
-          that page, and the cleaned file’s name ends in partly redacted. Most of these
-          warnings come from rules of thumb, so they can be wrong both ways. They lean
-          toward saying too much, so a brochure photo or a line of very small print on a
-          legal page can raise one, and they can also miss a case, such as the hidden text
-          the last part of this section lists. A document with no page it can read is
-          refused.
+          that page. If a run then removes something, the new file’s name ends in partly
+          redacted; a run that removes nothing gives a file whose name ends in cleaned,
+          whatever the pages hold. Most of these warnings come from rules of thumb, so
+          they can be wrong both ways. They lean toward saying too much, so a brochure
+          photo or a line of very small print on a legal page can raise one, and they can
+          also miss a case, such as the hidden text the last part of this section lists. A
+          document with no page it can read is refused.
         </p>
 
         <h3>Scans with recognised text</h3>
@@ -469,13 +472,16 @@ export default function SecurityPage() {
         </ul>
         {/* Spec 0006, AC-8 and AC-14 (the trim: a glyph straddling the edge
             removed whole; vector art only when one area covers it, a shape
-            spanning two strips a recorded limit, and only text proved). */}
+            spanning two strips a recorded limit, and only text proved); spec
+            0007, AC-12 (the partly redacted name only when a run removed
+            something). */}
         <p>
-          Both are warned about and named partly redacted, but neither is removed. Text
-          outside a page’s visible area is removed whenever you redact, and a character
-          the page’s edge cuts through is removed whole. A drawing lying wholly outside
-          goes too, except a shape that wraps around a corner of the page, which stays.
-          Only the removal of text is checked.
+          Both are warned about, and a file from a run that removes something is named
+          partly redacted, but neither is removed. Text outside a page’s visible area is
+          removed whenever you redact, and a character the page’s edge cuts through is
+          removed whole. A drawing lying wholly outside goes too, except a shape that
+          wraps around a corner of the page, which stays. Only the removal of text is
+          checked.
         </p>
 
         <h3>Fake redactions in files you receive</h3>
