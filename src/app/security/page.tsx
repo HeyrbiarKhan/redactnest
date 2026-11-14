@@ -254,20 +254,26 @@ export default function SecurityPage() {
             else), can escape both the blanking and this check.
           </li>
           {/* Spec 0004, AC-13 (no `/Info`, only allowlisted keys, no carrier
-              key or `/JS` anywhere, one revision) and INV-3. Those keys hold
-              each of the band's seven kinds (spec 0018, *Page changes*, item
-              13): document info by the trailer, XMP metadata and page
-              thumbnails by `CARRIER_KEYS`, bookmarks and the attachment and
-              script name trees by `CATALOG_KEYS`, attachment annotations by
-              `PAGE_KEYS`, JavaScript by `/JS` anywhere, earlier versions by the
-              version count. A change to `rebuild.ts` that drops one names fewer
-              here. "The file's own structure", never "anywhere": the check
-              reads every object's keys and never the bytes a picture or a font
-              stores inside itself, so what those hold is outside it (the fifth
-              verify, 2026-11-15), and Hidden data says so as a "can" line. */}
+              key or `/JS` anywhere, one revision) and INV-3. "Where the PDF
+              format keeps it" is each of the band's seven kinds at the place
+              the format defines for it, and the check rules out every one
+              (spec 0018, *Page changes*, item 13): document info in the
+              trailer's `/Info`, XMP metadata in a `/Metadata` entry on any
+              object and page thumbnails in `/Thumb` (`CARRIER_KEYS`),
+              bookmarks and the attachment and script name trees in the catalog
+              (`CATALOG_KEYS`), attachment annotations in a page's `/Annots`
+              (`PAGE_KEYS`) and associated files in `/AF`, JavaScript in `/JS`
+              anywhere, earlier versions by the version count. A change to
+              `rebuild.ts` that drops one names fewer here. Never "the file's
+              own structure": a key a program invents on another object is
+              copied with it and the check does not look for it (the sixth
+              verify, 2026-11-15, measured: pdfTeX's `/PTEX.InfoDict` kept an
+              author's name), and the bytes a picture stores inside itself are
+              outside it too (the fifth verify). Hidden data says both as "can"
+              lines. */}
           <li>
-            Structure: none of the hidden data the home page lists is left in the file’s
-            own structure, and the file holds a single version.
+            Structure: none of the hidden data the home page lists is left where the PDF
+            format keeps it, and the file holds a single version.
           </li>
         </ul>
         {/* Spec 0004, AC-14 (no output, one kind); spec 0007, AC-16 (each
@@ -283,11 +289,12 @@ export default function SecurityPage() {
         <SectionHeading sections={SECURITY_SECTIONS} name="hiddenData" />
         {/* Spec 0004, AC-7 (what is stripped) and AC-13 (the self check's
             structure part, the gate behind "strips"); the band linked, not
-            restated (spec 0018, AC-6). "From the file's own structure", as the
-            check's line says, never "whenever a file carries it". */}
+            restated (spec 0018, AC-6). "Where the PDF format keeps it", as the
+            check's line says, never "whenever a file carries it" or "from the
+            file's own structure" (the sixth verify, 2026-11-15). */}
         <p>
           The home page lists the <a href={HOME_BAND}>hidden data RedactNest strips</a>{" "}
-          from the file’s own structure.
+          where the PDF format keeps it.
         </p>
         {/* Spec 0006, AC-29 (every page image in a run's output has the same
             filter and the same bytes as in the source), held by
@@ -298,6 +305,19 @@ export default function SecurityPage() {
         <p>
           Details stored inside a picture’s own data, such as a photo’s camera details,
           can stay.
+        </p>
+        {/* The measurement spec 0018 records (item 15, the sixth verify,
+            2026-11-15): `tests/fixtures/form-xobject.pdf` with pdfTeX's two
+            default keys added in memory to its form XObject, `/PTEX.InfoDict`
+            (an author and a title) and `/PTEX.FileName` (a path), run with
+            nothing ticked: the self check passed, nothing was reported
+            stripped, and the output kept both keys, the author's name and the
+            path. The rebuild's sweep below the catalog and the pages deletes
+            only `CARRIER_KEYS` (`rebuild.ts`), so "can": a key a program
+            invents is kept or not by where it sits. */}
+        <p>
+          Entries a program adds for its own use, such as what LaTeX records about an
+          included figure, can stay.
         </p>
         {/* Spec 0004, AC-7, its *Feature design* sentence "Stripped and never
             reported", and its *Consequences* bullet "The output is plainer than
@@ -422,13 +442,21 @@ export default function SecurityPage() {
           {/* Spec 0005, AC-4 (other wraps not found, no match across text
               blocks), and its *Consequences* bullet "A value wrapped mid word
               or at a hyphen is missed" (an email wrapped at a dot lists only
-              the part after the break); spec 0017, AC-33, and its
-              *Consequences* bullet "Known misses, recorded" (a page break with
-              text between). A term is read across line and block breaks (spec
-              0017, AC-9), so only pages are named for it. */}
+              the part after the break). For a term: spec 0017, AC-8 (an exact
+              match is the folded term equal to the folded page, only a run of
+              whitespace or a break standing for a space) and AC-11 (the spaced
+              reading removes only separators), so other text between a term's
+              parts in reading order keeps them apart on one page; AC-33 (text
+              drawn between the parts keeps them apart across a page break) and
+              its *Consequences* bullet "Known misses, recorded". A term is read
+              across line and block breaks (AC-9), so only text between is
+              named for it: measured on `tests/fixtures/detect-wraps.pdf`, a
+              term split across its two columns is matched (the sixth verify,
+              2026-11-15). */}
           <li>
-            A value broken up across lines, columns, table cells or pages, or a term
-            broken up across pages, can be missed, or found only in part.
+            A value broken up across lines, columns, table cells or pages can be missed,
+            or found only in part. A term with other text between its parts, on one page
+            or across pages, can be missed.
           </li>
           {/* Spec 0005, AC-20, AC-21 and AC-23; spec 0014, AC-3 (a plain digit
               glued after a date, listed as an unticked phone row); spec 0017,
@@ -562,12 +590,16 @@ export default function SecurityPage() {
             ticks are kept" is the session's `failed` edge out of a run, which
             every refused run takes (spec 0007, AC-14 and INV-1). A worker lost
             during a run is not a refusal and its ticks do not survive it
-            (AC-14's last sentence), so the last line says so. */}
+            (AC-14's last sentence), so the last line says so. The review starts
+            over only on the lost state's Try again (`retry` in
+            `src/lib/session.ts`, which reopens at `opening` with no ticks and
+            no matches), never by itself (the sixth verify, 2026-11-15). */}
         <p>
           Otherwise the run stops with a plain reason and no file, and your ticks are
           kept: a row you could tick can still stop the run, for something RedactNest
           meets only while removing. Some files stop every run. A run can also end because
-          the engine itself was lost, and the review then starts over without your ticks.
+          the engine itself was lost. The review then starts over, without your ticks,
+          when you press Try again.
         </p>
       </section>
 

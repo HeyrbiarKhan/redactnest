@@ -168,13 +168,15 @@ describe("the security page", () => {
     ["theCheck", "none lying in one is left"],
     ["theCheck", "a character crossing the page’s edge can go with what lies outside it"],
     ["theCheck", "can escape both the blanking and this check"],
-    ["theCheck", "is left in the file’s own structure"],
+    ["theCheck", "is left where the PDF format keeps it"],
     ["theCheck", "If any part fails, you get no file"],
     ["theCheck", "a file the check could not vouch for"],
     // Hidden data (spec 0004).
-    ["hiddenData", "hidden data RedactNest strips from the file’s own structure"],
+    ["hiddenData", "hidden data RedactNest strips where the PDF format keeps it"],
     ["hiddenData", "Details stored inside a picture’s own data"],
     ["hiddenData", "a photo’s camera details, can stay"],
+    ["hiddenData", "Entries a program adds for its own use"],
+    ["hiddenData", "what LaTeX records about an included figure, can stay"],
     ["hiddenData", "automatic actions that are not scripts"],
     ["hiddenData", "its links and its accessibility tags"],
     ["hiddenData", "can keep that icon as a mark on the page"],
@@ -194,7 +196,10 @@ describe("the security page", () => {
     ["whatItCanMiss", "joined to other letters, digits or words"],
     ["whatItCanMiss", "a format, language or script RedactNest does not read"],
     ["whatItCanMiss", "Something that is not sensitive can be listed"],
-    ["whatItCanMiss", "or a term broken up across pages"],
+    [
+      "whatItCanMiss",
+      "A term with other text between its parts, on one page or across pages, can be missed",
+    ],
     ["whatItCanMiss", "two card numbers side by side can share one row"],
     ["whatItCanMiss", "look over the whole document"],
     // Pages it can't fully read (specs 0004, 0006, 0008 and 0010).
@@ -219,7 +224,10 @@ describe("the security page", () => {
     ["whenItStops", "your ticks are kept"],
     ["whenItStops", "a row you could tick can still stop the run"],
     ["whenItStops", "some files stop every run"],
-    ["whenItStops", "the review then starts over without your ticks"],
+    [
+      "whenItStops",
+      "The review then starts over, without your ticks, when you press Try again",
+    ],
     // Plans and the page limit (specs 0001, 0012 and 0017).
     ["plans", "how the tool page learns which plan applies to you"],
     ["plans", "Pro gives you longer documents and custom terms, not a lock"],
@@ -401,6 +409,25 @@ describe("the security page", () => {
     expect(text).not.toContain("suggestion: you can tick or untick any row");
     expect(text).not.toContain("the page may look redacted");
     expect(text).not.toContain("with no earlier versions inside it");
+  });
+
+  /**
+   * covers: AC-5. Words the sixth verify found claiming more than their gates
+   * or their sources (2026-11-15): hidden data gone from "the file's own
+   * structure" (a key a program invents on another object is copied with it,
+   * measured with pdfTeX's `/PTEX.InfoDict` keeping an author's name), a term
+   * missed only across pages (other text between its parts keeps them apart
+   * on one page too, spec 0017, AC-8), and the review starting over by itself
+   * after a lost engine (only Try again starts it, `retry` in the session).
+   */
+  it("claims no more than its gates for program entries, terms and a lost engine", () => {
+    render(<SecurityPage />);
+    const text = mainText();
+
+    expect(text).not.toContain("left in the file’s own structure");
+    expect(text).not.toContain("strips from the file’s own structure");
+    expect(text).not.toContain("or a term broken up across pages");
+    expect(text).not.toContain("the review then starts over without your ticks");
   });
 
   /** covers: AC-9. No cap, size or price as a number, and no repository. */
