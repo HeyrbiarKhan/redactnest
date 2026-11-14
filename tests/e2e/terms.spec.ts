@@ -258,3 +258,67 @@ test("on the Free plan the panel is locked and points to Pro", async ({ page }) 
   await expect(page.getByTestId("terms-add")).toBeDisabled();
   await expectNoAxeViolations(page);
 });
+
+// As fixed 2026-11-14 (the custom terms review's first Minor), with a real
+// clipboard and a real Ctrl+V: the field is read only while a search runs,
+// yet a list pasted into it is never dropped, and a paste never wipes what
+// was typed (AC-3, AC-19).
+test("a list pasted during a search joins it, and a paste keeps what was typed", async ({
+  page,
+  context,
+}) => {
+  // Each review search waits until the test lets it go, so the paste lands
+  // while one is under way.
+  await page.addInitScript(() => {
+    const held: (() => void)[] = [];
+    let holding = true;
+    const post = Worker.prototype.postMessage as (
+      this: Worker,
+      ...args: unknown[]
+    ) => void;
+    Worker.prototype.postMessage = function (this: Worker, ...args: unknown[]) {
+      if (holding && (args[0] as { kind?: string } | null)?.kind === "find-terms") {
+        held.push(() => post.apply(this, args));
+        return;
+      }
+      post.apply(this, args);
+    } as Worker["postMessage"];
+    (window as unknown as { releaseSearches: () => void }).releaseSearches = () => {
+      holding = false;
+      for (const send of held.splice(0)) send();
+    };
+  });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await answerPlan(page, "paid");
+  await open(page, TEXT_PAGE);
+
+  const field = page.getByRole("textbox", { name: "Add a name, number or phrase" });
+  const status = page.getByTestId("terms-status");
+  const paste = async (text: string) => {
+    await page.evaluate((lines) => navigator.clipboard.writeText(lines), text);
+    await field.focus();
+    await page.keyboard.press("Control+V");
+  };
+
+  await field.fill("Zephyrine Quill");
+  await field.press("Enter");
+  await expect(field).toHaveAttribute("readonly");
+  await paste("Orla Brandt\nTobias Wren");
+
+  await expect(page.getByTestId("term-chip")).toHaveCount(3);
+  await expect(status).toContainText("Searching for 3 terms…");
+
+  await page.evaluate(() =>
+    (window as unknown as { releaseSearches: () => void }).releaseSearches(),
+  );
+  await expect(status).toContainText(
+    "Not found in this document: “Zephyrine Quill”, “Orla Brandt” and “Tobias Wren”.",
+    { timeout: ENGINE_TIMEOUT },
+  );
+  await expect(field).not.toHaveAttribute("readonly");
+
+  await field.fill("Mirela");
+  await paste("Cosmo Vale\nIsolde Marr");
+  await expect(page.getByTestId("term-chip")).toHaveCount(5);
+  await expect(field).toHaveValue("Mirela");
+});

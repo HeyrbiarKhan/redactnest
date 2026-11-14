@@ -276,6 +276,80 @@ describe("the tab's list (AC-3, AC-6)", () => {
   });
 });
 
+/** Each chip's remove button, by its name, in list order. */
+const chipNames = () =>
+  screen
+    .getAllByTestId("term-chip")
+    .map((chip) => within(chip).getByRole("button").getAttribute("aria-label"));
+
+// As fixed 2026-11-14 (the custom terms review's first Minor): a paste is
+// never dropped, and never wipes what was typed.
+describe("a paste (AC-3, AC-19)", () => {
+  it("adds lines pasted during a search at once, and searches them with that search's terms", async () => {
+    const lands: ((found: TermsFound) => void)[] = [];
+    const findTerms = searching(
+      () =>
+        new Promise<TermsFound>((resolve) => {
+          lands.push(resolve);
+        }),
+    );
+    mocks.openSession.mockResolvedValue(session(findTerms));
+    render(<ToolClient />);
+    await choose();
+    await screen.findByTestId("terms-panel");
+
+    await type("Acme Ltd");
+    expect(field()).toHaveAttribute("readonly");
+    paste(["Jane Doe", "Bob Ray"]);
+
+    // Every line is a chip at once, and the search starts again with all
+    // three, so one line will say what each found.
+    expect(chipNames()).toEqual(["Remove Acme Ltd", "Remove Jane Doe", "Remove Bob Ray"]);
+    expect(findTerms).toHaveBeenCalledTimes(2);
+    expect(findTerms.mock.results[0].value.cancel).toHaveBeenCalledTimes(1);
+    const [batch] = findTerms.mock.lastCall ?? [[]];
+    expect(batch.map(({ text }) => text)).toEqual(["Acme Ltd", "Jane Doe", "Bob Ray"]);
+    expect(screen.getByTestId("terms-status")).toHaveTextContent(
+      "Searching for 3 terms…",
+    );
+
+    await act(async () => lands[1]({ terms: batch.map(({ id }) => id), matches: [] }));
+    expect(screen.getByTestId("terms-status")).toHaveTextContent(
+      "Not found in this document: “Acme Ltd”, “Jane Doe” and “Bob Ray”.",
+    );
+    expect(screen.getAllByTestId("term-not-found")).toHaveLength(3);
+  });
+
+  it("names a paste's refusals during a search and leaves that search running", async () => {
+    const findTerms = searching(() => new Promise<TermsFound>(() => {}));
+    mocks.openSession.mockResolvedValue(session(findTerms));
+    render(<ToolClient />);
+    await choose();
+    await screen.findByTestId("terms-panel");
+
+    await type("Acme Ltd");
+    paste(["a", "b"]);
+    expect(screen.getByTestId("terms-status")).toHaveTextContent(
+      "2 not added because they are too short (at least 2 characters): “a” and “b”.",
+    );
+    expect(findTerms).toHaveBeenCalledTimes(1);
+    expect(findTerms.mock.results[0].value.cancel).not.toHaveBeenCalled();
+  });
+
+  it("keeps what was typed in the field when a list is pasted", async () => {
+    render(<ToolClient />);
+    await choose();
+    await screen.findByTestId("terms-panel");
+
+    await userEvent.type(field(), "Acme");
+    paste(["Jane Doe", "Bob Ray"]);
+
+    expect(field()).toHaveValue("Acme");
+    expect(await screen.findAllByTestId("term-chip")).toHaveLength(2);
+    expect(chipNames()).toEqual(["Remove Jane Doe", "Remove Bob Ray"]);
+  });
+});
+
 describe("a job that opened on the Free plan (AC-2, AC-17, AC-18)", () => {
   it("locks the panel, lists the kept terms not searched, and Make waits until set aside", async () => {
     render(<ToolClient />);

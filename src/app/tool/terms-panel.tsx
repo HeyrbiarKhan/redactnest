@@ -70,10 +70,10 @@ interface TermsPanelProps {
  * The field sits in no `form`, has no `name`, and turns off form history,
  * spelling and correction, so the browser keeps no history of a term and
  * sends it to no spelling service (AC-23). Enter or Add adds the field's text
- * as one term; a paste holding a line break adds each line and empties the
- * field (AC-3). The polite line is in the page from the panel's first render,
- * so what a search does and what was refused is heard (AC-1, AC-19); focus
- * never moves when a search lands.
+ * as one term; a paste holding a line break adds each line and leaves the
+ * field as it was (AC-3). The polite line is in the page from the panel's
+ * first render, so what a search does and what was refused is heard (AC-1,
+ * AC-19); focus never moves when a search lands.
  */
 export function TermsPanel({
   terms,
@@ -124,15 +124,18 @@ export function TermsPanel({
     add();
   };
 
+  /**
+   * Spec 0017, AC-3, as fixed 2026-11-14: each line is a term, added at once,
+   * a search under way included (a read only field still hears a paste, and
+   * the lines join that search rather than vanish). What was typed before
+   * the paste stays in the field, never added and never wiped. A closed
+   * field is disabled and hears no paste, so the browser has it.
+   */
   const onPaste = (event: ClipboardEvent<HTMLInputElement>) => {
-    const pasted = event.clipboardData.getData("text");
-    const lines = linesOf(pasted);
-    if (lines.length < 2) return;
-    // Spec 0017, AC-3: each line is a term, and the field ends empty.
+    const lines = linesOf(event.clipboardData.getData("text"));
+    if (closed || lines.length < 2) return;
     event.preventDefault();
-    if (closed || searching) return;
     onAdd(lines);
-    setValue("");
   };
 
   return (

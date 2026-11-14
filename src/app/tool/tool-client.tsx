@@ -820,14 +820,20 @@ export function ToolClient() {
    * rules, the refusals said in the panel's line, and the added terms
    * searched as one batch. Answers whether nothing was refused, so a typed
    * term that was refused stays in the field.
+   *
+   * As fixed 2026-11-14: a paste can arrive while a search runs (the field is
+   * read only then, but still hears it). Its lines are added at once and join
+   * that search: it is cancelled and started again with its own terms still
+   * listed and the added ones, so one line says what they all found and no
+   * landed line is replaced before it is heard (AC-19). Typing cannot reach
+   * here mid search, since Add waits.
    */
   const handleAddTerms = useCallback(
     (lines: readonly string[]): boolean => {
       const live = sessionRef.current;
       if (
         (live.state !== "reviewing" && live.state !== "complete") ||
-        live.entitlement.tier !== "paid" ||
-        searchRef.current !== null
+        live.entitlement.tier !== "paid"
       ) {
         return false;
       }
@@ -842,7 +848,15 @@ export function ToolClient() {
           names: reason === "duplicate" ? repeated : [],
         })),
       );
-      startSearch(result.added);
+      const running = searchRef.current;
+      if (running !== null && result.added.length > 0) {
+        searchRef.current = null;
+        running.search.cancel();
+        const joined = new Set([...running.batch, ...result.added.map(({ id }) => id)]);
+        startSearch(result.list.filter(({ id }) => joined.has(id)));
+      } else {
+        startSearch(result.added);
+      }
       return result.refused.length === 0;
     },
     [setTerms, startSearch],
