@@ -418,11 +418,12 @@ export default function SecurityPage() {
           password (RedactNest does not take passwords), one with layers a viewer can
           switch on and off, and a file in which it finds no page it can read.
         </p>
-        {/* Spec 0004, AC-26 to AC-29; spec 0005, AC-8. */}
+        {/* Spec 0004, AC-26 to AC-29; spec 0005, AC-8. That the row cannot be
+            ticked is said once, under What it finds. */}
         <p>
           Some items cannot be removed safely, such as text set at an angle or inside
           replacement text. Where RedactNest can tell while reading, the row says the item
-          will stay in the file, and it cannot be ticked.
+          will stay in the file.
         </p>
         {/* Spec 0007, AC-14; spec 0004, AC-13 and AC-26, and its *Security
             model* bullets "A document with a text object that is positioned
