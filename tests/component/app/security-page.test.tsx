@@ -149,6 +149,10 @@ describe("the security page", () => {
     ["removedNotCovered", "removed, then marked"],
     ["removedNotCovered", "a change in the engine’s defaults cannot quietly change"],
     ["theCheck", "from the exact bytes you will download"],
+    ["theCheck", "inside each page’s visible area, every character you did not tick"],
+    ["theCheck", "used only as a soft mask, is not checked"],
+    ["theCheck", "identifier, which this check does not look at"],
+    ["removedNotCovered", "used only as a soft mask"],
     ["hiddenData", "automatic actions that are not scripts"],
     ["hiddenData", "keeps that icon as a mark on the page"],
     ["hiddenData", "the cleaned copy carries no restriction"],
@@ -156,6 +160,9 @@ describe("the security page", () => {
     // Specs 0005, 0014, 0015 and 0017: the recorded misses.
     ["whatItFinds", "Names and addresses are not among them"],
     ["whatItFinds", "Arabic, Hebrew or Devanagari, written with different vowel marks"],
+    ["whatItFinds", "except one RedactNest cannot remove safely"],
+    ["whatItFinds", "listed as two rows, one on each page, both unticked"],
+    ["whatItCanMiss", "wrapped at a dot before the @ is found only after the break"],
     [
       "whatItCanMiss",
       "The first three lists are for the details RedactNest finds by itself",
@@ -167,12 +174,20 @@ describe("the security page", () => {
     ["whatItCanMiss", "Smith is not found in SMITHDate"],
     // Specs 0006, 0008 and 0010: pages it cannot read.
     ["pagesItCannotRead", "lean toward saying too much"],
+    ["pagesItCannotRead", "a line of very small print on a legal page"],
+    ["pagesItCannotRead", "they can also miss a case"],
+    ["pagesItCannotRead", "This search can miss some hidden text"],
+    ["pagesItCannotRead", "a shape that wraps around a corner of the page, which stays"],
     ["pagesItCannotRead", "three or more letters or digits over that picture alone"],
     ["pagesItCannotRead", "a scan stored as several pieces"],
     ["pagesItCannotRead", "keeps its hidden part"],
     ["pagesItCannotRead", "Text a clip hides completely stays in the file"],
     // Spec 0004: refusals; specs 0001, 0012 and 0017: the honesty based cap.
     ["whenItStops", "your ticks are kept"],
+    ["whenItStops", "one too damaged to open"],
+    ["whenItStops", "within the same piece of text"],
+    ["whenItStops", "as its own piece of text, the way word processors and browsers"],
+    ["plans", "when you are signed in, our server asks Polar"],
     ["plans", "The page limit relies on honesty"],
     ["plans", "Pro gives you longer documents and custom terms, not a lock"],
     // Spec 0002, *Security model*, as the counts allow; spec 0004, AC-24; C8.
@@ -197,6 +212,30 @@ describe("the security page", () => {
     expect(text).not.toMatch(/support/i);
     expect(text).not.toContain("what anyone redacted");
     expect(text).not.toContain("engine upgrade");
+  });
+
+  /**
+   * covers: AC-5. Words the first verify found claiming more than their
+   * source (2026-11-14): every picture blanked and checked (spec 0004,
+   * INV-15), every footnote mark refusing (spec 0014), every drawing outside
+   * removed (spec 0006, AC-14), warnings that never miss (INV-9), Polar asked
+   * for everyone, every wrapped email, a drawn line as the example, every box
+   * changeable, every damaged file refused, and every unticked character kept.
+   */
+  it("claims no more than its sources for pictures, markers, the trim and the plan", () => {
+    render(<SecurityPage />);
+    const text = mainText();
+
+    expect(text).not.toContain("blanks any picture");
+    expect(text).not.toContain("or a smaller footnote mark straight after one");
+    expect(text).not.toContain("Text and drawings outside");
+    expect(text).not.toContain("the tool says so for that page");
+    expect(text).not.toContain("and our server asks Polar");
+    expect(text).not.toContain("email address wrapped at a dot is found only");
+    expect(text).not.toContain("a very thin line");
+    expect(text).not.toContain("you can change every one");
+    expect(text).not.toContain("a damaged one");
+    expect(text).not.toContain("Text: every character you did not tick");
   });
 
   /** covers: AC-9. No cap, size or price as a number, and no repository. */
