@@ -26,7 +26,7 @@ _Steps derived from spec 0018's acceptance criteria, as ratified on 2026-11-14. 
 
 ## Commands
 
-- [ ] `pnpm exec vitest run tests/component/app/security-page.test.tsx tests/component/ui/cover-figure.test.tsx tests/component/app/site-nav.test.tsx tests/unit/policy-pages.test.ts tests/unit/policy-sections.test.ts tests/unit/policy-changes.test.ts` → all pass, the banned outcome phrases, the AC-7 pins and both verifies' guards among them → AC-1 to AC-9, AC-11
+- [ ] `pnpm exec vitest run tests/component/app/security-page.test.tsx tests/component/ui/cover-figure.test.tsx tests/component/app/site-nav.test.tsx tests/unit/policy-pages.test.ts tests/unit/policy-sections.test.ts tests/unit/policy-changes.test.ts` → all pass, the banned outcome phrases, the AC-7 pins and the three verifies' guards among them → AC-1 to AC-9, AC-11
 - [ ] `pnpm exec playwright test tests/e2e/legal-pages.spec.ts tests/e2e/shell.spec.ts --project=chromium` → all pass → AC-1 to AC-4, AC-6, AC-8 to AC-10
 - [ ] `pnpm typecheck` and `pnpm lint` → clean → AC-11
 
@@ -36,7 +36,7 @@ _Steps derived from spec 0018's acceptance criteria, as ratified on 2026-11-14. 
 - AC-2 … the footer steps, `site-nav.test.tsx` and `shell.spec.ts`
 - AC-3 … the On this page and Last updated steps, and `legal-pages.spec.ts`
 - AC-4 … the Last updated step and `security-page.test.tsx`
-- AC-5 … the four check walk, the coverage table walk, and in `security-page.test.tsx` the banned outcome phrases (whole words, any case) and the guards for both verifies' phrases
+- AC-5 … the four check walk, the coverage table walk, and in `security-page.test.tsx` the banned outcome phrases (whole words, any case) and the guards for the three verifies' phrases
 - AC-6 … the links step, the walk's fourth check, `security-page.test.tsx` (the exact link set) and `legal-pages.spec.ts` (each link lands)
 - AC-7 … the coverage table walk, the sticky note step, and the pins in `security-page.test.tsx`, one per fact on each AC-7 line, each in its section, with the check that no word says memory is wiped or erased
 - AC-8 … the four drawing steps, `cover-figure.test.tsx` and `legal-pages.spec.ts`
@@ -54,3 +54,4 @@ _Steps derived from spec 0018's acceptance criteria, as ratified on 2026-11-14. 
 - The rework: the page rewritten by spec 0018's *Page changes*, items 1 to 42. Two sources differed from what the spec named, and the comments name the item that says it: the box as a filled path is spec 0004's *Decision* bullet "Self check method: compare, never sample", and a picture that cannot be decoded counting as not blank is spec 0004's AC-13, not INV-15. Spec 0004's INV-13 is about the content stream, so item 10 reads "never edits a page's drawing instructions itself": the box pass adds to the page through MuPDF.
 - After the rework, the full chromium browser project passed against one build (453 tests), and Vitest passed but for two stopwatch cases (`cost.test.ts`, `detect-adversarial.test.ts`) that pass alone, as they do on main under the parallel suite (6,705 of 6,705).
 - `legal-pages.spec.ts`'s link landing check now starts each target from a fresh page. With What we do not do linked, two `/privacy` targets come in a row, and the second was a same document hop that a visitor following a link from `/security` never makes.
+- After the third verify (e8066d1): the page's words changed where spec 0018's *Page changes* items 1, 2, 4, 7, 10, 11, 13, 15, 17, 18, 20, 22, 25, 26, 29, 30, 32 to 34, 36 and 39 to 41 now carry a dated as built note. The check's text line names only characters wholly inside the visible area and says one crossing the edge can go (measured: `tests/fixtures/trim-text.pdf`'s "Edge", centred inside, is gone after a run with nothing ticked); the fonts line no longer speaks of order; the untickable row, the OCR line, the notes line and the developer tools step say no more than the code does; and phrases no source states are cut. `security-page.test.tsx` pins the new words and guards the third verify's phrases. Spec 0004's "never their order" is owed on feature 30 in the scope.
