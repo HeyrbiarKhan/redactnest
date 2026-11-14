@@ -147,6 +147,7 @@ describe("the security page", () => {
     ["inYourBrowser", "swap or page files"],
     // Spec 0004: removed, then marked; the check; the stripped extras.
     ["removedNotCovered", "removed, then marked"],
+    ["removedNotCovered", "a change in the engine’s defaults cannot quietly change"],
     ["theCheck", "from the exact bytes you will download"],
     ["hiddenData", "automatic actions that are not scripts"],
     ["hiddenData", "keeps that icon as a mark on the page"],
@@ -154,6 +155,12 @@ describe("the security page", () => {
     ["hiddenData", "never which words they made or in what order"],
     // Specs 0005, 0014, 0015 and 0017: the recorded misses.
     ["whatItFinds", "Names and addresses are not among them"],
+    ["whatItFinds", "Arabic, Hebrew or Devanagari, written with different vowel marks"],
+    [
+      "whatItCanMiss",
+      "The first three lists are for the details RedactNest finds by itself",
+    ],
+    ["whatItCanMiss", "so those limits are not its own"],
     ["whatItCanMiss", "split across two blocks of text"],
     ["whatItCanMiss", "in UK or US national format"],
     ["whatItCanMiss", "with month names in English"],
@@ -167,12 +174,29 @@ describe("the security page", () => {
     // Spec 0004: refusals; specs 0001, 0012 and 0017: the honesty based cap.
     ["whenItStops", "your ticks are kept"],
     ["plans", "The page limit relies on honesty"],
-    // Spec 0004, AC-24, and claim C8.
+    ["plans", "Pro gives you longer documents and custom terms, not a lock"],
+    // Spec 0002, *Security model*, as the counts allow; spec 0004, AC-24; C8.
+    ["logsAndCounts", "nothing records your documents or the words anyone redacted"],
     ["logsAndCounts", "Our own code writes no log"],
   ] as const)("names in %s: %s", (section, phrase) => {
     render(<SecurityPage />);
 
     expect(sectionText(SECURITY_SECTIONS[section])).toContain(phrase);
+  });
+
+  /**
+   * covers: AC-5. Words that once claimed more than the code or Pricing
+   * supports: Pro promises no support, the counts do record removals by kind,
+   * and spelling out the engine's settings guards only against changed
+   * defaults.
+   */
+  it("claims no support, no unrecorded redactions and no upgrade proofing", () => {
+    render(<SecurityPage />);
+    const text = mainText();
+
+    expect(text).not.toMatch(/support/i);
+    expect(text).not.toContain("what anyone redacted");
+    expect(text).not.toContain("engine upgrade");
   });
 
   /** covers: AC-9. No cap, size or price as a number, and no repository. */

@@ -156,8 +156,9 @@ export default function SecurityPage() {
         {/* Spec 0004, *The three passes* and INV-13. */}
         <p>
           MuPDF does the removing, with every setting spelled out rather than left to its
-          defaults, so an engine upgrade cannot quietly change what is removed. RedactNest
-          never rewrites a page itself: what MuPDF cannot remove, it refuses.
+          defaults, so a change in the engine’s defaults cannot quietly change what is
+          removed. RedactNest never rewrites a page itself: what MuPDF cannot remove, it
+          refuses.
         </p>
       </section>
 
@@ -279,9 +280,10 @@ export default function SecurityPage() {
           A custom term finds its words whatever their case, through accents on Latin,
           Greek and Cyrillic letters, ligatures, extra spacing, line breaks and a word
           split by a hyphen at the end of a line. A match of the whole word starts ticked.
-          Others, such as the term joined to other text or written with different spacing,
-          are listed unticked with a note saying why. Like your document, your terms stay
-          on your device (see{" "}
+          Others are listed unticked with a note saying why: the term joined to other
+          text, written with different spacing, or, in scripts such as Arabic, Hebrew or
+          Devanagari, written with different vowel marks. Like your document, your terms
+          stay on your device (see{" "}
           <a href={privacy("yourDocuments")}>{PRIVACY_SECTIONS.yourDocuments}</a>).
         </p>
       </section>
@@ -289,10 +291,15 @@ export default function SecurityPage() {
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="whatItCanMiss" />
         {/* Specs 0005, 0014 and 0015, *Consequences* and *Follow-up*. */}
+        {/* Spec 0017, AC-8 and AC-9: a term crosses line and block breaks and a
+            line end hyphen, so the first three lists are not its limits. */}
         <p>
-          These are limits we have measured and recorded. Most are values that are not
-          found, or not found whole, so look over the document as well as what was found
-          and ticked.
+          These are limits we have measured and recorded. The first three lists are for
+          the details RedactNest finds by itself. A custom term reads across line breaks,
+          blocks of text such as columns, and a hyphen at the end of a line, so those
+          limits are not its own: its misses are the last list. Most are values that are
+          not found, or not found whole, so look over the document as well as what was
+          found and ticked.
         </p>
 
         <h3>Anywhere in a page</h3>
@@ -475,13 +482,15 @@ export default function SecurityPage() {
           .
         </p>
         {/* Spec 0001, *Consequences* (the paywall is not enforceable); spec 0012,
-         *Consequences*; spec 0017, *Consequences* (the same gate for terms). */}
+         *Consequences*, and INV-8 (only what Pro does today: the higher page cap,
+         and custom terms since spec 0017); spec 0017, *Consequences* (the same
+         gate for terms). */}
         <p>
           The page limit relies on honesty. It is applied in your own browser, by code
           anyone can read, so someone determined could lift it. The limit decides how long
           a document may be and nothing else, and it plays no part in keeping your
-          document private. Pro pays for convenience and support, not a lock, and custom
-          terms are switched on the same way.
+          document private. Pro gives you longer documents and custom terms, not a lock,
+          and custom terms rely on honesty in the same way.
         </p>
       </section>
 
@@ -489,8 +498,8 @@ export default function SecurityPage() {
         <SectionHeading sections={SECURITY_SECTIONS} name="logsAndCounts" />
         {/* Spec 0002, *Security model* (audit logging, stated plainly). */}
         <p>
-          On purpose, nothing records your documents or what anyone redacted, because such
-          a record would recreate the very exposure RedactNest exists to remove.
+          On purpose, nothing records your documents or the words anyone redacted, because
+          such a record would recreate the very exposure RedactNest exists to remove.
         </p>
         {/* Claim C8; spec 0004, AC-24 (MuPDF's lines discarded); claim C10 linked. */}
         <p>
