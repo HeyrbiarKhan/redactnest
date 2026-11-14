@@ -405,10 +405,10 @@ The page that closes the sale for HR, legal and healthcare buyers: what in memor
 **Also owed here:** what the counts and error reports hold, and what they never hold (spec 0016), linking claims C14 to C16 rather than restating them.
 spec [0018](../specs/0018-security-page/index.md) (ratified 2026-11-14: one claim rule in AC-5, limits stated broadly; spec 0013's AC-8 now names the footer link) · code in `src/app/security/page.tsx`, `src/ui/cover-figure.tsx`, `src/app/site-nav.tsx` (the footer's Security link), `src/lib/policy-sections.ts` and `src/lib/policy-changes.ts`
 - [x] Build it: `/develop security & how it works page`
-- [ ] Rework it to the ratified spec: `/develop security & how it works page`
-  - [ ] The page's words by spec 0018's *Page changes*, items 1 to 42, every source comment in AC-5's order · AC-5, AC-6, AC-7
-  - [ ] The tests: the banned outcome phrases, one pin per AC-7 line, the What we do not do link, the second verify's phrases; the browser and unit suites still green · AC-1 to AC-11
-  - [ ] `verify.md`'s claim walk to the coverage table, and the change entry dated the day it merges · AC-3, AC-5, AC-7
+- [x] Rework it to the ratified spec: `/develop security & how it works page`
+  - [x] The page's words by spec 0018's *Page changes*, items 1 to 42, every source comment in AC-5's order · AC-5, AC-6, AC-7
+  - [x] The tests: the banned outcome phrases, one pin per AC-7 line, the What we do not do link, the second verify's phrases; the browser and unit suites still green · AC-1 to AC-11
+  - [x] `verify.md`'s claim walk to the coverage table, and the change entry dated the day it merges (2026-11-14; `verify.md`'s *Before merge* moves it if the merge falls later) · AC-3, AC-5, AC-7
 - [ ] Verify it: `/check verify security & how it works page`
 - [ ] Review it (fresh model): `/check review security & how it works page`
 
