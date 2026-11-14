@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import {
+  EngineFailure,
   openDocumentWith,
   redactDocumentWith,
   silenceEngineLog,
@@ -309,6 +310,49 @@ describe("removing term rows (AC-21)", () => {
     expect(text).toContain("on the first of May.");
     expect(text).not.toContain("Ltd on the first of May.");
   });
+
+  /**
+   * AC-21: a joined row ticked by hand either goes with the word it is glued
+   * to left whole, or the run is refused as overreach and no file leaves.
+   * Never a third way: the glued word never loses a character. Read back with
+   * the test's own reader, apart from the engine's self check.
+   */
+  it(
+    "removes a joined row ticked alone with its glued neighbour kept, or refuses the run as overreach",
+    { timeout: 240_000 },
+    async () => {
+      const found = await search("terms.pdf", ["Smith", "0958"]);
+      const joined = found.filter((match) => match.termNotes.includes("joined"));
+      // JohnSmith, SmithDate, 0958Mobile, Smith2026 and SmithJones.
+      expect(joined).toHaveLength(5);
+      const original = documentText(fixture("terms.pdf"));
+      const count = (text: string, part: string) => text.split(part).length - 1;
+
+      for (const match of joined) {
+        const glueBefore = /[\p{L}\p{N}]+$/u.exec(match.before)?.[0] ?? "";
+        const glueAfter = /^[\p{L}\p{N}]+/u.exec(match.after)?.[0] ?? "";
+        const word = `${glueBefore}${match.text}${glueAfter}`;
+        expect(word, "a joined row is glued at one edge at least").not.toBe(match.text);
+
+        let output: ArrayBuffer;
+        try {
+          ({ output } = await redact("terms.pdf", [match.target!]));
+        } catch (failure) {
+          expect(failure).toBeInstanceOf(EngineFailure);
+          expect((failure as EngineFailure).errorKind).toBe("redaction-overreach");
+          continue;
+        }
+
+        const text = documentText(output);
+        expect(count(text, word), word).toBe(count(original, word) - 1);
+        for (const neighbour of [glueBefore, glueAfter].filter((part) => part !== "")) {
+          expect(count(text, neighbour), `${neighbour} in ${word}`).toBe(
+            count(original, neighbour),
+          );
+        }
+      }
+    },
+  );
 
   it("removes a term inside an address with the address, each counted once", async () => {
     const found = await search("sample-agreement.pdf", ["Morgan"]);

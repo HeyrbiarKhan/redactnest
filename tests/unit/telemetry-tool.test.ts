@@ -10,10 +10,12 @@ import { parseTelemetryEvent } from "@/telemetry/events";
 import { toolEvents } from "@/telemetry/tool";
 import {
   asMatchId,
+  asTermId,
   type DocumentSummary,
   type EntitlementSnapshot,
   type RedactionOutcome,
   type ReviewMatch,
+  type TermId,
 } from "@/worker/protocol";
 
 /**
@@ -331,6 +333,135 @@ describe("what an event can hold", () => {
       expect(parseTelemetryEvent(JSON.parse(JSON.stringify(event)))).toEqual(event);
       const text = JSON.stringify(event);
       for (const leak of ["Jane", "passport", "secret-", "example.com", "Doe"]) {
+        expect(text).not.toContain(leak);
+      }
+    }
+  });
+});
+
+/**
+ * Spec 0017, AC-24. `term` is one more kind in the by kind fields, and
+ * `redaction-completed` counts the terms searched and set aside, each a
+ * `Bucket`: never a term, a `TermId` or a per term count.
+ */
+describe("custom terms (spec 0017)", () => {
+  // Ids a leak would show, unlike anything an event may hold.
+  const ACME = asTermId("term-id-acme-7f3a");
+  const JANE = asTermId("term-id-jane-91c2");
+  const ZED = asTermId("term-id-zed-0b44");
+
+  const termRow = (id: string, term: TermId): ReviewMatch => ({
+    ...match(id, "term"),
+    term,
+  });
+
+  const TERM_OUTCOME: RedactionOutcome = {
+    pageCount: 4,
+    removedByType: { email: 1, term: 3 },
+    pagesByFinding: {},
+    sanitized: [],
+  };
+
+  /** A paid job that opened with two kept terms found, then one search failed and was set aside. */
+  const withTerms = () =>
+    run(IDLE, {
+      type: "file-chosen",
+      jobId: "job-1",
+      file: FILE,
+      entitlement: PAID,
+      terms: [ACME, JANE],
+    });
+  const openedWithTerms = () =>
+    run(withTerms(), {
+      type: "opened",
+      summary: SUMMARY,
+      matches: [
+        match("e", "email"),
+        termRow("a1", ACME),
+        termRow("a2", ACME),
+        termRow("j1", JANE),
+      ],
+    });
+  const setAside = () =>
+    run(
+      openedWithTerms(),
+      { type: "terms-searching", jobId: "job-1", terms: [ZED] },
+      { type: "terms-failed", jobId: "job-1", terms: [ZED] },
+      { type: "terms-set-aside", jobId: "job-1", terms: [ZED] },
+    );
+
+  it("counts the kept list's rows found at open under term", () => {
+    const [event] = toolEvents(withTerms(), openedWithTerms());
+    expect(event).toMatchObject({
+      name: "document-opened",
+      found: { email: "1", term: "2-5" },
+    });
+  });
+
+  it("sends nothing when a review search lands, since document-opened counts only the open", () => {
+    const searching = run(openedWithTerms(), {
+      type: "terms-searching",
+      jobId: "job-1",
+      terms: [ZED],
+    });
+    const found = run(searching, {
+      type: "terms-found",
+      jobId: "job-1",
+      terms: [ZED],
+      matches: [termRow("z1", ZED)],
+    });
+    expect(toolEvents(openedWithTerms(), searching)).toEqual([]);
+    expect(toolEvents(searching, found)).toEqual([]);
+  });
+
+  it("counts what was removed and left under term, and the terms searched and set aside", () => {
+    const start = run(
+      setAside(),
+      { type: "tick-toggled", id: asMatchId("a2") },
+      { type: "redact-started" },
+    );
+    const complete = run(start, {
+      type: "redacted",
+      outcome: TERM_OUTCOME,
+      removedByTerm: [
+        { term: ACME, removed: 1 },
+        { term: JANE, removed: 1 },
+      ],
+    });
+
+    expect(toolEvents(start, complete)).toEqual([
+      {
+        name: "redaction-completed",
+        removed: { email: "1", term: "2-5" },
+        unticked: { term: "1" },
+        blockedByKind: {},
+        blockedByReason: {},
+        stripped: [],
+        terms: "2-5",
+        termsSetAside: "1",
+        tier: "paid",
+        account: "signed-in",
+      },
+    ]);
+  });
+
+  it("parses, and holds no term id and no per term count", () => {
+    const start = run(setAside(), { type: "redact-started" });
+    const complete = run(start, {
+      type: "redacted",
+      outcome: TERM_OUTCOME,
+      removedByTerm: [{ term: ACME, removed: 2 }],
+    });
+    const events = [
+      ...toolEvents(withTerms(), openedWithTerms()),
+      ...toolEvents(start, complete),
+    ];
+
+    expect(events).toHaveLength(2);
+    for (const event of events) {
+      expect(parseTelemetryEvent(JSON.parse(JSON.stringify(event)))).toEqual(event);
+      const text = JSON.stringify(event);
+      for (const leak of ["term-id-", "secret-", "removedByTerm"]) {
         expect(text).not.toContain(leak);
       }
     }

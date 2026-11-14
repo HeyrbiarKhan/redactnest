@@ -11,15 +11,29 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { ReviewChecklist } from "@/app/tool/review-checklist";
+import {
+  ReviewChecklist,
+  type TermGroupActions,
+  type TermGroupTerm,
+} from "@/app/tool/review-checklist";
 import {
   BLOCKED_REASON_TEXT,
   COVERAGE_NOTE,
   COVERAGE_NOTE_PARTLY,
+  coverageNoteWithTerms,
   NOTHING_FOUND,
   NOTHING_FOUND_PARTLY,
+  TERM_NOTE_TEXT,
 } from "@/lib/detectors";
-import { asMatchId, type MatchId, type ReviewMatch } from "@/worker/protocol";
+import { TERMS_TEXT } from "@/lib/flow-text";
+import type { TermState } from "@/lib/session";
+import {
+  asMatchId,
+  asTermId,
+  type MatchId,
+  type ReviewMatch,
+  type TermId,
+} from "@/worker/protocol";
 
 import { expectNoAxeViolations } from "../setup/component";
 
@@ -521,5 +535,376 @@ describe("select all", () => {
       await expectNoAxeViolations(container);
       unmount();
     }
+  });
+});
+
+/**
+ * Spec 0017, AC-14 to AC-17. One group per term this job knows, in the list's
+ * order and before the detector groups; a group with no rows says why, with
+ * its ways on. The page's wiring of these handlers is proved in
+ * `tests/component/terms-flow.test.tsx`.
+ */
+describe("custom term groups (spec 0017)", () => {
+  const ACME = asTermId("acme");
+  const JANE = asTermId("jane");
+
+  const SEARCHED: TermState = { state: "searched" };
+
+  function termRow(
+    id: string,
+    term: TermId,
+    text: string,
+    overrides: Partial<ReviewMatch> = {},
+  ): ReviewMatch {
+    return match(id, "term", text, { term, ...overrides });
+  }
+
+  function actions(overrides: Partial<TermGroupActions> = {}): TermGroupActions {
+    return {
+      onSetAside: vi.fn(),
+      onRemove: vi.fn(),
+      onTryAgain: vi.fn(),
+      onRecheck: vi.fn(),
+      searching: false,
+      ...overrides,
+    };
+  }
+
+  function showTerms(options: {
+    terms: readonly TermGroupTerm[];
+    matches?: readonly ReviewMatch[];
+    ticked?: readonly MatchId[];
+    running?: boolean;
+    partly?: boolean;
+    termActions?: TermGroupActions;
+  }) {
+    const matches = options.matches ?? [];
+    return render(
+      <ReviewChecklist
+        matches={matches}
+        ticked={new Set(options.ticked ?? matches.map(({ id }) => id))}
+        running={options.running ?? false}
+        partly={options.partly ?? false}
+        onToggle={() => {}}
+        onTicksSet={() => {}}
+        terms={options.terms}
+        termActions={options.termActions}
+      />,
+    );
+  }
+
+  const summaries = (container: HTMLElement) =>
+    groups(container).map((group) => group.querySelector("summary")?.textContent);
+
+  it("lists each term's group in the list's order, before the detector groups, headed as typed (AC-14)", () => {
+    const { container } = showTerms({
+      terms: [
+        { id: JANE, text: "Jane Doe", state: SEARCHED },
+        { id: ACME, text: "Acme Ltd", state: SEARCHED },
+      ],
+      matches: [
+        match("e1", "email", "jane@example.com"),
+        termRow("a1", ACME, "Acme Ltd"),
+        termRow("j1", JANE, "Jane Doe"),
+        termRow("a2", ACME, "ACME LTD", { page: 2 }),
+      ],
+    });
+
+    expect(summaries(container)).toEqual([
+      "Jane Doe1 match",
+      "Acme Ltd2 matches",
+      "Email addresses1 email address",
+    ]);
+  });
+
+  it("counts a blocked row in its group, and offers select all only once two rows can be ticked (AC-14)", () => {
+    const blocked = termRow("a2", ACME, "Acme Ltd", {
+      blocked: "replacement-text",
+      tickedByDefault: false,
+    });
+    const terms = [{ id: ACME, text: "Acme Ltd", state: SEARCHED }];
+    const { container, unmount } = showTerms({
+      terms,
+      matches: [termRow("a1", ACME, "Acme Ltd"), blocked],
+    });
+
+    expect(summaries(container)).toEqual(["Acme Ltd2 matches"]);
+    expect(screen.queryByRole("checkbox", { name: /^Select all/ })).toBeNull();
+    unmount();
+
+    showTerms({
+      terms,
+      matches: [
+        termRow("a1", ACME, "Acme Ltd"),
+        blocked,
+        termRow("a3", ACME, "Acme Ltd", { page: 3 }),
+      ],
+    });
+    expect(
+      screen.getByRole("checkbox", { name: "Select all 2 matches" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId(`select-all-term-${ACME}`)).toBeInTheDocument();
+  });
+
+  it("describes a noted row by each of its notes, in TERM_NOTE_TEXT's words (AC-11, AC-14)", () => {
+    showTerms({
+      terms: [{ id: ACME, text: "Acme Ltd", state: SEARCHED }],
+      matches: [
+        termRow("a1", ACME, "AcmeLtd", {
+          tickedByDefault: false,
+          termNotes: ["joined", "page-break"],
+        }),
+      ],
+      ticked: [],
+    });
+
+    const box = screen.getByRole("checkbox", { name: "AcmeLtd" });
+    expect(box).not.toBeChecked();
+    expect(box).toHaveAccessibleDescription(
+      expect.stringContaining(TERM_NOTE_TEXT.joined),
+    );
+    expect(box).toHaveAccessibleDescription(
+      expect.stringContaining(TERM_NOTE_TEXT["page-break"]),
+    );
+  });
+
+  it("says a searched term with no rows was not found in this document (AC-15)", () => {
+    showTerms({ terms: [{ id: ACME, text: "Acme Ltd", state: SEARCHED }] });
+
+    expect(screen.getByTestId("term-not-found")).toHaveTextContent(
+      "Not found in this document",
+    );
+  });
+
+  it("speaks only for the pages RedactNest could read when some page carries a warning (AC-15)", () => {
+    showTerms({ terms: [{ id: ACME, text: "Acme Ltd", state: SEARCHED }], partly: true });
+
+    expect(screen.getByTestId("term-not-found")).toHaveTextContent(
+      "Not found on the pages RedactNest could read",
+    );
+  });
+
+  it("says a term is still being searched", () => {
+    showTerms({ terms: [{ id: ACME, text: "Acme Ltd", state: { state: "searching" } }] });
+
+    expect(screen.getByTestId("term-searching")).toHaveTextContent(TERMS_TEXT.searching);
+    expect(screen.queryByTestId("term-not-found")).toBeNull();
+  });
+
+  it("offers Try again, Set aside and Remove for a failed search, each handed the term (AC-17)", async () => {
+    const ways = actions();
+    showTerms({
+      terms: [
+        {
+          id: ACME,
+          text: "Acme Ltd",
+          state: { state: "not-searched", reason: "search-failed" },
+        },
+      ],
+      termActions: ways,
+    });
+    const user = userEvent.setup();
+
+    expect(screen.getByTestId("term-not-searched")).toHaveTextContent(
+      "Not searched: the search could not finish.",
+    );
+    expect(screen.queryByTestId("term-recheck")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await user.click(screen.getByRole("button", { name: "Set aside for this file" }));
+    await user.click(screen.getByRole("button", { name: "Remove Acme Ltd" }));
+
+    expect(ways.onTryAgain).toHaveBeenCalledWith(ACME);
+    expect(ways.onSetAside).toHaveBeenCalledWith(ACME);
+    expect(ways.onRemove).toHaveBeenCalledWith(ACME);
+  });
+
+  it("offers Check my plan for a Free plan term only where the account offers it, and never Try again (AC-2, AC-17)", async () => {
+    const terms = [
+      {
+        id: ACME,
+        text: "Acme Ltd",
+        state: { state: "not-searched", reason: "free-plan" } as const,
+      },
+    ];
+    const ways = actions();
+    const { unmount } = showTerms({ terms, termActions: ways });
+
+    expect(screen.getByTestId("term-not-searched")).toHaveTextContent(
+      "Not searched: this file opened on the Free plan.",
+    );
+    expect(screen.queryByTestId("term-try-again")).toBeNull();
+    await userEvent.setup().click(screen.getByTestId("term-recheck"));
+    expect(ways.onRecheck).toHaveBeenCalledTimes(1);
+    unmount();
+
+    showTerms({ terms, termActions: actions({ onRecheck: null }) });
+    expect(screen.queryByTestId("term-recheck")).toBeNull();
+    expect(screen.getByTestId("term-set-aside")).toBeInTheDocument();
+  });
+
+  it("holds Try again busy while another search runs, so one search runs at a time (AC-19)", async () => {
+    const ways = actions({ searching: true });
+    showTerms({
+      terms: [
+        {
+          id: ACME,
+          text: "Acme Ltd",
+          state: { state: "not-searched", reason: "search-failed" },
+        },
+      ],
+      termActions: ways,
+    });
+
+    const tryAgain = screen.getByTestId("term-try-again");
+    expect(tryAgain).toHaveAttribute("aria-disabled", "true");
+    await userEvent.setup().click(tryAgain);
+    expect(ways.onTryAgain).not.toHaveBeenCalled();
+    // Remove stays live while a search runs (AC-19).
+    expect(screen.getByRole("button", { name: "Remove Acme Ltd" })).toBeEnabled();
+  });
+
+  it("says a set aside term was not searched and why, and offers only Remove (AC-17)", () => {
+    showTerms({
+      terms: [
+        {
+          id: ACME,
+          text: "Acme Ltd",
+          state: { state: "set-aside", reason: "search-failed" },
+        },
+      ],
+      termActions: actions(),
+    });
+
+    expect(screen.getByTestId("term-set-aside")).toHaveTextContent(
+      "Set aside: not searched in this file because the search could not finish.",
+    );
+    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Remove Acme Ltd",
+    ]);
+  });
+
+  it("disables every way on while a run is under way (AC-1)", () => {
+    showTerms({
+      terms: [
+        {
+          id: ACME,
+          text: "Acme Ltd",
+          state: { state: "not-searched", reason: "search-failed" },
+        },
+        {
+          id: JANE,
+          text: "Jane Doe",
+          state: { state: "not-searched", reason: "free-plan" },
+        },
+      ],
+      termActions: actions(),
+      running: true,
+    });
+
+    for (const button of screen.getAllByRole("button")) expect(button).toBeDisabled();
+  });
+
+  it("shows Nothing found only when no row of any kind exists (AC-14)", () => {
+    const { unmount } = showTerms({
+      terms: [{ id: ACME, text: "Acme Ltd", state: SEARCHED }],
+      matches: [termRow("a1", ACME, "Acme Ltd")],
+    });
+    expect(screen.queryByText(NOTHING_FOUND.title)).toBeNull();
+    unmount();
+
+    showTerms({ terms: [{ id: ACME, text: "Acme Ltd", state: SEARCHED }] });
+    expect(screen.getByText(NOTHING_FOUND.title)).toBeInTheDocument();
+    expect(screen.getByTestId("term-not-found")).toBeInTheDocument();
+  });
+
+  describe("the coverage note (AC-16)", () => {
+    const coverage = () => screen.getByTestId("coverage");
+
+    it("names one searched term without a count", () => {
+      showTerms({ terms: [{ id: ACME, text: "Acme Ltd", state: SEARCHED }] });
+
+      expect(coverage()).toHaveTextContent(coverageNoteWithTerms(1, false));
+      expect(coverage()).toHaveTextContent(/and your custom term\. Anything else/);
+    });
+
+    it("names the searched terms by count, and counts only those searched", () => {
+      showTerms({
+        terms: [
+          { id: ACME, text: "Acme Ltd", state: SEARCHED },
+          { id: JANE, text: "Jane Doe", state: SEARCHED },
+          {
+            id: asTermId("zed"),
+            text: "Zed Corp",
+            state: { state: "set-aside", reason: "search-failed" },
+          },
+        ],
+      });
+
+      expect(coverage()).toHaveTextContent(coverageNoteWithTerms(2, false));
+      expect(coverage()).toHaveTextContent("your 2 custom terms");
+    });
+
+    it("speaks only for the pages it could read when some page carries a warning", () => {
+      showTerms({
+        terms: [{ id: ACME, text: "Acme Ltd", state: SEARCHED }],
+        partly: true,
+      });
+
+      expect(coverage()).toHaveTextContent(coverageNoteWithTerms(1, true));
+    });
+
+    it("stays the detectors' note while no term has been searched", () => {
+      const { unmount } = showTerms({
+        terms: [{ id: ACME, text: "Acme Ltd", state: { state: "searching" } }],
+      });
+      expect(coverage()).toHaveTextContent(COVERAGE_NOTE);
+      unmount();
+
+      showTerms({
+        terms: [
+          {
+            id: ACME,
+            text: "Acme Ltd",
+            state: { state: "not-searched", reason: "free-plan" },
+          },
+        ],
+        partly: true,
+      });
+      expect(coverage()).toHaveTextContent(COVERAGE_NOTE_PARTLY);
+    });
+  });
+
+  it("passes axe with a term's rows, a note, and each state a group with no rows takes", async () => {
+    const { container } = showTerms({
+      terms: [
+        { id: ACME, text: "Acme Ltd", state: SEARCHED },
+        { id: JANE, text: "Jane Doe", state: SEARCHED },
+        { id: asTermId("s"), text: "Searching", state: { state: "searching" } },
+        {
+          id: asTermId("f"),
+          text: "Failed",
+          state: { state: "not-searched", reason: "search-failed" },
+        },
+        {
+          id: asTermId("p"),
+          text: "Free",
+          state: { state: "not-searched", reason: "free-plan" },
+        },
+        {
+          id: asTermId("a"),
+          text: "Aside",
+          state: { state: "set-aside", reason: "free-plan" },
+        },
+      ],
+      matches: [
+        termRow("a1", ACME, "Acme Ltd"),
+        termRow("a2", ACME, "AcmeLtd", { tickedByDefault: false, termNotes: ["joined"] }),
+      ],
+      ticked: [asMatchId("a1")],
+      termActions: actions(),
+    });
+
+    await expectNoAxeViolations(container);
   });
 });

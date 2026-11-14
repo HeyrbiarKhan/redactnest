@@ -13,12 +13,14 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToolClient } from "@/app/tool/tool-client";
+import { offerDownload } from "@/lib/download";
 import {
   asMatchId,
   EngineError,
   type DocumentSummary,
   type EntitlementSnapshot,
   type ReviewMatch,
+  type TermId,
   type TermQuery,
 } from "@/worker/protocol";
 import type { OpenedSession, TermSearch, TermsFound } from "@/worker/client";
@@ -624,5 +626,185 @@ describe("the polite line names only listed terms (AC-19)", () => {
     await press(chipRemove("Term number 0"));
     expect(screen.getAllByTestId("term-chip")).toHaveLength(49);
     expect(status).toHaveTextContent(full);
+  });
+});
+
+/**
+ * Spec 0017, AC-1, AC-19, AC-21 and AC-22: a run over term rows, what the
+ * result card says for each term, and the review a new term brings back. The
+ * engine's removal is proved in `tests/unit/terms-engine.test.ts`; here the
+ * worker's answer is the boundary.
+ */
+describe("a run over term rows (AC-1, AC-19, AC-21, AC-22)", () => {
+  const OUTPUT = new ArrayBuffer(8);
+
+  /** The id the page minted for each term, read from the batches it sent. */
+  let minted: Map<string, TermId>;
+
+  function idOf(text: string): TermId {
+    const id = minted.get(text);
+    if (id === undefined) throw new Error(`never searched ${text}`);
+    return id;
+  }
+
+  function termRow(
+    id: string,
+    term: TermId,
+    overrides: Partial<ReviewMatch>,
+  ): ReviewMatch {
+    return Object.freeze({
+      ...EMAIL,
+      id: asMatchId(id),
+      type: "term",
+      term,
+      ...overrides,
+    });
+  }
+
+  /** What each term finds: Acme twice exactly and once joined, Jane once and once blocked. */
+  const ROWS: Readonly<Record<string, (term: TermId) => readonly ReviewMatch[]>> = {
+    "Acme Ltd": (term) => [
+      termRow("a1", term, { text: "Acme Ltd" }),
+      termRow("a2", term, { text: "ACME LTD", page: 2 }),
+      termRow("a3", term, {
+        text: "AcmeLtd",
+        tickedByDefault: false,
+        termNotes: Object.freeze(["joined"] as const),
+      }),
+    ],
+    "Jane Doe": (term) => [
+      termRow("j1", term, { text: "Jane Doe" }),
+      termRow("j2", term, {
+        text: "J. Doe",
+        tickedByDefault: false,
+        blocked: "replacement-text",
+      }),
+    ],
+  };
+
+  /** Rows by `ROWS`; a batch holding Zed Corp fails, as a worker error would. */
+  const findTerms = () =>
+    searching((batch) => {
+      for (const { id, text } of batch) minted.set(text, id);
+      if (batch.some(({ text }) => text === "Zed Corp")) {
+        return Promise.reject(new EngineError("unsupported"));
+      }
+      return Promise.resolve({
+        terms: batch.map(({ id }) => id),
+        matches: batch.flatMap(({ id, text }) => ROWS[text]?.(id) ?? []),
+      });
+    });
+
+  function withRedact(redact: OpenedSession["redact"]): OpenedSession {
+    return { ...session(findTerms()), redact };
+  }
+
+  beforeEach(() => {
+    minted = new Map();
+  });
+
+  it("names each term's removed and left counts in list order, and each set aside term", async () => {
+    // The engine reports per term in its own order; the card follows the list.
+    const redact = vi.fn<OpenedSession["redact"]>(async () => ({
+      output: OUTPUT,
+      outcome: {
+        pageCount: 2,
+        removedByType: { term: 3 },
+        pagesByFinding: {},
+        sanitized: [],
+      },
+      removedByTerm: [
+        { term: idOf("Jane Doe"), removed: 1 },
+        { term: idOf("Acme Ltd"), removed: 2 },
+      ],
+    }));
+    mocks.openSession.mockResolvedValue(withRedact(redact));
+    render(<ToolClient />);
+    await choose();
+    await screen.findByTestId("terms-panel");
+
+    paste(["Acme Ltd", "Jane Doe"]);
+    await screen.findByRole("checkbox", { name: "AcmeLtd" });
+    await type("Zed Corp");
+    await userEvent.click(await screen.findByTestId("term-set-aside"));
+
+    await userEvent.click(screen.getByTestId("redact"));
+    const result = await screen.findByTestId("result");
+
+    // Only the exact, unblocked rows were asked for (AC-21, INV-4).
+    expect(redact.mock.lastCall?.[0]).toEqual(
+      expect.arrayContaining([asMatchId("a1"), asMatchId("a2"), asMatchId("j1")]),
+    );
+    expect(redact.mock.lastCall?.[0]).toHaveLength(3);
+
+    // AC-21: a run that removed only term rows is redacted, never cleaned.
+    expect(
+      within(result).getByRole("heading", { name: "Your redacted file is ready" }),
+    ).toBeInTheDocument();
+    const outcome = screen.getByTestId("outcome");
+    expect(outcome).toHaveTextContent(
+      "Removed2 matches for “Acme Ltd” and 1 match for “Jane Doe”",
+    );
+    expect(outcome).toHaveTextContent(
+      "Left in the file1 match for “Acme Ltd” you left unticked. 1 match for “Jane Doe” RedactNest couldn't remove.",
+    );
+    expect(outcome).toHaveTextContent(
+      "Not searched“Zed Corp”, set aside because the search could not finish",
+    );
+
+    await userEvent.click(screen.getByTestId("download"));
+    expect(offerDownload).toHaveBeenCalledWith(OUTPUT, "lease-redacted.pdf");
+  });
+
+  it("disables the field, Add and every remove while a run is under way (AC-1)", async () => {
+    mocks.openSession.mockResolvedValue(
+      withRedact(vi.fn<OpenedSession["redact"]>(() => new Promise(() => {}))),
+    );
+    render(<ToolClient />);
+    await choose();
+    await screen.findByTestId("terms-panel");
+    paste(["Acme Ltd", "Jane Doe"]);
+    await screen.findByRole("checkbox", { name: "AcmeLtd" });
+
+    await userEvent.click(screen.getByTestId("redact"));
+
+    const panel = screen.getByTestId("terms-panel");
+    expect(field()).toBeDisabled();
+    expect(within(panel).getByRole("button", { name: "Add" })).toBeDisabled();
+    expect(
+      within(panel).getByRole("button", { name: "Remove all terms" }),
+    ).toBeDisabled();
+    expect(chipRemove("Acme Ltd")).toBeDisabled();
+    expect(chipRemove("Jane Doe")).toBeDisabled();
+  });
+
+  it("brings the review back when a term is added after a copy is made, and the next run includes it (AC-19)", async () => {
+    const redact = vi.fn<OpenedSession["redact"]>(async () => ({
+      output: OUTPUT,
+      outcome: {
+        pageCount: 2,
+        removedByType: { term: 2 },
+        pagesByFinding: {},
+        sanitized: [],
+      },
+      removedByTerm: [{ term: idOf("Acme Ltd"), removed: 2 }],
+    }));
+    mocks.openSession.mockResolvedValue(withRedact(redact));
+    render(<ToolClient />);
+    await choose();
+    await screen.findByTestId("terms-panel");
+    await type("Acme Ltd");
+    await screen.findByRole("checkbox", { name: "AcmeLtd" });
+    await userEvent.click(screen.getByTestId("redact"));
+    await screen.findByTestId("result");
+
+    await type("Jane Doe");
+    await screen.findByRole("checkbox", { name: "Jane Doe" });
+    expect(screen.queryByTestId("result")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId("redact"));
+    expect(redact).toHaveBeenCalledTimes(2);
+    expect(redact.mock.lastCall?.[0]).toEqual(expect.arrayContaining([asMatchId("j1")]));
   });
 });

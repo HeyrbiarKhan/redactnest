@@ -289,6 +289,94 @@ describe("removing terms (AC-5)", () => {
   });
 });
 
+describe("Make waits only while it must (AC-5, AC-18, INV-3)", () => {
+  it("lets Make run once the only term being searched is removed", () => {
+    const searching = sessionReducer(reviewing(), {
+      type: "terms-searching",
+      jobId: JOB,
+      terms: [SMITH],
+    });
+    expect(canMake(live(searching))).toBe(false);
+
+    const removed = live(
+      sessionReducer(searching, { type: "terms-removed", jobId: JOB, terms: [SMITH] }),
+    );
+    expect(canMake(removed)).toBe(true);
+    expect(sessionReducer(removed, { type: "redact-started" }).state).toBe("redacting");
+  });
+
+  it("lets Make run once a term not searched on the Free plan is removed", () => {
+    const free = drive(chosen(FREE, [ACME]), opened([EMAIL]));
+    const removed = live(
+      sessionReducer(free, { type: "terms-removed", jobId: JOB, terms: [ACME] }),
+    );
+    expect(removed.terms.size).toBe(0);
+    expect(canMake(removed)).toBe(true);
+  });
+
+  it("keeps a Free plan term's reason when it is set aside (AC-17)", () => {
+    const free = drive(chosen(FREE, [ACME]), opened([EMAIL]));
+    const session = live(
+      sessionReducer(free, { type: "terms-set-aside", jobId: JOB, terms: [ACME] }),
+    );
+    expect(states(session)).toEqual({
+      acme: { state: "set-aside", reason: "free-plan" },
+    });
+    expect(canMake(session)).toBe(true);
+  });
+
+  it("keeps ticks working while a term is being searched", () => {
+    const searching = sessionReducer(reviewing(), {
+      type: "terms-searching",
+      jobId: JOB,
+      terms: [SMITH],
+    });
+    const unticked = live(
+      sessionReducer(searching, { type: "tick-toggled", id: ACME_ROW.id }),
+    );
+    expect(unticked.ticked.has(ACME_ROW.id)).toBe(false);
+    expect(states(unticked).smith).toEqual({ state: "searching" });
+  });
+});
+
+describe("a Try again that fails again (AC-20)", () => {
+  it("leaves its terms not searched for the same reason, and Make still waits", () => {
+    const session = live(
+      (
+        [
+          { type: "terms-searching", jobId: JOB, terms: [SMITH] },
+          { type: "terms-failed", jobId: JOB, terms: [SMITH] },
+          { type: "terms-searching", jobId: JOB, terms: [SMITH] },
+          { type: "terms-failed", jobId: JOB, terms: [SMITH] },
+        ] satisfies SessionAction[]
+      ).reduce<ToolSession>(sessionReducer, reviewing()),
+    );
+    expect(states(session).smith).toEqual({
+      state: "not-searched",
+      reason: "search-failed",
+    });
+    expect(session.matches).toEqual([EMAIL, ACME_ROW]);
+    expect(canMake(session)).toBe(false);
+  });
+});
+
+describe("the per term removals (AC-22, INV-9)", () => {
+  it("are dropped with the outcome when a tick change returns a complete session to reviewing", () => {
+    const complete = drive(
+      chosen(PAID, [ACME]),
+      opened([EMAIL, ACME_ROW]),
+      { type: "redact-started" },
+      { type: "redacted", outcome: OUTCOME, removedByTerm: [{ term: ACME, removed: 1 }] },
+    );
+    const session = live(
+      sessionReducer(complete, { type: "tick-toggled", id: EMAIL.id }),
+    );
+    expect(session.state).toBe("reviewing");
+    expect(session.outcome).toBeNull();
+    expect(session.removedByTerm).toBeNull();
+  });
+});
+
 describe("a retry after a lost worker (AC-20)", () => {
   it("keeps a set aside term set aside and searches the rest at the reopen", () => {
     const session = (
