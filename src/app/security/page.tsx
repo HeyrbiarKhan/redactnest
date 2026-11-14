@@ -88,17 +88,19 @@ export default function SecurityPage() {
             copies in its heap) and AC-6. No "only": the checklist's context
             and the checked output reach the page, each said where it belongs. */}
         <p>
-          When you choose a PDF, the tool page hands it to a background worker in the same
-          tab (a Web Worker), which holds the document while you work on it. The PDF
-          engine, MuPDF built for the browser, runs inside that worker too.
+          When you choose a PDF, the tool page hands it to a background worker (a Web
+          Worker), which holds the document while you work on it. The PDF engine, MuPDF
+          built for the browser, runs inside that worker too.
         </p>
         {/* Spec 0001's *Consequences* bullet "`'unsafe-inline'` on the tool
-            route" (the page is rendered static, so no server is in its path);
-            C1 and C5 linked, not restated. */}
+            route" (the page is rendered static, so no server is in its path)
+            and spec 0002, INV-1 (the document exists only inside the worker),
+            which together say no server of ours reads it; C1 and C5 linked,
+            not restated. */}
         <p>
-          The tool page is a fixed file, the same for everyone, so no server of ours takes
-          part in reading your document. What the page does ask our own server, and what
-          that carries, is in the privacy policy’s{" "}
+          The tool page is a fixed file, so no server of ours takes part in reading your
+          document. What the page does ask our own server, and what that carries, is in
+          the privacy policy’s{" "}
           <a href={privacy("yourDocuments")}>{PRIVACY_SECTIONS.yourDocuments}</a>.
         </p>
 
@@ -114,11 +116,11 @@ export default function SecurityPage() {
           the first document, though its memory is only released for reuse until you leave
           the page or start over.
         </p>
-        {/* Spec 0002, AC-4 and INV-7; spec 0004, AC-20. */}
-        <p>
-          The cleaned copy waits in the page until you download it, and the page lets go
-          of it once it is handed to your browser.
-        </p>
+        {/* Spec 0002, AC-4 and INV-7 (released once the download is handed
+            to the browser); spec 0004, AC-20 (dropped sooner on a tick change,
+            start over, a replacement, a lost worker or leaving the page), so
+            "only until". */}
+        <p>The cleaned copy waits in the page only until you download it.</p>
         {/* Spec 0002, AC-11, and its *Security model* bullet "The `File` handle
             is worth naming". */}
         <p>
@@ -128,8 +130,9 @@ export default function SecurityPage() {
         </p>
 
         <h3>What no website can control</h3>
-        {/* Spec 0002's *Security model* bullet "What this design does not
-            control". */}
+        {/* Spec 0018, AC-7 (what no website controls), and spec 0002's
+            *Security model* bullet "What this design does not control" (the
+            four things). */}
         <p>
           Some things on your device are beyond any website, RedactNest included: your
           operating system moving memory to disk (swap or page files), your browser
@@ -140,13 +143,16 @@ export default function SecurityPage() {
 
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="removedNotCovered" />
-        {/* Spec 0018, AC-8. */}
+        {/* Spec 0004's *Security model* bullet "Text that no detector matched
+            passes through as it is" (text under a black rectangle is still in
+            the file, a fake redaction), and spec 0018, AC-8, whose drawing
+            shows a copy giving the words back. */}
         <p>
           Drawing a black box over words hides them from your eyes, not from the file. The
-          words are still there underneath, so selecting, searching or copying the text
-          brings them back.
+          words are still there underneath, so copying the text brings them back.
         </p>
-        {/* Spec 0018, AC-8. */}
+        {/* Spec 0018, AC-8, and the *Page design* bullet "The drawing" it
+            points to (the panels' words and the caption). */}
         <CoverFigure
           panels={COVER_PANELS}
           caption="Both pages look the same. Only the second took the words out of the file."
@@ -169,9 +175,12 @@ export default function SecurityPage() {
           that area, such as an underline, can go with it. Ink of a scanned page lying
           further out than that can stay visible.
         </p>
-        {/* Spec 0004, INV-5, INV-13 and AC-13. INV-13 is about the content
-            stream, so the line says drawing instructions: the box pass adds to
-            the page through MuPDF. */}
+        {/* Spec 0004, INV-5 (every setting written out), its *Decision*
+            bullet "Redaction settings are explicit at the call site", whose
+            line "All twelve arguments are written out" gives the reason, INV-13
+            and AC-13. INV-13 is about the content stream, so the line says
+            drawing instructions: the box pass adds to the page through
+            MuPDF. */}
         <p>
           MuPDF does the removing, with every setting spelled out rather than left to its
           defaults, so a change in the engine’s defaults cannot quietly change what is
@@ -182,18 +191,23 @@ export default function SecurityPage() {
 
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="theCheck" />
-        {/* Spec 0004, INV-2 and AC-13. */}
+        {/* Spec 0004, INV-2 and AC-13 (three parts: the text of every page,
+            the pictures under each target, the file's structure). */}
         <p>
           Before you get a file, RedactNest opens the new file again, from the exact bytes
-          you will download, and checks three things on every page:
+          you will download, and checks three things:
         </p>
         <ul>
-          {/* Spec 0004, INV-2 and AC-13; spec 0006, AC-17 (the visible area). */}
+          {/* Spec 0004, INV-2 and AC-13; spec 0006, AC-16 (a character wholly
+              inside the visible area stays where it was, one crossing its edge
+              may go or stay) and AC-17 (none centred outside survives). The
+              check compares against the page after the trim, so "wholly". */}
           <li>
-            Text: inside each page’s visible area, every character you did not tick is
-            still there, in its place, and none you ticked is; outside it, none is left at
-            all. It reads the pages twice, the second time ignoring replacement text (the
-            words a copy gives instead of what is drawn).
+            Text: for each page’s visible area, every character wholly inside it that you
+            did not tick is still there, in its place, and none you ticked is. Outside it,
+            none is left at all, and a character crossing the page’s edge can go with what
+            lies outside it. It reads the pages twice, the second time ignoring
+            replacement text (the words a copy gives instead of what is drawn).
           </li>
           {/* Spec 0004, AC-13 (a picture it cannot decode counts as not blank)
               and INV-15, and its *Security model* bullet "The pixel check sees
@@ -204,11 +218,13 @@ export default function SecurityPage() {
             repeating pattern, or used only as a soft mask (to fade or shape something
             else), can escape both the blanking and this check.
           </li>
-          {/* Spec 0004, AC-13 and INV-3. `structureIsClean` covers each of the
-              band's seven stripped kinds: document info by the trailer, XMP,
-              thumbnails and private data by `CARRIER_KEYS`, bookmarks,
-              attachments and named scripts by `CATALOG_KEYS`, annotations by
-              `PAGE_KEYS`, scripts by `/JS` anywhere, earlier versions by the
+          {/* Spec 0004, AC-13 (no `/Info`, only allowlisted keys, no carrier
+              key or `/JS` anywhere, one revision) and INV-3. Those keys hold
+              each of the band's seven kinds (spec 0018, *Page changes*, item
+              13): document info by the trailer, XMP metadata and page
+              thumbnails by `CARRIER_KEYS`, bookmarks and the attachment and
+              script name trees by `CATALOG_KEYS`, attachment annotations by
+              `PAGE_KEYS`, JavaScript by `/JS` anywhere, earlier versions by the
               version count. A change to `rebuild.ts` that drops one names fewer
               here. */}
           <li>
@@ -216,7 +232,8 @@ export default function SecurityPage() {
             file, and the file holds a single version, with no earlier versions inside it.
           </li>
         </ul>
-        {/* Spec 0004, AC-14. */}
+        {/* Spec 0004, AC-14 (no output, one kind); spec 0007, AC-16 (each
+            kind's words, so the reason is plain). */}
         <p>
           If any part fails, you get no file, only a plain reason. RedactNest stops rather
           than hand you a file the check could not vouch for.
@@ -225,11 +242,11 @@ export default function SecurityPage() {
 
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="hiddenData" />
-        {/* Spec 0004, AC-7. */}
+        {/* Spec 0004, AC-7 (what is stripped); the band linked, not restated
+            (spec 0018, AC-6). */}
         <p>
-          A PDF can carry far more than its pages. The home page lists{" "}
-          <a href={HOME_BAND}>what RedactNest finds and strips</a> whenever a file carries
-          it.
+          The home page lists the <a href={HOME_BAND}>hidden data RedactNest strips</a>{" "}
+          whenever a file carries it.
         </p>
         {/* Spec 0004, AC-7, its *Feature design* sentence "Stripped and never
             reported", and its *Consequences* bullet "The output is plainer than
@@ -242,59 +259,70 @@ export default function SecurityPage() {
         </p>
 
         <h3>Notes and attachments</h3>
-        {/* Spec 0004, AC-22 and AC-7; the measurement spec 0018's AC-7 records
-            (`tests/fixtures/metadata.pdf`, 2026-11-14, a run with nothing
-            ticked: no annotation, note text or attached file left in any
-            object, both icons still drawn). "Can keep": one fixture measured,
-            so the icon is a "can" line, while the text and the file gone is
-            the structure check's gate. */}
+        {/* Spec 0004, AC-22 (comments and form fields flattened) and AC-7 (no
+            annotations or attachments in the output); the measurement spec
+            0018's AC-7 records (`tests/fixtures/metadata.pdf`, 2026-11-14, a
+            run with nothing ticked: no annotation, note text or attached file
+            left in any object, both icons still drawn). "Can keep": one
+            fixture measured, so the icon is a "can" line, while the text and
+            the file gone is AC-7's, on every file. */}
         <p>
           The home page notes{" "}
           <a href={HOME_BAND}>how comments and form fields are flattened</a>. A sticky
           note or a file attachment that shows as an icon can keep that icon as a mark on
           the page, while what it held but did not show, the note’s text or the attached
-          file, is gone, as the structure check holds.
+          file, is gone.
         </p>
 
         <h3>Passwords and fonts</h3>
         <ul>
-          {/* Spec 0004, AC-10, and its *Security model* bullet "Owner password
-              restrictions are removed on purpose". */}
+          {/* Spec 0004, AC-10 (a file with an owner password is redacted, the
+              output unencrypted with no permission restrictions), and its
+              *Security model* bullet "Owner password restrictions are removed
+              on purpose". */}
           <li>
-            A file that opens without a password but restricts printing or copying is
+            A file that opens without a password but restricts what you can do with it is
             redacted, and the cleaned copy carries no restriction. That is on purpose: you
             already hold the content, and the restriction protects nothing from you.
           </li>
           {/* Spec 0004's *Security model* bullet "Embedded fonts keep the shapes
-              of removed characters". */}
+              of removed characters" (an inventory of which characters existed).
+              Nothing about order: an app that numbers a subset font's
+              characters as each first appears keeps some of it (the third
+              verify, 2026-11-14), so that bullet's "never their order" is
+              owed on feature 30 in the scope. */}
           <li>
-            Fonts in the file are kept as they are, so a font can still hold the shapes of
-            characters that were removed. That could tell someone which characters the
-            document used, never which words they made or in what order.
+            A font in the file can still hold the shapes of characters that were removed.
+            That can tell someone which characters the document used.
           </li>
         </ul>
       </section>
 
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="whatItFinds" />
-        {/* Spec 0005, AC-14; spec 0017, AC-7. */}
+        {/* Spec 0005, AC-14 (names and addresses not looked for); spec 0017,
+            AC-1 (the custom terms panel). That terms come with Pro is said
+            once, under Plans. */}
         <p>
           RedactNest looks for the{" "}
           <a href={HOME_BAND}>kinds of detail the home page lists</a>. It does not look
           for names or postal addresses, and you can add those as custom terms.
         </p>
-        {/* Spec 0005, AC-8 (a match RedactNest would refuse starts unticked and
-            cannot be ticked), AC-10 and AC-13. No "only": the row AC-8 blocks
-            is the exception, named here. */}
+        {/* Spec 0005, AC-8 (a match the find step can tell the engine would
+            refuse starts unticked and cannot be ticked), AC-10 and AC-13. That
+            a row you can tick can still stop the run (spec 0005, AC-6) is said
+            once, under When it stops instead. */}
         <p>
           Each find is a row with a box. A row’s starting tick is a suggestion: you can
-          tick or untick any row except one RedactNest cannot remove safely.
+          tick or untick any row except one RedactNest can tell, while reading, that it
+          cannot remove safely.
         </p>
 
         <h3>Custom terms</h3>
-        {/* Spec 0017, AC-7 (case and accents folded) and AC-8 (a match is the
-            folded term equal to the folded page, spacing and line breaks
-            included, so a term is plain words); C3 linked, not restated. */}
+        {/* Spec 0017, AC-29 and INV-5 (no pattern is built from a term, so a
+            term is plain words), AC-7 (case and accents folded) and AC-8
+            (spacing and line breaks match one space); C3 linked, not
+            restated. */}
         <p>
           A custom term is plain words, never a pattern or a wildcard. It matches its
           words through many differences of writing, such as case, accents, spacing and
@@ -305,29 +333,40 @@ export default function SecurityPage() {
 
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="whatItCanMiss" />
-        {/* Spec 0005, AC-14. */}
+        {/* Spec 0005's *Consequences* bullet "Rule based detection misses
+            whatever does not look like its pattern". Each line below says what
+            can be missed. */}
         <p>
-          RedactNest finds patterns in the text; it does not understand the document. So
-          it can miss a value or a term, or find only part of one and leave the rest in
-          the file.
+          RedactNest goes by what the text looks like; it does not understand the
+          document.
         </p>
         <ul>
-          {/* Spec 0005, AC-4; spec 0017, AC-33, and its *Consequences* bullet
-              "Known misses, recorded" (a page break with text between). */}
+          {/* Spec 0005, AC-4 (other wraps not found, no match across text
+              blocks), and its *Consequences* bullet "A value wrapped mid word
+              or at a hyphen is missed" (an email wrapped at a dot lists only
+              the part after the break); spec 0017, AC-33, and its
+              *Consequences* bullet "Known misses, recorded" (a page break with
+              text between). A term is read across line and block breaks (spec
+              0017, AC-9), so only pages are named for it. */}
           <li>
-            A value or term broken up across lines, columns, table cells or pages can be
-            missed, or found only in part.
+            A value broken up across lines, columns, table cells or pages, or a term
+            broken up across pages, can be missed, or found only in part.
           </li>
           {/* Spec 0005, AC-20, AC-21 and AC-23; spec 0014, AC-3 (a plain digit
-              glued after a date), AC-4 and AC-6; spec 0017, AC-10. */}
+              glued after a date, listed as an unticked phone row); spec 0017,
+              AC-10, and its *Consequences* bullet "Known misses, recorded" (an
+              all capitals word glued to the next). */}
           <li>
             One joined to other letters, digits or words can be missed, found only in
             part, or listed unticked.
           </li>
           {/* Spec 0005, AC-2 and AC-19, and its *Consequences* bullet "Rule based
               detection misses whatever does not look like its pattern" (another
-              region's national number, a non English month); spec 0015's
-              *Consequences* bullet "Still missed" (number words). */}
+              region's national number, a non English month) and its bullet "A
+              phone number written in decimal digits other than ASCII `0` to `9`
+              is found only when it is written with a `+`" (another script);
+              spec 0015's *Consequences* bullet "Still missed" (number
+              words). */}
           <li>
             One written in a format, language or script RedactNest does not read, such as
             a phone number in another country’s own format, or a date written in words or
@@ -338,8 +377,8 @@ export default function SecurityPage() {
               of a longer code" (checks passing by chance), and "Two cards side by
               side on one run can share one row". */}
           <li>
-            Something that is not sensitive can be listed, and two values close together
-            can share one row, so they stay or go together.
+            Something that is not sensitive can be listed, and two card numbers side by
+            side can share one row, so they stay or go together.
           </li>
         </ul>
         {/* Spec 0018, AC-5 (look over the document); the terms' Checking the
@@ -363,26 +402,26 @@ export default function SecurityPage() {
             findings will misfire sometimes" (each errs toward saying too much;
             the small print is its 0.5 pt legal line). */}
         <p>
-          It warns you about a page when it sees something there it cannot check. These
-          warnings rely on rules of thumb, so they can miss a page, and can warn about one
-          that is fine, such as a page with a brochure photo or a line of very small
-          print.
+          RedactNest’s page warnings rely on rules of thumb, so they can miss a page, and
+          can warn about one that is fine, such as a page with a brochure photo or a line
+          of very small print.
         </p>
+        {/* Spec 0018, AC-7 (the Pages line: one list of what can stay or be
+            misjudged). Each item below names its own source. */}
         <p>Some things can stay in the file, or be misjudged:</p>
         <ul>
           {/* Spec 0008, AC-1 and AC-9. */}
           <li>
             When a scan carries text from recognition (OCR) run by another tool,
             RedactNest can treat the picture as read and work from that text alone, so
-            words the recognition missed or misread can stay in the picture with no
-            warning.
+            words the recognition missed or misread can stay in the picture.
           </li>
           {/* Spec 0010, AC-7, and its *Decision* bullets "MRC pieces and a photo
               pasted before OCR are recorded limits" and "Dense vertical OCR is a
               recorded limit". */}
           <li>
             It can name a scan as a picture it cannot read although recognised text lies
-            over it. Treat that page as not checked.
+            over it.
           </li>
           {/* Spec 0006, AC-15. */}
           <li>
@@ -408,13 +447,13 @@ export default function SecurityPage() {
 
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="whenItStops" />
-        {/* Spec 0004, AC-1 to AC-3; spec 0007, AC-17 (a file that needs a
-            password is refused, and the page never asks for one); spec 0006,
-            AC-10 (no page it can read). */}
+        {/* Spec 0004, AC-1 to AC-3, with spec 0007, AC-16 (the `corrupt`
+            kind's words: the file may be damaged); spec 0007, AC-17 (a file
+            that needs a password is refused, and the page never asks for one);
+            spec 0006, AC-10 (no page it can read). */}
         <p>
-          Some files and some items RedactNest cannot handle safely, so it refuses rather
-          than guess. At open it refuses, among others, a file that is not a PDF (judged
-          by its contents, never its name), one too damaged to open, one that needs a
+          At open, RedactNest refuses, among others, a file that is not a PDF (judged by
+          its contents, never its name), one too damaged to open, one that needs a
           password (RedactNest does not take passwords), one with layers a viewer can
           switch on and off, and a file in which it finds no page it can read.
         </p>
@@ -425,14 +464,17 @@ export default function SecurityPage() {
           replacement text. Where RedactNest can tell while reading, the row says the item
           will stay in the file.
         </p>
-        {/* Spec 0007, AC-14; spec 0004, AC-13 and AC-26, and its *Security
-            model* bullets "A document with a text object that is positioned
-            with `Td`" (some files stop every run) and "A text watermark that
-            crosses a target" (a stop met only while removing). */}
+        {/* Spec 0007, AC-14 (a refused run keeps every tick, with its reason
+            and no output); spec 0005, AC-6 (the self check can still refuse a
+            run of rows that could be ticked); spec 0004, AC-13 and AC-26, and
+            its *Security model* bullets "A document with a text object that is
+            positioned with `Td`" (some files stop every run) and "A text
+            watermark that crosses a target" (a stop met only while
+            removing). */}
         <p>
           Otherwise the run stops with a plain reason and no file, and your ticks are
-          kept. A run can stop for something it meets only while removing, and some files
-          stop every run.
+          kept: a row you could tick can still stop the run, for something RedactNest
+          meets only while removing. Some files stop every run.
         </p>
       </section>
 
@@ -444,17 +486,18 @@ export default function SecurityPage() {
           carries, is in{" "}
           <a href={privacy("yourDocuments")}>{PRIVACY_SECTIONS.yourDocuments}</a>.
         </p>
-        {/* Spec 0012, INV-8 as spec 0017's AC-26 amends it (only what Pro does
-            today, so no support is promised); spec 0017, INV-2 (terms honesty
-            based, like the cap); spec 0001's *Consequences* bullet "The paywall
-            is not enforceable"; spec 0012's *Consequences* bullet "The paywall
-            stays unenforceable". */}
+        {/* Spec 0012, AC-13 (Pro's longer documents) and INV-8 as spec 0017's
+            AC-26 amends it (only what Pro does today, custom terms among it, so
+            no support is promised); spec 0017, INV-2 (terms honesty based, like
+            the cap); spec 0001's *Consequences* bullet "The paywall is not
+            enforceable" (client side code and published source); spec 0012's
+            *Consequences* bullet "The paywall stays unenforceable" (not a
+            lock). */}
         <p>
           The page limit relies on honesty. It is applied in your own browser, by code
-          anyone can read, so someone determined could lift it. The limit decides how long
-          a document may be and nothing else, and it plays no part in keeping your
-          document private. Pro gives you longer documents and custom terms, not a lock,
-          and custom terms rely on honesty in the same way.
+          anyone can read, so someone determined could lift it. Pro gives you longer
+          documents and custom terms, not a lock, and custom terms rely on honesty in the
+          same way.
         </p>
       </section>
 
@@ -466,7 +509,10 @@ export default function SecurityPage() {
           On purpose, there is no record of your document or its words, because such a
           record would recreate the very exposure RedactNest exists to remove.
         </p>
-        {/* Spec 0004, AC-24; C8 and C10 linked, not restated. */}
+        {/* Spec 0004, AC-24 (never reaches the console), and its *Decision*
+            bullet "MuPDF's log is silenced once, right after the engine loads"
+            (its warnings can quote document detail); C8 and C10 linked, not
+            restated. */}
         <p>
           MuPDF’s own messages, which can quote a document, are thrown away inside the
           worker as the engine loads. Whether our own code writes a log is in{" "}
@@ -474,11 +520,12 @@ export default function SecurityPage() {
           what our host keeps is in{" "}
           <a href={privacy("whatWeReceive")}>{PRIVACY_SECTIONS.whatWeReceive}</a>.
         </p>
-        {/* C7 and C14 to C16, linked, not restated. */}
+        {/* C7 (the only outside script) and C14 to C16, linked, not
+            restated. */}
         <p>
           What we count, what a failure report holds and what neither ever holds is in{" "}
           <a href={privacy("countsAndReports")}>{PRIVACY_SECTIONS.countsAndReports}</a>,
-          and which scripts run on our pages is in{" "}
+          and which outside scripts run on our pages is in{" "}
           <a href={privacy("whatWeDoNotDo")}>{PRIVACY_SECTIONS.whatWeDoNotDo}</a>.
         </p>
       </section>
@@ -487,15 +534,16 @@ export default function SecurityPage() {
         <SectionHeading sections={SECURITY_SECTIONS} name="checkIt" />
         {/* Spec 0009, AC-1 and AC-4. */}
         <p>
-          The foot of every page links to the source code for the version you are using,
-          so you can read what runs in your browser.
+          The foot of every page links to the source code for the version you are using.
         </p>
-        {/* Spec 0002, AC-3 as C5 amends it; spec 0004, AC-21; C1 and C5
-            linked. */}
+        {/* Spec 0002, AC-3 as C5 amends it, and spec 0004, AC-21 (what the
+            tool page asks our server); C1 and C5 linked. Developer tools come
+            first, because requests made as the page loads are listed only if
+            the panel is already open. */}
         <p>
-          Your browser can show you the rest. Open its developer tools on the tool page,
-          redact a file, and the network panel lists every request the page sends, so you
-          can check what{" "}
+          Your browser can show you the rest. Open its developer tools, then load the tool
+          page and redact a file, and the network panel lists every request the page
+          sends, so you can check what{" "}
           <a href={privacy("yourDocuments")}>{PRIVACY_SECTIONS.yourDocuments}</a> says.
         </p>
         {/* Spec 0011, AC-16. */}
@@ -507,7 +555,7 @@ export default function SecurityPage() {
 
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="changes" />
-        {/* Spec 0011, AC-2. */}
+        {/* Spec 0011, AC-2, which this page takes through spec 0018, AC-3. */}
         <p>
           When we change this page, we update the date at the top and add a line below
           saying what changed.

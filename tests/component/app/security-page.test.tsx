@@ -151,7 +151,7 @@ describe("the security page", () => {
     ["inYourBrowser", "Leaving the page, closing the tab or pressing Start over stops"],
     ["inYourBrowser", "nothing in the page can reach the first document"],
     ["inYourBrowser", "its memory is only released for reuse"],
-    ["inYourBrowser", "The cleaned copy waits in the page until you download it"],
+    ["inYourBrowser", "The cleaned copy waits in the page only until you download it"],
     ["inYourBrowser", "keeps a handle to the file you chose"],
     ["inYourBrowser", "swap or page files"],
     // Removed, not just covered, and The check on every file (spec 0004).
@@ -161,22 +161,24 @@ describe("the security page", () => {
     ["removedNotCovered", "a change in the engine’s defaults cannot quietly change"],
     ["removedNotCovered", "a ticked item MuPDF cannot remove stops the run"],
     ["theCheck", "from the exact bytes you will download"],
+    ["theCheck", "every character wholly inside it that you did not tick"],
+    ["theCheck", "a character crossing the page’s edge can go with what lies outside it"],
     ["theCheck", "can escape both the blanking and this check"],
     ["theCheck", "If any part fails, you get no file"],
     ["theCheck", "a file the check could not vouch for"],
     // Hidden data (spec 0004).
-    ["hiddenData", "what RedactNest finds and strips"],
+    ["hiddenData", "hidden data RedactNest strips whenever a file carries it"],
     ["hiddenData", "automatic actions that are not scripts"],
     ["hiddenData", "its links and its accessibility tags"],
     ["hiddenData", "can keep that icon as a mark on the page"],
     ["hiddenData", "the cleaned copy carries no restriction"],
-    ["hiddenData", "never which words they made or in what order"],
+    ["hiddenData", "which characters the document used"],
     // What it finds (specs 0005 and 0017).
     ["whatItFinds", "kinds of detail the home page lists"],
     ["whatItFinds", "does not look for names or postal addresses"],
     ["whatItFinds", "you can add those as custom terms"],
     ["whatItFinds", "A row’s starting tick is a suggestion"],
-    ["whatItFinds", "any row except one RedactNest cannot remove safely"],
+    ["whatItFinds", "any row except one RedactNest can tell, while reading, that it"],
     ["whatItFinds", "never a pattern or a wildcard"],
     ["whatItFinds", "line breaks, but not all"],
     // What it can miss (specs 0005, 0014, 0015 and 0017).
@@ -184,13 +186,17 @@ describe("the security page", () => {
     ["whatItCanMiss", "joined to other letters, digits or words"],
     ["whatItCanMiss", "a format, language or script RedactNest does not read"],
     ["whatItCanMiss", "Something that is not sensitive can be listed"],
-    ["whatItCanMiss", "two values close together can share one row"],
+    ["whatItCanMiss", "or a term broken up across pages"],
+    ["whatItCanMiss", "two card numbers side by side can share one row"],
     ["whatItCanMiss", "look over the whole document"],
     // Pages it can't fully read (specs 0004, 0006, 0008 and 0010).
     ["pagesItCannotRead", "does not read words that exist only as a picture"],
     ["pagesItCannotRead", "can miss a page, and can warn about one that is fine"],
-    ["pagesItCannotRead", "missed or misread can stay in the picture with no warning"],
-    ["pagesItCannotRead", "Treat that page as not checked"],
+    ["pagesItCannotRead", "missed or misread can stay in the picture"],
+    [
+      "pagesItCannotRead",
+      "a picture it cannot read although recognised text lies over it",
+    ],
     ["pagesItCannotRead", "beyond the page’s visible edge can stay in the file"],
     ["pagesItCannotRead", "Text a clip hides completely can stay in the file"],
     ["pagesItCannotRead", "Drawings outside the visible area can stay in the file"],
@@ -202,6 +208,7 @@ describe("the security page", () => {
     ["whenItStops", "a file in which it finds no page it can read"],
     ["whenItStops", "the row says the item will stay in the file"],
     ["whenItStops", "your ticks are kept"],
+    ["whenItStops", "a row you could tick can still stop the run"],
     ["whenItStops", "some files stop every run"],
     // Plans and the page limit (specs 0001, 0012 and 0017).
     ["plans", "how the tool page learns which plan applies to you"],
@@ -213,6 +220,7 @@ describe("the security page", () => {
     ["logsAndCounts", "thrown away inside the worker"],
     // Check it yourself (specs 0002, 0009 and 0011).
     ["checkIt", "links to the source code for the version you are using"],
+    ["checkIt", "Open its developer tools, then load the tool page and redact a file"],
     ["checkIt", "the network panel lists every request the page sends"],
     ["checkIt", "please write to"],
   ] as const)("names in %s: %s", (section, phrase) => {
@@ -315,6 +323,32 @@ describe("the security page", () => {
     expect(text).not.toContain("If a run then removes something");
     expect(text).not.toContain("does not clear pictures");
     expect(text).not.toContain("not wiped");
+  });
+
+  /**
+   * covers: AC-5. Words the third verify found claiming more than the code or
+   * their sources (2026-11-14): every unticked character inside the visible
+   * area kept (spec 0006, AC-16 lets one crossing the edge go), a font that
+   * never shows order (an app can number a subset font's characters by first
+   * use), three things checked on every page (the structure is the file's),
+   * "whenever" reading as though it held for finds, a note's text gone by the
+   * structure check (the rebuild drops it), missed OCR words with no warning
+   * (the page's note says so), developer tools opened after the page loads
+   * (they miss the requests made at load), and the page limit playing no part
+   * in privacy (no source says so).
+   */
+  it("claims no more than its sources for the edge, fonts, the check and the network panel", () => {
+    render(<SecurityPage />);
+    const text = mainText();
+
+    expect(text).not.toContain("inside each page’s visible area, every character you");
+    expect(text).not.toContain("in what order");
+    expect(text).not.toContain("three things on every page");
+    expect(text).not.toContain("finds and strips whenever");
+    expect(text).not.toContain("as the structure check holds");
+    expect(text).not.toContain("stay in the picture with no warning");
+    expect(text).not.toContain("developer tools on the tool page");
+    expect(text).not.toContain("plays no part in keeping your document private");
   });
 
   /** covers: AC-9. No cap, size or price as a number, and no repository. */
