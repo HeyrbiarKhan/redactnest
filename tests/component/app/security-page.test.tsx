@@ -158,6 +158,10 @@ describe("the security page", () => {
     ["removedNotCovered", "removed, then marked"],
     ["removedNotCovered", "a little past the item’s edges"],
     ["removedNotCovered", "further out than that can stay visible"],
+    [
+      "removedNotCovered",
+      "The original copy of a figure or picture under a removed item can stay in the file",
+    ],
     ["removedNotCovered", "a change in the engine’s defaults cannot quietly change"],
     ["removedNotCovered", "a ticked item MuPDF cannot remove stops the run"],
     ["theCheck", "from the exact bytes you will download"],
@@ -178,11 +182,13 @@ describe("the security page", () => {
     ["theCheck", "If any part fails, you get no file"],
     ["theCheck", "a file the check could not vouch for"],
     // Hidden data (spec 0004).
-    ["hiddenData", "hidden data RedactNest looks for and strips"],
+    ["hiddenData", "hidden data RedactNest looks for"],
     ["hiddenData", "Details stored inside a picture’s own data"],
     ["hiddenData", "a photo’s camera details, can stay"],
-    ["hiddenData", "automatic actions that are not scripts"],
-    ["hiddenData", "its links and its accessibility tags"],
+    ["hiddenData", "RedactNest strips the file’s identifier"],
+    ["hiddenData", "automatic actions that are not scripts no longer work"],
+    ["hiddenData", "its links and its accessibility tags no longer work"],
+    ["hiddenData", "A sticky note or a file attachment is taken off the page"],
     ["hiddenData", "can keep that icon as a mark on the page"],
     ["hiddenData", "the cleaned copy carries no restriction"],
     ["hiddenData", "which characters the document used"],
@@ -451,6 +457,31 @@ describe("the security page", () => {
     expect(text).not.toContain("where the PDF format keeps it");
     expect(text).not.toContain("what LaTeX records about an included figure");
     expect(text.split("entries a program adds for its own use").length - 1).toBe(1);
+  });
+
+  /**
+   * covers: AC-5. Words the eighth verify found resting on the write dropping
+   * what nothing refers to (2026-11-15), which is no gate: whatever a kept
+   * object points to is copied with it. Measured with a private key on a
+   * font: a ticked value inside a figure stayed in the file's bytes, a blanked
+   * picture's original stayed byte for byte, a note's text and an attached
+   * file stayed while reported stripped, and page labels, viewer preferences,
+   * an opening action and alternate text stayed. So no line says text leaves
+   * the file, that what a note held is gone, or that RedactNest strips what
+   * the band lists or what no longer works, and the original copy is one
+   * "can" line, said once.
+   */
+  it("claims nothing gone that a kept object can point to", () => {
+    render(<SecurityPage />);
+    const text = mainText();
+
+    expect(metadata.description).not.toContain("removed from the file");
+    expect(text).not.toContain("took the words out of the file");
+    expect(text).not.toContain("is gone");
+    expect(text).not.toContain("looks for and strips");
+    expect(text).not.toContain("also strips page labels");
+    expect(text).not.toContain("loses its links");
+    expect(text.split("when another part of the file points to it").length - 1).toBe(1);
   });
 
   /** covers: AC-9. No cap, size or price as a number, and no repository. */

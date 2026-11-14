@@ -73,14 +73,21 @@ const COVER_PANELS: readonly CoverPanel[] = Object.freeze([
  * The description's absolutes, each behind a gate (spec 0018, AC-5): "never
  * uploaded" is the tool page's content security policy (`connect-src 'self'`)
  * with no endpoint of ours that takes document data (spec 0002, AC-3 as C5
- * amends it); "before any box is drawn" is the pass order (spec 0004's
+ * amends it); "the text you tick is taken out of the page's drawing
+ * instructions" is the self check's character part: no page, as the check
+ * reads it, holds a character lying in a ticked item (spec 0004, INV-2 and
+ * AC-13); "before any box is drawn" is the pass order (spec 0004's
  * *Decision* bullet "Box pass"); "every new file is checked" is the self
- * check, which no file leaves without passing (spec 0004, INV-2).
+ * check, which no file leaves without passing (spec 0004, INV-2). Never
+ * "removed from the file": the check reads what each page draws, not every
+ * object in the file, and the eighth verify (2026-11-15) measured a ticked
+ * value staying in the file's bytes when another object pointed to the
+ * figure that held it (spec 0018, item 17).
  */
 export const metadata: Metadata = {
   title: NAV_TEXT.security,
   description:
-    "How RedactNest works: your PDF is processed in your browser and never uploaded, text is removed from the file before any box is drawn, every new file is checked before you get it, and the limits are stated plainly.",
+    "How RedactNest works: your PDF is processed in your browser and never uploaded, the text you tick is taken out of the page’s drawing instructions before any box is drawn, every new file is checked before you get it, and the limits are stated plainly.",
 };
 
 export default function SecurityPage() {
@@ -167,19 +174,26 @@ export default function SecurityPage() {
         </p>
         {/* Spec 0018, AC-8, and the *Page design* bullet "The drawing" it
             points to (the panels' words and the caption). The caption's "only"
-            tells the two drawn panels apart; it claims nothing about a
-            document. */}
+            tells the two drawn panels apart in the drawing's own terms, what a
+            copy of each gives, and claims nothing about a document; never
+            "took the words out of the file" (the eighth verify,
+            2026-11-15). */}
         <CoverFigure
           panels={COVER_PANELS}
-          caption="Both pages look the same. Only the second took the words out of the file."
+          caption="Both pages look the same. Only the second leaves the address out of a copy of its text."
         />
         {/* Spec 0004, AC-4 (the text removed), and its *Decision* bullets "Box
             pass" (the box drawn last) and "Self check method: compare, never
             sample" (the box a filled path, not text). "Each item you ticked"
             and "nothing in it to copy" sit behind the self check's character
-            part, which every file passes: none leaves holding a ticked
-            character, or any character under a box (spec 0004, INV-2, INV-10
-            and AC-13). */}
+            part, which every file passes: no page, as the check reads it,
+            holds a ticked character or any character under a box (spec 0004,
+            INV-2, INV-10 and AC-13). The check reads what each page draws,
+            not every object in the file, so the line says "drawing
+            instructions", never "the file": the original of a figure that
+            held a ticked value can stay when another part of the file points
+            to it, which the next paragraph says (the eighth verify,
+            2026-11-15). */}
         <p>
           RedactNest works the other way round: removed, then marked. It takes each item
           you ticked out of the page’s drawing instructions (the part of the file that
@@ -193,12 +207,23 @@ export default function SecurityPage() {
             removed item is blank there, or no file leaves (spec 0004, AC-13
             and INV-15). No colour is named: blank is white, or unpainted for a
             stencil picture (AC-13). The reach past the edges is the pass's own
-            area, the same on every item ("Padded area"). */}
+            area, the same on every item ("Padded area"). The last line is the
+            measurements spec 0018 records (item 17, the eighth verify,
+            2026-11-15), each with a private key on page 1's first font
+            pointing at the original: `tests/fixtures/form-xobject.pdf` with
+            SECRET-42 ticked kept SECRET-42 in the output's bytes, though not
+            in its drawn text, and `tests/fixtures/images-under.pdf` with both
+            values ticked kept the unblanked image mask byte for byte while the
+            drawn copy was blanked. The self check passed both times. MuPDF
+            redacts a figure or picture into a new copy, which the page draws,
+            and without the pointer neither original stayed, so "can". */}
         <p>
           Under each removed item it also blanks the pictures MuPDF reports there, over an
           area reaching a little past the item’s edges, and small drawn marks lying wholly
           inside that area, such as an underline, can go with it. Ink of a scanned page
-          lying further out than that can stay visible.
+          lying further out than that can stay visible. The original copy of a figure or
+          picture under a removed item can stay in the file, untouched, when another part
+          of the file points to it.
         </p>
         {/* Spec 0004, INV-5 (every setting written out), its *Decision*
             bullet "Redaction settings are explicit at the call site", whose
@@ -208,7 +233,8 @@ export default function SecurityPage() {
             MuPDF. "Every setting" is INV-5, all four arguments written at each
             call in `src/engine/passes.ts`. "Never edits" names a step that
             does not exist (INV-13). "Stops the run" is the self check: a
-            ticked character still in the output fails it (AC-13). */}
+            ticked character still on a page, as the check reads it, fails it
+            (AC-13). */}
         <p>
           MuPDF does the removing, with every setting spelled out rather than left to its
           defaults, so a change in the engine’s defaults cannot quietly change what is
@@ -267,16 +293,24 @@ export default function SecurityPage() {
               below the catalog and the pages the rebuild deletes only
               `CARRIER_KEYS`, so whatever else an object it keeps refers to is
               copied with it. */}
-          {/* The "can" line is the measurements spec 0018 records (items 13
-              and 15), each run with nothing ticked: on
+          {/* The "can" line is the measurements spec 0018 records (items 13,
+              15 and 17), each run with nothing ticked: on
               `tests/fixtures/form-xobject.pdf`, an embedded file reached
               through the figure's `/Ref` or `/OPI` (the seventh verify,
-              2026-11-15) and pdfTeX's `/PTEX.InfoDict` and `/PTEX.FileName`
-              (the sixth verify); on `tests/fixtures/images-under.pdf`, an
-              embedded file through the picture's `/OPI` and the same two
-              program keys (the seventh verify). Each time the self check
-              passed, nothing was reported stripped, and the output kept them.
-              "Can", because a carrier key is deleted wherever it sits. */}
+              2026-11-15), pdfTeX's `/PTEX.InfoDict` and `/PTEX.FileName` (the
+              sixth verify), and page labels, viewer preferences, an opening
+              action and a structure tree's alternate text, each reached from a
+              private key on a font (the eighth verify); on
+              `tests/fixtures/images-under.pdf`, an embedded file through the
+              picture's `/OPI` and the same two program keys (the seventh
+              verify); on `tests/fixtures/metadata.pdf`, a note's text and an
+              attached file reached from a private key on a font pointing at
+              the page's annotations (the eighth verify). Each time the self
+              check passed and the output kept them, though the `metadata.pdf`
+              run reported annotations and attachments stripped. Notes and
+              attachments, and Hidden data's list of what no longer works,
+              point here for what they held rather than say it again. "Can",
+              because a carrier key is deleted wherever it sits. */}
           <li>
             Structure: the file holds a single version, and the check looks for the hidden
             data the home page lists. Hidden data kept in less common places the PDF
@@ -296,15 +330,17 @@ export default function SecurityPage() {
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="hiddenData" />
         {/* The band linked, not restated (spec 0018, AC-6): a plain pointer
-            naming the subject, spec 0004, AC-7 (what is stripped) and AC-13
-            (what the structure check looks for), with no claim of its own.
-            What the check looks for and what can stay are said once, under
-            The check on every file; never "where the PDF format keeps it",
-            "whenever a file carries it" or "from the file's own structure"
-            (the seventh verify, 2026-11-15). */}
+            naming the subject, spec 0004, AC-13 (what the structure check
+            looks for), with no claim of its own. What the check looks for and
+            what can stay are said once, under The check on every file. Never
+            "strips": an attachment a kept object points to stays while it is
+            reported stripped (the eighth verify, 2026-11-15, measured on
+            `tests/fixtures/metadata.pdf`); nor "where the PDF format keeps
+            it", "whenever a file carries it" or "from the file's own
+            structure" (the seventh verify). */}
         <p>
-          The home page lists the{" "}
-          <a href={HOME_BAND}>hidden data RedactNest looks for and strips</a>.
+          The home page lists the kinds of{" "}
+          <a href={HOME_BAND}>hidden data RedactNest looks for</a>.
         </p>
         {/* Spec 0006, AC-29 (every page image in a run's output has the same
             filter and the same bytes as in the source), held by
@@ -318,44 +354,48 @@ export default function SecurityPage() {
         </p>
         {/* Spec 0004, AC-7, its *Feature design* sentence "Stripped and never
             reported", and its *Consequences* bullet "The output is plainer than
-            the source, by design". Each item sits behind the self check's
-            structure part (AC-13) or a step that does not exist: page labels,
-            viewer preferences and an opening action are off the catalog's
-            allowlist (`CATALOG_KEYS`), other automatic actions are the `/AA`
-            carrier key on any object, links are a page's `/Annots` (`PAGE_KEYS`)
-            and tags the catalog's structure tree. The identifier is a step
-            that does not exist: the output is a new document that takes the
-            source's pages and never its trailer (`graftPages`), pinned in
-            `tests/unit/redaction.test.ts`. "Without reporting" is
-            `SANITIZED_KINDS`, which has no kind for them
-            (`tests/unit/redaction-inventory.test.ts`). Private application
-            data is not named: the check holds only the format's own key for
-            it, not every place a producer may write its own. */}
+            the source, by design". "No longer work" sits behind the self
+            check's structure part (AC-13), which every file passes: page
+            labels, viewer preferences and an opening action are off the
+            catalog's allowlist (`CATALOG_KEYS`), other automatic actions are
+            the `/AA` carrier key, off every object, links are a page's
+            `/Annots`, off every page (`PAGE_KEYS`), and tags hang from the
+            catalog's structure tree. Never "strips" for these: a dictionary a
+            kept object points to is copied with it, so what they held can stay
+            (the eighth verify, 2026-11-15, measured on
+            `tests/fixtures/form-xobject.pdf`), which the structure item's one
+            "can" line says. The identifier is a step that does not exist: the
+            output is a new document that takes the source's pages and never
+            its trailer (`graftPages`), pinned in `tests/unit/redaction.test.ts`.
+            "None of these is reported" is `SANITIZED_KINDS`, which has no kind
+            for them (`tests/unit/redaction-inventory.test.ts`). Private
+            application data is not named: the check holds only the format's
+            own key for it, not every place a producer may write its own. */}
         <p>
-          That list leaves some things out. RedactNest also strips page labels, viewer
-          preferences, automatic actions that are not scripts, and the file’s identifier,
-          without reporting them. And the cleaned copy loses its links and its
-          accessibility tags, so screen readers read it less well.
+          That list leaves some things out. RedactNest strips the file’s identifier. In
+          the cleaned copy, page labels, viewer preferences and automatic actions that are
+          not scripts no longer work, and none of these is reported. Its links and its
+          accessibility tags no longer work either, so screen readers read it less well.
         </p>
 
         <h3>Notes and attachments</h3>
-        {/* Spec 0004, AC-22 (comments and form fields flattened) and AC-7 (no
-            annotations or attachments in the output); the measurement spec
-            0018's AC-7 records (`tests/fixtures/metadata.pdf`, 2026-11-14, a
-            run with nothing ticked: no annotation, note text or attached file
-            left in any object, both icons still drawn). "Can keep": one
-            fixture measured, so the icon is a "can" line, while the text and
-            the file gone is AC-7's, on every file. "Is gone" sits behind the
-            self check's structure part (AC-13): no page holds annotations
-            (`PAGE_KEYS`), the catalog no attachment list (`CATALOG_KEYS`) and
-            no object an associated file (`/AF`), and the write drops every
-            object nothing refers to (`WRITE_OPTIONS`). */}
+        {/* Spec 0004, AC-22 (comments and form fields flattened) and AC-7; the
+            measurement spec 0018's AC-7 records (`tests/fixtures/metadata.pdf`,
+            2026-11-14, a run with nothing ticked: both icons still drawn).
+            "Can keep": one fixture measured, so the icon is a "can" line.
+            "Taken off the page" sits behind the self check's structure part
+            (AC-13), which every file passes: no page holds annotations
+            (`PAGE_KEYS`). Never "is gone" for what a note or attachment held:
+            the write drops only what nothing refers to, and the eighth verify
+            (2026-11-15) measured the note's text and the attached file staying,
+            reported stripped, when a kept object pointed to the page's
+            annotations (spec 0018, item 17). That they can stay is said once,
+            by the structure item's "can" line. */}
         <p>
           The home page notes{" "}
           <a href={HOME_BAND}>how comments and form fields are flattened</a>. A sticky
-          note or a file attachment that shows as an icon can keep that icon as a mark on
-          the page, while what it held but did not show, the note’s text or the attached
-          file, is gone.
+          note or a file attachment is taken off the page, though one that shows as an
+          icon can keep that icon as a mark on the page.
         </p>
 
         <h3>Passwords and fonts</h3>
