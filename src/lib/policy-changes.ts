@@ -24,7 +24,7 @@ export type PolicyChanges = readonly [PolicyChange, ...PolicyChange[]];
 
 export const PRIVACY_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
   Object.freeze({
-    date: "2026-11-11",
+    date: "2026-11-14",
     summary:
       "Added custom terms: the names, numbers or phrases you type for RedactNest to find stay on your device, like your document, and the counts now include how many custom terms were used, never the terms.",
   }),
