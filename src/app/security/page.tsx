@@ -69,6 +69,14 @@ const COVER_PANELS: readonly CoverPanel[] = Object.freeze([
   }),
 ]);
 
+/**
+ * The description's absolutes, each behind a gate (spec 0018, AC-5): "never
+ * uploaded" is the tool page's content security policy (`connect-src 'self'`)
+ * with no endpoint of ours that takes document data (spec 0002, AC-3 as C5
+ * amends it); "before any box is drawn" is the pass order (spec 0004's
+ * *Decision* bullet "Box pass"); "every new file is checked" is the self
+ * check, which no file leaves without passing (spec 0004, INV-2).
+ */
 export const metadata: Metadata = {
   title: NAV_TEXT.security,
   description:
@@ -108,7 +116,10 @@ export default function SecurityPage() {
         {/* Spec 0002, AC-5a, AC-5b and INV-6, and its *Security model* bullet
             "The two endings are not equally strong". "Once that session has
             ended" rather than "from then on", because a run under way finishes
-            its step before the session ends. */}
+            its step before the session ends. "At once" is the worker's
+            termination (AC-5b). "Nothing in the page can reach" names a step
+            that does not exist: the page keeps no reference to a replaced
+            document (AC-5a). "Only released" is the limit, not a promise. */}
         <p>
           Leaving the page, closing the tab or pressing Start over stops the worker, and
           its memory goes back to your browser at once. Opening a second document ends the
@@ -119,10 +130,13 @@ export default function SecurityPage() {
         {/* Spec 0002, AC-4 and INV-7 (released once the download is handed
             to the browser); spec 0004, AC-20 (dropped sooner on a tick change,
             start over, a replacement, a lost worker or leaving the page), so
-            "only until". */}
+            "only until": keeping the copy past the handover is a step that
+            does not exist (INV-7). */}
         <p>The cleaned copy waits in the page only until you download it.</p>
         {/* Spec 0002, AC-11, and its *Security model* bullet "The `File` handle
-            is worth naming". */}
+            is worth naming". "Stores nothing new" sits behind spec 0002, INV-3:
+            no storage is ever written, held by lint in every zone and by
+            `tests/e2e/privacy.spec.ts` in a real browser. */}
         <p>
           Until the session ends, the page also keeps a handle to the file you chose, so
           it can read that one file again without asking. It stores nothing new: the file
@@ -152,14 +166,20 @@ export default function SecurityPage() {
           words are still there underneath, so copying the text brings them back.
         </p>
         {/* Spec 0018, AC-8, and the *Page design* bullet "The drawing" it
-            points to (the panels' words and the caption). */}
+            points to (the panels' words and the caption). The caption's "only"
+            tells the two drawn panels apart; it claims nothing about a
+            document. */}
         <CoverFigure
           panels={COVER_PANELS}
           caption="Both pages look the same. Only the second took the words out of the file."
         />
         {/* Spec 0004, AC-4 (the text removed), and its *Decision* bullets "Box
             pass" (the box drawn last) and "Self check method: compare, never
-            sample" (the box a filled path, not text). */}
+            sample" (the box a filled path, not text). "Each item you ticked"
+            and "nothing in it to copy" sit behind the self check's character
+            part, which every file passes: none leaves holding a ticked
+            character, or any character under a box (spec 0004, INV-2, INV-10
+            and AC-13). */}
         <p>
           RedactNest works the other way round: removed, then marked. It takes each item
           you ticked out of the page’s drawing instructions (the part of the file that
@@ -168,19 +188,27 @@ export default function SecurityPage() {
         </p>
         {/* Spec 0004's *Decision* bullets "Padded area" and "Padded pass", and
             its *Security model* bullets "Covered line art is removed across the
-            padded area" and "Scan ink further from the OCR text". */}
+            padded area" and "Scan ink further from the OCR text". "Each" sits
+            behind the self check's pixel part: every picture it sees under a
+            removed item is blank there, or no file leaves (spec 0004, AC-13
+            and INV-15). No colour is named: blank is white, or unpainted for a
+            stencil picture (AC-13). The reach past the edges is the pass's own
+            area, the same on every item ("Padded area"). */}
         <p>
-          Under each removed item it also blanks to white the pictures MuPDF reports
-          there, a little past the item’s edges, and small drawn marks lying wholly inside
-          that area, such as an underline, can go with it. Ink of a scanned page lying
-          further out than that can stay visible.
+          Under each removed item it also blanks the pictures MuPDF reports there, over an
+          area reaching a little past the item’s edges, and small drawn marks lying wholly
+          inside that area, such as an underline, can go with it. Ink of a scanned page
+          lying further out than that can stay visible.
         </p>
         {/* Spec 0004, INV-5 (every setting written out), its *Decision*
             bullet "Redaction settings are explicit at the call site", whose
             line "All twelve arguments are written out" gives the reason, INV-13
             and AC-13. INV-13 is about the content stream, so the line says
             drawing instructions: the box pass adds to the page through
-            MuPDF. */}
+            MuPDF. "Every setting" is INV-5, all four arguments written at each
+            call in `src/engine/passes.ts`. "Never edits" names a step that
+            does not exist (INV-13). "Stops the run" is the self check: a
+            ticked character still in the output fails it (AC-13). */}
         <p>
           MuPDF does the removing, with every setting spelled out rather than left to its
           defaults, so a change in the engine’s defaults cannot quietly change what is
@@ -192,7 +220,8 @@ export default function SecurityPage() {
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="theCheck" />
         {/* Spec 0004, INV-2 and AC-13 (three parts: the text of every page,
-            the pictures under each target, the file's structure). */}
+            the pictures under each target, the file's structure). This is the
+            gate itself: every file passes it or does not leave. */}
         <p>
           Before you get a file, RedactNest opens the new file again, from the exact bytes
           you will download, and checks three things:
@@ -201,13 +230,19 @@ export default function SecurityPage() {
           {/* Spec 0004, INV-2 and AC-13; spec 0006, AC-16 (a character wholly
               inside the visible area stays where it was, one crossing its edge
               may go or stay) and AC-17 (none centred outside survives). The
-              check compares against the page after the trim, so "wholly". */}
+              check compares against the page after the trim, so "wholly". It
+              skips whitespace, so "spaces aside". It counts a character as
+              ticked by where it lies (inside a ticked item, on its line), not
+              by which row held it, and fails on any character under a box
+              (spec 0004, INV-10), so "lying in an item you ticked". Every
+              "every" and "none" here is the check's own rule. */}
           <li>
-            Text: for each page’s visible area, every character wholly inside it that you
-            did not tick is still there, in its place, and none you ticked is. Outside it,
-            none is left at all, and a character crossing the page’s edge can go with what
-            lies outside it. It reads the pages twice, the second time ignoring
-            replacement text (the words a copy gives instead of what is drawn).
+            Text, spaces aside: for each page’s visible area, every character wholly
+            inside it is still there, in its place, except those lying in an item you
+            ticked, and none lying in one is left. Outside the visible area, none is left
+            at all, and a character crossing the page’s edge can go with what lies outside
+            it. It reads the pages twice, the second time ignoring replacement text (the
+            words a copy gives instead of what is drawn).
           </li>
           {/* Spec 0004, AC-13 (a picture it cannot decode counts as not blank)
               and INV-15, and its *Security model* bullet "The pixel check sees
@@ -226,14 +261,18 @@ export default function SecurityPage() {
               script name trees by `CATALOG_KEYS`, attachment annotations by
               `PAGE_KEYS`, JavaScript by `/JS` anywhere, earlier versions by the
               version count. A change to `rebuild.ts` that drops one names fewer
-              here. */}
+              here. "The file's own structure", never "anywhere": the check
+              reads every object's keys and never the bytes a picture or a font
+              stores inside itself, so what those hold is outside it (the fifth
+              verify, 2026-11-15), and Hidden data says so as a "can" line. */}
           <li>
-            Structure: none of the hidden data the home page lists is left anywhere in the
-            file, and the file holds a single version, with no earlier versions inside it.
+            Structure: none of the hidden data the home page lists is left in the file’s
+            own structure, and the file holds a single version.
           </li>
         </ul>
         {/* Spec 0004, AC-14 (no output, one kind); spec 0007, AC-16 (each
-            kind's words, so the reason is plain). */}
+            kind's words, so the reason is plain). "No file, only a plain
+            reason" is that gate: a failed check returns no bytes (INV-2). */}
         <p>
           If any part fails, you get no file, only a plain reason. RedactNest stops rather
           than hand you a file the check could not vouch for.
@@ -242,20 +281,44 @@ export default function SecurityPage() {
 
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="hiddenData" />
-        {/* Spec 0004, AC-7 (what is stripped); the band linked, not restated
-            (spec 0018, AC-6). */}
+        {/* Spec 0004, AC-7 (what is stripped) and AC-13 (the self check's
+            structure part, the gate behind "strips"); the band linked, not
+            restated (spec 0018, AC-6). "From the file's own structure", as the
+            check's line says, never "whenever a file carries it". */}
         <p>
           The home page lists the <a href={HOME_BAND}>hidden data RedactNest strips</a>{" "}
-          whenever a file carries it.
+          from the file’s own structure.
+        </p>
+        {/* Spec 0006, AC-29 (every page image in a run's output has the same
+            filter and the same bytes as in the source), held by
+            `tests/unit/cost.test.ts` and run again by the fifth verify
+            (2026-11-15). A picture under no removed item leaves as the file
+            stored it, so whatever it holds inside its own bytes leaves with
+            it; one the run blanks is written again, so "can". */}
+        <p>
+          Details stored inside a picture’s own data, such as a photo’s camera details,
+          can stay.
         </p>
         {/* Spec 0004, AC-7, its *Feature design* sentence "Stripped and never
             reported", and its *Consequences* bullet "The output is plainer than
-            the source, by design". */}
+            the source, by design". Each item sits behind the self check's
+            structure part (AC-13) or a step that does not exist: page labels,
+            viewer preferences and an opening action are off the catalog's
+            allowlist (`CATALOG_KEYS`), other automatic actions are the `/AA`
+            carrier key on any object, links are a page's `/Annots` (`PAGE_KEYS`)
+            and tags the catalog's structure tree. The identifier is a step
+            that does not exist: the output is a new document that takes the
+            source's pages and never its trailer (`graftPages`), pinned in
+            `tests/unit/redaction.test.ts`. "Without reporting" is
+            `SANITIZED_KINDS`, which has no kind for them
+            (`tests/unit/redaction-inventory.test.ts`). Private application
+            data is not named: the check holds only the format's own key for
+            it, not every place a producer may write its own. */}
         <p>
-          That list leaves some things out. RedactNest also strips private application
-          data, page labels, viewer preferences, automatic actions that are not scripts,
-          and the file’s identifier, without reporting them. And the cleaned copy loses
-          its links and its accessibility tags, so screen readers read it less well.
+          That list leaves some things out. RedactNest also strips page labels, viewer
+          preferences, automatic actions that are not scripts, and the file’s identifier,
+          without reporting them. And the cleaned copy loses its links and its
+          accessibility tags, so screen readers read it less well.
         </p>
 
         <h3>Notes and attachments</h3>
@@ -265,7 +328,11 @@ export default function SecurityPage() {
             run with nothing ticked: no annotation, note text or attached file
             left in any object, both icons still drawn). "Can keep": one
             fixture measured, so the icon is a "can" line, while the text and
-            the file gone is AC-7's, on every file. */}
+            the file gone is AC-7's, on every file. "Is gone" sits behind the
+            self check's structure part (AC-13): no page holds annotations
+            (`PAGE_KEYS`), the catalog no attachment list (`CATALOG_KEYS`) and
+            no object an associated file (`/AF`), and the write drops every
+            object nothing refers to (`WRITE_OPTIONS`). */}
         <p>
           The home page notes{" "}
           <a href={HOME_BAND}>how comments and form fields are flattened</a>. A sticky
@@ -279,7 +346,11 @@ export default function SecurityPage() {
           {/* Spec 0004, AC-10 (a file with an owner password is redacted, the
               output unencrypted with no permission restrictions), and its
               *Security model* bullet "Owner password restrictions are removed
-              on purpose". */}
+              on purpose". "Not refused for that" names a step that does not
+              exist: the open refuses only a file that needs a password to open
+              (`src/engine/open.ts`). "No restriction" sits behind the self
+              check, which fails an output whose trailer holds `/Encrypt`
+              (AC-13). */}
           <li>
             A file that opens without a password but restricts what you can do with it is
             not refused for that, and the cleaned copy carries no restriction. That is on
@@ -301,9 +372,10 @@ export default function SecurityPage() {
 
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="whatItFinds" />
-        {/* Spec 0005, AC-14 (names and addresses not looked for); spec 0017,
-            AC-1 (the custom terms panel). That terms come with Pro is said
-            once, under Plans. */}
+        {/* Spec 0005, AC-14 (names and addresses not looked for: no such
+            detector exists, a step that does not exist); spec 0017, AC-1 (the
+            custom terms panel). That terms come with Pro is said once, under
+            Plans. */}
         <p>
           RedactNest looks for the{" "}
           <a href={HOME_BAND}>kinds of detail the home page lists</a>. It does not look
@@ -312,16 +384,21 @@ export default function SecurityPage() {
         {/* Spec 0005, AC-8 (a match the find step can tell the engine would
             refuse starts unticked and cannot be ticked), AC-10 and AC-13. That
             a row you can tick can still stop the run (spec 0005, AC-6) is said
-            once, under When it stops instead. */}
+            once, under When it stops instead. "Any row except" names a step
+            that does not exist: the session refuses a tick only on a blocked
+            match (`tick-toggled` and `ticks-set` in `src/lib/session.ts`). The rows hold still
+            while a run works (spec 0007, AC-7's rule for select all, which the
+            checklist applies to every row), so "while no run is under
+            way". */}
         <p>
-          Each find is a row with a box. A row’s starting tick is a suggestion: you can
-          tick or untick any row except one RedactNest can tell, while reading, that it
-          cannot remove safely.
+          Each find is a row with a box. A row’s starting tick is a suggestion. While no
+          run is under way, you can tick or untick any row except one RedactNest can tell,
+          while reading, that it cannot remove safely.
         </p>
 
         <h3>Custom terms</h3>
         {/* Spec 0017, AC-29 and INV-5 (no pattern is built from a term, so a
-            term is plain words), AC-7 (case and accents folded) and AC-8
+            term is plain words: "never" names a step that does not exist), AC-7 (case and accents folded) and AC-8
             (spacing and line breaks match one space); C3 linked, not
             restated. */}
         <p>
@@ -394,7 +471,8 @@ export default function SecurityPage() {
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="pagesItCannotRead" />
         {/* Spec 0004's *Security model* bullet "Text drawn as vector outlines,
-            or shown only as pixels". */}
+            or shown only as pixels". "Does not read" names a step that does
+            not exist: RedactNest has no text recognition. */}
         <p>
           RedactNest does not read words that exist only as a picture, so it cannot find
           them.
@@ -436,13 +514,17 @@ export default function SecurityPage() {
 
         <h3>Fake redactions in files you receive</h3>
         {/* Spec 0006, AC-6 (text under a cover), AC-7 (text a viewer does not
-            show) and INV-9 (the search can miss). */}
+            show) and INV-9 (the search can miss). "When it finds some, it warns
+            you" sits behind two records over every finding in
+            `src/lib/page-findings.ts` (`FINDING_TONE` and the finding lines):
+            both findings are warnings with words of their own, a finding
+            without its line fails `pnpm typecheck`, and both lines say the
+            text is still in the file. */}
         <p>
           RedactNest looks for text under a box or picture drawn over it, and for text you
           cannot see, such as text the same colour as the page. When it finds some, it
-          warns you: the page may look redacted, but the text is still in the file. This
-          search can miss hidden text, so a file you received can still hold words that
-          look covered, with no warning.
+          warns you that the text is still in the file. This search can miss hidden text,
+          so a file you received can still hold words that look covered, with no warning.
         </p>
       </section>
 
@@ -451,7 +533,10 @@ export default function SecurityPage() {
         {/* Spec 0004, AC-1 to AC-3, with spec 0007, AC-16 (the `corrupt`
             kind's words: the file may be damaged); spec 0007, AC-17 (a file
             that needs a password is refused, and the page never asks for one);
-            spec 0006, AC-10 (no page it can read). */}
+            spec 0006, AC-10 (no page it can read). Each is a refusal the engine
+            makes on every file it judges that way, in the open's fixed order
+            (`src/engine/open.ts`). "Never its name" names a step that does not
+            exist: the name is never consulted (spec 0004, INV-4). */}
         <p>
           At open, RedactNest refuses, among others, a file that is not a PDF (judged by
           its contents, never its name), one too damaged to open, one that needs a
@@ -459,7 +544,9 @@ export default function SecurityPage() {
           switch on and off, and a file in which it finds no page it can read.
         </p>
         {/* Spec 0004, AC-26 to AC-29; spec 0005, AC-8. That the row cannot be
-            ticked is said once, under What it finds. */}
+            ticked is said once, under What it finds. "The row says" sits behind
+            `BLOCKED_REASON_TEXT`, a record over every reason a match is
+            blocked for, each line ending "will stay in the file". */}
         <p>
           Some items cannot be removed safely, such as text set at an angle or inside
           replacement text. Where RedactNest can tell while reading, the row says the item
@@ -471,11 +558,16 @@ export default function SecurityPage() {
             its *Security model* bullets "A document with a text object that is
             positioned with `Td`" (some files stop every run) and "A text
             watermark that crosses a target" (a stop met only while
-            removing). */}
+            removing). "No file" is spec 0004, AC-14, on every failed run. "Your
+            ticks are kept" is the session's `failed` edge out of a run, which
+            every refused run takes (spec 0007, AC-14 and INV-1). A worker lost
+            during a run is not a refusal and its ticks do not survive it
+            (AC-14's last sentence), so the last line says so. */}
         <p>
           Otherwise the run stops with a plain reason and no file, and your ticks are
           kept: a row you could tick can still stop the run, for something RedactNest
-          meets only while removing. Some files stop every run.
+          meets only while removing. Some files stop every run. A run can also end because
+          the engine itself was lost, and the review then starts over without your ticks.
         </p>
       </section>
 
@@ -505,7 +597,12 @@ export default function SecurityPage() {
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="logsAndCounts" />
         {/* Spec 0002's *Security model* bullet "Audit logging, stated
-            plainly". */}
+            plainly". "No record" sits behind three gates: the tool page's
+            content security policy (`connect-src 'self'`), no endpoint of ours
+            that takes document data (spec 0002, AC-3 as C5 amends it), and
+            every log, count and error payload typed as kinds and numbers with
+            no free string (spec 0002, INV-4, held by
+            `tests/unit/loggable.test.ts`). */}
         <p>
           On purpose, there is no record of your document or its words, because such a
           record would recreate the very exposure RedactNest exists to remove.
@@ -513,7 +610,8 @@ export default function SecurityPage() {
         {/* Spec 0004, AC-24 (never reaches the console), and its *Decision*
             bullet "MuPDF's log is silenced once, right after the engine loads"
             (its warnings can quote document detail); C8 and C10 linked, not
-            restated. */}
+            restated. "Thrown away" is the callback `silenceEngineLog` installs
+            on every engine load, before a document is opened. */}
         <p>
           MuPDF’s own messages, which can quote a document, are thrown away inside the
           worker as the engine loads. Whether our own code writes a log is in{" "}
@@ -533,14 +631,17 @@ export default function SecurityPage() {
 
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="checkIt" />
-        {/* Spec 0009, AC-1 and AC-4. */}
+        {/* Spec 0009, AC-1 and AC-4. "Every page": the root layout draws the
+            footer on every route (`src/app/layout.tsx`), and a build whose
+            link is not the built version's fails (AC-4 to AC-6). */}
         <p>
           The foot of every page links to the source code for the version you are using.
         </p>
         {/* Spec 0002, AC-3 as C5 amends it, and spec 0004, AC-21 (what the
             tool page asks our server); C1 and C5 linked. Developer tools come
             first, because requests made as the page loads are listed only if
-            the panel is already open. */}
+            the panel is already open. "Every request" is what the browser's
+            own panel does, not a claim about RedactNest. */}
         <p>
           Your browser can show you the rest. Open its developer tools, then load the tool
           page and redact a file, and the network panel lists every request the page

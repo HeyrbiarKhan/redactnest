@@ -161,13 +161,20 @@ describe("the security page", () => {
     ["removedNotCovered", "a change in the engine’s defaults cannot quietly change"],
     ["removedNotCovered", "a ticked item MuPDF cannot remove stops the run"],
     ["theCheck", "from the exact bytes you will download"],
-    ["theCheck", "every character wholly inside it that you did not tick"],
+    [
+      "theCheck",
+      "every character wholly inside it is still there, in its place, except those lying in an item you ticked",
+    ],
+    ["theCheck", "none lying in one is left"],
     ["theCheck", "a character crossing the page’s edge can go with what lies outside it"],
     ["theCheck", "can escape both the blanking and this check"],
+    ["theCheck", "is left in the file’s own structure"],
     ["theCheck", "If any part fails, you get no file"],
     ["theCheck", "a file the check could not vouch for"],
     // Hidden data (spec 0004).
-    ["hiddenData", "hidden data RedactNest strips whenever a file carries it"],
+    ["hiddenData", "hidden data RedactNest strips from the file’s own structure"],
+    ["hiddenData", "Details stored inside a picture’s own data"],
+    ["hiddenData", "a photo’s camera details, can stay"],
     ["hiddenData", "automatic actions that are not scripts"],
     ["hiddenData", "its links and its accessibility tags"],
     ["hiddenData", "can keep that icon as a mark on the page"],
@@ -178,6 +185,7 @@ describe("the security page", () => {
     ["whatItFinds", "does not look for names or postal addresses"],
     ["whatItFinds", "you can add those as custom terms"],
     ["whatItFinds", "A row’s starting tick is a suggestion"],
+    ["whatItFinds", "While no run is under way, you can tick or untick"],
     ["whatItFinds", "any row except one RedactNest can tell, while reading, that it"],
     ["whatItFinds", "never a pattern or a wildcard"],
     ["whatItFinds", "line breaks, but not all"],
@@ -200,6 +208,7 @@ describe("the security page", () => {
     ["pagesItCannotRead", "beyond the page’s visible edge can stay in the file"],
     ["pagesItCannotRead", "Text a clip hides completely can stay in the file"],
     ["pagesItCannotRead", "Drawings outside the visible area can stay in the file"],
+    ["pagesItCannotRead", "it warns you that the text is still in the file"],
     ["pagesItCannotRead", "This search can miss hidden text"],
     // When it stops instead (specs 0004, 0005, 0006 and 0007).
     ["whenItStops", "one too damaged to open"],
@@ -210,6 +219,7 @@ describe("the security page", () => {
     ["whenItStops", "your ticks are kept"],
     ["whenItStops", "a row you could tick can still stop the run"],
     ["whenItStops", "some files stop every run"],
+    ["whenItStops", "the review then starts over without your ticks"],
     // Plans and the page limit (specs 0001, 0012 and 0017).
     ["plans", "how the tool page learns which plan applies to you"],
     ["plans", "Pro gives you longer documents and custom terms, not a lock"],
@@ -365,6 +375,32 @@ describe("the security page", () => {
 
     expect(text).not.toContain("reads the text a PDF holds");
     expect(text).not.toContain("restricts what you can do with it is redacted");
+  });
+
+  /**
+   * covers: AC-5. Words the fifth verify and the sweep after it found with no
+   * gate behind them (2026-11-15): hidden data gone "anywhere" and stripped
+   * "whenever" (the structure check reads keys, never the bytes a picture
+   * stores inside itself, spec 0006, AC-29), pictures blanked "to white" (a
+   * stencil picture is left unpainted, spec 0004, AC-13), private application
+   * data named as a kind (the check holds only the format's own key for it),
+   * every character "you did not tick" kept (the check goes by where a
+   * character lies, and skips spaces), any row tickable with no word on a run
+   * under way, and both hidden text warnings said to call the page redacted
+   * looking (only the covered text line does).
+   */
+  it("claims no more than its gates for hidden data, pictures, ticks and warnings", () => {
+    render(<SecurityPage />);
+    const text = mainText();
+
+    expect(text).not.toContain("left anywhere in the file");
+    expect(text).not.toContain("strips whenever a file carries it");
+    expect(text).not.toContain("blanks to white");
+    expect(text).not.toMatch(/private application data/i);
+    expect(text).not.toContain("that you did not tick is still there");
+    expect(text).not.toContain("suggestion: you can tick or untick any row");
+    expect(text).not.toContain("the page may look redacted");
+    expect(text).not.toContain("with no earlier versions inside it");
   });
 
   /** covers: AC-9. No cap, size or price as a number, and no repository. */
