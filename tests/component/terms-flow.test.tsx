@@ -245,7 +245,7 @@ describe("the tab's list (AC-3, AC-6)", () => {
       "“term NUMBER 3” not added because it is already in your list.",
     );
     expect(status).toHaveTextContent(
-      "2 not added because your list is full at 50 terms: “Two more” and “Three more”.",
+      "2 not added because your list was full at 50 terms: “Two more” and “Three more”.",
     );
     expect(field()).toHaveValue("");
   });
@@ -601,5 +601,28 @@ describe("the polite line names only listed terms (AC-19)", () => {
     await press(chipRemove("Acme Ltd"));
     expect(status).not.toHaveTextContent("already in your list");
     expect(status).toHaveTextContent(tooShort);
+  });
+
+  it("keeps the list full line after a removal, still naming the lines that never got in", async () => {
+    render(<ToolClient />);
+    await choose();
+    await screen.findByTestId("terms-panel");
+    const status = screen.getByTestId("terms-status");
+    const full =
+      "2 not added because your list was full at 50 terms: “Two more” and “Three more”.";
+
+    paste([
+      ...Array.from({ length: 50 }, (_, index) => `Term number ${index}`),
+      "Two more",
+      "Three more",
+    ]);
+    expect(await screen.findAllByTestId("term-chip")).toHaveLength(50);
+    expect(status).toHaveTextContent(full);
+
+    // The list now has room, but the line says what it was at the paste, so
+    // it is still true, and it is the only place those two lines are named.
+    await press(chipRemove("Term number 0"));
+    expect(screen.getAllByTestId("term-chip")).toHaveLength(49);
+    expect(status).toHaveTextContent(full);
   });
 });

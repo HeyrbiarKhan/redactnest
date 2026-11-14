@@ -695,9 +695,12 @@ export const TERM_REFUSAL_TEXT: Readonly<
     one: "it is already in your list",
     other: "they are already in your list",
   }),
+  // Past tense, unlike the rest: it says what the list was at that Add or
+  // paste, so it stays true once a term is removed and keeps naming the lines
+  // that never got in, which no other line names (AC-4, AC-19).
   "list-full": Object.freeze({
-    one: `your list is full at ${countText(config.maxCustomTerms)} terms`,
-    other: `your list is full at ${countText(config.maxCustomTerms)} terms`,
+    one: `your list was full at ${countText(config.maxCustomTerms)} terms`,
+    other: `your list was full at ${countText(config.maxCustomTerms)} terms`,
   }),
 });
 

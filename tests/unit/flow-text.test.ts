@@ -812,6 +812,12 @@ describe("the custom terms words (spec 0017)", () => {
       ]);
     });
 
+    it("says the list was full, so the line stays true after a term is removed", () => {
+      expect(words([{ text: "One more", reason: "list-full" }])).toEqual([
+        "“One more” not added because your list was full at 50 terms.",
+      ]);
+    });
+
     it("groups several by reason, each line reading as naturally as one alone, and says its reason", () => {
       expect(
         refusalLines(
@@ -836,7 +842,7 @@ describe("the custom terms words (spec 0017)", () => {
         },
         {
           reason: "list-full",
-          text: "2 not added because your list is full at 50 terms: “One more” and “Two more”.",
+          text: "2 not added because your list was full at 50 terms: “One more” and “Two more”.",
         },
       ]);
     });
