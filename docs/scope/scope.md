@@ -24,22 +24,23 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 11 | Telemetry & error monitoring | Release 3 | done |
 | 12 | Remaining detectors | Release 3 | done |
 | 13 | Custom terms | Release 4 | done |
-| 14 | Manual rectangle redaction | Release 5 | planned |
-| 15 | Marketing site | Release 6 | planned |
-| 16 | Security & how it works page | Release 6 | planned |
-| 17 | Data processing agreement | Release 6 | planned |
+| 14 | Manual rectangle redaction | Release 6 | planned |
+| 15 | Marketing site | Release 5 | planned |
+| 16 | Security & how it works page | Release 5 | planned |
+| 17 | Data processing agreement | Release 5 | planned |
 | 18 | AGPL compliance & source publication | Release 1 | done |
 | 19 | Sparse OCR scans | Release 1 | done |
 | 20 | Dense text layers over pictures | Release 1 | done |
 | 21 | Launch readiness | Release 2 | done |
 | 22 | Brand & UI refresh | Release 2 | done |
-| 23 | Legal review | Release 6 | planned |
+| 23 | Legal review | Release 5 | planned |
 | 24 | Detector follow ups | Release 3 | done |
 | 25 | More date forms | Release 3 | done |
 | 26 | UI polish | Release 3 | done |
 | 27 | Detector and fixture gates | Release 3 | done |
 | 28 | UI polish 2 | Release 3 | done |
-| 29 | Home page reflow | Release 6 | planned |
+| 29 | Home page reflow | Release 5 | planned |
+| 30 | Engine and code follow ups | Release 6 | planned |
 
 ## Foundations
 
@@ -391,27 +392,9 @@ spec [0017](../specs/0017-custom-terms/index.md) · code in `src/detect/terms.ts
 - [x] Test it: `/test custom terms`
 - [x] Review it (fresh model): `/check review custom terms`
 
-## Release 5: Second paid capability
+## Release 5: Get found and get trusted
 
-### 14. Manual rectangle redaction · needs a decision · GA
-Draw a box, and everything under it goes. The only way to remove signatures, logos, handwriting, table cells and images, and the only useful answer for a scanned page.
-**Done when:** a paid user can draw boxes on rendered pages, everything under a box is genuinely removed from the output including image data, screen coordinates map correctly to page coordinates at every zoom level, and there is a keyboard path to place and adjust a box.
-**Also owed here:** the page preview (spec 0013 left it with this feature): whether review shows rendered pages, the amendment to spec 0002 INV-1 and INV-2 that page images on the main thread need, and where rendered pages sit in `/tool`'s three area grid.
-- [ ] Design it (spec): `/architect manual rectangle redaction`
-
-## Release 6: Get found and get trusted
-
-### 15. Marketing site · needs a decision
-A small set of pages on what this audience actually searches for, since search is the acquisition channel for a self serve tool at this price. The landing page itself, the brand and the site wide social preview image are built in feature 22.
-**Done when:** the search pages are server rendered with metadata, a sitemap and their own social cards, they lead into the tool, and Core Web Vitals pass on mobile.
-**Also owed here:** the search pages reuse the shell, `FeatureList` and the social card's composition (spec 0013). Per page social cards, and whether a manifest is worth a policy change, are this feature's calls.
-- [ ] Design it (spec): `/architect marketing site`
-
-### 29. Home page reflow · from spec 0013
-At 320 pixels wide with text at 200%, the home page's main content scrolls sideways, with the header's menu shut or open. It is older than feature 28, whose menu is not the cause. Spec 0013's AC-26 checks 320 pixels and 200% text apart, so no criterion asks for both at once, but a visitor who needs both meets it. Built beside feature 15, since the search pages reuse the same shell and `FeatureList` (your call, 2026-11-11).
-**Done when:** at 320 pixels with 200% text, `/` has no sideways scroll with the menu shut or open; the element that was wider than the window wraps or shrinks rather than being clipped; wider screens look as today; and a browser test holds 320 pixels and 200% text together on `/`, which feature 15's search pages can join.
-**Also owed here:** find the wide element first, with `/debug` if it is not obvious. Spec 0013's AC-26 amended to name the combined case, and `scripts/make-brand.mjs` rerun only if a brand picture changes (each is drawn at desktop width, so none should).
-- [ ] Build it: `/develop home page reflow`
+Pulled ahead of rectangles (your call, 2026-11-14). Pro already has two things worth paying for, no page cap and custom terms, and the product is live, so visitors are what is missing now. The first month of counts (from about 2026-12-08) also says more once they arrive. The security page goes first, since it needs no spec; then the search pages, with the home page reflow built beside them. Features 23 and 17 stay in this release but wait for 100+ users and the lawyer, so release 6 can start while they wait.
 
 ### 16. Security & how it works page · Alpha
 The page that closes the sale for HR, legal and healthcare buyers: what in memory processing means, what the logs do and do not hold, and why covering text with a box is not redaction.
@@ -421,6 +404,19 @@ The page that closes the sale for HR, legal and healthcare buyers: what in memor
 **Also owed here:** the plan check (claim C5) and why the page cap is honesty based (spec 0012), linking the privacy policy's claims rather than restating them (spec 0011).
 **Also owed here:** what the counts and error reports hold, and what they never hold (spec 0016), linking claims C14 to C16 rather than restating them.
 - [ ] Build it: `/develop security & how it works page`
+
+### 15. Marketing site · needs a decision
+A small set of pages on what this audience actually searches for, since search is the acquisition channel for a self serve tool at this price. The landing page itself, the brand and the site wide social preview image are built in feature 22.
+**Done when:** the search pages are server rendered with metadata, a sitemap and their own social cards, they lead into the tool, and Core Web Vitals pass on mobile.
+**Also owed here:** the search pages reuse the shell, `FeatureList` and the social card's composition (spec 0013). Per page social cards, and whether a manifest is worth a policy change, are this feature's calls.
+**Also owed here:** the search pages may name custom terms, which Pro has done since spec 0017, under spec 0012's INV-8 (only what Pro does today, every cap from `config`).
+- [ ] Design it (spec): `/architect marketing site`
+
+### 29. Home page reflow · from spec 0013
+At 320 pixels wide with text at 200%, the home page's main content scrolls sideways, with the header's menu shut or open. It is older than feature 28, whose menu is not the cause. Spec 0013's AC-26 checks 320 pixels and 200% text apart, so no criterion asks for both at once, but a visitor who needs both meets it. Built beside feature 15, since the search pages reuse the same shell and `FeatureList` (your call, 2026-11-11).
+**Done when:** at 320 pixels with 200% text, `/` has no sideways scroll with the menu shut or open; the element that was wider than the window wraps or shrinks rather than being clipped; wider screens look as today; and a browser test holds 320 pixels and 200% text together on `/`, which feature 15's search pages can join.
+**Also owed here:** find the wide element first, with `/debug` if it is not obvious. Spec 0013's AC-26 amended to name the combined case, and `scripts/make-brand.mjs` rerun only if a brand picture changes (each is drawn at desktop width, so none should).
+- [ ] Build it: `/develop home page reflow`
 
 ### 23. Legal review · needs a decision · Alpha · from spec 0011
 The lawyer questions launch left open, asked once RedactNest has 100+ users, on a tech lawyer's advice (2026-10-03). PECA section 32, Pakistani law and courts, and a full review of both pages (spec 0011 steps 3 and 4), plus two from spec 0012: does Polar's own use of billing details as merchant of record (fraud, security, tax records) make it a controller for that part, and does every cookie claim C6 calls strictly necessary meet that exemption, given Clerk's `__refresh_<suffix>` stays after sign out on production. It sits before feature 17 because the Polar answer can change what the DPA says.
@@ -432,6 +428,22 @@ Something a business buyer can sign, ready before somebody asks for it under tim
 **Done when:** a DPA is available, reflects the no storage reality, and lists any subprocessors.
 **Also owed here:** it lists every entry in `OUTSIDE_SERVICES` (spec 0011), Umami and Sentry included since spec 0016, with Clerk and Polar as processors, as Polar's own DPA says (spec 0012). Feature 23's answer on Polar may change Polar's role.
 - [ ] Build it: `/develop data processing agreement`
+
+## Release 6: Second paid capability
+
+Moved after release 5 (your call, 2026-11-14), so counts from real visitors can inform the biggest build left. Feature 30 goes first: small engine gaps that fail safe and code nits, and its rotated page fixture is one rectangles will need too.
+
+### 30. Engine and code follow ups · Alpha · from specs 0006, 0007 and 0013
+Small open items from older specs' Follow-ups, gathered in one row so they stay visible (your call, 2026-11-14). Two are engine gaps that fail safe, never a leak; the rest are code nits from reviews.
+**Done when:** a rotated and cropped fixture, with text past the crop and a line straddling it, is pinned through open, run and self check, so `planTrim`'s strips, the media box fallback and the annotation quad points are shown to agree on a `/Rotate` page (spec 0006); a line box that is not finite gets the same answer at open as at Redact, either as a trim trigger or as an `unsupported` refusal at open, never a `redaction-incomplete` after the visitor has ticked (spec 0006); `partlyNamed` in `src/app/tool/result-card.tsx` comes from the same `OutputForm` that named the file, not from the name's ending (spec 0007, nit 2); `countRemoved` moves out of `src/lib/detectors.ts`, so `src/lib/session.ts` stays plain data with no `lucide-react` (spec 0007, nit 3); and `IconCircle`'s unused `sm` size is removed with its tests, its `design.md` radius rule and its `src/ui/AGENTS.md` line, or kept on purpose, your call at the build (spec 0013).
+**Also owed here:** if choosing between the trim trigger and the refusal turns out to change what a visitor sees beyond a plain refusal, bring it to `/architect` rather than picking in the build. The rotated fixture also gives feature 14 a rotated page to map boxes onto. Each item is ticked in its spec's Follow-up as it lands.
+- [ ] Build it: `/develop engine and code follow ups`
+
+### 14. Manual rectangle redaction · needs a decision · GA
+Draw a box, and everything under it goes. The only way to remove signatures, logos, handwriting, table cells and images, and the only useful answer for a scanned page.
+**Done when:** a paid user can draw boxes on rendered pages, everything under a box is genuinely removed from the output including image data, screen coordinates map correctly to page coordinates at every zoom level, and there is a keyboard path to place and adjust a box.
+**Also owed here:** the page preview (spec 0013 left it with this feature): whether review shows rendered pages, the amendment to spec 0002 INV-1 and INV-2 that page images on the main thread need, and where rendered pages sit in `/tool`'s three area grid.
+- [ ] Design it (spec): `/architect manual rectangle redaction`
 
 ## Deferred
 Out of scope for the current build pass, kept so the plan stays honest.
@@ -461,7 +473,7 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **A date piece that starts with punctuation**: a new date a higher kind's row holds in part is listed as its free pieces, and the piece rule trims whitespace only, so `212 918 8665 1119 21. June 2014` lists `. June 2014` (pinned in `detect.test.ts`). Harmless to the bar, but the row reads oddly in the checklist and removes the full stop. Trim a date piece's leading punctuation, measured through `detect` against main first (the review's third Minor) · needs a decision · from spec 0015
 - **Date variants still missed after feature 25**: `A.D.` or `in the year` before a year, number words (`twenty-seventh day`), a day range in a new form (`3-5 Jan-2026`), a written year first date with spaces (`2026 Sep 27`), uneven spacing round a separator, an ordinal or mixed dashes in a flush form, a space before a comma, a number right before a month first date read as a two digit year (`19 December, 16 2015`), and two dates joined where one is unseparated (`20260927-20260928`, which main misses too). Bring one to `/architect` when a review or a visitor meets it, measured through `detect` against main · needs a decision · from spec 0015
 - **A natural text corpus for detector noise**: spec 0015's noise figures come from synthetic shapes and token soup; a corpus of made up but natural documents would tighten them, the two digit year and numbered list figures first · needs a decision · from spec 0015
-- **Read the first month of counts**: once feature 11 has run for a month (it went live on 2026-11-08, so from about 2026-12-08), bring its numbers to `/architect` for spec 0006's thresholds and `off-page-picture`, spec 0005's `replacement-text` refusals and spec 0007's named refused item (*Name the item behind a refused run*, above) · needs a decision · from spec 0016
+- **Read the first month of counts**: once feature 11 has run for a month (it went live on 2026-11-08, so from about 2026-12-08), bring its numbers to `/architect` for spec 0006's thresholds and `off-page-picture`, spec 0005's `replacement-text` refusals and spec 0007's named refused item (*Name the item behind a refused run*, above); and read spec 0017's counts (`term` rows, `terms` and `termsSetAside`) to see whether Pro's custom terms are used and how often a Free job meets a kept list · needs a decision · from specs 0016 and 0017
 - **Automated browsers in the counts**: if page visits look inflated, measure, then consider skipping `navigator.webdriver`, keeping the e2e flag so the privacy proof still runs · needs a decision · from spec 0016
 - **A custom term split by a running footer**: spec 0017 carries a page's end into the next page, so a term split by a page break is found, but text drawn between the two parts in reading order (a running footer or a page number) still keeps them apart. Measure how often real documents do this before any design · needs a decision · from spec 0017
 - **Patterns in a custom term**: a term today is literal text; a reference number's shape (`INV-` and any four digits) or a wildcard would be a decision of its own, with its own noise measured · needs a decision · from spec 0017
