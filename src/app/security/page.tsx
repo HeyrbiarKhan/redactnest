@@ -282,8 +282,9 @@ export default function SecurityPage() {
               on purpose". */}
           <li>
             A file that opens without a password but restricts what you can do with it is
-            redacted, and the cleaned copy carries no restriction. That is on purpose: you
-            already hold the content, and the restriction protects nothing from you.
+            not refused for that, and the cleaned copy carries no restriction. That is on
+            purpose: you already hold the content, and the restriction protects nothing
+            from you.
           </li>
           {/* Spec 0004's *Security model* bullet "Embedded fonts keep the shapes
               of removed characters" (an inventory of which characters existed).
@@ -395,8 +396,8 @@ export default function SecurityPage() {
         {/* Spec 0004's *Security model* bullet "Text drawn as vector outlines,
             or shown only as pixels". */}
         <p>
-          RedactNest reads the text a PDF holds. It does not read words that exist only as
-          a picture, so it cannot find them.
+          RedactNest does not read words that exist only as a picture, so it cannot find
+          them.
         </p>
         {/* Spec 0006, INV-9, and its *Consequences* bullet "The heuristic
             findings will misfire sometimes" (each errs toward saying too much;

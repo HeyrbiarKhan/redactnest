@@ -351,6 +351,22 @@ describe("the security page", () => {
     expect(text).not.toContain("plays no part in keeping your document private");
   });
 
+  /**
+   * covers: AC-5. Words the fourth verify found claiming more than their
+   * sources (2026-11-14): every text a PDF holds read (spec 0004's bullet on
+   * outlines and pixels states only what is not), and a file with an owner
+   * restriction promised a redacted result (AC-10 makes the restriction no
+   * reason to refuse, but the run can still stop for another, spec 0007,
+   * AC-14).
+   */
+  it("claims no more than its sources for reading text and owner restrictions", () => {
+    render(<SecurityPage />);
+    const text = mainText();
+
+    expect(text).not.toContain("reads the text a PDF holds");
+    expect(text).not.toContain("restricts what you can do with it is redacted");
+  });
+
   /** covers: AC-9. No cap, size or price as a number, and no repository. */
   it("states no cap as a number and never mentions the repository", () => {
     render(<SecurityPage />);
