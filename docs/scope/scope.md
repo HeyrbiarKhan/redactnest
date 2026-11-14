@@ -396,7 +396,7 @@ spec [0017](../specs/0017-custom-terms/index.md) · code in `src/detect/terms.ts
 
 Pulled ahead of rectangles (your call, 2026-11-14). Pro already has two things worth paying for, no page cap and custom terms, and the product is live, so visitors are what is missing now. The first month of counts (from about 2026-12-08) also says more once they arrive. The security page goes first, since it needs no spec; then the search pages, with the home page reflow built beside them. Features 23 and 17 stay in this release but wait for 100+ users and the lawyer, so release 6 can start while they wait.
 
-### 16. Security & how it works page · Alpha
+### 16. Security & how it works page · Alpha + review
 The page that closes the sale for HR, legal and healthcare buyers: what in memory processing means, what the logs do and do not hold, and why covering text with a box is not redaction.
 **Done when:** the page describes the real implementation accurately, with no claim the code does not support.
 **Also owed here:** a sticky note or a file attachment that shows in the source is flattened into the page like any other visible annotation (spec 0004, AC-22), so its icon stays as a mark on the page even though the note's text and the attached file are gone. Say so plainly, so the page does not suggest every trace of them was removed.
@@ -404,6 +404,8 @@ The page that closes the sale for HR, legal and healthcare buyers: what in memor
 **Also owed here:** the plan check (claim C5) and why the page cap is honesty based (spec 0012), linking the privacy policy's claims rather than restating them (spec 0011).
 **Also owed here:** what the counts and error reports hold, and what they never hold (spec 0016), linking claims C14 to C16 rather than restating them.
 - [ ] Build it: `/develop security & how it works page`
+- [ ] Verify it: `/check verify security & how it works page`
+- [ ] Review it (fresh model): `/check review security & how it works page`
 
 ### 15. Marketing site · needs a decision
 A small set of pages on what this audience actually searches for, since search is the acquisition channel for a self serve tool at this price. The landing page itself, the brand and the site wide social preview image are built in feature 22.
