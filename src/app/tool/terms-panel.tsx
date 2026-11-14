@@ -233,8 +233,15 @@ export function TermsPanel({
       )}
 
       <div aria-live="polite" data-testid="terms-status" className="text-small text-ink">
-        {status.map((line) => (
-          <p key={line}>{line}</p>
+        {status.map((line, at) => (
+          // Keyed by its words, so a line keeps its node when one before it
+          // goes and is never heard twice; a repeat of the same words takes
+          // its count, so two keys never clash.
+          <p
+            key={`${line}#${status.slice(0, at).filter((each) => each === line).length}`}
+          >
+            {line}
+          </p>
         ))}
       </div>
     </div>
