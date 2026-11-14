@@ -23,7 +23,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 10 | Billing & paid plan | Release 2 | done |
 | 11 | Telemetry & error monitoring | Release 3 | done |
 | 12 | Remaining detectors | Release 3 | done |
-| 13 | Custom terms | Release 4 | in-progress |
+| 13 | Custom terms | Release 4 | done |
 | 14 | Manual rectangle redaction | Release 5 | planned |
 | 15 | Marketing site | Release 6 | planned |
 | 16 | Security & how it works page | Release 6 | planned |
@@ -376,7 +376,7 @@ spec [0013](../specs/0013-brand-ui-refresh/index.md) · code in `src/ui/spinner.
 
 ## Release 4: First paid capability
 
-### 13. Custom terms · in-progress · Beta + review
+### 13. Custom terms · done · Beta + review
 Type the names, reference numbers or phrases to remove and they go everywhere they appear. The first paid capability with real substance behind it.
 **Done when:** a paid user can enter terms and every occurrence is removed from the content stream, including matches broken across line breaks and hyphenation, and the summary reports how many were removed.
 spec [0017](../specs/0017-custom-terms/index.md) · code in `src/detect/terms.ts`, `src/lib/term-text.ts`, `src/lib/terms.ts`, `src/engine/find.ts`, `src/worker`, `src/lib/session.ts`, `src/app/tool` (`terms-panel.tsx`), `src/ui` (`text-field.tsx`, `chip.tsx`), `scripts/lib/terms-fixtures.mjs`
