@@ -9,12 +9,12 @@ _Steps derived from spec 0018's acceptance criteria, as ratified on 2026-11-14. 
 - [ ] On `/tool`, open `tests/fixtures/text-page.pdf`, untick a row, then follow the footer's "Security" link → the browser's leave warning appears, and dismissing it keeps the work → AC-2
 - [ ] On a wide desktop window, scroll `/security` → On this page sits beside the text and stays in view while a middle section scrolls past; on a narrower window, and on the wide one with text at 200%, it sits above the text and scrolls away with the page → AC-3
 - [ ] Read "Last updated" → it matches the newest entry under Changes, and each On this page link lands on its own heading, in `SECURITY_SECTIONS` order → AC-3, AC-4
-- [ ] Walk AC-5 over every paragraph, list item and the drawing in `src/app/security/page.tsx`, in four checks → AC-5, AC-6:
+- [x] Walk AC-5 over every paragraph, list item and the drawing in `src/app/security/page.tsx`, in four checks → AC-5, AC-6:
   1. **Sourced.** Read its source comment, open the named item and confirm it exists and says the thing. The comment names, in this order: the spec's AC or INV where it has one; else a privacy claim (C1 to C16); else a *Security model*, *Consequences* or *Decision* bullet by its opening words; else the dated measurement spec 0018 records. A heading alone fails.
   2. **Safe direction.** For each claim about an outcome (finds, lists, ticks, removes, blanks, refuses, warns, names), either try to break it with the real code, through the PDFs in `tests/fixtures` or plain text through `detect` and `findTerms`, and find it holds in every case it covers, or confirm it is a "can" line. A "can" line the code sometimes gets right is met, not a failure.
   3. **Absolutes.** Each "never", "always", "every", "none", "only" or "is not" sits behind a gate every file passes (the self check, the tool page's content security policy, a refusal the engine makes on every file it judges that way) or names a step that does not exist (no text recognition, no name or address detector, no pattern in a term).
   4. **Said once.** No fact appears twice on the page, and none restates what a page AC-6 names already says; a pointer names the subject, never the fact.
-- [ ] Walk spec 0018's *Coverage of earlier specs' asks* row by row → for each earlier spec's ask, the line the table points to is in that section and states the ask at a buyer's level: by kind, with no quoted value, no exact threshold and no list of named cases → AC-5, AC-7
+- [x] Walk spec 0018's *Coverage of earlier specs' asks* row by row → for each earlier spec's ask, the line the table points to is in that section and states the ask at a buyer's level: by kind, with no quoted value, no exact threshold and no list of named cases → AC-5, AC-7
 - [ ] Follow every link in the text → Your documents, What we do not do, What we receive when you visit and Counts and error reports on `/privacy`, Checking the result is your job on `/terms`, and the finds and strips band on `/` (from Hidden data, its note on comments, and What it finds), each landing on its heading → AC-6
 - [ ] Open `tests/fixtures/metadata.pdf` in `/tool`, press Make a cleaned copy with nothing ticked, download, and open the cleaned file → the sticky note's and the attachment's icons still show near the top right of page one, while the note's words ("Private reviewer comment") and the attached file are gone → AC-7 (measured 2026-11-14 with the real engine: ink inside both icons' areas before and after, and the note's text gone)
 - [ ] Look at the drawing under "Removed, not just covered" on a wide window → two panels side by side that look the same; under the first, a copy gives the address, under the second, nothing after "Contact:" → AC-8
@@ -26,9 +26,9 @@ _Steps derived from spec 0018's acceptance criteria, as ratified on 2026-11-14. 
 
 ## Commands
 
-- [ ] `pnpm exec vitest run tests/component/app/security-page.test.tsx tests/component/ui/cover-figure.test.tsx tests/component/app/site-nav.test.tsx tests/unit/policy-pages.test.ts tests/unit/policy-sections.test.ts tests/unit/policy-changes.test.ts` → all pass, the banned outcome phrases, the AC-7 pins and the three verifies' guards among them → AC-1 to AC-9, AC-11
-- [ ] `pnpm exec playwright test tests/e2e/legal-pages.spec.ts tests/e2e/shell.spec.ts --project=chromium` → all pass → AC-1 to AC-4, AC-6, AC-8 to AC-10
-- [ ] `pnpm typecheck` and `pnpm lint` → clean → AC-11
+- [x] `pnpm exec vitest run tests/component/app/security-page.test.tsx tests/component/ui/cover-figure.test.tsx tests/component/app/site-nav.test.tsx tests/unit/policy-pages.test.ts tests/unit/policy-sections.test.ts tests/unit/policy-changes.test.ts` → all pass, the banned outcome phrases, the AC-7 pins and the three verifies' guards among them → AC-1 to AC-9, AC-11
+- [x] `pnpm exec playwright test tests/e2e/legal-pages.spec.ts tests/e2e/shell.spec.ts --project=chromium` → all pass → AC-1 to AC-4, AC-6, AC-8 to AC-10
+- [x] `pnpm typecheck` and `pnpm lint` → clean → AC-11
 
 ## Acceptance criteria coverage
 
