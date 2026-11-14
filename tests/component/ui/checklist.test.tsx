@@ -197,6 +197,14 @@ describe("CountBadge", () => {
     expect(container).not.toHaveTextContent("items");
   });
 
+  it("writes 1,000 and more with a thousands separator, as every count on the page is", () => {
+    const { container } = render(
+      <CountBadge count={3_000} noun={ITEMS} tone="neutral" compact />,
+    );
+
+    expect(container).toHaveTextContent("3,000 items");
+  });
+
   it("shows only the number when compact, and still says the noun", () => {
     const { container } = render(
       <CountBadge count={2} noun={ITEMS} tone="neutral" compact />,

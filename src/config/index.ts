@@ -30,6 +30,8 @@ const RAW = {
   NEXT_PUBLIC_MAX_PAGES: process.env.NEXT_PUBLIC_MAX_PAGES,
   NEXT_PUBLIC_MAX_FILE_BYTES: process.env.NEXT_PUBLIC_MAX_FILE_BYTES,
   NEXT_PUBLIC_MATCH_CONTEXT_CHARS: process.env.NEXT_PUBLIC_MATCH_CONTEXT_CHARS,
+  NEXT_PUBLIC_MAX_CUSTOM_TERMS: process.env.NEXT_PUBLIC_MAX_CUSTOM_TERMS,
+  NEXT_PUBLIC_MAX_TERM_CHARS: process.env.NEXT_PUBLIC_MAX_TERM_CHARS,
   NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   NEXT_PUBLIC_SOURCE_URL: process.env.NEXT_PUBLIC_SOURCE_URL,
   // Whether billing is on (spec 0012, AC-23). Only its presence is read here;
@@ -260,6 +262,20 @@ const matchContextChars = readInt(
   CONTEXT_CHAR_CEILING,
 );
 
+/**
+ * Spec 0017, *Configuration required*. How many custom terms a tab's list
+ * holds, and the longest term in characters as a person sees them (with at
+ * most four code points for each, `TERM_POINTS_PER_CHAR` in `term-text`). The
+ * ceilings keep a typo from handing a page a list or a term the matcher was
+ * never measured on: raising either default reruns AC-28 (and AC-29 for the
+ * term length).
+ */
+const TERM_LIST_CEILING = 100;
+const TERM_CHARS_CEILING = 200;
+
+const maxCustomTerms = readInt("NEXT_PUBLIC_MAX_CUSTOM_TERMS", 50, 1, TERM_LIST_CEILING);
+const maxTermChars = readInt("NEXT_PUBLIC_MAX_TERM_CHARS", 100, 2, TERM_CHARS_CEILING);
+
 if (freePageCap > maxPages) {
   throw new ConfigError(
     `NEXT_PUBLIC_FREE_PAGE_CAP (${freePageCap}) cannot exceed NEXT_PUBLIC_MAX_PAGES (${maxPages}).`,
@@ -317,6 +333,13 @@ export const config = Object.freeze({
    * the window size is read here rather than written anywhere else.
    */
   matchContextChars,
+  /**
+   * How many custom terms a tab's list holds (spec 0017, AC-4), and so how
+   * many one request may carry for a `paid` job (AC-27). Pro only.
+   */
+  maxCustomTerms,
+  /** The longest custom term, in characters as a person sees them (AC-4, AC-27). */
+  maxTermChars,
   /** Canonical origin, for metadata and the sitemap. */
   siteUrl: readUrl("NEXT_PUBLIC_SITE_URL", "http://localhost:3000", true),
   /**

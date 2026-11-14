@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, EyeOff } from "lucide-react";
+import { Ban, EyeOff, Info } from "lucide-react";
 
 import { cx } from "@/lib/cx";
 
@@ -36,6 +36,12 @@ interface ChecklistItemProps {
    * after any blocked reason and joins the checkbox's description.
    */
   readonly concealedNote?: string;
+  /**
+   * Why a custom term's row was left unticked (spec 0017, AC-14), one line
+   * per note, after the concealed note, each joining the checkbox's
+   * description.
+   */
+  readonly notes?: readonly string[];
   readonly onCheckedChange: (checked: boolean) => void;
 }
 
@@ -69,6 +75,7 @@ export function ChecklistItem({
   disabled = false,
   blockedReason,
   concealedNote,
+  notes = [],
   onCheckedChange,
 }: ChecklistItemProps) {
   const textId = `${id}-text`;
@@ -76,6 +83,7 @@ export function ChecklistItem({
   const contextId = `${id}-context`;
   const reasonId = `${id}-reason`;
   const noteId = `${id}-concealed`;
+  const termNoteId = (at: number) => `${id}-note-${at}`;
   const blocked = blockedReason !== undefined;
   const concealed = concealedNote !== undefined;
   const inactive = disabled || blocked;
@@ -102,6 +110,7 @@ export function ChecklistItem({
             contextId,
             blocked && reasonId,
             concealed && noteId,
+            ...notes.map((_, at) => termNoteId(at)),
           )}
         />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
@@ -143,6 +152,21 @@ export function ChecklistItem({
               <span className="min-w-0">{concealedNote}</span>
             </span>
           )}
+          {notes.map((note, at) => (
+            <span
+              key={note}
+              id={termNoteId(at)}
+              className="flex items-start gap-2 text-small text-ink"
+            >
+              {/* A shape as well as words, as the other notes have one. */}
+              <Info
+                aria-hidden="true"
+                className="size-5 shrink-0 text-ink-muted"
+                strokeWidth={1.75}
+              />
+              <span className="min-w-0">{note}</span>
+            </span>
+          ))}
         </span>
       </label>
     </li>

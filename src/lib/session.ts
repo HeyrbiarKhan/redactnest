@@ -23,6 +23,8 @@ import type {
   ProgressPhase,
   RedactionOutcome,
   ReviewMatch,
+  TermId,
+  TermRemoval,
 } from "@/worker/protocol";
 
 import { countRemoved } from "@/lib/detectors";
@@ -39,6 +41,32 @@ import { isPartly } from "@/lib/page-findings";
  */
 export type SessionState =
   "idle" | "opening" | "reviewing" | "redacting" | "complete" | "failed" | "lost";
+
+/**
+ * Why a listed term was not searched in this job. Spec 0017, AC-17:
+ * `free-plan`, the job opened on the Free plan, so the kept list was not
+ * searched; `search-failed`, the worker answered a review search with an
+ * error (AC-20). A closed set; the words live in `TERMS_TEXT`.
+ */
+export const NOT_SEARCHED_REASONS = Object.freeze([
+  "free-plan",
+  "search-failed",
+] as const);
+
+export type NotSearchedReason = (typeof NOT_SEARCHED_REASONS)[number];
+
+/**
+ * One listed term's state in one job. Spec 0017, *State transitions* and
+ * INV-3: every term the job knows is searching, searched (with rows, or said
+ * not found), not searched with its reason, or set aside with its reason, and
+ * says which. The tab's list owns each term's text and order; the job holds
+ * only this (INV-7).
+ */
+export type TermState =
+  | { readonly state: "searching" }
+  | { readonly state: "searched" }
+  | { readonly state: "not-searched"; readonly reason: NotSearchedReason }
+  | { readonly state: "set-aside"; readonly reason: NotSearchedReason };
 
 /** Nothing is open. What a fresh page and a released session both look like. */
 export interface IdleSession {
@@ -81,19 +109,40 @@ export interface LiveSession {
   readonly runFailure: EngineErrorKind | null;
   /** Counts only. Null until the job completes. */
   readonly outcome: RedactionOutcome | null;
+  /**
+   * Each term's removals in the last run, from the `redacted` reply (spec
+   * 0017, AC-22). Set at `redacted` and cleared wherever `outcome` is, and
+   * kept beside it, never inside it, so it is never counted or logged (INV-9).
+   */
+  readonly removedByTerm: readonly TermRemoval[] | null;
   /** True once a download has been handed over. */
   readonly downloaded: boolean;
+  /**
+   * Each listed term's state in this job, keyed by the tab's ids (spec 0017,
+   * *Data model sketch*). Empty with billing off, or with nothing listed.
+   */
+  readonly terms: ReadonlyMap<TermId, TermState>;
 }
 
 export type ToolSession = IdleSession | LiveSession;
 
+/** What every `terms-*` action carries: its job, and its batch's terms. */
+interface TermsBatch {
+  readonly jobId: string;
+  readonly terms: readonly TermId[];
+}
+
 export type SessionAction =
-  /** A file was chosen. Implies releasing whatever came before it. */
+  /**
+   * A file was chosen. Implies releasing whatever came before it. `terms` is
+   * the tab's kept list (spec 0017, AC-6).
+   */
   | {
       readonly type: "file-chosen";
       readonly jobId: string;
       readonly file: File;
       readonly entitlement: EntitlementSnapshot;
+      readonly terms: readonly TermId[];
     }
   | { readonly type: "progress"; readonly phase: ProgressPhase }
   | {
@@ -109,17 +158,39 @@ export type SessionAction =
       readonly on: boolean;
     }
   | { readonly type: "redact-started" }
-  | { readonly type: "redacted"; readonly outcome: RedactionOutcome }
+  | {
+      readonly type: "redacted";
+      readonly outcome: RedactionOutcome;
+      readonly removedByTerm: readonly TermRemoval[];
+    }
   | { readonly type: "downloaded" }
   /** Make it again: the same ticks, run once more after a download. */
   | { readonly type: "rerun" }
   | { readonly type: "cancelled" }
   | { readonly type: "failed"; readonly failure: EngineErrorKind }
   | { readonly type: "worker-lost" }
-  | { readonly type: "retry" }
-  | { readonly type: "released" };
+  /** `terms` is the tab's kept list, searched at the reopen (spec 0017, AC-20). */
+  | { readonly type: "retry"; readonly terms: readonly TermId[] }
+  | { readonly type: "released" }
+  /* Spec 0017, *State transitions*. */
+  /** An Add, a paste or a Try again sent its batch to the worker. */
+  | ({ readonly type: "terms-searching" } & TermsBatch)
+  /** The batch's search landed, with every row its terms found. */
+  | ({
+      readonly type: "terms-found";
+      readonly matches: readonly ReviewMatch[];
+    } & TermsBatch)
+  /** The worker answered the batch with an error kind (AC-20). */
+  | ({ readonly type: "terms-failed" } & TermsBatch)
+  /** Set aside for this file (AC-17). */
+  | ({ readonly type: "terms-set-aside" } & TermsBatch)
+  /** Remove, or Remove all (AC-5). */
+  | ({ readonly type: "terms-removed" } & TermsBatch);
 
 export const IDLE: IdleSession = Object.freeze({ state: "idle" });
+
+const SEARCHED: TermState = Object.freeze({ state: "searched" });
+const SEARCHING: TermState = Object.freeze({ state: "searching" });
 
 /**
  * What the file's name says it is. Spec 0007, AC-12 and INV-2.
@@ -213,6 +284,64 @@ export function hasUnsavedWork(session: ToolSession): boolean {
   return false;
 }
 
+/**
+ * May Make a cleaned copy run? Spec 0017, AC-18 and INV-3: not while any
+ * listed term is still searching, or was not searched and has not been set
+ * aside, so no term is ever left unsearched in silence. A set aside term does
+ * not hold it.
+ */
+export function canMake(session: LiveSession): boolean {
+  for (const { state } of session.terms.values()) {
+    if (state === "searching" || state === "not-searched") return false;
+  }
+  return true;
+}
+
+/**
+ * The kept list's states as a job opens (spec 0017, *State transitions*):
+ * each term searching on a `paid` job and not searched (`free-plan`) on a
+ * `free` one. A term set aside earlier in the same job stays set aside,
+ * which only a retry after a lost worker can meet.
+ */
+function keptStates(
+  ids: readonly TermId[],
+  entitlement: EntitlementSnapshot,
+  earlier: ReadonlyMap<TermId, TermState>,
+): ReadonlyMap<TermId, TermState> {
+  const opening: TermState =
+    entitlement.tier === "paid"
+      ? Object.freeze({ state: "searching" })
+      : Object.freeze({ state: "not-searched", reason: "free-plan" });
+  return new Map(
+    ids.map((id) => {
+      const before = earlier.get(id);
+      return [id, before?.state === "set-aside" ? before : opening];
+    }),
+  );
+}
+
+/**
+ * A `terms-*` action belongs to this job and arrives while there is a review
+ * to change (spec 0017, *State transitions*). Anything else is a late reply
+ * or a stray press, and changes nothing.
+ */
+function acceptsTerms(session: ToolSession, jobId: string): session is LiveSession {
+  return (
+    (session.state === "reviewing" || session.state === "complete") &&
+    session.jobId === jobId
+  );
+}
+
+/**
+ * Back to `reviewing` from `complete`, as a tick change goes (spec 0017,
+ * AC-19; spec 0007, AC-14): the outcome and the made copy are dropped.
+ */
+function backToReview(session: LiveSession): Partial<LiveSession> {
+  return session.state === "complete"
+    ? { state: "reviewing", outcome: null, removedByTerm: null, downloaded: false }
+    : {};
+}
+
 function sameTicks(a: ReadonlySet<MatchId>, b: ReadonlySet<MatchId>): boolean {
   if (a.size !== b.size) return false;
   for (const id of a) {
@@ -251,7 +380,10 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
         failure: null,
         runFailure: null,
         outcome: null,
+        removedByTerm: null,
         downloaded: false,
+        // Spec 0017, AC-6: the kept list, searched at open on Pro.
+        terms: keptStates(action.terms, action.entitlement, new Map()),
       });
 
     case "released":
@@ -261,8 +393,12 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
       if (session.state !== "opening" && session.state !== "redacting") return session;
       return freeze({ ...session, phase: action.phase });
 
-    case "opened":
+    case "opened": {
       if (session.state !== "opening") return session;
+      // Spec 0017, AC-5: a row only for a term the job still holds.
+      const matches = action.matches.filter(
+        (match) => match.term === null || session.terms.has(match.term),
+      );
       return freeze({
         ...session,
         state: "reviewing",
@@ -271,10 +407,18 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
         // warning reads, over the same summary. Still provisional: `redacted`
         // settles it from what the run removed (spec 0007, AC-12).
         outputName: outputNameFor(session.file.name, provisionalForm(action.summary)),
-        matches: action.matches,
-        ticked: seededTicks(action.matches),
+        matches,
+        ticked: seededTicks(matches),
         phase: null,
+        // The kept list was searched in the same read as detection (AC-9).
+        terms: new Map(
+          [...session.terms].map(([id, state]) => [
+            id,
+            state.state === "searching" ? SEARCHED : state,
+          ]),
+        ),
       });
+    }
 
     case "tick-toggled": {
       // From `complete`, changing a tick is the edge that lets somebody correct
@@ -296,6 +440,7 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
         state: "reviewing",
         ticked,
         outcome: null,
+        removedByTerm: null,
         downloaded: false,
       });
     }
@@ -328,6 +473,7 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
         state: "reviewing",
         ticked,
         outcome: null,
+        removedByTerm: null,
         downloaded: false,
       });
     }
@@ -338,12 +484,14 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
       // next one would be a summary that describes a file nobody downloaded, so
       // this one stays belt and braces rather than relying on the paths above.
       // A new run is a new question, so the last one's refusal goes (AC-14).
-      if (session.state !== "reviewing") return session;
+      // Never while a term is searching or not searched (spec 0017, AC-18).
+      if (session.state !== "reviewing" || !canMake(session)) return session;
       return freeze({
         ...session,
         state: "redacting",
         phase: null,
         outcome: null,
+        removedByTerm: null,
         runFailure: null,
       });
 
@@ -360,6 +508,7 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
           outputFormFor(session.summary, action.outcome),
         ),
         outcome: action.outcome,
+        removedByTerm: action.removedByTerm,
         phase: null,
         downloaded: false,
       });
@@ -376,12 +525,15 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
       // purpose (spec 0002, AC-4), so getting the same file back costs a run
       // over the same ticks on the untouched original. Only once the file has
       // been handed over; before that, Download still holds it.
-      if (session.state !== "complete" || !session.downloaded) return session;
+      if (session.state !== "complete" || !session.downloaded || !canMake(session)) {
+        return session;
+      }
       return freeze({
         ...session,
         state: "redacting",
         phase: null,
         outcome: null,
+        removedByTerm: null,
         runFailure: null,
         downloaded: false,
       });
@@ -452,8 +604,101 @@ export function sessionReducer(session: ToolSession, action: SessionAction): Too
         failure: null,
         runFailure: null,
         outcome: null,
+        removedByTerm: null,
         downloaded: false,
+        // Spec 0017, AC-20: the kept list is searched at the reopen, with the
+        // job's own snapshot; a term set aside stays set aside.
+        terms: keptStates(action.terms, session.entitlement, session.terms),
       });
+
+    case "terms-searching": {
+      // An Add, a paste or a Try again (spec 0017, AC-3, AC-20). Pro only,
+      // from the job's frozen snapshot (INV-2).
+      if (!acceptsTerms(session, action.jobId)) return session;
+      if (session.entitlement.tier !== "paid" || action.terms.length === 0) {
+        return session;
+      }
+      const terms = new Map(session.terms);
+      for (const id of action.terms) terms.set(id, SEARCHING);
+      return freeze({ ...session, ...backToReview(session), terms });
+    }
+
+    case "terms-found": {
+      // AC-9 and AC-19. Rows only for a term of the batch the job still holds
+      // and is searching, so a term removed mid search lands nothing (AC-5).
+      // Each new row's default tick joins the tick set, never reseeding it,
+      // so an untick elsewhere survives.
+      if (!acceptsTerms(session, action.jobId)) return session;
+      const landing = new Set(
+        action.terms.filter((id) => session.terms.get(id)?.state === "searching"),
+      );
+      if (landing.size === 0) return session;
+
+      const rows = action.matches.filter(
+        (match) => match.term !== null && landing.has(match.term),
+      );
+      const terms = new Map(session.terms);
+      for (const id of landing) terms.set(id, SEARCHED);
+      return freeze({
+        ...session,
+        ...backToReview(session),
+        matches: [...session.matches, ...rows],
+        ticked: new Set([...session.ticked, ...seededTicks(rows)]),
+        terms,
+      });
+    }
+
+    case "terms-failed": {
+      // AC-20: the review stays, rows and ticks so far kept, and the batch's
+      // terms not searched, so Make waits until each is tried again, set
+      // aside or removed.
+      if (!acceptsTerms(session, action.jobId)) return session;
+      const failed = action.terms.filter(
+        (id) => session.terms.get(id)?.state === "searching",
+      );
+      if (failed.length === 0) return session;
+      const terms = new Map(session.terms);
+      for (const id of failed) {
+        terms.set(id, Object.freeze({ state: "not-searched", reason: "search-failed" }));
+      }
+      return freeze({ ...session, terms });
+    }
+
+    case "terms-set-aside": {
+      // AC-17: for this job only, keeping its reason for the result card.
+      if (!acceptsTerms(session, action.jobId)) return session;
+      const terms = new Map(session.terms);
+      let changed = false;
+      for (const id of action.terms) {
+        const state = terms.get(id);
+        if (state?.state !== "not-searched") continue;
+        terms.set(id, Object.freeze({ state: "set-aside", reason: state.reason }));
+        changed = true;
+      }
+      return changed ? freeze({ ...session, terms }) : session;
+    }
+
+    case "terms-removed": {
+      // AC-5: each term out of the job, its rows out of the checklist and its
+      // rows out of the tick set, from any state.
+      if (!acceptsTerms(session, action.jobId)) return session;
+      const gone = new Set(action.terms.filter((id) => session.terms.has(id)));
+      if (gone.size === 0) return session;
+
+      const matches = session.matches.filter(
+        (match) => match.term === null || !gone.has(match.term),
+      );
+      const kept = new Set(matches.map(({ id }) => id));
+      const terms = new Map(session.terms);
+      for (const id of gone) terms.delete(id);
+      return freeze({
+        ...session,
+        ...backToReview(session),
+        matches,
+        ticked: new Set([...session.ticked].filter((id) => kept.has(id))),
+        terms,
+      });
+    }
   }
 }
 

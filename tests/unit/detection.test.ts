@@ -1469,7 +1469,15 @@ describe("the shared predicates", () => {
     const targets = [DETECT_BLOCKED.slanted, DETECT_BLOCKED.overImage].map(
       (needle): RedactionTarget => {
         const [quads] = searched("detect-blocked.pdf", 0, needle);
-        return { page: 0, quads, start: 0, end: 0, kind: "email", text: needle };
+        return {
+          page: 0,
+          quads,
+          start: 0,
+          end: 0,
+          kind: "email",
+          term: null,
+          text: needle,
+        };
       },
     );
     expect(found.filter((match) => match.page === 0)).toHaveLength(2);
@@ -1531,6 +1539,7 @@ describe("the shared predicates", () => {
         start: 0,
         end: 0,
         kind: "email",
+        term: null,
         text: needle,
       }),
     );

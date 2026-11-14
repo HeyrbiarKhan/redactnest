@@ -89,7 +89,7 @@ export {
 } from "./device";
 export { hasPdfHeader, PDF_HEADER_WINDOW } from "./door";
 export { checkpoint, EngineFailure, RunCancelled } from "./failure";
-export { findMatchesIn, offLineGlyphs } from "./find";
+export { findMatchesIn, findTermsIn, offLineGlyphs } from "./find";
 export {
   blankedRegion,
   BOUNDS_REACH_RATIO,

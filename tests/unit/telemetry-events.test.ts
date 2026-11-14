@@ -51,6 +51,8 @@ const COMPLETED: TelemetryEvent = {
   blockedByKind: {},
   blockedByReason: {},
   stripped: ["document-info", "annotations"],
+  terms: "2-5",
+  termsSetAside: "0",
   tier: "paid",
   account: "signed-in",
 };

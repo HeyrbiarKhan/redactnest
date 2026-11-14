@@ -128,6 +128,8 @@ describe("the plans (AC-13)", () => {
     expect(lines("Free")).toEqual([`Up to ${config.freePageCap} pages a document`]);
     expect(lines("Pro")).toEqual([
       `Up to ${config.maxPages} pages a document`,
+      // Spec 0017, AC-26: custom terms, the cap from config.
+      `Custom terms: up to ${config.maxCustomTerms} names, numbers or phrases, found wherever they appear`,
       "Everything in Free",
     ]);
   });
@@ -149,7 +151,7 @@ describe("the plans (AC-13)", () => {
       screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent),
     ).toEqual(["Basic", "Pro Plus"]);
     expect(within(card("Pro Plus")).getByText("$23 a month")).toBeInTheDocument();
-    expect(lines("Pro Plus")[1]).toBe("Everything in Basic");
+    expect(lines("Pro Plus")[2]).toBe("Everything in Basic");
     expect(screen.queryByText("$19 a month")).not.toBeInTheDocument();
   });
 });

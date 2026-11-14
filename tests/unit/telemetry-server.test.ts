@@ -77,10 +77,13 @@ function recordingSeams(overrides: Partial<TelemetrySeams> = {}) {
   return { seams, sent, scheduled };
 }
 
-/** Every kind present, the largest event the catalog can build. */
+/**
+ * Every kind present, the largest event the catalog can build: every
+ * `MatchKind`, `term` included since spec 0017 (AC-24).
+ */
 const allDetectors = Object.fromEntries(
-  DETECTOR_KINDS.map((kind) => [kind, "51+"]),
-) as Record<DetectorKind, "51+">;
+  [...DETECTOR_KINDS, "term"].map((kind) => [kind, "51+"]),
+) as Record<DetectorKind | "term", "51+">;
 const allReasons = Object.fromEntries(
   BLOCKED_REASONS.map((kind) => [kind, "1"]),
 ) as Record<BlockedReason, "1">;
@@ -91,6 +94,8 @@ const WORST_CASE: UsageEvent = {
   blockedByKind: allDetectors,
   blockedByReason: allReasons,
   stripped: SANITIZED_KINDS,
+  terms: "51+",
+  termsSetAside: "21-50",
   tier: "paid",
   account: "signed-in",
 };
@@ -166,12 +171,16 @@ describe("the Umami request", () => {
         blockedByKind: {},
         blockedByReason: {},
         stripped: ["document-info", "annotations"],
+        terms: "0",
+        termsSetAside: "0",
         tier: "free",
         account: "none",
       }),
     ).toEqual({
       "stripped_document-info": true,
       stripped_annotations: true,
+      terms: "0",
+      termsSetAside: "0",
       tier: "free",
       account: "none",
     });
@@ -201,7 +210,9 @@ describe("the Umami request", () => {
 
   it("fits the worst case event under Umami's property limit, so nothing is split", () => {
     const data = umamiData(WORST_CASE);
-    expect(Object.keys(data)).toHaveLength(38);
+    // 38 before spec 0017: a `term` key in three by kind fields, `terms`
+    // and `termsSetAside` make 43.
+    expect(Object.keys(data)).toHaveLength(43);
     expect(Object.keys(data).length).toBeLessThanOrEqual(UMAMI_MAX_PROPERTIES);
   });
 });

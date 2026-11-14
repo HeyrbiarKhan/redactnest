@@ -18,15 +18,19 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { countText } from "@/lib/count-text";
 import {
   DETECTOR_KINDS,
+  MATCH_KINDS,
   type BlockedReason,
   type DetectionCounts,
   type DetectorKind,
   type MatchId,
+  type MatchKind,
   type RedactionOutcome,
   type ResultCounts,
   type ReviewMatch,
+  type TermNote,
 } from "@/worker/protocol";
 
 export interface DetectorLabel {
@@ -109,9 +113,12 @@ export const BLOCKED_REASON_TEXT: Readonly<Record<BlockedReason, string>> = Obje
  * once feature 12 makes it three or more (spec 0007, Follow-up nit 4).
  */
 export function lookedFor(type: "conjunction" | "disjunction"): string {
-  return new Intl.ListFormat("en-GB", { type }).format(
-    DETECTOR_KINDS.map((kind) => DETECTOR_LABELS[kind].noun.other),
-  );
+  return new Intl.ListFormat("en-GB", { type }).format(detectorNouns());
+}
+
+/** Every kind looked for, as plural nouns, in `DETECTOR_KINDS` order. */
+function detectorNouns(): readonly string[] {
+  return DETECTOR_KINDS.map((kind) => DETECTOR_LABELS[kind].noun.other);
 }
 
 /**
@@ -133,6 +140,23 @@ export const NOTHING_FOUND = Object.freeze({
  */
 export const COVERAGE_NOTE_PARTLY = `RedactNest looked for ${lookedFor("conjunction")} on the pages it could read. Anything else, such as names and addresses, stays in the file.`;
 
+/**
+ * The coverage note when this job searched custom terms (spec 0017, AC-16):
+ * the detectors and the terms, by count once there are two or more, the terms
+ * the last part of the one list, and still that everything else stays in the
+ * file. `lookedFor` and the detectors it names are unchanged.
+ */
+export function coverageNoteWithTerms(searched: number, partly: boolean): string {
+  const terms =
+    searched === 1 ? "your custom term" : `your ${countText(searched)} custom terms`;
+  const looked = new Intl.ListFormat("en-GB", { type: "conjunction" }).format([
+    ...detectorNouns(),
+    terms,
+  ]);
+  const where = partly ? " on the pages it could read" : "";
+  return `RedactNest looked for ${looked}${where}. Anything else stays in the file.`;
+}
+
 export const NOTHING_FOUND_PARTLY = Object.freeze({
   title: NOTHING_FOUND.title,
   helper: `RedactNest found no ${lookedFor("disjunction")} on the pages it could read. Make a cleaned copy to remove metadata and hidden content.`,
@@ -144,7 +168,7 @@ export const NOTHING_FOUND_PARTLY = Object.freeze({
  * carries no text at all.
  */
 export function detectionCounts(matches: readonly ReviewMatch[]): DetectionCounts {
-  const foundByType: Partial<Record<DetectorKind, number>> = {};
+  const foundByType: Partial<Record<MatchKind, number>> = {};
   const blockedByReason: Partial<Record<BlockedReason, number>> = {};
 
   for (const match of matches) {
@@ -171,16 +195,18 @@ export function countedKinds(
     const count = byType[kind] ?? 0;
     if (count === 0) return [];
     const { noun } = DETECTOR_LABELS[kind];
-    return [`${count} ${count === 1 ? noun.one : noun.other}`];
+    return [`${countText(count)} ${count === 1 ? noun.one : noun.other}`];
   });
 }
 
 /**
- * How many items a run removed, over every kind. The one sum behind the result
- * card's title and the file's name (spec 0007, AC-12 and INV-2).
+ * How many items a run removed, over every kind, `term` included, so a run
+ * that removed only term rows is never named cleaned. The one sum behind the
+ * result card's title and the file's name (spec 0007, AC-12 and INV-2; spec
+ * 0017, AC-21).
  */
 export function countRemoved(outcome: RedactionOutcome): number {
-  return DETECTOR_KINDS.reduce(
+  return MATCH_KINDS.reduce(
     (total, kind) => total + (outcome.removedByType[kind] ?? 0),
     0,
   );
@@ -202,8 +228,8 @@ export function resultCounts(
   ticked: ReadonlySet<MatchId>,
   outcome: RedactionOutcome,
 ): ResultCounts {
-  const untickedByType: Partial<Record<DetectorKind, number>> = {};
-  const blockedByType: Partial<Record<DetectorKind, number>> = {};
+  const untickedByType: Partial<Record<MatchKind, number>> = {};
+  const blockedByType: Partial<Record<MatchKind, number>> = {};
   const blockedByReason: Partial<Record<BlockedReason, number>> = {};
 
   for (const match of matches) {
@@ -224,3 +250,23 @@ export function resultCounts(
     sanitized: Object.freeze([...outcome.sanitized]),
   });
 }
+
+/* Custom terms (spec 0017). */
+
+/**
+ * A term group's count noun (AC-14): `match` for one, `matches` otherwise.
+ */
+export const TERM_GROUP_NOUN = Object.freeze({ one: "match", other: "matches" });
+
+/**
+ * Why a term row was left unticked, in words (AC-11). A record over
+ * `TermNote`, so a note added to the protocol without its words fails
+ * `pnpm typecheck`.
+ */
+export const TERM_NOTE_TEXT: Readonly<Record<TermNote, string>> = Object.freeze({
+  joined: "Joined to other text, so it was left unticked.",
+  spaced: "Written with different spacing or punctuation, so it was left unticked.",
+  marks: "Written with different vowel signs or marks, so it was left unticked.",
+  "page-break":
+    "Part of a match split across a page break, so it was left unticked; its other part is listed too.",
+});

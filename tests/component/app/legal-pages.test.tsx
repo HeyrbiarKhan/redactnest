@@ -350,13 +350,19 @@ describe("the privacy policy's facts", () => {
       ).tagName,
     ).toBe("LI");
     expect(text).not.toMatch(/No analytics, advertising, tracking or error reporting/);
+    // C3, as spec 0017 changes it: the terms you type stay on your device.
+    expect(text).toContain(
+      "the names, numbers or phrases you type for it to find, and your file’s name all stay on your device",
+    );
 
     const counts = sectionText(PRIVACY_SECTIONS.countsAndReports);
     // C14
     expect(counts).toContain("by kind and in ranges");
     expect(counts).toContain("2 to 5 email addresses found");
+    // Spec 0017, AC-25: how many custom terms were used, never the terms.
+    expect(counts).toContain("or how many custom terms were used");
     expect(counts).toContain(
-      "never holds your document, its name, its words or the details found in it, such as the email addresses themselves",
+      "never holds your document, its name, its words, the details found in it, such as the email addresses themselves, or the terms you type",
     );
     expect(counts).toContain(
       "no id and no cookie, so the counts Umami holds cannot be tied to each other or to you",

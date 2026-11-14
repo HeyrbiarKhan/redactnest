@@ -168,6 +168,7 @@ function openedSession(jobId = "job"): OpenedSession {
     summary: SUMMARY,
     matches: [],
     redact: vi.fn(),
+    findTerms: vi.fn(),
     cancel: vi.fn(),
     release: vi.fn(),
   };
@@ -182,9 +183,24 @@ function hangsAt(phase: ProgressPhase | null) {
 }
 
 /** The caps the worker was told to enforce on the most recent open. */
-function lastLimits(): { maxBytes: number; maxPages: number } {
+function lastLimits(): {
+  maxBytes: number;
+  maxPages: number;
+  maxTerms: number;
+  maxTermChars: number;
+} {
   const call = mocks.openSession.mock.lastCall as
-    [{ limits: { maxBytes: number; maxPages: number } }] | undefined;
+    | [
+        {
+          limits: {
+            maxBytes: number;
+            maxPages: number;
+            maxTerms: number;
+            maxTermChars: number;
+          };
+        },
+      ]
+    | undefined;
   if (!call) throw new Error("openSession was never called");
   return call[0].limits;
 }
@@ -309,7 +325,12 @@ describe("the page cap (AC-9)", () => {
     await screen.findByTestId("page-count");
 
     // INV-5. Sending `config.maxPages` here is what left the free cap unenforced.
-    expect(lastLimits()).toEqual({ maxBytes: FREE.maxFileBytes, maxPages: FREE.pageCap });
+    expect(lastLimits()).toEqual({
+      maxBytes: FREE.maxFileBytes,
+      maxPages: FREE.pageCap,
+      maxTerms: 0,
+      maxTermChars: 100,
+    });
   });
 
   it("reopens on the cap it started with when entitlement changes mid job", async () => {
@@ -1036,9 +1057,12 @@ describe("the plan, said out loud (spec 0012, AC-5 and AC-6)", () => {
       expect(mocks.getEntitlement).toHaveBeenLastCalledWith(
         expect.objectContaining({ fresh: true }),
       );
+      // Spec 0017, AC-27: a paid job may carry the list's cap of terms.
       expect(lastLimits()).toEqual({
         maxBytes: PAID.maxFileBytes,
         maxPages: PAID.pageCap,
+        maxTerms: 50,
+        maxTermChars: 100,
       });
       expect(reads).toHaveBeenCalledTimes(2);
       expect(screen.getByTestId("file-bar")).toHaveTextContent("long.pdf");
@@ -1279,6 +1303,8 @@ describe("the redaction path (spec 0004)", () => {
       tickedByDefault: true,
       blocked: null,
       concealed: null,
+      term: null,
+      termNotes: [],
     },
     {
       id: asMatchId("m2"),
@@ -1292,6 +1318,8 @@ describe("the redaction path (spec 0004)", () => {
       tickedByDefault: false,
       blocked: null,
       concealed: null,
+      term: null,
+      termNotes: [],
     },
   ]);
 
@@ -1321,7 +1349,7 @@ describe("the redaction path (spec 0004)", () => {
     return {
       session,
       finish: async (output = new ArrayBuffer(16), outcome = OUTCOME) => {
-        await act(async () => resolve({ output, outcome }));
+        await act(async () => resolve({ output, outcome, removedByTerm: [] }));
       },
       fail: async (error: unknown) => {
         await act(async () => reject(error));
@@ -1624,6 +1652,8 @@ describe("the checklist (spec 0005)", () => {
       tickedByDefault: true,
       blocked: null,
       concealed: null,
+      term: null,
+      termNotes: [],
     },
     {
       id: PHONE,
@@ -1637,6 +1667,8 @@ describe("the checklist (spec 0005)", () => {
       tickedByDefault: false,
       blocked: null,
       concealed: null,
+      term: null,
+      termNotes: [],
     },
     {
       id: BLOCKED,
@@ -1650,6 +1682,8 @@ describe("the checklist (spec 0005)", () => {
       tickedByDefault: false,
       blocked: "slanted-text",
       concealed: null,
+      term: null,
+      termNotes: [],
     },
   ]);
 
@@ -1762,6 +1796,7 @@ describe("the checklist (spec 0005)", () => {
             run.finish = () =>
               resolve({
                 output: new ArrayBuffer(8),
+                removedByTerm: [],
                 outcome: {
                   pageCount: 2,
                   removedByType: { email: 1 },
@@ -1827,7 +1862,12 @@ describe("the page readings (spec 0006)", () => {
       redact: vi.fn(
         () =>
           new Promise<RedactedOutput>((resolve) => {
-            finish = () => resolve({ output: new ArrayBuffer(8), outcome: OUTCOME });
+            finish = () =>
+              resolve({
+                output: new ArrayBuffer(8),
+                outcome: OUTCOME,
+                removedByTerm: [],
+              });
           }),
       ),
     };
@@ -1929,7 +1969,11 @@ describe("the page readings (spec 0006)", () => {
   it("keeps the plain name and shows no download warning when no page carries one", async () => {
     const session: OpenedSession = {
       ...openedSession(),
-      redact: vi.fn(async () => ({ output: new ArrayBuffer(8), outcome: OUTCOME })),
+      redact: vi.fn(async () => ({
+        output: new ArrayBuffer(8),
+        outcome: OUTCOME,
+        removedByTerm: [],
+      })),
     };
     await openWith(session);
     const user = userEvent.setup();
@@ -2072,6 +2116,8 @@ describe("the page readings (spec 0006)", () => {
       tickedByDefault: false,
       blocked: "slanted-text",
       concealed: null,
+      term: null,
+      termNotes: [],
     });
 
     it("sit in an untitled note after the warnings, with the crooked scan line last", async () => {
@@ -2170,6 +2216,8 @@ describe("the redact flow (spec 0007)", () => {
       tickedByDefault: true,
       blocked: null,
       concealed: null,
+      term: null,
+      termNotes: [],
       ...extra,
     };
   }
@@ -2238,7 +2286,9 @@ describe("the redact flow (spec 0007)", () => {
     return {
       session,
       finish: (outcome: RedactionOutcome = FLOW_OUTCOME) =>
-        act(async () => latest().resolve({ output: new ArrayBuffer(8), outcome })),
+        act(async () =>
+          latest().resolve({ output: new ArrayBuffer(8), outcome, removedByTerm: [] }),
+        ),
       refuse: (kind: EngineError["errorKind"]) =>
         act(async () => latest().reject(new EngineError(kind))),
       progress: (phase: ProgressPhase) => act(async () => latest().onProgress?.(phase)),

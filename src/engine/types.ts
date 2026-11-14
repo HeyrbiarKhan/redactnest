@@ -1,11 +1,15 @@
 import type {
   BlockedReason,
   Concealment,
-  DetectorKind,
   DocumentSummary,
   MatchId,
+  MatchKind,
   PageFinding,
   SanitizedKind,
+  TermId,
+  TermNote,
+  TermQuery,
+  TermRemoval,
 } from "@/worker/protocol";
 
 /**
@@ -103,15 +107,22 @@ export interface RedactionTarget {
   readonly quads: readonly Quad[];
   /**
    * Code point offsets into the ordinary mode page text detection built, end
-   * exclusive (spec 0005). Not read by the engine yet; kept for feature 13.
+   * exclusive (spec 0005). Not read by the engine; term spans carry page level
+   * offsets, which feature 13 does not need either (spec 0017).
    */
   readonly start: number;
   readonly end: number;
   /**
-   * What the detector found, so the worker can count `removedByType` without
-   * the main thread naming anything (spec 0004).
+   * What found it, a detector's kind or `term`, so the worker can count
+   * `removedByType` without the main thread naming anything (spec 0004).
    */
-  readonly kind: DetectorKind;
+  readonly kind: MatchKind;
+  /**
+   * The custom term it was searched under, or `null` for a detector's find,
+   * so a run can count `removedByTerm` after its self check (spec 0017,
+   * AC-22). An id the page minted, never the term's text.
+   */
+  readonly term: TermId | null;
   /**
    * The match exactly as detection extracted it, so the engine can prove the
    * quads really surround it before removing anything (spec 0004, AC-27). A
@@ -140,7 +151,11 @@ export type TargetMap = Map<MatchId, RedactionTarget>;
 export type FoundMatch = {
   /** Zero based, as the engine counts. */
   readonly page: number;
-  readonly kind: DetectorKind;
+  readonly kind: MatchKind;
+  /** The term it was searched under, or `null` for a detector's (spec 0017). */
+  readonly term: TermId | null;
+  /** Why a term row was left unticked (spec 0017, AC-11); empty otherwise. */
+  readonly termNotes: readonly TermNote[];
   /** The NFKC page text of the match, a line join as one space (AC-5). */
   readonly text: string;
   /** Up to `contextChars` code points either side, whitespace collapsed (AC-5). */
@@ -152,7 +167,10 @@ export type FoundMatch = {
    */
   readonly beforeCut: boolean;
   readonly afterCut: boolean;
-  /** The detector's rule (AC-10), and false whenever blocked. */
+  /**
+   * The detector's rule (AC-10), or for a term an exact whole word match
+   * (spec 0017, INV-4), and false whenever blocked.
+   */
   readonly tickedByDefault: boolean;
   /**
    * Whether a character of the match sits where the page keeps a glyph from
@@ -176,6 +194,11 @@ export interface FindOptions {
    * stop: detection throws `RunCancelled` and hands nothing back.
    */
   readonly isCancelled?: () => boolean;
+  /**
+   * Custom terms to search for, in the same read of each page (spec 0017,
+   * AC-9, INV-8). Already judged by the worker's gate (AC-27).
+   */
+  readonly terms?: readonly TermQuery[];
 }
 
 /**
@@ -200,6 +223,13 @@ export interface OpenDocument {
    */
   findMatches(options: FindOptions): Promise<readonly FoundMatch[]>;
   /**
+   * Find `options.terms` alone, with no detector, on every page that holds a
+   * readable character: one review search batch (spec 0017, AC-9). Reads each
+   * such page once for the whole batch, and loads one again only for the
+   * first part of a match across its end (INV-8).
+   */
+  findTerms(options: FindOptions): Promise<readonly FoundMatch[]>;
+  /**
    * Release the native memory MuPDF holds.
    *
    * Safe to call more than once. This is the tidy ending, taken when a second
@@ -221,7 +251,9 @@ export interface RedactionResult {
    */
   readonly output: ArrayBuffer;
   /** Counted only once the self check has passed (AC-15). */
-  readonly removedByType: Readonly<Partial<Record<DetectorKind, number>>>;
+  readonly removedByType: Readonly<Partial<Record<MatchKind, number>>>;
+  /** Ticked term targets per term, counted with `removedByType` (spec 0017, AC-22). */
+  readonly removedByTerm: readonly TermRemoval[];
   /** The kinds the source actually carried, in `SANITIZED_KINDS` order. */
   readonly sanitized: readonly SanitizedKind[];
   /**

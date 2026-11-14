@@ -18,8 +18,8 @@ import type { LiveSession, ToolSession } from "@/lib/session";
 import {
   BLOCKED_REASONS,
   countPagesByFinding,
-  DETECTOR_KINDS,
   type EngineErrorKind,
+  MATCH_KINDS,
   PAGE_FINDINGS,
   SANITIZED_KINDS,
 } from "@/worker/protocol";
@@ -36,13 +36,25 @@ function opened(session: LiveSession): readonly TelemetryEvent[] {
     Object.freeze({
       name: "document-opened",
       pages: bucket(session.summary.pageCount),
-      found: bucketsByKind(DETECTOR_KINDS, foundByType),
+      // Spec 0017, AC-24: every `MatchKind`, the kept list's rows included,
+      // and only the rows found at open.
+      found: bucketsByKind(MATCH_KINDS, foundByType),
       blocked: bucketsByKind(BLOCKED_REASONS, blockedByReason),
       pagesWith: bucketsByKind(PAGE_FINDINGS, countPagesByFinding(session.summary.pages)),
       tier: session.entitlement.tier,
       account: session.entitlement.account,
     }),
   ];
+}
+
+/**
+ * How many listed terms are in `state` in this job (spec 0017, AC-24): a
+ * count, never which terms.
+ */
+function termsIn(session: LiveSession, state: "searched" | "set-aside"): number {
+  let count = 0;
+  for (const term of session.terms.values()) if (term.state === state) count += 1;
+  return count;
 }
 
 /** A run that completed (AC-12), from the same counts the result card shows. */
@@ -52,10 +64,12 @@ function completed(session: LiveSession): readonly TelemetryEvent[] {
   return [
     Object.freeze({
       name: "redaction-completed",
-      removed: bucketsByKind(DETECTOR_KINDS, counts.removedByType),
-      unticked: bucketsByKind(DETECTOR_KINDS, counts.untickedByType),
-      blockedByKind: bucketsByKind(DETECTOR_KINDS, counts.blockedByType),
+      removed: bucketsByKind(MATCH_KINDS, counts.removedByType),
+      unticked: bucketsByKind(MATCH_KINDS, counts.untickedByType),
+      blockedByKind: bucketsByKind(MATCH_KINDS, counts.blockedByType),
       blockedByReason: bucketsByKind(BLOCKED_REASONS, counts.blockedByReason),
+      terms: bucket(termsIn(session, "searched")),
+      termsSetAside: bucket(termsIn(session, "set-aside")),
       // From the list, so no kind appears twice whatever the outcome held.
       stripped: Object.freeze(
         SANITIZED_KINDS.filter((kind) => counts.sanitized.includes(kind)),

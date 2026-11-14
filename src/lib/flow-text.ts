@@ -13,9 +13,12 @@
  */
 
 import { config } from "@/config";
-import { countedKinds, lookedFor } from "@/lib/detectors";
+import { countText } from "@/lib/count-text";
+import { countedKinds, lookedFor, TERM_GROUP_NOUN } from "@/lib/detectors";
 import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
 import { PRICING_PATH, SIGN_IN_PATH } from "@/lib/routes";
+import { NOT_SEARCHED_REASONS, type NotSearchedReason } from "@/lib/session";
+import { TERM_MIN_CHARS, termHead, termLength, type TermRefusal } from "@/lib/term-text";
 import type {
   EngineErrorKind,
   EntitlementAccount,
@@ -405,7 +408,7 @@ export function tickCountLine(
   if (found === 0) return null;
   if (tickable === 0) return "None of the found items can be removed.";
   if (ticked === 0) return "Nothing is ticked, so nothing will be removed.";
-  return `${ticked} of ${tickable} found ${tickable === 1 ? "item" : "items"} will be removed.`;
+  return `${countText(ticked)} of ${countText(tickable)} found ${tickable === 1 ? "item" : "items"} will be removed.`;
 }
 
 /**
@@ -414,7 +417,7 @@ export function tickCountLine(
  */
 export function redactLabel(ticked: number): string {
   if (ticked === 0) return "Make a cleaned copy";
-  return `Redact ${ticked} ${ticked === 1 ? "item" : "items"}`;
+  return `Redact ${countText(ticked)} ${ticked === 1 ? "item" : "items"}`;
 }
 
 /* The rail and the found items column (spec 0013, AC-14 to AC-19). */
@@ -458,20 +461,69 @@ export const RESULT_TERMS = Object.freeze({
   stripped: "Also stripped",
 });
 
-/** Removed: what the engine reported, by kind (AC-11, INV-4). */
-export function removedLine(counts: ResultCounts): string {
-  const kinds = countedKinds(counts.removedByType);
-  return kinds.length === 0 ? "Nothing" : LIST.format(kinds);
+/**
+ * One custom term's counts on the result card (spec 0017, AC-22): its words
+ * from the tab's list, how many of its rows the engine removed
+ * (`removedByTerm`), and how many it left unticked or could not remove.
+ */
+export interface TermResult {
+  readonly text: string;
+  readonly removed: number;
+  readonly unticked: number;
+  readonly blocked: number;
+}
+
+/**
+ * `3 matches for “Acme Ltd”`: a term's count, by `TERM_GROUP_NOUN`, the term
+ * quoted so a short one (`to`) never reads as part of the sentence.
+ */
+function termCount(count: number, text: string): string {
+  return `${countText(count)} ${count === 1 ? TERM_GROUP_NOUN.one : TERM_GROUP_NOUN.other} for ${quoted(text)}`;
+}
+
+/** Each term with a count, as words, in list order. */
+function termCounts(
+  terms: readonly TermResult[],
+  count: (term: TermResult) => number,
+): readonly string[] {
+  return terms.flatMap((term) =>
+    count(term) > 0 ? [termCount(count(term), term.text)] : [],
+  );
+}
+
+/**
+ * Removed: what the engine reported, by kind (AC-11, INV-4), then each term
+ * by what the engine removed for it, in list order (spec 0017, AC-22).
+ */
+export function removedLine(
+  counts: ResultCounts,
+  terms: readonly TermResult[] = [],
+): string {
+  const parts = [
+    ...countedKinds(counts.removedByType),
+    ...termCounts(terms, ({ removed }) => removed),
+  ];
+  return parts.length === 0 ? "Nothing" : LIST.format(parts);
 }
 
 /**
  * Left in the file: up to two sentences, what was left unticked and what could
- * not be removed (AC-11). Each blocked row already says why, so the reasons
- * are not repeated here.
+ * not be removed (AC-11), each term named beside the detector kinds (spec
+ * 0017, AC-22). Each blocked row already says why, so the reasons are not
+ * repeated here.
  */
-export function leftLine(counts: ResultCounts): string {
-  const unticked = countedKinds(counts.untickedByType);
-  const blocked = countedKinds(counts.blockedByType);
+export function leftLine(
+  counts: ResultCounts,
+  terms: readonly TermResult[] = [],
+): string {
+  const unticked = [
+    ...countedKinds(counts.untickedByType),
+    ...termCounts(terms, ({ unticked: count }) => count),
+  ];
+  const blocked = [
+    ...countedKinds(counts.blockedByType),
+    ...termCounts(terms, ({ blocked: count }) => count),
+  ];
   const sentences = [
     ...(unticked.length > 0 ? [`${LIST.format(unticked)} you left unticked.`] : []),
     ...(blocked.length > 0
@@ -510,3 +562,282 @@ export function strippedLine(sanitized: readonly SanitizedKind[]): string {
 
 /** Once Download has handed the file over (AC-13). */
 export const DOWNLOADED_LINE = "Your browser has the file.";
+
+/* Custom terms (spec 0017). */
+
+/**
+ * A term as the visitor typed it, in curly quotes, wherever a sentence names
+ * one, so a term like `to` never reads as part of the sentence. A chip, a
+ * group's heading and a remove button's name show it bare.
+ */
+function quoted(text: string): string {
+  return `“${text}”`;
+}
+
+/** `term` or `terms`, for a count. */
+function termWord(count: number): string {
+  return count === 1 ? "term" : "terms";
+}
+
+/** Why a term was not searched in this file (AC-17), for a sentence to carry. */
+const NOT_SEARCHED_WHY: Readonly<Record<NotSearchedReason, string>> = Object.freeze({
+  "free-plan": `this file opened on the ${FREE_PLAN.name} plan`,
+  "search-failed": "the search could not finish",
+});
+
+/**
+ * The words the custom terms panel, its chips, its groups and the action
+ * panel show (AC-1 to AC-6, AC-14, AC-15, AC-17 to AC-20). A term's own text
+ * is the visitor's words, never the document's, so a line may carry it
+ * (spec 0007, INV-3 and INV-4, as spec 0017 amends them).
+ */
+export const TERMS_TEXT = Object.freeze({
+  heading: "Custom terms",
+  label: "Add a name, number or phrase",
+  add: "Add",
+  /** Add's busy words while a search runs (AC-19; spec 0013, AC-34). */
+  adding: "Searching",
+  removeAll: "Remove all terms",
+  remove: (text: string) => `Remove ${text}`,
+  searchingOne: (text: string) => `Searching for ${quoted(text)}…`,
+  searchingMany: (count: number) => `Searching for ${countText(count)} terms…`,
+  /** A chip's state while its search runs. */
+  searching: "Searching",
+  /** A chip's count once found, by AC-14's noun. */
+  matches: (count: number) =>
+    `${countText(count)} ${count === 1 ? TERM_GROUP_NOUN.one : TERM_GROUP_NOUN.other}`,
+  notFound: "Not found in this document",
+  notFoundPartly: "Not found on the pages RedactNest could read",
+  notSearched: Object.freeze({
+    "free-plan": `Not searched: ${NOT_SEARCHED_WHY["free-plan"]}`,
+    "search-failed": `Not searched: ${NOT_SEARCHED_WHY["search-failed"]}`,
+  }) satisfies Readonly<Record<NotSearchedReason, string>>,
+  /** The button that sets a term aside for this job (AC-17). */
+  setAside: "Set aside for this file",
+  /**
+   * A set aside term's chip: what being set aside means, in words of its own
+   * rather than the button's (AC-17).
+   */
+  setAsideState: "Set aside: not searched in this file",
+  /** A set aside term's place in the list, with its reason (AC-17). */
+  setAsideGroup: Object.freeze({
+    "free-plan": `Set aside: not searched in this file because it opened on the ${FREE_PLAN.name} plan`,
+    "search-failed": `Set aside: not searched in this file because ${NOT_SEARCHED_WHY["search-failed"]}`,
+  }) satisfies Readonly<Record<NotSearchedReason, string>>,
+  tryAgain: "Try again",
+  recheck: "Check my plan and open it again",
+  /** Beside the full drop zone while the list holds terms (AC-6). */
+  kept: (count: number) =>
+    `${countText(count)} custom ${termWord(count)} ${count === 1 ? "is" : "are"} kept for this tab`,
+});
+
+/**
+ * The polite line once a search lands (AC-19): how many matches each term
+ * found, then the terms not found, heard once. Two sentences at most, so a
+ * 50 term paste is not 50 sentences. The not found words lead their own
+ * sentence and keep their case, so "RedactNest" stays a name.
+ */
+export function termsFoundLine(
+  found: readonly { readonly text: string; readonly count: number }[],
+  partly: boolean,
+): string {
+  const counted = found.filter(({ count }) => count > 0);
+  const missing = found.filter(({ count }) => count === 0);
+  const notFound = partly ? TERMS_TEXT.notFoundPartly : TERMS_TEXT.notFound;
+  return [
+    counted.length > 0
+      ? `Found ${LIST.format(counted.map(({ text, count }) => termCount(count, text)))}.`
+      : null,
+    missing.length > 0
+      ? `${notFound}: ${LIST.format(missing.map(({ text }) => quoted(text)))}.`
+      : null,
+  ]
+    .filter((sentence) => sentence !== null)
+    .join(" ");
+}
+
+/** The polite line while a search runs (AC-19). */
+export function termsSearchingLine(texts: readonly string[]): string {
+  return texts.length === 1
+    ? TERMS_TEXT.searchingOne(texts[0])
+    : TERMS_TEXT.searchingMany(texts.length);
+}
+
+/** The polite line when a review search fails (AC-20). */
+export function termsFailedLine(texts: readonly string[]): string {
+  const names = LIST.format(texts.map(quoted));
+  const them = texts.length === 1 ? "it" : "them";
+  return `${names} could not be searched. ${TERMS_TEXT.tryAgain}, set aside or remove ${them}.`;
+}
+
+/**
+ * Why a term was not added (AC-4), a record over the refusal kinds, so a kind
+ * added without its words fails `pnpm typecheck`: each reason as it reads
+ * after "not added because", for one refused line and for several. The caps
+ * come from `config` and the term rules, never a literal.
+ */
+export const TERM_REFUSAL_TEXT: Readonly<
+  Record<TermRefusal, { readonly one: string; readonly other: string }>
+> = Object.freeze({
+  "too-short": Object.freeze({
+    one: `it is too short (at least ${TERM_MIN_CHARS} characters)`,
+    other: `they are too short (at least ${TERM_MIN_CHARS} characters)`,
+  }),
+  "too-long": Object.freeze({
+    one: `it is too long (at most ${countText(config.maxTermChars)} characters)`,
+    other: `they are too long (at most ${countText(config.maxTermChars)} characters)`,
+  }),
+  "no-letter-or-digit": Object.freeze({
+    one: "it has no letter or number",
+    other: "they have no letter or number",
+  }),
+  duplicate: Object.freeze({
+    one: "it is already in your list",
+    other: "they are already in your list",
+  }),
+  // Past tense, unlike the rest: it says what the list was at that Add or
+  // paste, so it stays true once a term is removed and keeps naming the lines
+  // that never got in, which no other line names (AC-4, AC-19).
+  "list-full": Object.freeze({
+    one: `your list was full at ${countText(config.maxCustomTerms)} terms`,
+    other: `your list was full at ${countText(config.maxCustomTerms)} terms`,
+  }),
+});
+
+/**
+ * How many refused lines a paste names, and how much of each (AC-4). Rules
+ * about the line, not caps on the visitor: past these the line would bury
+ * the reasons, and each reason still says how many more it refused.
+ */
+const REFUSED_NAMED = 20;
+const REFUSED_NAME_CHARS = 60;
+
+/**
+ * A refused line, named in full up to 60 characters as a person sees them, a
+ * longer one cut between characters, with its length counted the same way
+ * (AC-4, as fixed 2026-11-14).
+ */
+function refusedName(text: string): string {
+  const head = termHead(text, REFUSED_NAME_CHARS);
+  if (head === text) return quoted(text);
+  return `${quoted(`${head}…`)} (${countText(termLength(text))} characters)`;
+}
+
+/**
+ * The panel's line for what was not added (AC-4, INV-11): one line per
+ * reason, in `order`. A reason that refused one line names it, as a typed
+ * term is named (`“a” not added because it is too short …`); one that refused
+ * several counts them and names those among the first 20 refused lines, then
+ * how many more it refused. No refused line passes unsaid. Each line says
+ * its reason too, so the page can take the duplicate line away once the
+ * term it repeats is removed (AC-5).
+ */
+export function refusalLines(
+  refused: readonly { readonly text: string; readonly reason: TermRefusal }[],
+  order: readonly TermRefusal[],
+): readonly { readonly reason: TermRefusal; readonly text: string }[] {
+  const named = new Set(refused.slice(0, REFUSED_NAMED));
+  return order.flatMap((reason) => {
+    const these = refused.filter((each) => each.reason === reason);
+    if (these.length === 0) return [];
+    const why = TERM_REFUSAL_TEXT[reason];
+    const names = these
+      .filter((each) => named.has(each))
+      .map(({ text }) => refusedName(text));
+    const line = (text: string) => [Object.freeze({ reason, text })];
+    if (these.length === 1 && names.length === 1) {
+      return line(`${names[0]} not added because ${why.one}.`);
+    }
+    const counted = `${countText(these.length)} not added because ${these.length === 1 ? why.one : why.other}`;
+    if (names.length === 0) return line(`${counted}.`);
+    const more = these.length - names.length;
+    const listed = [...names, ...(more > 0 ? [`${countText(more)} more`] : [])];
+    return line(`${counted}: ${LIST.format(listed)}.`);
+  });
+}
+
+/** The locked panel's words and way forward, by the job's account (AC-2). */
+export interface TermsLocked {
+  readonly line: string;
+  readonly link: PlanLink | null;
+  readonly recheck: string | null;
+}
+
+const LOCKED_PRO_LINE = `Custom terms come with ${PRO_PLAN.name}: add names, numbers or phrases and every place they appear is found.`;
+const LOCKED_UNCONFIRMED_LINE = `This file opened on the ${FREE_PLAN.name} plan because your plan could not be confirmed, so custom terms are off for it.`;
+
+/**
+ * The locked panel on a `free` job (AC-2), a record over the account kinds:
+ * Pricing, in a new tab, for an anonymous visitor or a signed in Free one;
+ * the unconfirmed line and Check my plan and open it again where the plan
+ * could not be confirmed (spec 0012, AC-6).
+ */
+export const TERMS_LOCKED_TEXT: Readonly<Record<EntitlementAccount, TermsLocked>> =
+  Object.freeze({
+    none: Object.freeze({ line: LOCKED_PRO_LINE, link: GET_PRO, recheck: null }),
+    "signed-in": Object.freeze({ line: LOCKED_PRO_LINE, link: GET_PRO, recheck: null }),
+    "sign-in-needed": Object.freeze({
+      line: LOCKED_UNCONFIRMED_LINE,
+      link: null,
+      recheck: RECHECK,
+    }),
+    unknown: Object.freeze({
+      line: LOCKED_UNCONFIRMED_LINE,
+      link: null,
+      recheck: RECHECK,
+    }),
+  });
+
+/**
+ * The ways on for terms not searched, by reason (AC-17, AC-18): Try again
+ * where the search failed; where the file opened on the Free plan, Check my
+ * plan and open it again only where the job's account offers it (AC-2); Set
+ * aside and Remove for both.
+ */
+const WAYS_ON: Readonly<
+  Record<NotSearchedReason, (them: string, recheck: boolean) => string>
+> = Object.freeze({
+  "free-plan": (them, recheck) =>
+    `Set aside or remove ${them} to go ahead${recheck ? ", or check your plan and open the file again" : ""}`,
+  "search-failed": (them) =>
+    `${TERMS_TEXT.tryAgain}, set aside or remove ${them} to go ahead`,
+});
+
+/**
+ * Why Make a cleaned copy waits (AC-18), or null when it may run: still
+ * searching, or which terms were not searched, why, and the ways on, one
+ * pair of sentences per reason. `recheck` is whether the job's account
+ * offers Check my plan and open it again.
+ */
+export function makeWaitsLine(
+  searching: boolean,
+  notSearched: readonly { readonly text: string; readonly reason: NotSearchedReason }[],
+  recheck: boolean,
+): string | null {
+  if (searching) return "Your custom terms are still being searched, so the run waits.";
+  if (notSearched.length === 0) return null;
+  return NOT_SEARCHED_REASONS.flatMap((reason) => {
+    const texts = notSearched.filter((each) => each.reason === reason);
+    if (texts.length === 0) return [];
+    const names = LIST.format(texts.map(({ text }) => quoted(text)));
+    const one = texts.length === 1;
+    return [
+      `${names} ${one ? "was" : "were"} not searched because ${NOT_SEARCHED_WHY[reason]}. ${WAYS_ON[reason](one ? "it" : "them", recheck)}.`,
+    ];
+  }).join(" ");
+}
+
+/** The result card's term for the set aside line (AC-22). */
+export const RESULT_SET_ASIDE = "Not searched";
+
+/** The set aside terms, each with why it was not searched (AC-22). */
+export function setAsideLine(
+  setAside: readonly { readonly text: string; readonly reason: NotSearchedReason }[],
+): string {
+  return LIST.format(
+    setAside.map(
+      ({ text, reason }) =>
+        `${quoted(text)}, set aside because ${NOT_SEARCHED_WHY[reason]}`,
+    ),
+  );
+}

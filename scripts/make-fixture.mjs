@@ -31,6 +31,7 @@ import {
   sampleAgreement,
 } from "./lib/detection-fixtures.mjs";
 import { encryptObjects } from "./lib/pdf-encrypt.mjs";
+import { termsDense, termsPdf } from "./lib/terms-fixtures.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
 import {
   readBlank,
@@ -500,6 +501,13 @@ const FIXTURES = [
     detectDateForms(),
     "one line per date form the second scan adds, beside other kinds",
   ],
+  // Spec 0017: custom terms.
+  [
+    "terms.pdf",
+    termsPdf(),
+    "a line per term case: folds, breaks, edges, spacing, marks, page breaks",
+  ],
+  ["terms-dense.pdf", termsDense(), "a 50 page review log, the initials JK 3,000 times"],
   [
     "sample-agreement.pdf",
     sampleAgreement(),

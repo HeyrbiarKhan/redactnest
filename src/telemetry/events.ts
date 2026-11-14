@@ -29,16 +29,16 @@ import {
 } from "@/lib/routes";
 import {
   BLOCKED_REASONS,
-  DETECTOR_KINDS,
   ENGINE_ERROR_KINDS,
   ENTITLEMENT_ACCOUNTS,
+  MATCH_KINDS,
   PAGE_FINDINGS,
   SANITIZED_KINDS,
   type BlockedReason,
-  type DetectorKind,
   type EngineErrorKind,
   type EntitlementAccount,
   type EntitlementSnapshot,
+  type MatchKind,
   type PageFinding,
   type SanitizedKind,
 } from "@/worker/protocol";
@@ -252,7 +252,8 @@ export type PageView = Readonly<{ name: "page-view"; page: PageKind }>;
 export type DocumentOpened = Readonly<{
   name: "document-opened";
   pages: Bucket;
-  found: ByKind<DetectorKind>;
+  /** Every `MatchKind`, `term` included, counted from the rows found at open. */
+  found: ByKind<MatchKind>;
   blocked: ByKind<BlockedReason>;
   pagesWith: ByKind<PageFinding>;
   tier: Tier;
@@ -261,10 +262,17 @@ export type DocumentOpened = Readonly<{
 
 export type RedactionCompleted = Readonly<{
   name: "redaction-completed";
-  removed: ByKind<DetectorKind>;
-  unticked: ByKind<DetectorKind>;
-  blockedByKind: ByKind<DetectorKind>;
+  removed: ByKind<MatchKind>;
+  unticked: ByKind<MatchKind>;
+  blockedByKind: ByKind<MatchKind>;
   blockedByReason: ByKind<BlockedReason>;
+  /**
+   * How many custom terms were searched in this job, and how many set aside,
+   * when the run completed (spec 0017, AC-24). Ranges only: no term, no
+   * `TermId` and no per term count is ever an event's.
+   */
+  terms: Bucket;
+  termsSetAside: Bucket;
   /** No repeats, in `SANITIZED_KINDS` order. */
   stripped: readonly SanitizedKind[];
   tier: Tier;
@@ -392,17 +400,19 @@ export const EVENT_FIELDS: {
   "page-view": Object.freeze({ page: one(PAGE_KINDS) }),
   "document-opened": Object.freeze({
     pages: one(BUCKETS),
-    found: byKind(DETECTOR_KINDS),
+    found: byKind(MATCH_KINDS),
     blocked: byKind(BLOCKED_REASONS),
     pagesWith: byKind(PAGE_FINDINGS),
     tier: one(TIERS),
     account: one(ENTITLEMENT_ACCOUNTS),
   }),
   "redaction-completed": Object.freeze({
-    removed: byKind(DETECTOR_KINDS),
-    unticked: byKind(DETECTOR_KINDS),
-    blockedByKind: byKind(DETECTOR_KINDS),
+    removed: byKind(MATCH_KINDS),
+    unticked: byKind(MATCH_KINDS),
+    blockedByKind: byKind(MATCH_KINDS),
     blockedByReason: byKind(BLOCKED_REASONS),
+    terms: one(BUCKETS),
+    termsSetAside: one(BUCKETS),
     stripped: set(SANITIZED_KINDS),
     tier: one(TIERS),
     account: one(ENTITLEMENT_ACCOUNTS),

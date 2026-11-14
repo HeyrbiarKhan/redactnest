@@ -19,13 +19,17 @@ import { FOOTER_LINK_CLASS } from "../footer-link";
 export function NewTabLink({
   link,
   className,
+  linkRef,
 }: {
   readonly link: PlanLink;
   /** Colour and weight for where it sits; it inherits the text's otherwise. */
   readonly className?: string;
+  /** So a caller can send focus here when a control near it goes (spec 0017, AC-5). */
+  readonly linkRef?: Ref<HTMLAnchorElement>;
 }) {
   return (
     <a
+      ref={linkRef}
       href={link.href}
       target="_blank"
       rel="noopener noreferrer"

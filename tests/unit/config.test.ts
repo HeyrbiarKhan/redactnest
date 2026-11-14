@@ -16,6 +16,8 @@ const CONFIG_KEYS = [
   "NEXT_PUBLIC_MAX_PAGES",
   "NEXT_PUBLIC_MAX_FILE_BYTES",
   "NEXT_PUBLIC_MATCH_CONTEXT_CHARS",
+  "NEXT_PUBLIC_MAX_CUSTOM_TERMS",
+  "NEXT_PUBLIC_MAX_TERM_CHARS",
   "NEXT_PUBLIC_SITE_URL",
   "NEXT_PUBLIC_SOURCE_URL",
   "NEXT_PUBLIC_VERCEL_GIT_PROVIDER",
@@ -121,6 +123,58 @@ describe("a malformed value fails as loudly as a missing one", () => {
   it("rejects a site url that is not a url", async () => {
     await expect(loadConfig({ NEXT_PUBLIC_SITE_URL: "redactnest.com" })).rejects.toThrow(
       /absolute URL/,
+    );
+  });
+});
+
+/**
+ * Spec 0017, *Configuration required*. The custom terms caps are read like
+ * every other cap, and their ceilings keep a typo from handing the page a list
+ * or a term the matcher was never measured on (AC-28, AC-29).
+ */
+describe("the custom terms caps", () => {
+  it("default to 50 terms of at most 100 characters", async () => {
+    const config = await loadConfig({});
+    expect(config.maxCustomTerms).toBe(50);
+    expect(config.maxTermChars).toBe(100);
+  });
+
+  it("read values that are set, up to each ceiling", async () => {
+    const config = await loadConfig({
+      NEXT_PUBLIC_MAX_CUSTOM_TERMS: "100",
+      NEXT_PUBLIC_MAX_TERM_CHARS: "200",
+    });
+    expect(config.maxCustomTerms).toBe(100);
+    expect(config.maxTermChars).toBe(200);
+  });
+
+  it("allow the smallest list and the shortest longest term", async () => {
+    const config = await loadConfig({
+      NEXT_PUBLIC_MAX_CUSTOM_TERMS: "1",
+      NEXT_PUBLIC_MAX_TERM_CHARS: "2",
+    });
+    expect(config.maxCustomTerms).toBe(1);
+    expect(config.maxTermChars).toBe(2);
+  });
+
+  it.each([
+    ["zero", "0"],
+    ["past the ceiling", "101"],
+    ["not a number", "fifty"],
+    ["a float", "50.5"],
+  ])("refuse a list cap that is %s", async (_label, value) => {
+    await expect(loadConfig({ NEXT_PUBLIC_MAX_CUSTOM_TERMS: value })).rejects.toThrow(
+      /NEXT_PUBLIC_MAX_CUSTOM_TERMS/,
+    );
+  });
+
+  it.each([
+    ["one, shorter than any term may be", "1"],
+    ["past the ceiling", "201"],
+    ["negative", "-100"],
+  ])("refuse a term length cap that is %s", async (_label, value) => {
+    await expect(loadConfig({ NEXT_PUBLIC_MAX_TERM_CHARS: value })).rejects.toThrow(
+      /NEXT_PUBLIC_MAX_TERM_CHARS/,
     );
   });
 });

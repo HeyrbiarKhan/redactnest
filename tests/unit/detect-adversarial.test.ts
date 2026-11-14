@@ -1,8 +1,8 @@
 import { parsePhoneNumberFromString } from "libphonenumber-js/max";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DETECTORS, MAX_PARSES_PER_GROUP } from "@/detect";
-import type { DetectorKind } from "@/worker/protocol";
+import { DETECTORS, findTerms, MAX_PARSES_PER_GROUP, type TermInput } from "@/detect";
+import { asTermId, type DetectorKind, type TermQuery } from "@/worker/protocol";
 
 /**
  * Every detector runs in time linear in its input. Spec 0005, AC-16 and INV-7.
@@ -406,4 +406,107 @@ describe("the phone detector's parses", () => {
     },
     WALL_TIMEOUT_MS,
   );
+});
+
+/**
+ * Spec 0017, AC-29. The custom term matcher is linear in the page text for
+ * each term: 50 terms of up to 100 characters against 100,000 characters
+ * built against a naive matcher finish within a second of CPU time.
+ *
+ * The shapes are a term's prefix repeated with its last letter never
+ * reached, the same with separators between every character, case and mark
+ * variants, every term a run of one letter on a page of that letter (every
+ * place a match, every edge glued), and lines ending in a hyphen, where the
+ * exact reading takes its two ways at every line, with terms of one letter
+ * and of that letter and hyphens, so every place matches.
+ */
+describe("the custom term matcher on 100,000 adversarial characters (spec 0017, AC-29)", () => {
+  const TERMS_BUDGET_MS = 1_000;
+
+  /** A line break, written in a page's `unit` where a line ends. */
+  const BREAK = String.fromCharCode(10);
+
+  /** `unit` repeated to `LENGTH` code points, each `BREAK` a line break. */
+  function termPage(unit: string): TermInput {
+    const points = Array.from(unit.repeat(Math.ceil(LENGTH / [...unit].length))).slice(
+      0,
+      LENGTH,
+    );
+    const lineBreaks: number[] = [];
+    const text = points
+      .map((point, at) => {
+        if (point !== BREAK) return point;
+        lineBreaks.push(at);
+        return " ";
+      })
+      .join("");
+    return { text, breaks: lineBreaks, lineBreaks, pageStart: 0 };
+  }
+
+  /** 50 terms, each of `make(index)`, all folding apart as a list requires. */
+  function fifty(make: (index: number) => string): readonly TermQuery[] {
+    return Array.from({ length: 50 }, (_, index) => ({
+      id: asTermId(`term-${index}`),
+      text: make(index),
+    }));
+  }
+
+  /** `A`, `B` and so on, then `AA`: a different ending for each of 50 terms. */
+  const ending = (index: number) =>
+    String.fromCharCode(65 + (index % 26)) + (index >= 26 ? "Q" : "");
+
+  const SHAPES: readonly (readonly [string, string, readonly TermQuery[]])[] = [
+    [
+      "a prefix repeated, its last letter never reached",
+      "Ab",
+      fifty((index) => `${"Ab".repeat(49)}X${ending(index)}`.slice(0, 100)),
+    ],
+    [
+      "the prefix with separators between every character",
+      "A b-a'B.a ",
+      fifty((index) => `${"Ab".repeat(49)}X${ending(index)}`.slice(0, 100)),
+    ],
+    [
+      "case and mark variants",
+      "a\u0301B\u0300A\u0308b",
+      fifty((index) => `${"\u00e1B".repeat(48)}Z${ending(index)}`.slice(0, 100)),
+    ],
+    [
+      "one letter, every place a glued match",
+      "a",
+      fifty((index) => "a".repeat(51 + index)),
+    ],
+    [
+      "lines ending in a hyphen, terms of one letter",
+      `a-${BREAK}`,
+      fifty((index) => "a".repeat(51 + index)),
+    ],
+    [
+      "lines ending in a hyphen, terms with hyphens",
+      `a-${BREAK}`,
+      fifty((index) => "a-".repeat(26 + index).slice(0, 51 + index)),
+    ],
+  ];
+
+  it.each(SHAPES)(
+    "finishes within its budget: %s",
+    (_shape, unit, terms) => {
+      const input = termPage(unit);
+      expect(elapsed(() => findTerms(input, terms))).toBeLessThan(TERMS_BUDGET_MS);
+    },
+    WALL_TIMEOUT_MS,
+  );
+
+  it("builds no RegExp from a term", () => {
+    const made = vi.spyOn(globalThis, "RegExp");
+    try {
+      findTerms(
+        termPage("Acme Ltd (a.*b)+ "),
+        fifty((index) => `(a.*b)+${ending(index)}`),
+      );
+      expect(made).not.toHaveBeenCalled();
+    } finally {
+      made.mockRestore();
+    }
+  });
 });

@@ -15,9 +15,10 @@ import { BILLING_ENV, SOURCE_URL, TELEMETRY_ENV } from "./tests/e2e/build-env";
 
 /**
  * The specs that time the page, run in a project of its own: the checklist
- * (spec 0007, AC-8) and the paid cap's open and reads (spec 0012, AC-24).
+ * (spec 0007, AC-8), the paid cap's open and reads (spec 0012, AC-24), and
+ * custom terms on the paid cap (spec 0017, AC-28).
  */
-const SPEED_SPEC = /(checklist|paid-cap)-speed\.spec\.ts$/;
+const SPEED_SPEC = /(checklist|paid-cap|terms)-speed\.spec\.ts$/;
 
 const PORT = 3000;
 const BASE_URL = `http://localhost:${PORT}`;

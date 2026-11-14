@@ -74,6 +74,8 @@ function rows(kind: DetectorKind, ticked: boolean): ReviewMatch[] {
     tickedByDefault: ticked,
     blocked: null,
     concealed: null,
+    term: null,
+    termNotes: [],
   }));
 }
 
@@ -94,6 +96,7 @@ const OPEN: readonly SessionAction[] = [
       maxFileBytes: 26_214_400,
       account: "signed-in",
     },
+    terms: [],
   },
   { type: "opened", summary: { pageCount: 25, pages: [] }, matches: MATCHES },
 ];

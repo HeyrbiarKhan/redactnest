@@ -50,12 +50,35 @@ import {
   type ResponseMessage,
   type ResultMessage,
   type ReviewMatch,
+  type TermId,
+  type TermQuery,
+  type TermRemoval,
+  type TermsFoundMessage,
 } from "./protocol";
 
 /** What a finished redaction hands back. The output is transferred, not copied. */
 export interface RedactedOutput {
   readonly output: ArrayBuffer;
   readonly outcome: RedactionOutcome;
+  /** Each term's removals, beside the outcome (spec 0017, AC-22, INV-9). */
+  readonly removedByTerm: readonly TermRemoval[];
+}
+
+/** What a finished review search hands back (spec 0017, *API surface*). */
+export interface TermsFound {
+  /** The batch it was asked for. */
+  readonly terms: readonly TermId[];
+  readonly matches: readonly ReviewMatch[];
+}
+
+/**
+ * One review search in flight, with a cancel of its own (spec 0017, AC-5):
+ * removing every term of a batch cancels its search whatever else the
+ * session is doing. A cancelled search rejects with `OperationCancelled`.
+ */
+export interface TermSearch {
+  readonly done: Promise<TermsFound>;
+  cancel(): void;
 }
 
 /**
@@ -73,15 +96,24 @@ export interface OpenedSession {
     matchIds: readonly MatchId[],
     options?: { onProgress?: (phase: ProgressPhase) => void },
   ): Promise<RedactedOutput>;
-  /** Abort whatever is in flight. The session survives. */
+  /**
+   * Search the open document for one batch of terms: one Add, one paste or
+   * one Try again (spec 0017, AC-9). Queued in the worker behind anything the
+   * session is already doing.
+   */
+  findTerms(terms: readonly TermQuery[]): TermSearch;
+  /** Abort the open or the run in flight. The session survives. */
   cancel(): void;
   /** End the session. Terminates the worker and frees everything. */
   release(): void;
 }
 
+/** A reply that settles an operation. */
+type Settling = ResultMessage | RedactedMessage | TermsFoundMessage;
+
 interface PendingOperation {
   readonly jobId: string;
-  readonly resolve: (message: ResultMessage | RedactedMessage) => void;
+  readonly resolve: (message: Settling) => void;
   readonly reject: (error: Error) => void;
   readonly onProgress?: (phase: ProgressPhase) => void;
 }
@@ -147,6 +179,7 @@ function getWorker(): Worker {
         break;
       case "result":
       case "redacted":
+      case "terms-found":
         pending.delete(message.id);
         operation.resolve(message);
         break;
@@ -247,9 +280,11 @@ export function openSession(options: {
   jobId: string;
   bytes: ArrayBuffer;
   limits: EngineLimits;
+  /** The tab's kept list, empty for a `free` job (spec 0017, AC-6, AC-27). */
+  terms: readonly TermQuery[];
   onProgress?: (phase: ProgressPhase) => void;
 }): Promise<OpenedSession> {
-  const { jobId, bytes, limits, onProgress } = options;
+  const { jobId, bytes, limits, terms, onProgress } = options;
   const engine = getWorker();
 
   // AC-1, and the reason a new document does not need a new worker. The session
@@ -263,7 +298,7 @@ export function openSession(options: {
   // abort without the caller having to hold an id.
   let activeId: string | null = id;
 
-  const settled = new Promise<ResultMessage | RedactedMessage>((resolve, reject) => {
+  const settled = new Promise<Settling>((resolve, reject) => {
     pending.set(id, { jobId, resolve, reject, onProgress });
   });
 
@@ -276,6 +311,7 @@ export function openSession(options: {
     // The context window comes from the typed config module (INV-9), like every
     // other cap. Never a literal here.
     contextChars: config.matchContextChars,
+    terms,
   };
 
   // The second argument is the transfer list. This is the line that keeps
@@ -315,7 +351,7 @@ export function openSession(options: {
         const redactId = crypto.randomUUID();
         activeId = redactId;
 
-        const done = new Promise<ResultMessage | RedactedMessage>((resolve, reject) => {
+        const done = new Promise<Settling>((resolve, reject) => {
           pending.set(redactId, {
             jobId,
             resolve,
@@ -338,8 +374,43 @@ export function openSession(options: {
           if (reply.kind !== "redacted") {
             throw new EngineError("unsupported");
           }
-          return { output: reply.output, outcome: reply.outcome };
+          return {
+            output: reply.output,
+            outcome: reply.outcome,
+            removedByTerm: reply.removedByTerm,
+          };
         });
+      },
+
+      findTerms(batch) {
+        // Tracked by its own id, never as `activeId`, so Cancel during a run
+        // never stops a search, and a search's cancel never stops a run.
+        const searchId = crypto.randomUUID();
+        const found = new Promise<Settling>((resolve, reject) => {
+          pending.set(searchId, { jobId, resolve, reject });
+        });
+        const searchRequest: RequestMessage = {
+          id: searchId,
+          jobId,
+          kind: "find-terms",
+          terms: batch,
+        };
+        engine.postMessage(searchRequest);
+
+        return {
+          done: found.then((reply) => {
+            if (reply.kind !== "terms-found") throw new EngineError("unsupported");
+            return { terms: reply.terms, matches: reply.matches };
+          }),
+          cancel() {
+            const operation = pending.get(searchId);
+            if (!operation) return;
+            pending.delete(searchId);
+            const message: RequestMessage = { id: searchId, jobId, kind: "cancel" };
+            engine.postMessage(message);
+            operation.reject(new OperationCancelled());
+          },
+        };
       },
 
       cancel,

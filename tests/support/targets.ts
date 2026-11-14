@@ -62,6 +62,7 @@ export function findTargets(
           start: 0,
           end: needle.length,
           kind,
+          term: null,
           text: needle,
         }));
       } finally {

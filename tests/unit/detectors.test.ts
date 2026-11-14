@@ -39,6 +39,8 @@ function match(
     tickedByDefault: blocked === null,
     blocked,
     concealed: null,
+    term: null,
+    termNotes: [],
   };
 }
 

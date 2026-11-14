@@ -126,7 +126,7 @@ const OUTCOME: RedactionOutcome = {
 };
 
 /** The caps a job runs under, as the entitlement snapshot froze them. */
-const LIMITS = { maxBytes: 26_214_400, maxPages: 3 };
+const LIMITS = { maxBytes: 26_214_400, maxPages: 3, maxTerms: 0, maxTermChars: 100 };
 
 /** Open a session and answer it, which is the starting point of most cases. */
 async function openedSession(client: typeof import("@/worker/client")) {
@@ -134,6 +134,7 @@ async function openedSession(client: typeof import("@/worker/client")) {
     jobId: "job-1",
     bytes: new ArrayBuffer(64),
     limits: LIMITS,
+    terms: [],
   });
   const worker = currentWorker();
   const { id } = worker.lastOpen;
@@ -179,7 +180,12 @@ describe("starting the engine", () => {
     const client = await loadClient();
 
     void client
-      .openSession({ jobId: "job-1", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .openSession({
+        jobId: "job-1",
+        bytes: new ArrayBuffer(8),
+        limits: LIMITS,
+        terms: [],
+      })
       .catch(() => {});
 
     expect(FakeWorker.instances).toHaveLength(1);
@@ -198,7 +204,9 @@ describe("handing a document over", () => {
     const client = await loadClient();
     const bytes = new ArrayBuffer(1024);
 
-    void client.openSession({ jobId: "job-1", bytes, limits: LIMITS }).catch(() => {});
+    void client
+      .openSession({ jobId: "job-1", bytes, limits: LIMITS, terms: [] })
+      .catch(() => {});
 
     expect(currentWorker().posted[0].transfer).toEqual([bytes]);
   });
@@ -207,7 +215,9 @@ describe("handing a document over", () => {
     const client = await loadClient();
     const bytes = new ArrayBuffer(1024);
 
-    void client.openSession({ jobId: "job-1", bytes, limits: LIMITS }).catch(() => {});
+    void client
+      .openSession({ jobId: "job-1", bytes, limits: LIMITS, terms: [] })
+      .catch(() => {});
 
     const open = currentWorker().lastOpen;
     expect(open.kind).toBe("open");
@@ -229,10 +239,10 @@ describe("handing a document over", () => {
     const client = await loadClient();
 
     void client
-      .openSession({ jobId: "a", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .openSession({ jobId: "a", bytes: new ArrayBuffer(8), limits: LIMITS, terms: [] })
       .catch(() => {});
     void client
-      .openSession({ jobId: "b", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .openSession({ jobId: "b", bytes: new ArrayBuffer(8), limits: LIMITS, terms: [] })
       .catch(() => {});
 
     const [first, second] = currentWorker().requests.filter(
@@ -256,11 +266,17 @@ describe("handing a document over", () => {
       .openSession({
         jobId: "job-1",
         bytes: new ArrayBuffer(8),
-        limits: { maxBytes: 999, maxPages: 3 },
+        limits: { maxBytes: 999, maxPages: 3, maxTerms: 0, maxTermChars: 100 },
+        terms: [],
       })
       .catch(() => {});
 
-    expect(currentWorker().lastOpen.limits).toEqual({ maxBytes: 999, maxPages: 3 });
+    expect(currentWorker().lastOpen.limits).toEqual({
+      maxBytes: 999,
+      maxPages: 3,
+      maxTerms: 0,
+      maxTermChars: 100,
+    });
   });
 
   /** INV-9. The context window is a config value like every other cap. */
@@ -268,7 +284,12 @@ describe("handing a document over", () => {
     const client = await loadClient({ NEXT_PUBLIC_MATCH_CONTEXT_CHARS: "17" });
 
     void client
-      .openSession({ jobId: "job-1", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .openSession({
+        jobId: "job-1",
+        bytes: new ArrayBuffer(8),
+        limits: LIMITS,
+        terms: [],
+      })
       .catch(() => {});
 
     expect(currentWorker().lastOpen.contextChars).toBe(17);
@@ -292,6 +313,7 @@ describe("what comes back", () => {
       jobId: "job-1",
       bytes: new ArrayBuffer(8),
       limits: LIMITS,
+      terms: [],
       onProgress: (phase) => phases.push(phase),
     });
     const worker = currentWorker();
@@ -312,6 +334,7 @@ describe("what comes back", () => {
       jobId: "job-1",
       bytes: new ArrayBuffer(8),
       limits: LIMITS,
+      terms: [],
     });
     const worker = currentWorker();
 
@@ -338,6 +361,7 @@ describe("what comes back", () => {
       jobId: "job-1",
       bytes: new ArrayBuffer(8),
       limits: LIMITS,
+      terms: [],
     });
     const worker = currentWorker();
 
@@ -357,6 +381,7 @@ describe("what comes back", () => {
       jobId: "job-1",
       bytes: new ArrayBuffer(8),
       limits: LIMITS,
+      terms: [],
     });
     const worker = currentWorker();
 
@@ -391,6 +416,7 @@ describe("what comes back", () => {
       jobId: "job-1",
       bytes: new ArrayBuffer(8),
       limits: LIMITS,
+      terms: [],
     });
     const worker = currentWorker();
     const { id } = worker.lastOpen;
@@ -412,6 +438,7 @@ describe("what comes back", () => {
       jobId: "job-1",
       bytes: new ArrayBuffer(8),
       limits: LIMITS,
+      terms: [],
     });
     const worker = currentWorker();
     const { id } = worker.lastOpen;
@@ -429,6 +456,7 @@ describe("what comes back", () => {
       jobId: "job-1",
       bytes: new ArrayBuffer(8),
       limits: LIMITS,
+      terms: [],
     });
     const worker = currentWorker();
 
@@ -438,6 +466,7 @@ describe("what comes back", () => {
       kind: "redacted",
       output: new ArrayBuffer(8),
       outcome: OUTCOME,
+      removedByTerm: [],
     });
 
     await expect(pending).rejects.toMatchObject({ errorKind: "unsupported" });
@@ -476,11 +505,16 @@ describe("redacting through a session", () => {
       id: redactId,
       jobId: "job-1",
       kind: "redacted",
+      removedByTerm: [],
       output,
       outcome: OUTCOME,
     });
 
-    await expect(pending).resolves.toEqual({ output, outcome: OUTCOME });
+    await expect(pending).resolves.toEqual({
+      output,
+      outcome: OUTCOME,
+      removedByTerm: [],
+    });
   });
 
   it("reports a refusal as the kind the worker gave", async () => {
@@ -541,6 +575,7 @@ describe("when the worker dies", () => {
       jobId: "job-1",
       bytes: new ArrayBuffer(8),
       limits: LIMITS,
+      terms: [],
     });
     const retired = currentWorker();
     const { id } = retired.lastOpen;
@@ -558,7 +593,7 @@ describe("when the worker dies", () => {
   it("prevents the browser's default error handling", async () => {
     const client = await loadClient();
     void client
-      .openSession({ jobId: "a", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .openSession({ jobId: "a", bytes: new ArrayBuffer(8), limits: LIMITS, terms: [] })
       .catch(() => {});
 
     expect(currentWorker().fail().defaultPrevented).toBe(true);
@@ -597,6 +632,7 @@ describe("cancelling an operation", () => {
       jobId: "job-1",
       bytes: new ArrayBuffer(8),
       limits: LIMITS,
+      terms: [],
     });
     const worker = currentWorker();
     const { id } = worker.lastOpen;
@@ -653,6 +689,7 @@ describe("cancelling an operation", () => {
       kind: "redacted",
       output: new ArrayBuffer(8),
       outcome: OUTCOME,
+      removedByTerm: [],
     });
 
     await expect(redacting).rejects.toMatchObject({ name: "OperationCancelled" });
@@ -684,7 +721,12 @@ describe("a second document in the same tab", () => {
     const { worker } = await openedSession(client);
 
     void client
-      .openSession({ jobId: "job-2", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .openSession({
+        jobId: "job-2",
+        bytes: new ArrayBuffer(8),
+        limits: LIMITS,
+        terms: [],
+      })
       .catch(() => {});
 
     expect(FakeWorker.instances).toHaveLength(1);
@@ -694,13 +736,23 @@ describe("a second document in the same tab", () => {
   it("tells the worker to stop what the previous job had in flight", async () => {
     const client = await loadClient();
     void client
-      .openSession({ jobId: "job-1", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .openSession({
+        jobId: "job-1",
+        bytes: new ArrayBuffer(8),
+        limits: LIMITS,
+        terms: [],
+      })
       .catch(() => {});
     const worker = currentWorker();
     const abandoned = worker.lastOpen.id;
 
     void client
-      .openSession({ jobId: "job-2", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .openSession({
+        jobId: "job-2",
+        bytes: new ArrayBuffer(8),
+        limits: LIMITS,
+        terms: [],
+      })
       .catch(() => {});
 
     expect(worker.requests).toContainEqual({
@@ -717,10 +769,16 @@ describe("a second document in the same tab", () => {
       jobId: "job-1",
       bytes: new ArrayBuffer(8),
       limits: LIMITS,
+      terms: [],
     });
 
     void client
-      .openSession({ jobId: "job-2", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .openSession({
+        jobId: "job-2",
+        bytes: new ArrayBuffer(8),
+        limits: LIMITS,
+        terms: [],
+      })
       .catch(() => {});
 
     await expect(abandoned).rejects.toMatchObject({ name: "OperationCancelled" });
@@ -737,12 +795,18 @@ describe("a second document in the same tab", () => {
       jobId: "job-1",
       bytes: new ArrayBuffer(8),
       limits: LIMITS,
+      terms: [],
     });
     const worker = currentWorker();
     const staleId = worker.lastOpen.id;
 
     void client
-      .openSession({ jobId: "job-2", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .openSession({
+        jobId: "job-2",
+        bytes: new ArrayBuffer(8),
+        limits: LIMITS,
+        terms: [],
+      })
       .catch(() => {});
     worker.reply({
       id: staleId,
@@ -758,13 +822,19 @@ describe("a second document in the same tab", () => {
   it("leaves the arriving job's own operation alone", async () => {
     const client = await loadClient();
     void client
-      .openSession({ jobId: "job-1", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .openSession({
+        jobId: "job-1",
+        bytes: new ArrayBuffer(8),
+        limits: LIMITS,
+        terms: [],
+      })
       .catch(() => {});
 
     const pending = client.openSession({
       jobId: "job-2",
       bytes: new ArrayBuffer(8),
       limits: LIMITS,
+      terms: [],
     });
     const worker = currentWorker();
     worker.reply({
@@ -793,6 +863,7 @@ describe("a second document in the same tab", () => {
       jobId: "job-1",
       bytes: new ArrayBuffer(8),
       limits: LIMITS,
+      terms: [],
     });
 
     await expect(run).rejects.toMatchObject({ name: "OperationCancelled" });
@@ -832,6 +903,7 @@ describe("releasing the session", () => {
       jobId: "job-1",
       bytes: new ArrayBuffer(8),
       limits: LIMITS,
+      terms: [],
     });
 
     client.releaseEngine();
@@ -845,7 +917,12 @@ describe("releasing the session", () => {
 
     session.release();
     void client
-      .openSession({ jobId: "job-2", bytes: new ArrayBuffer(8), limits: LIMITS })
+      .openSession({
+        jobId: "job-2",
+        bytes: new ArrayBuffer(8),
+        limits: LIMITS,
+        terms: [],
+      })
       .catch(() => {});
 
     expect(FakeWorker.instances).toHaveLength(2);
@@ -882,6 +959,7 @@ describe("a session that was cancelled and used again", () => {
       kind: "redacted",
       output: new ArrayBuffer(8),
       outcome: OUTCOME,
+      removedByTerm: [],
     });
 
     await expect(second).resolves.toMatchObject({ outcome: OUTCOME });
@@ -926,6 +1004,7 @@ describe("a session that was cancelled and used again", () => {
       kind: "redacted",
       output: new ArrayBuffer(8),
       outcome: OUTCOME,
+      removedByTerm: [],
     });
     worker.reply({
       id: secondId,

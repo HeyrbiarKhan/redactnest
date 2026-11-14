@@ -24,11 +24,14 @@ import {
   openDocument,
   redactDocument,
   RunCancelled,
+  type FoundMatch,
   type OpenDocument,
   type RedactionTarget,
   type TargetMap,
   type TrimOutcome,
 } from "@/engine";
+import { foldTerm, prepareTerm, termRefusal } from "@/lib/term-text";
+
 import {
   asMatchId,
   countPagesByFinding,
@@ -42,6 +45,8 @@ import {
   type ResponseMessage,
   type ResultMessage,
   type ReviewMatch,
+  type TermQuery,
+  type TermsFoundMessage,
 } from "./protocol";
 
 /**
@@ -100,7 +105,10 @@ interface EngineSession {
    * are the session's only mutable fields.
    */
   runs: Promise<void>;
-  /** The run in flight, so a replacement can cancel it (AC-23). */
+  /**
+   * The run or review search in flight, so a replacement can cancel it
+   * (AC-23; spec 0017, *API surface*).
+   */
   activeRunId: string | null;
 }
 
@@ -148,11 +156,70 @@ function endSession(jobId: string): void {
 
   sessions.delete(jobId);
   session.targets.clear();
-  session.doc.close();
+  // Spec 0017, *API surface*. A review search reads the review copy itself,
+  // so the copy closes only once the session's queue has settled: the search
+  // stops at its next checkpoint and lets go of its page first. An idle queue
+  // settles at once, and a queue never rejects.
+  void session.runs.then(() => session.doc.close());
+}
+
+/**
+ * Spec 0017, AC-27 and INV-2. Does this request's list of terms pass the gate,
+ * judged alone? The worker keeps no list, so each request is judged against
+ * its own terms and the job's frozen limits: no more than `maxTerms` (0 for a
+ * `free` job), each a string `prepareTerm` leaves as it is, none that
+ * `termRefusal` refuses against the request's earlier terms, and no id named
+ * twice. Narrowed from `unknown`, since it arrived across the boundary.
+ */
+function termsPass(terms: unknown, limits: EngineLimits): terms is readonly TermQuery[] {
+  if (!Array.isArray(terms) || terms.length > limits.maxTerms) return false;
+  const caps = { maxTerms: limits.maxTerms, maxTermChars: limits.maxTermChars };
+  const folds = new Set<string>();
+  const ids = new Set<string>();
+  for (const term of terms as readonly unknown[]) {
+    if (typeof term !== "object" || term === null) return false;
+    const { id, text } = term as { id?: unknown; text?: unknown };
+    if (typeof id !== "string" || id === "" || ids.has(id)) return false;
+    if (typeof text !== "string" || prepareTerm(text) !== text) return false;
+    if (termRefusal(text, folds, caps) !== null) return false;
+    ids.add(id);
+    folds.add(foldTerm(text));
+  }
+  return true;
+}
+
+/**
+ * A found match, as a row the page may see, with an id minted here, so an id
+ * from a finished session can never name a match in a new one. Spec 0005,
+ * INV-2 and INV-4: only an unblocked match's target goes into the session's
+ * private map, so a `redact` naming a blocked one is refused as `unsupported`
+ * by the check in `handleRedact`, with no new code path.
+ */
+function reviewMatch(match: FoundMatch, targets: TargetMap): ReviewMatch {
+  const matchId = asMatchId(crypto.randomUUID());
+  if (match.target !== null) targets.set(matchId, match.target);
+  return {
+    id: matchId,
+    type: match.kind,
+    // Spec 0017: the page's own term id, echoed back, and the row's notes.
+    term: match.term,
+    termNotes: match.termNotes,
+    page: match.page + 1,
+    text: match.text,
+    before: match.before,
+    after: match.after,
+    // Spec 0007, AC-9 and AC-26: two booleans, and nothing else new.
+    beforeCut: match.beforeCut,
+    afterCut: match.afterCut,
+    tickedByDefault: match.blocked === null && match.tickedByDefault,
+    blocked: match.blocked,
+    // Spec 0006, AC-13: a closed kind, so the row can say so (AC-24).
+    concealed: match.concealed,
+  };
 }
 
 async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
-  const { id, jobId, bytes, limits, contextChars } = request;
+  const { id, jobId, bytes, limits, contextChars, terms } = request;
 
   // AC-1, first half: a document arriving means the one before it is over, so
   // it goes now rather than once this one has parsed. Waiting would leave the
@@ -161,6 +228,14 @@ async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
   // session under this same job id too: it is the old document, not this one.
   const evicted = [...sessions.values()];
   for (const existing of sessions.keys()) endSession(existing);
+
+  // Spec 0017, AC-27. The kept list is judged before anything is parsed: a
+  // `free` job's limits allow no term, so it may carry none.
+  if (!termsPass(terms, limits)) {
+    postError(id, jobId, "unsupported");
+    cancelled.delete(id);
+    return;
+  }
 
   try {
     // Spec 0004, AC-23. Ending a session cancelled its run, and the run is
@@ -191,37 +266,16 @@ async function handleOpen(request: Extract<RequestMessage, { kind: "open" }>) {
       // Spec 0005, AC-11. Detection runs inside `open`, on the review copy,
       // and looks at the cancelled set after every read of every page.
       postProgress(id, jobId, "detecting");
+      // Spec 0017, AC-9 and INV-8: the kept list in the same read.
       const found = await doc.findMatches({
         contextChars,
         isCancelled: () => cancelled.has(id),
+        terms,
       });
       if (cancelled.has(id)) return;
 
-      // Spec 0005, INV-2 and INV-4. Each match gets an id minted here, so an id
-      // from a finished session can never name a match in a new one. Only an
-      // unblocked match's target goes into the private map: a blocked one has
-      // none, so a `redact` naming it is refused as `unsupported` by the check
-      // in `handleRedact`, with no new code path.
       const targets: TargetMap = new Map();
-      const matches = found.map((match): ReviewMatch => {
-        const matchId = asMatchId(crypto.randomUUID());
-        if (match.target !== null) targets.set(matchId, match.target);
-        return {
-          id: matchId,
-          type: match.kind,
-          page: match.page + 1,
-          text: match.text,
-          before: match.before,
-          after: match.after,
-          // Spec 0007, AC-9 and AC-26: two booleans, and nothing else new.
-          beforeCut: match.beforeCut,
-          afterCut: match.afterCut,
-          tickedByDefault: match.blocked === null && match.tickedByDefault,
-          blocked: match.blocked,
-          // Spec 0006, AC-13: a closed kind, so the row can say so (AC-24).
-          concealed: match.concealed,
-        };
-      });
+      const matches = found.map((match) => reviewMatch(match, targets));
 
       // AC-1, second half: evicted again on the way out, so two opens that
       // overlap cannot both end up in the registry whichever order they happen
@@ -343,6 +397,8 @@ async function runRedaction(
         pagesByFinding: countPagesByFinding(summary.pages),
         sanitized: result.sanitized,
       },
+      // Spec 0017, AC-22 and INV-9: beside the outcome, never inside it.
+      removedByTerm: result.removedByTerm,
     };
 
     // Transferred as the engine made it: the engine copied it out of MuPDF's
@@ -355,6 +411,70 @@ async function runRedaction(
 
     // All or nothing (AC-14): one kind, and no output. Whatever the original
     // error said about the document stops here.
+    postError(
+      id,
+      jobId,
+      error instanceof EngineFailure ? error.errorKind : "unsupported",
+    );
+  } finally {
+    if (session.activeRunId === id) session.activeRunId = null;
+    cancelled.delete(id);
+  }
+}
+
+/**
+ * One review search batch (spec 0017, AC-9 and AC-27). Refused at once for an
+ * unknown session, an empty batch, or terms the gate refuses, which is every
+ * batch on a `free` job. Otherwise it joins the session's run queue (spec
+ * 0004, AC-18), so a search and a redaction never read at once.
+ */
+function handleFindTerms(request: Extract<RequestMessage, { kind: "find-terms" }>): void {
+  const { id, jobId, terms } = request;
+  const session = sessions.get(jobId);
+  if (
+    !session ||
+    !Array.isArray(terms) ||
+    terms.length === 0 ||
+    !termsPass(terms, session.limits)
+  ) {
+    postError(id, jobId, "unsupported");
+    return;
+  }
+  session.runs = session.runs.then(() => runSearch(session, id, jobId, terms));
+}
+
+async function runSearch(
+  session: EngineSession,
+  id: string,
+  jobId: string,
+  terms: readonly TermQuery[],
+): Promise<void> {
+  try {
+    // Checked again as it leaves the queue, as a run is: cancelled while it
+    // waited, or its session ended by a replacement, it never reads.
+    if (cancelled.has(id) || sessions.get(jobId) !== session) return;
+
+    // The session's active run while it reads, so a replacement's
+    // `endSession` cancels it before the review copy closes.
+    session.activeRunId = id;
+    const found = await session.doc.findTerms({
+      contextChars: session.contextChars,
+      isCancelled: () => cancelled.has(id),
+      terms,
+    });
+    if (cancelled.has(id) || sessions.get(jobId) !== session) return;
+
+    const message: TermsFoundMessage = {
+      id,
+      jobId,
+      kind: "terms-found",
+      terms: terms.map((term) => term.id),
+      matches: found.map((match) => reviewMatch(match, session.targets)),
+    };
+    scope.postMessage(message);
+  } catch (error) {
+    // A search that noticed its cancel posts nothing, as a run does.
+    if (cancelled.has(id) || error instanceof RunCancelled) return;
     postError(
       id,
       jobId,
@@ -389,6 +509,9 @@ scope.addEventListener("message", (event: MessageEvent<RequestMessage>) => {
   switch (request.kind) {
     case "open":
       void handleOpen(request);
+      break;
+    case "find-terms":
+      handleFindTerms(request);
       break;
     case "redact":
       handleRedact(request);

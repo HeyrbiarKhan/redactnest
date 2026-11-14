@@ -83,10 +83,11 @@ export default function PrivacyPage() {
           We never store your document, and nothing about it is saved in your browser’s
           storage.
         </p>
-        {/* C3 */}
+        {/* C3, as spec 0017 changes it */}
         <p>
-          What RedactNest finds in your document, the words around each item it finds, and
-          your file’s name all stay on your device.
+          What RedactNest finds in your document, the words around each item it finds, the
+          names, numbers or phrases you type for it to find, and your file’s name all stay
+          on your device.
         </p>
         {/* C4 */}
         <p>
@@ -200,13 +201,14 @@ export default function PrivacyPage() {
 
       <section>
         <SectionHeading sections={PRIVACY_SECTIONS} name="countsAndReports" />
-        {/* C14 */}
+        {/* C14, as spec 0017 changes it */}
         <p>
           We count page visits, documents opened and redacted, refusals and steps toward
-          Pro, by kind and in ranges: for example, 2 to 5 email addresses found. A count
-          never holds your document, its name, its words or the details found in it, such
-          as the email addresses themselves. It carries no id and no cookie, so the counts
-          Umami holds cannot be tied to each other or to you.
+          Pro, by kind and in ranges: for example, 2 to 5 email addresses found, or how
+          many custom terms were used. A count never holds your document, its name, its
+          words, the details found in it, such as the email addresses themselves, or the
+          terms you type. It carries no id and no cookie, so the counts Umami holds cannot
+          be tied to each other or to you.
         </p>
         <p>
           Our server passes the counts to Umami. Umami never receives your IP address or

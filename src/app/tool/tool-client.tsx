@@ -31,12 +31,20 @@ import {
   IDLE_STEPS,
   isTickCaused,
   LOST_TEXT,
+  makeWaitsLine,
   PHASE_TEXT,
   phaseLine,
   redactLabel,
+  refusalLines,
   RUN_REFUSAL_LEAD,
   runRefusalText,
+  TERMS_LOCKED_TEXT,
+  TERMS_TEXT,
+  termsFailedLine,
+  termsFoundLine,
+  termsSearchingLine,
   tickCountLine,
+  type TermResult,
 } from "@/lib/flow-text";
 import {
   ADVICE,
@@ -49,6 +57,7 @@ import {
 } from "@/lib/page-findings";
 import { TOOL_PATH } from "@/lib/routes";
 import {
+  canMake,
   hasUnsavedWork,
   IDLE,
   sessionReducer,
@@ -56,14 +65,20 @@ import {
   type ToolSession,
 } from "@/lib/session";
 import { getSupport, SUPPORT_GAP_TEXT, type SupportReport } from "@/lib/support";
+import { TERM_REFUSALS } from "@/lib/term-text";
+import { addTerms, focusAfterRemoving, removeTerms, type CustomTerm } from "@/lib/terms";
 import { report } from "@/telemetry/client";
 import { toolEvents } from "@/telemetry/tool";
 
 import {
+  asTermId,
   EngineError,
   OperationCancelled,
+  type EngineLimits,
   type EntitlementSnapshot,
   type MatchId,
+  type TermId,
+  type TermQuery,
 } from "@/worker/protocol";
 import {
   onEngineLost,
@@ -71,6 +86,7 @@ import {
   releaseEngine,
   warmEngine,
   type OpenedSession,
+  type TermSearch,
 } from "@/worker/client";
 import { Button } from "@/ui/button";
 import { Callout } from "@/ui/callout";
@@ -84,8 +100,9 @@ import { FailureCallout } from "./failure-callout";
 import { LockLine } from "./lock-line";
 import { NewTabLink, PlanLine } from "./plan-line";
 import { ResultCard } from "./result-card";
-import { ReviewChecklist } from "./review-checklist";
+import { ReviewChecklist, type TermGroupTerm } from "./review-checklist";
 import { TermsNotice } from "./terms-notice";
+import { TermsPanel, type TermChip, type TermFocus } from "./terms-panel";
 
 /**
  * Did this session lose its worker before the engine had finished loading?
@@ -102,6 +119,15 @@ function loadNeverFinished(session: ToolSession): session is LiveSession {
     session.state === "opening" &&
     (session.phase === null || session.phase === "loading-engine")
   );
+}
+
+/**
+ * One line of the custom terms panel's polite line, with the listed terms
+ * it names, so it goes once one of them is removed (spec 0017, AC-5).
+ */
+interface PoliteLine {
+  readonly text: string;
+  readonly names: readonly TermId[];
 }
 
 /** Where focus goes after a step change. Spec 0007, *Focus*. */
@@ -182,6 +208,33 @@ const REPLACE_WARNING =
 const START_OVER_WARNING =
   "You have unsaved work on the document that is open. Starting over will discard it. Continue?";
 
+const REOPEN_WARNING =
+  "You have unsaved work on the document that is open. Checking your plan opens this file again, which discards your work on it. Continue?";
+
+/** The caps the tab's list is judged by (spec 0017, AC-4), from `config` alone. */
+const TERM_CAPS = Object.freeze({
+  maxTerms: config.maxCustomTerms,
+  maxTermChars: config.maxTermChars,
+});
+
+/**
+ * The caps a job's open hands the worker (spec 0017, AC-27): its frozen
+ * snapshot's page and size caps, and terms only on a `paid` job.
+ */
+function limitsFor(entitlement: EntitlementSnapshot): EngineLimits {
+  return {
+    maxBytes: entitlement.maxFileBytes,
+    maxPages: entitlement.pageCap,
+    maxTerms: entitlement.tier === "paid" ? config.maxCustomTerms : 0,
+    maxTermChars: config.maxTermChars,
+  };
+}
+
+/** Mint a term's id on the page (spec 0017, *Value sourcing*). */
+function mintTermId(): TermId {
+  return asTermId(crypto.randomUUID());
+}
+
 export function ToolClient() {
   /**
    * Spec 0003, AC-21 and INV-10. Was this document loaded at `/tool`?
@@ -256,6 +309,49 @@ export function ToolClient() {
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+
+  /**
+   * The tab's custom terms (spec 0017, *Data model sketch*, INV-7): one list,
+   * outside the job, in the order added, kept across files and ended by the
+   * page. Memory only (INV-1). The ref is set in the same handler that sets
+   * the state, so a second handler in the same turn reads the new list.
+   */
+  const [terms, setTermsState] = useState<readonly CustomTerm[]>([]);
+  const termsRef = useRef<readonly CustomTerm[]>(terms);
+  const setTerms = useCallback((next: readonly CustomTerm[]) => {
+    termsRef.current = next;
+    setTermsState(next);
+  }, []);
+
+  /**
+   * The panel's polite line (spec 0017, AC-19, AC-20): what the search in
+   * flight or the last one said, then what the last Add or paste refused
+   * (AC-4), which stays until the next one. Each line keeps the listed terms
+   * it names (a refusal for a repeat names the term it repeats), so it goes
+   * with the first of them removed, and never names a term the list no
+   * longer holds, or says one is already in it (AC-5).
+   */
+  const [searchLine, setSearchLine] = useState<PoliteLine | null>(null);
+  const [refusedLines, setRefusedLines] = useState<readonly PoliteLine[]>([]);
+
+  /**
+   * The review search in flight, and its batch (spec 0017, AC-5, AC-19): one
+   * at a time, cancelled once every term of its batch is removed.
+   */
+  const searchRef = useRef<{
+    readonly search: TermSearch;
+    readonly batch: readonly TermId[];
+  } | null>(null);
+  const termFieldRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * Where focus goes once a term's control has gone with it (spec 0017,
+   * AC-5): set by the handler that takes the control away, a chip's remove,
+   * the panel's Remove all, or a term's own Remove or Try again in its group,
+   * and moved by the panel after the render that drops the control. Only set
+   * while the panel shows, so it never waits for a panel that is not there.
+   */
+  const termFocusRef = useRef<TermFocus | null>(null);
 
   /**
    * Ask which plan applies once the page has loaded, rather than on the warm
@@ -377,10 +473,18 @@ export function ToolClient() {
    * of it, so this reads it each time rather than holding its bytes.
    */
   const runOpen = useCallback(
-    async (job: { jobId: string; file: File; entitlement: EntitlementSnapshot }) => {
+    async (job: {
+      jobId: string;
+      file: File;
+      entitlement: EntitlementSnapshot;
+      /** The kept list to search at open: empty on a `free` job (spec 0017, AC-6). */
+      terms: readonly TermQuery[];
+    }) => {
       const attempt = (attemptRef.current += 1);
       const current = () => attemptRef.current === attempt;
       openedRef.current = null;
+      // Whatever search the last document ran is over with it.
+      searchRef.current = null;
 
       let bytes: ArrayBuffer;
       try {
@@ -403,11 +507,10 @@ export function ToolClient() {
           jobId: job.jobId,
           bytes,
           // The snapshot's cap, never `config.maxPages`. This line is the free
-          // page cap being enforced at all (INV-5).
-          limits: {
-            maxBytes: job.entitlement.maxFileBytes,
-            maxPages: job.entitlement.pageCap,
-          },
+          // page cap being enforced at all (INV-5), and the terms only on Pro
+          // (spec 0017, AC-27).
+          limits: limitsFor(job.entitlement),
+          terms: job.terms,
           onProgress: (phase) => {
             if (current()) dispatch({ type: "progress", phase });
           },
@@ -448,11 +551,36 @@ export function ToolClient() {
       setCheckingEntitlement(false);
 
       const jobId = crypto.randomUUID();
-      dispatch({ type: "file-chosen", jobId, file, entitlement });
-      await runOpen({ jobId, file, entitlement });
+      const kept = termsRef.current;
+      // Spec 0017, AC-6: the kept list rides with the open, searched in the
+      // same pass as detection on Pro, and listed not searched on Free.
+      dispatch({
+        type: "file-chosen",
+        jobId,
+        file,
+        entitlement,
+        terms: kept.map(({ id }) => id),
+      });
+      setSearchLine(null);
+      setRefusedLines([]);
+      await runOpen({
+        jobId,
+        file,
+        entitlement,
+        terms: entitlement.tier === "paid" ? kept : [],
+      });
     },
     [runOpen],
   );
+
+  /**
+   * The kept list a reopen of the same job searches (spec 0017, AC-20): every
+   * term but those set aside in this job, on Pro only.
+   */
+  const reopenTerms = useCallback((live: LiveSession): readonly TermQuery[] => {
+    if (live.entitlement.tier !== "paid") return [];
+    return termsRef.current.filter(({ id }) => live.terms.get(id)?.state !== "set-aside");
+  }, []);
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -503,14 +631,15 @@ export function ToolClient() {
     const current = sessionRef.current;
     if (current.state !== "lost") return;
 
-    dispatch({ type: "retry" });
+    dispatch({ type: "retry", terms: termsRef.current.map(({ id }) => id) });
     void runOpen({
       jobId: current.jobId,
       file: current.file,
       // INV-5: the same job, so the same frozen snapshot it started on.
       entitlement: current.entitlement,
+      terms: reopenTerms(current),
     });
-  }, [runOpen]);
+  }, [runOpen, reopenTerms]);
 
   /** Start over, and Redact another PDF under another label (spec 0007, AC-13). */
   const handleStartOver = useCallback(() => {
@@ -527,8 +656,11 @@ export function ToolClient() {
     // whatever is opened next.
     attemptRef.current += 1;
     openedRef.current = null;
+    searchRef.current = null;
     releaseEngine();
     dispatch({ type: "released" });
+    setSearchLine(null);
+    setRefusedLines([]);
   }, []);
 
   /**
@@ -546,6 +678,8 @@ export function ToolClient() {
     const live = sessionRef.current;
     const opened = openedRef.current;
     if (!opened || live.state === "idle") return;
+    // Spec 0017, AC-18: never while a custom term is searching or not searched.
+    if (!canMake(live)) return;
     if (start === "redact-started" && live.state !== "reviewing") return;
     if (start === "rerun" && !(live.state === "complete" && live.downloaded)) return;
 
@@ -555,7 +689,7 @@ export function ToolClient() {
     dispatch({ type: start });
 
     try {
-      const { output, outcome } = await opened.redact([...live.ticked], {
+      const { output, outcome, removedByTerm } = await opened.redact([...live.ticked], {
         onProgress: (phase) => {
           if (current()) dispatch({ type: "progress", phase });
         },
@@ -564,7 +698,7 @@ export function ToolClient() {
       // Only a run that is still the one on screen gets to hand over a file.
       if (!current() || sessionRef.current.state !== "redacting") return;
       outputRef.current = output;
-      dispatch({ type: "redacted", outcome });
+      dispatch({ type: "redacted", outcome, removedByTerm });
     } catch (error) {
       if (!current()) return;
       if (error instanceof OperationCancelled) {
@@ -609,6 +743,228 @@ export function ToolClient() {
   }, []);
 
   /**
+   * Search the open document for one batch of terms (spec 0017, AC-9, AC-19,
+   * AC-20): one Add, one paste or one Try again, on Pro only, one at a time.
+   * The session hears the batch is searching, the polite line says what, and
+   * what lands is for this job alone: a search superseded by a new file, a
+   * start over, a lost worker or the removal of its whole batch posts
+   * nothing.
+   */
+  const startSearch = useCallback((batch: readonly CustomTerm[]): boolean => {
+    const live = sessionRef.current;
+    const opened = openedRef.current;
+    if (
+      batch.length === 0 ||
+      opened === null ||
+      searchRef.current !== null ||
+      (live.state !== "reviewing" && live.state !== "complete") ||
+      live.entitlement.tier !== "paid"
+    ) {
+      return false;
+    }
+    const { jobId } = live;
+    const ids = batch.map(({ id }) => id);
+    dispatch({ type: "terms-searching", jobId, terms: ids });
+    // One term is named; a batch is counted, so its line names none.
+    setSearchLine({
+      text: termsSearchingLine(batch.map(({ text }) => text)),
+      names: ids.length === 1 ? ids : [],
+    });
+
+    const search = opened.findTerms(batch);
+    searchRef.current = { search, batch: ids };
+    const still = () =>
+      batch.filter(({ id }) => termsRef.current.some((term) => term.id === id));
+
+    search.done.then(
+      ({ matches }) => {
+        if (searchRef.current?.search !== search) return;
+        searchRef.current = null;
+        dispatch({ type: "terms-found", jobId, terms: ids, matches });
+        const { summary } = sessionRef.current as LiveSession;
+        const partly = summary !== null && isPartly(summary);
+        const listed = still();
+        const found = listed.map(({ id, text }) => ({
+          text,
+          count: matches.filter((match) => match.term === id).length,
+        }));
+        setSearchLine(
+          found.length > 0
+            ? { text: termsFoundLine(found, partly), names: listed.map(({ id }) => id) }
+            : null,
+        );
+      },
+      (error: unknown) => {
+        if (searchRef.current?.search !== search) return;
+        searchRef.current = null;
+        // A cancel is not a failure: its terms were removed, or its document
+        // went. A worker error keeps the review (AC-20).
+        if (!(error instanceof EngineError)) return;
+        dispatch({ type: "terms-failed", jobId, terms: ids });
+        const failed = still();
+        setSearchLine(
+          failed.length > 0
+            ? {
+                text: termsFailedLine(failed.map(({ text }) => text)),
+                names: failed.map(({ id }) => id),
+              }
+            : null,
+        );
+      },
+    );
+    return true;
+  }, []);
+
+  /**
+   * Add and paste (spec 0017, AC-3, AC-4): each line through the list's
+   * rules, the refusals said in the panel's line, and the added terms
+   * searched as one batch. Answers whether nothing was refused, so a typed
+   * term that was refused stays in the field.
+   *
+   * As fixed 2026-11-14: a paste can arrive while a search runs (the field is
+   * read only then, but still hears it). Its lines are added at once and join
+   * that search: it is cancelled and started again with its own terms still
+   * listed and the added ones, so one line says what they all found and no
+   * landed line is replaced before it is heard (AC-19). Typing cannot reach
+   * here mid search, since Add waits.
+   */
+  const handleAddTerms = useCallback(
+    (lines: readonly string[]): boolean => {
+      const live = sessionRef.current;
+      if (
+        (live.state !== "reviewing" && live.state !== "complete") ||
+        live.entitlement.tier !== "paid"
+      ) {
+        return false;
+      }
+      const result = addTerms(termsRef.current, lines, TERM_CAPS, mintTermId);
+      setTerms(result.list);
+      const repeated = result.refused.flatMap(({ duplicates }) =>
+        duplicates === null ? [] : [duplicates],
+      );
+      setRefusedLines(
+        refusalLines(result.refused, TERM_REFUSALS).map(({ reason, text }) => ({
+          text,
+          names: reason === "duplicate" ? repeated : [],
+        })),
+      );
+      const running = searchRef.current;
+      if (running !== null && result.added.length > 0) {
+        searchRef.current = null;
+        running.search.cancel();
+        const joined = new Set([...running.batch, ...result.added.map(({ id }) => id)]);
+        startSearch(result.list.filter(({ id }) => joined.has(id)));
+      } else {
+        startSearch(result.added);
+      }
+      return result.refused.length === 0;
+    },
+    [setTerms, startSearch],
+  );
+
+  /**
+   * Remove one term, or every term (spec 0017, AC-5): out of the tab's list
+   * and, in the same handler, out of the job with its rows and ticks. A
+   * search whose whole batch is gone is cancelled, and each polite line goes
+   * once it names a term that went.
+   */
+  const handleRemoveTerms = useCallback(
+    (ids: readonly TermId[]) => {
+      const next = removeTerms(termsRef.current, ids);
+      setTerms(next);
+      const live = sessionRef.current;
+      if (live.state !== "idle") {
+        dispatch({ type: "terms-removed", jobId: live.jobId, terms: ids });
+      }
+      const gone = new Set(ids);
+      const stale = (line: PoliteLine) => line.names.some((id) => gone.has(id));
+      setSearchLine((line) => (line !== null && stale(line) ? null : line));
+      setRefusedLines((lines) =>
+        lines.some(stale) ? lines.filter((line) => !stale(line)) : lines,
+      );
+      const running = searchRef.current;
+      if (running && running.batch.every((id) => !next.some((term) => term.id === id))) {
+        searchRef.current = null;
+        running.search.cancel();
+        setSearchLine(null);
+      }
+    },
+    [setTerms],
+  );
+
+  /**
+   * One term, from its chip or from its own Remove in its group, with
+   * focus to the next term's remove button, else the previous one's, else
+   * the field (AC-5): the same place from both, since both buttons go.
+   */
+  const handleRemoveTerm = useCallback(
+    (id: TermId) => {
+      termFocusRef.current = focusAfterRemoving(termsRef.current, id) ?? "field";
+      handleRemoveTerms([id]);
+    },
+    [handleRemoveTerms],
+  );
+
+  const removeAllTerms = useCallback(() => {
+    handleRemoveTerms(termsRef.current.map(({ id }) => id));
+    setRefusedLines([]);
+  }, [handleRemoveTerms]);
+
+  /** The panel's Remove all, with focus to the field (AC-5). */
+  const handleRemoveAllTerms = useCallback(() => {
+    termFocusRef.current = "field";
+    removeAllTerms();
+  }, [removeAllTerms]);
+
+  /**
+   * Remove all on the kept line beside the full drop zone (AC-6). The line
+   * goes with its button, so focus moves to Choose a PDF, the control just
+   * above it and the next step. That button is on screen before and after,
+   * so focus can move here, ahead of the render that drops the line.
+   */
+  const handleRemoveKeptTerms = useCallback(() => {
+    removeAllTerms();
+    chooseRef.current?.focus();
+  }, [removeAllTerms]);
+
+  /** Set aside for this file (spec 0017, AC-17): for this job only. */
+  const handleSetAside = useCallback((id: TermId) => {
+    const live = sessionRef.current;
+    if (live.state === "idle") return;
+    dispatch({ type: "terms-set-aside", jobId: live.jobId, terms: [id] });
+  }, []);
+
+  /**
+   * Try again (spec 0017, AC-20): every term whose search failed, as one
+   * batch, in list order. Its group shows the search in place of the button,
+   * so focus moves to the field, where an Add leaves it while a search runs
+   * (AC-5, AC-19).
+   */
+  const handleTryAgainTerms = useCallback(() => {
+    const live = sessionRef.current;
+    if (live.state === "idle") return;
+    const started = startSearch(
+      termsRef.current.filter(({ id }) => {
+        const state = live.terms.get(id);
+        return state?.state === "not-searched" && state.reason === "search-failed";
+      }),
+    );
+    if (started) termFocusRef.current = "field";
+  }, [startSearch]);
+
+  /**
+   * Check my plan and open it again, from the locked panel or a term not
+   * searched on the Free plan (spec 0017, AC-2, AC-17; spec 0012, AC-6): the
+   * same file, as a new job, under a fresh answer, with the kept list.
+   */
+  const handleTermsRecheck = useCallback(() => {
+    const live = sessionRef.current;
+    if (live.state === "idle") return;
+    if (hasUnsavedWork(live) && !window.confirm(REOPEN_WARNING)) return;
+    void openFile(live.file, true);
+  }, [openFile]);
+
+  /**
    * AC-20. The output is dropped whenever the session stops being `complete`
    * with nothing downloaded: a tick change, start over, a replacement, a lost
    * worker. One effect watching that one fact, rather than a drop at each exit,
@@ -643,19 +999,21 @@ export function ToolClient() {
 
         // Both land in one render, so nobody sees the lost message flash past.
         dispatch({ type: "worker-lost" });
-        dispatch({ type: "retry" });
+        dispatch({ type: "retry", terms: termsRef.current.map(({ id }) => id) });
         void runOpen({
           jobId: live.jobId,
           file: live.file,
           // INV-5: the same job, so the same frozen snapshot it started on.
           entitlement: live.entitlement,
+          terms: reopenTerms(live),
         });
         return;
       }
 
+      searchRef.current = null;
       dispatch({ type: "worker-lost" });
     });
-  }, [runOpen]);
+  }, [runOpen, reopenTerms]);
 
   /**
    * AC-13. The browser's own warning, and only when there is something to lose.
@@ -715,6 +1073,48 @@ export function ToolClient() {
         : null,
     [session],
   );
+
+  /**
+   * The custom terms as this job holds them, in the tab's list order (spec
+   * 0017, AC-1, AC-14): the panel's chips, the checklist's groups, and what
+   * the result card says for each.
+   */
+  const termView = useMemo(() => {
+    if (session.state === "idle") return null;
+    const rows = new Map<TermId, number>();
+    for (const match of session.matches) {
+      if (match.term !== null) rows.set(match.term, (rows.get(match.term) ?? 0) + 1);
+    }
+    const chips: readonly TermChip[] = terms.map((term) => ({
+      ...term,
+      state: session.terms.get(term.id),
+      rows: rows.get(term.id) ?? 0,
+    }));
+    const groups: readonly TermGroupTerm[] = chips.flatMap(({ id, text, state }) =>
+      state === undefined ? [] : [{ id, text, state }],
+    );
+    const searching = groups.some(({ state }) => state.state === "searching");
+    const notSearched = groups.flatMap(({ text, state }) =>
+      state.state === "not-searched" ? [{ text, reason: state.reason }] : [],
+    );
+
+    const results: readonly TermResult[] = groups
+      .filter(({ state }) => state.state === "searched")
+      .map(({ id, text }) => {
+        const own = session.matches.filter((match) => match.term === id);
+        return {
+          text,
+          removed: session.removedByTerm?.find((each) => each.term === id)?.removed ?? 0,
+          unticked: own.filter((m) => m.blocked === null && !session.ticked.has(m.id))
+            .length,
+          blocked: own.filter((m) => m.blocked !== null).length,
+        };
+      });
+    const setAside = groups.flatMap(({ text, state }) =>
+      state.state === "set-aside" ? [{ text, reason: state.reason }] : [],
+    );
+    return { chips, groups, searching, notSearched, results, setAside };
+  }, [session, terms]);
 
   // Ahead of the support check, so nothing about this document is trusted
   // before it is known to be the tool's own. No drop zone also means nothing
@@ -861,6 +1261,26 @@ export function ToolClient() {
               announced as news.
             */}
               <TermsNotice />
+              {/*
+              Spec 0017, AC-6. The tab's list outlives the job, so while the
+              full zone shows and the list holds terms, one line says how many
+              are kept, with Remove all. It adds and searches nothing.
+            */}
+              {terms.length > 0 && (
+                <p
+                  data-testid="terms-kept"
+                  className="flex flex-wrap items-center gap-x-3 text-small text-ink"
+                >
+                  <span>{TERMS_TEXT.kept(terms.length)}</span>
+                  <Button
+                    variant="link"
+                    data-testid="terms-kept-remove-all"
+                    onClick={handleRemoveKeptTerms}
+                  >
+                    {TERMS_TEXT.removeAll}
+                  </Button>
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -993,6 +1413,15 @@ export function ToolClient() {
               )}
               label={redactLabel(session.ticked.size)}
               running={session.state === "redacting"}
+              waiting={
+                termView === null
+                  ? null
+                  : makeWaitsLine(
+                      termView.searching,
+                      termView.notSearched,
+                      TERMS_LOCKED_TEXT[session.entitlement.account].recheck !== null,
+                    )
+              }
               onRedact={() => void runRedaction("redact-started")}
               onCancel={handleCancel}
               redactRef={redactRef}
@@ -1003,6 +1432,8 @@ export function ToolClient() {
           {session.state === "complete" && counts !== null && (
             <ResultCard
               counts={counts}
+              terms={termView?.results}
+              setAside={termView?.setAside}
               summary={session.summary}
               outputName={session.outputName}
               downloaded={session.downloaded}
@@ -1048,6 +1479,44 @@ export function ToolClient() {
               partly={session.summary !== null && isPartly(session.summary)}
               onToggle={handleToggle}
               onTicksSet={handleTicksSet}
+              terms={termView?.groups}
+              termActions={{
+                onSetAside: handleSetAside,
+                onRemove: handleRemoveTerm,
+                onTryAgain: handleTryAgainTerms,
+                onRecheck:
+                  TERMS_LOCKED_TEXT[session.entitlement.account].recheck === null
+                    ? null
+                    : handleTermsRecheck,
+                searching: termView?.searching ?? false,
+              }}
+              panel={
+                // Spec 0017, AC-1 and AC-2: with billing on, Pro gets the
+                // panel and Free the locked one; with billing off, none.
+                config.billingEnabled && termView !== null ? (
+                  <TermsPanel
+                    terms={termView.chips}
+                    locked={
+                      session.entitlement.tier === "paid"
+                        ? null
+                        : TERMS_LOCKED_TEXT[session.entitlement.account]
+                    }
+                    partly={session.summary !== null && isPartly(session.summary)}
+                    running={session.state === "redacting"}
+                    searching={termView.searching}
+                    status={[
+                      ...(searchLine === null ? [] : [searchLine.text]),
+                      ...refusedLines.map(({ text }) => text),
+                    ]}
+                    onAdd={handleAddTerms}
+                    onRemove={handleRemoveTerm}
+                    onRemoveAll={handleRemoveAllTerms}
+                    onRecheck={handleTermsRecheck}
+                    fieldRef={termFieldRef}
+                    focusRef={termFocusRef}
+                  />
+                ) : undefined
+              }
             />
           </div>
         )}

@@ -1,3 +1,4 @@
+import { countText } from "@/lib/count-text";
 import { cx } from "@/lib/cx";
 
 export type CountBadgeTone = "accent" | "neutral";
@@ -24,7 +25,8 @@ const TONE: Readonly<Record<CountBadgeTone, string>> = Object.freeze({
 
 /**
  * A count in a pill. Always announced with its noun, "2 items", never as a bare
- * number that means nothing out of context (AC-10).
+ * number that means nothing out of context (AC-10). Written as every count on
+ * the page is, `3,000` from 1,000 (`countText`; spec 0017, as built).
  */
 export function CountBadge({ count, noun, tone, compact = false }: CountBadgeProps) {
   const word = count === 1 ? noun.one : noun.other;
@@ -36,7 +38,7 @@ export function CountBadge({ count, noun, tone, compact = false }: CountBadgePro
         TONE[tone],
       )}
     >
-      {count}
+      {countText(count)}
       {compact ? <span className="sr-only">{` ${word}`}</span> : ` ${word}`}
     </span>
   );
