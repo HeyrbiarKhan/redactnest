@@ -160,7 +160,7 @@ describe("the security page", () => {
     ["removedNotCovered", "further out than that can stay visible"],
     [
       "removedNotCovered",
-      "The original copy of a figure or picture under a removed item can stay in the file",
+      "The original copy of a figure or picture under a removed item can stay in the file, still holding what you ticked",
     ],
     ["removedNotCovered", "a change in the engine’s defaults cannot quietly change"],
     ["removedNotCovered", "a ticked item MuPDF cannot remove stops the run"],
@@ -182,12 +182,15 @@ describe("the security page", () => {
     ["theCheck", "If any part fails, you get no file"],
     ["theCheck", "a file the check could not vouch for"],
     // Hidden data (spec 0004).
-    ["hiddenData", "hidden data RedactNest looks for"],
+    ["hiddenData", "The home page lists the kinds of hidden data."],
     ["hiddenData", "Details stored inside a picture’s own data"],
     ["hiddenData", "a photo’s camera details, can stay"],
     ["hiddenData", "RedactNest strips the file’s identifier"],
-    ["hiddenData", "automatic actions that are not scripts no longer work"],
-    ["hiddenData", "its links and its accessibility tags no longer work"],
+    [
+      "hiddenData",
+      "Page labels, viewer preferences and automatic actions that are not scripts no longer work either, and are not reported.",
+    ],
+    ["hiddenData", "links and accessibility tags no longer work"],
     ["hiddenData", "A sticky note or a file attachment is taken off the page"],
     ["hiddenData", "can keep that icon as a mark on the page"],
     ["hiddenData", "the cleaned copy carries no restriction"],
@@ -482,6 +485,25 @@ describe("the security page", () => {
     expect(text).not.toContain("also strips page labels");
     expect(text).not.toContain("loses its links");
     expect(text.split("when another part of the file points to it").length - 1).toBe(1);
+  });
+
+  /**
+   * covers: AC-5. Words the review on a fresh model found easy to misread
+   * (2026-11-15): the original copy of a figure or picture called
+   * "untouched", which reads as harmless when it can still hold what you
+   * ticked; "none of these is reported" just before links and accessibility
+   * tags, which the result does report (as annotations and as tags); and the
+   * Hidden data pointer saying "looks for", which the structure item says, so
+   * the pointer now says only that the home page lists the kinds.
+   */
+  it("says what the original copy can hold, which kinds go unreported, and looks for once", () => {
+    render(<SecurityPage />);
+    const text = mainText();
+
+    expect(text).not.toMatch(/\buntouched\b/i);
+    expect(text).not.toMatch(/none of these is reported/i);
+    expect(text).not.toContain("hidden data RedactNest looks for");
+    expect(text.split("looks for the hidden data").length - 1).toBe(1);
   });
 
   /** covers: AC-9. No cap, size or price as a number, and no repository. */

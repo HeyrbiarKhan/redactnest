@@ -216,14 +216,18 @@ export default function SecurityPage() {
             values ticked kept the unblanked image mask byte for byte while the
             drawn copy was blanked. The self check passed both times. MuPDF
             redacts a figure or picture into a new copy, which the page draws,
-            and without the pointer neither original stayed, so "can". */}
+            and without the pointer neither original stayed, so "can". "Still
+            holding what you ticked" says what such a copy can hold, by kind:
+            the ticked value inside the figure, the unblanked picture. Never
+            "untouched", which reads as harmless (the review on a fresh model,
+            2026-11-15). The exact cases stay in spec 0018. */}
         <p>
           Under each removed item it also blanks the pictures MuPDF reports there, over an
           area reaching a little past the item’s edges, and small drawn marks lying wholly
           inside that area, such as an underline, can go with it. Ink of a scanned page
           lying further out than that can stay visible. The original copy of a figure or
-          picture under a removed item can stay in the file, untouched, when another part
-          of the file points to it.
+          picture under a removed item can stay in the file, still holding what you
+          ticked, when another part of the file points to it.
         </p>
         {/* Spec 0004, INV-5 (every setting written out), its *Decision*
             bullet "Redaction settings are explicit at the call site", whose
@@ -330,17 +334,18 @@ export default function SecurityPage() {
       <section>
         <SectionHeading sections={SECURITY_SECTIONS} name="hiddenData" />
         {/* The band linked, not restated (spec 0018, AC-6): a plain pointer
-            naming the subject, spec 0004, AC-13 (what the structure check
-            looks for), with no claim of its own. What the check looks for and
-            what can stay are said once, under The check on every file. Never
-            "strips": an attachment a kept object points to stays while it is
-            reported stripped (the eighth verify, 2026-11-15, measured on
+            that says only that the home page lists the kinds, with no claim
+            of its own. What the check does with them ("looks for", spec 0004,
+            AC-13) and what can stay are said once, in the structure item under
+            The check on every file, so the pointer never says "looks for"
+            (the review on a fresh model, 2026-11-15). Never "strips": an
+            attachment a kept object points to stays while it is reported
+            stripped (the eighth verify, 2026-11-15, measured on
             `tests/fixtures/metadata.pdf`); nor "where the PDF format keeps
             it", "whenever a file carries it" or "from the file's own
             structure" (the seventh verify). */}
         <p>
-          The home page lists the kinds of{" "}
-          <a href={HOME_BAND}>hidden data RedactNest looks for</a>.
+          The home page lists the <a href={HOME_BAND}>kinds of hidden data</a>.
         </p>
         {/* Spec 0006, AC-29 (every page image in a run's output has the same
             filter and the same bytes as in the source), held by
@@ -367,15 +372,21 @@ export default function SecurityPage() {
             "can" line says. The identifier is a step that does not exist: the
             output is a new document that takes the source's pages and never
             its trailer (`graftPages`), pinned in `tests/unit/redaction.test.ts`.
-            "None of these is reported" is `SANITIZED_KINDS`, which has no kind
-            for them (`tests/unit/redaction-inventory.test.ts`). Private
-            application data is not named: the check holds only the format's
-            own key for it, not every place a producer may write its own. */}
+            "Are not reported" is `SANITIZED_KINDS`, which has no kind for page
+            labels, viewer preferences or automatic actions
+            (`tests/unit/redaction-inventory.test.ts`). It names those three as
+            its sentence's subject and ends the paragraph, so it reaches
+            neither links, reported as `annotations` (`src/engine/inventory.ts`),
+            nor tags, reported as `accessibility-tags`; never "none of these is
+            reported" beside them (the review on a fresh model, 2026-11-15).
+            Private application data is not named: the check holds only the
+            format's own key for it, not every place a producer may write its
+            own. */}
         <p>
           That list leaves some things out. RedactNest strips the file’s identifier. In
-          the cleaned copy, page labels, viewer preferences and automatic actions that are
-          not scripts no longer work, and none of these is reported. Its links and its
-          accessibility tags no longer work either, so screen readers read it less well.
+          the cleaned copy, links and accessibility tags no longer work, so screen readers
+          read it less well. Page labels, viewer preferences and automatic actions that
+          are not scripts no longer work either, and are not reported.
         </p>
 
         <h3>Notes and attachments</h3>
