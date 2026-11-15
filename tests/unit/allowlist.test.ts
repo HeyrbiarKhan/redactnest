@@ -1,10 +1,14 @@
 import type { PDFDocument } from "mupdf";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   CATALOG_KEYS,
+  EngineFailure,
+  openDocumentWith,
   PAGE_KEYS,
+  redactDocumentWith,
   ROLES,
+  silenceEngineLog,
   STRING_PLACES,
   TRAILER_KEYS,
   walkRoles,
@@ -12,7 +16,7 @@ import {
 } from "@/engine";
 
 import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
-import { keysOf, mupdf } from "../support/mupdf";
+import { inspect, keysOf, LIMITS, mupdf } from "../support/mupdf";
 
 /**
  * The typed allowlist's walk. Spec 0019, AC-1 to AC-3, INV-1 and INV-2.
@@ -532,6 +536,129 @@ describe("from the pages, at open (AC-3)", () => {
       expect([...(walk.reached.get(5) ?? [])]).toEqual(["simple-font"]);
       expect(walk.reached.has(2)).toBe(false);
       expect(walk.pages[0][0].resources?.get("Font").isDictionary()).toBe(true);
+    });
+  });
+});
+
+/** The bytes of a document built here. */
+function bytesOf(objects: Body[]): ArrayBuffer {
+  return writePdf({ objects, trailer: "/Root 1 0 R" }).bytes.slice().buffer;
+}
+
+/** The kind an open refuses with, or `null` if it opened. */
+async function openOutcome(bytes: ArrayBuffer): Promise<string | null> {
+  try {
+    const doc = await openDocumentWith(mupdf, bytes, LIMITS);
+    doc.close();
+    return null;
+  } catch (failure) {
+    if (failure instanceof EngineFailure) return failure.errorKind;
+    throw failure;
+  }
+}
+
+/** The kind a run with nothing ticked fails with, or `null` if it made a file. */
+async function runOutcome(bytes: ArrayBuffer): Promise<string | null> {
+  try {
+    await redactDocumentWith(mupdf, bytes, []);
+    return null;
+  } catch (failure) {
+    if (failure instanceof EngineFailure) return failure.errorKind;
+    throw failure;
+  }
+}
+
+const READABLE = "BT /F1 12 Tf 72 700 Td (A line anybody can read) Tj ET";
+
+/**
+ * AC-3: a shape the walk cannot read is refused at open, on the prepared
+ * review copy, before any review exists, and by a run handed the bytes
+ * directly, before anything is written.
+ */
+describe("the refusal (AC-3)", () => {
+  beforeAll(() => {
+    silenceEngineLog(mupdf);
+  });
+
+  const unreadable = [
+    [
+      "a font whose /Widths is a dictionary",
+      onePage(
+        "<< /Font << /F1 5 0 R >> >>",
+        [
+          "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /FirstChar 32 /LastChar 126 " +
+            "/Widths << /Wide 1 >> >>",
+        ],
+        READABLE,
+      ),
+    ],
+    [
+      "one stream reached as both page contents and a form",
+      [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R " +
+          "/Resources << /Font << /F1 5 0 R >> /XObject << /Fm1 4 0 R >> >> >>",
+        stream("/Type /XObject /Subtype /Form /BBox [0 0 612 792]", READABLE),
+        HELVETICA,
+      ],
+    ],
+  ] as const;
+
+  it.each(unreadable)("refuses at open %s", async (_label, objects) => {
+    await expect(openOutcome(bytesOf([...objects]))).resolves.toBe(
+      "unreadable-structure",
+    );
+  });
+
+  it.each(unreadable)("refuses a run handed the bytes of %s", async (_label, objects) => {
+    await expect(runOutcome(bytesOf([...objects]))).resolves.toBe("unreadable-structure");
+  });
+
+  it("keeps the no-readable-text refusal ahead of its own", async () => {
+    const objects = onePage("<< /Font << /F1 5 0 R >> >>", [
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Widths << >> >>",
+    ]);
+    await expect(openOutcome(bytesOf(objects))).resolves.toBe("no-readable-text");
+  });
+
+  it("keeps the empty clip refusal ahead of its own", async () => {
+    const objects = onePage(
+      "<< /Font << /F1 5 0 R >> >>",
+      ["<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Widths << >> >>"],
+      `${READABLE}
+q 0 0 0 0 re W n BT /F1 12 Tf 72 650 Td (jane.doe@example.com) Tj ET Q`,
+    );
+    await expect(openOutcome(bytesOf(objects))).resolves.toBe("unsupported");
+  });
+
+  it("opens and runs a page whose tree node has no /Type, inheriting its resources", async () => {
+    const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Kids [3 0 R] /Count 1 /Resources << /Font << /F1 5 0 R >> >> /MediaBox [0 0 612 792] >>",
+      "<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>",
+      stream("", READABLE),
+      HELVETICA,
+    ];
+    const bytes = bytesOf(objects);
+    await expect(openOutcome(bytes)).resolves.toBeNull();
+    await expect(runOutcome(bytes)).resolves.toBeNull();
+  });
+
+  it("deletes a pattern of a type MuPDF never draws, and opens and runs", async () => {
+    const objects = onePage(
+      "<< /Font << /F1 5 0 R >> /Pattern << /P1 6 0 R >> >>",
+      [HELVETICA, "<< /Type /Pattern /PatternType 3 >>"],
+      `${READABLE}
+/Pattern cs /P1 scn 72 600 20 20 re f`,
+    );
+    const bytes = bytesOf(objects);
+    await expect(openOutcome(bytes)).resolves.toBeNull();
+
+    const { output } = await redactDocumentWith(mupdf, bytes, []);
+    inspect(output, (doc) => {
+      const patterns = doc.findPage(0).get("Resources", "Pattern");
+      expect(patterns.isNull() || !keysOf(patterns).includes("P1")).toBe(true);
     });
   });
 });

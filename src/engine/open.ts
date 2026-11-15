@@ -2,6 +2,7 @@ import type { Document, PDFDocument } from "mupdf";
 
 import { PAGE_FINDINGS, type DocumentSummary, type PageFinding } from "@/worker/protocol";
 
+import { walkRoles } from "./allowlist";
 import { refuseAtTheDoor } from "./door";
 import { EngineFailure } from "./failure";
 import { findMatchesIn, findTermsIn } from "./find";
@@ -83,10 +84,11 @@ export async function openDocument(
  * cannot skip it. On the path through `openDocument` it has passed already and
  * costs a scan of at most 1024 bytes.
  *
- * The order is fixed (spec 0006, *State transitions*): door, open, password,
- * page cap, layers, prepare, inspect, the refusal, the empty clip refusal,
- * trim. Detection follows, when the worker asks the handle for its matches,
- * on the trimmed page.
+ * The order is fixed (spec 0006, *State transitions*, as spec 0019 amends
+ * it): door, open, password, page cap, layers, prepare, the role walk, inspect,
+ * the refusal, the empty clip refusal, the role walk's refusal, trim.
+ * Detection follows, when the worker asks the handle for its matches, on the
+ * trimmed page.
  */
 export async function openDocumentWith(
   mupdf: MuPdf,
@@ -140,6 +142,12 @@ export async function openDocumentWith(
     // opening it, and never again (INV-1).
     prepareDocument(mupdf, pdf);
 
+    // Spec 0019, AC-3: the typed allowlist's walk, read only, from each
+    // prepared page, so a file whose shape a run's prune would refuse is
+    // refused now, before anybody reviews it. Its refusal waits until after
+    // the two below, so those keep their kinds and their advice.
+    const roles = walkRoles(pdf, "read", "pages");
+
     // Spec 0006, AC-1: every page read once, on the prepared page, before
     // detection. A page that throws fails the open (AC-11).
     const inspections = await inspectPages(mupdf, pdf, isCancelled);
@@ -158,6 +166,12 @@ export async function openDocumentWith(
     // refusal and its advice.
     if (inspections.some(({ emptyClip }) => emptyClip)) {
       throw new EngineFailure("unsupported");
+    }
+
+    // Spec 0019, AC-3: a shape the role walk cannot read. It names no page,
+    // and no review exists.
+    if (roles.problem !== null) {
+      throw new EngineFailure("unreadable-structure");
     }
 
     // AC-14: what lies outside each page's visible area goes from the review

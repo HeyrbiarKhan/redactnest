@@ -273,6 +273,35 @@ export function render(bytes: ArrayBuffer, index: number, scale = 4): Render {
 }
 
 /**
+ * Every page rendered in RGB at `scale` times its size, as a digest of its
+ * pixels and its size, opened once. Two files whose lists are equal draw every
+ * page pixel for pixel the same (spec 0019, AC-7).
+ */
+export function pageRenders(bytes: ArrayBuffer, scale = 2): string[] {
+  return inspect(bytes, (doc) =>
+    Array.from({ length: doc.countPages() }, (_, index) => {
+      const page = doc.loadPage(index);
+      try {
+        const pixmap = page.toPixmap(
+          [scale, 0, 0, scale, 0, 0],
+          mupdf.ColorSpace.DeviceRGB,
+          false,
+          true,
+        );
+        try {
+          const digest = createHash("sha256").update(pixmap.getPixels()).digest("hex");
+          return `${pixmap.getWidth()}x${pixmap.getHeight()} ${digest}`;
+        } finally {
+          pixmap.destroy();
+        }
+      } finally {
+        page.destroy();
+      }
+    }),
+  );
+}
+
+/**
  * Every pixel of a render whose centre lies inside `quad`. Only the pixels
  * under the quad's bounds are tested, so a 4 times page stays quick.
  */
