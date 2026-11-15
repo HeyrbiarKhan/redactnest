@@ -75,3 +75,30 @@ _What the build added for verify to run. Behaviour only; the figures live in the
 ### Found while building
 
 - [ ] MuPDF 1.28.1: in the rebuilt document, a stream the carrier sweep resolves loses its data when the deduplicating write merges an object that stream's own dictionary points to. Two identical pdfTeX info dictionaries on a form and an image made a run with nothing ticked fail `unsupported` (the form's text was gone). The prune reads only through references, so it never triggers this; the sweep, unchanged, still can. Open on main too.
+
+## As built: the words (added by /develop, 2026-11-15)
+
+_Tasks 12 to 15. Five lines read wider than their gates under spec 0018's AC-5, so each was narrowed and recorded as built in `index.md`: AC-12's closing line, and four of AC-14's lines. Read `/` and `/security` against those as built notes, not the first words AC-12 and AC-14 give._
+
+### UI / manual
+
+- [ ] Read `/` → the lead "RedactNest looks for … in your PDF and lets you tick what to remove.", the card "Ticked text is taken out of the page, and document info and attachments are stripped.", the heading "What RedactNest looks for and strips", the first card titled "Looks for" and closing on "No text wholly inside a page's visible area is removed unless you tick it.", the Strips card's six kinds (no XMP metadata) and its note naming "a note's hidden text and any attached file" → AC-12
+- [ ] On `/tool`, open `tests/fixtures/trim-text.pdf` and make a cleaned copy with nothing ticked; read the download with a scratch script → its "Edge", which crosses the visible edge, is gone, which is why the closing line says "wholly inside a page's visible area" → AC-12, as built
+- [ ] At 1280 pixels, look at the band → the Strips card holds six rows (three a column) beside seven, both cards stand the same height, and the pair still reads as one; judge whether the shorter list needs a design change → AC-12
+- [ ] Read `/security` → item 8's "out of the text the page draws", the original copy line ending "a figure or picture they do not reach, directly or through what they use", the structure item's "almost all of it what a page needs to draw", Hidden data's four unreported kinds, Notes and attachments' "the note's hidden text", the descriptions line ending "warns about each page where it finds some", and the heading What it looks for at `#what-it-finds` → AC-14, as built
+- [ ] Read `/security`'s "Last updated" and Changes → the new entry is first, dated 16 November 2026, the earliest day it can merge (2026-11-15 is First published, and no two entries share a day); move it to the real merge day if that is later → AC-14
+- [ ] Walk spec 0018's AC-5 over each changed line on both pages, opening each source its comment names → each absolute sits behind a gate every file passes or a step that does not exist → AC-12, AC-14
+
+### Commands
+
+- [ ] `pnpm exec vitest run tests/unit/home-text.test.ts tests/component/app/home-page.test.tsx tests/component/app/security-page.test.tsx tests/unit/policy-changes.test.ts` → all pass, the narrowed lines pinned word for word and their wider readings held off the page → AC-12, AC-14
+- [ ] `pnpm exec playwright test --project=chromium tests/e2e/design-system.spec.ts tests/e2e/legal-pages.spec.ts -g "home|security"` → all pass: the band's heading and titles, six strips split three and three, equal card heights, axe, 320 pixels and doubled text, and every `/security` check → AC-12, AC-14
+- [ ] `pnpm exec vitest run --project component tests/component/tool-client.test.tsx -t "descriptions written|says plainly"` → `/tool`'s words stand: AC-9's warning line, the partly redacted name and `unreadable-structure`'s words → AC-3, AC-13
+
+### Value sourcing, the words
+
+- [ ] The closing line's reach: `whollyInside` in `src/engine/trim.ts` lets a character that crosses the visible edge by any amount go, and the self check compares against the page after the trim → "wholly inside a page's visible area" is the gate's reach (spec 0004, AC-13; spec 0006, AC-16)
+- [ ] "Almost all of it what a page needs to draw": read `ROLES`, `CATALOG_KEYS` and `STRING_PLACES` → the keys kept that no page needs to draw are the catalog's `/Lang`, a property list's `/ActualText` and `/MCID`, and a resource dictionary's `/Properties` and `/ProcSet`
+- [ ] "A figure or picture they do not reach": every figure or picture in an output is reached through a resource entry a drawing stream names, or through what that uses (a soft mask's group, an image's mask), and an unreached one fails the check → AC-5
+- [ ] "Warns about each page where it finds some": an inline property list whose `/Alt` is written as a name stays quiet (`holdsString` in `src/engine/marked.ts` counts strings only) → the line claims no more than the scan → AC-9
+- [ ] "The note's hidden text": `prepareDocument` deletes unseen annotations and bakes the rest (`doc.bake(true, true)`), so what a note's appearance draws is page text and stays → spec 0004, AC-22
