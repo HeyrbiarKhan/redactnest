@@ -50,7 +50,7 @@ export const TERMS_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
  * so a change to what it says adds an entry here the same way.
  */
 export const SECURITY_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
-  Object.freeze({ date: "2026-11-14", summary: "First published." }),
+  Object.freeze({ date: "2026-11-15", summary: "First published." }),
 ]);
 
 /** The newest entry's date, which is what "Last updated" shows (AC-2). */

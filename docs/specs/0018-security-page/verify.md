@@ -46,7 +46,7 @@ _Steps derived from spec 0018's acceptance criteria, as ratified on 2026-11-14. 
 
 ## Before merge
 
-- The one change entry, "First published." in `SECURITY_CHANGES` (`src/lib/policy-changes.ts`), reads 2026-11-14. If the branch merges on a later day, move it to that day, written as a literal (spec 0018, *Change list*).
+- The one change entry, "First published." in `SECURITY_CHANGES` (`src/lib/policy-changes.ts`), reads 2026-11-14. If the branch merges on a later day, move it to that day, written as a literal (spec 0018, *Change list*). _Done 2026-11-15: moved to 2026-11-15, the merge day._
 
 ## As built (2026-11-14)
 
