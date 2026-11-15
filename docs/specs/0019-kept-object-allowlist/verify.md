@@ -20,8 +20,8 @@ Run each from a scratch test that loads the real engine (`redactDocumentWith`, `
 
 - [ ] On `/tool`, open `tests/fixtures/marked-descriptions.pdf` → the warning callout shows AC-9's line naming the warned pages; tick the value on its first page and press Redact 1 item → the download is named partly redacted, and the warning before download names the finding → AC-9, AC-13
 - [ ] On `/tool`, open `tests/fixtures/kept-embedded.pdf` and `kept-annotations.pdf`, make a cleaned copy with nothing ticked → "Also stripped" names attachments (and annotations on the second); download each and read it with a scratch script → no embedded file, no note text → AC-8, AC-13
-- [ ] Read `/` → the lead, the "Removed, not covered" card, the band's heading, its first card's title, the Strips card's list (no XMP metadata) and the band's note read as AC-12 gives them, and no other "finds" or "found" on the page makes a claim → AC-12
-- [ ] Read `/security` → the five changed lines read as AC-14 gives them, "Last updated" is the merge day, and the Changes list has the new entry first → AC-14
+- [ ] Read `/` → the lead, the "Removed, not covered" card, the band's heading, its first card's title and closing line, the Strips card's list (no XMP metadata) and the band's note read as AC-12 gives them, and no other "finds" or "found" on the page makes a claim → AC-12
+- [ ] Read `/security` → the five changed lines and the heading What it looks for (its address still ending `#what-it-finds`) read as AC-14 gives them, no other "finds" or "found" on the page makes a claim, "Last updated" is the merge day, and the Changes list has the new entry first → AC-14
 - [ ] Walk spec 0018's AC-5 over every line AC-12 and AC-14 change (sourced, safe direction, absolutes behind a gate, said once), opening each source the comment names → AC-12, AC-14
 - [ ] Run axe on `/tool` with `marked-descriptions.pdf` open, and on `/` → no violations → AC-9, AC-12
 
