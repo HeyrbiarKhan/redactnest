@@ -166,6 +166,56 @@ describe("a document carrying one thing", () => {
       onePage({ catalog: "/AF [6 0 R]", objects: attachment(6) }),
       ["attachments"],
     ],
+    // Spec 0019, AC-8: an embedded file wherever it is referenced from, an
+    // orphan nothing reaches included.
+    [
+      "an embedded file reached through a figure's /Ref",
+      onePage({
+        objects: [
+          stream(
+            "/Type /XObject /Subtype /Form /BBox [0 0 10 10] /Ref << /F 7 0 R /Page 0 >>",
+            "",
+          ),
+          ...attachment(7),
+        ],
+      }),
+      ["attachments"],
+    ],
+    [
+      "an embedded file reached through a picture's /OPI",
+      onePage({
+        objects: [
+          stream(
+            "/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray " +
+              "/BitsPerComponent 8 /OPI << /1.3 << /Type /OPI /Version 1.3 /F 7 0 R " +
+              "/Size [1 1] /CropRect [0 0 1 1] /Position [0 0 0 1 1 1 1 0] >> >>",
+            "\u0080",
+          ),
+          ...attachment(7),
+        ],
+      }),
+      ["attachments"],
+    ],
+    [
+      "a file specification nothing reaches",
+      onePage({ objects: attachment(6) }),
+      ["attachments"],
+    ],
+    [
+      "an embedded file stream nothing reaches",
+      onePage({ objects: [stream("/Type /EmbeddedFile", "orphaned contents")] }),
+      ["attachments"],
+    ],
+    [
+      "a file specification holding /EF with no /Type",
+      onePage({
+        objects: [
+          "<< /F (notes.txt) /EF << /F 7 0 R >> >>",
+          stream("", "attached contents"),
+        ],
+      }),
+      ["attachments"],
+    ],
     [
       "a bookmark",
       onePage({
@@ -241,6 +291,10 @@ describe("a document that carries nothing the table reports", () => {
     [
       "an outline with no entries",
       onePage({ catalog: "/Outlines << /Type /Outlines /Count 0 >>" }),
+    ],
+    [
+      "a file specification naming an outside file, with nothing embedded",
+      onePage({ objects: ["<< /Type /Filespec /F (outside.pdf) >>"] }),
     ],
     /**
      * Stripped with everything else and never reported, because they would

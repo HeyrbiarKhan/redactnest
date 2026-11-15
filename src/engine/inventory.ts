@@ -1,4 +1,4 @@
-import type { PDFDocument } from "mupdf";
+import type { PDFDocument, PDFObject } from "mupdf";
 
 import { SANITIZED_KINDS, type SanitizedKind } from "@/worker/protocol";
 
@@ -80,7 +80,7 @@ export function takeInventory(doc: PDFDocument): readonly SanitizedKind[] {
 
   forEachDictionary(doc, (dict) => {
     if (hasKey(dict, "Metadata")) found.add("xmp-metadata");
-    if (hasKey(dict, "AF")) found.add("attachments");
+    if (hasKey(dict, "AF") || isEmbeddedFile(dict)) found.add("attachments");
     if (hasKey(dict, "JS")) found.add("javascript");
   });
 
@@ -91,4 +91,15 @@ export function takeInventory(doc: PDFDocument): readonly SanitizedKind[] {
   }
 
   return SANITIZED_KINDS.filter((kind) => found.has(kind));
+}
+
+/**
+ * An embedded file stream, or a file specification holding one in `/EF`,
+ * wherever it is referenced from, an orphan nothing reaches included. On
+ * purpose: whatever the source held, none of it leaves (spec 0019, AC-8), and
+ * the self check fails any output still holding one (AC-5).
+ */
+function isEmbeddedFile(dict: PDFObject): boolean {
+  const type = dict.get("Type");
+  return (type.isName() && type.asName() === "EmbeddedFile") || hasKey(dict, "EF");
 }

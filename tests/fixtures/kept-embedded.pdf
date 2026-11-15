@@ -1,0 +1,120 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [15 0 R 17 0 R 19 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /EmbeddedFile /Length 33 >>
+stream
+reference xobject embedded secret
+endstream
+endobj
+6 0 obj
+<< /Type /Filespec /F (reference.pdf) /UF (reference.pdf) /EF << /F 5 0 R >> >>
+endobj
+7 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 400 40] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Ref << /F 6 0 R /Page 0 >> /Length 62 >>
+stream
+BT /F1 12 Tf 4 20 Td (A figure that names another file) Tj ET
+
+endstream
+endobj
+8 0 obj
+<< /Type /EmbeddedFile /Length 24 >>
+stream
+form opi embedded secret
+endstream
+endobj
+9 0 obj
+<< /Type /Filespec /F (form-proxy.tif) /UF (form-proxy.tif) /EF << /F 8 0 R >> >>
+endobj
+10 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 400 40] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /OPI << /2.0 << /Type /OPI /Version 2.0 /F 9 0 R /Inks /full_color >> >> /Length 56 >>
+stream
+BT /F1 12 Tf 4 20 Td (A figure with an OPI proxy) Tj ET
+
+endstream
+endobj
+11 0 obj
+<< /Type /EmbeddedFile /Length 25 >>
+stream
+image opi embedded secret
+endstream
+endobj
+12 0 obj
+<< /Type /Filespec /F (image-proxy.tif) /UF (image-proxy.tif) /EF << /F 11 0 R >> >>
+endobj
+13 0 obj
+<< /Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /OPI << /1.3 << /Type /OPI /Version 1.3 /F 12 0 R /Size [2 2] /CropRect [0 0 2 2] /Position [0 0 0 2 2 2 2 0] >> >> /Length 12 >>
+stream
+Èx(Èx(Èx(Èx(
+endstream
+endobj
+14 0 obj
+<<  /Length 95 >>
+stream
+BT /F1 12 Tf 72 700 Td (A page drawing a reference figure) Tj ET
+q 1 0 0 1 72 600 cm /Fm1 Do Q
+
+endstream
+endobj
+15 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /XObject << /Fm1 7 0 R >> >> /Contents 14 0 R >>
+endobj
+16 0 obj
+<<  /Length 98 >>
+stream
+BT /F1 12 Tf 72 700 Td (A page drawing a figure with a proxy) Tj ET
+q 1 0 0 1 72 600 cm /Fm1 Do Q
+
+endstream
+endobj
+17 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /XObject << /Fm1 10 0 R >> >> /Contents 16 0 R >>
+endobj
+18 0 obj
+<<  /Length 101 >>
+stream
+BT /F1 12 Tf 72 700 Td (A page drawing a picture with a proxy) Tj ET
+q 40 0 0 40 72 600 cm /Im1 Do Q
+
+endstream
+endobj
+19 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]  /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /XObject << /Im1 13 0 R >> >> /Contents 18 0 R >>
+endobj
+xref
+0 20
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000130 00000 n 
+0000000227 00000 n 
+0000000322 00000 n 
+0000000425 00000 n 
+0000000520 00000 n 
+0000000758 00000 n 
+0000000852 00000 n 
+0000000949 00000 n 
+0000001227 00000 n 
+0000001323 00000 n 
+0000001424 00000 n 
+0000001696 00000 n 
+0000001843 00000 n 
+0000002008 00000 n 
+0000002158 00000 n 
+0000002324 00000 n 
+0000002478 00000 n 
+trailer
+<< /Size 20 /Root 1 0 R >>
+startxref
+2644
+%%EOF

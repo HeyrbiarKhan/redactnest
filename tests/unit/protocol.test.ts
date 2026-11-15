@@ -58,6 +58,9 @@ describe("the closed set of failures", () => {
       // cleanly.
       "no-readable-text",
       "edge-text",
+      // Added by spec 0019: a file whose shape the typed allowlist cannot
+      // read, refused at open or by a run before anything is written.
+      "unreadable-structure",
     ]);
   });
 

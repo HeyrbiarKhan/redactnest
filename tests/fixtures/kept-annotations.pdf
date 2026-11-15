@@ -1,0 +1,60 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [11 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /RedactNestPrivate [7 0 R 8 0 R 9 0 R] >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /EmbeddedFile /Length 24 >>
+stream
+attached secret contents
+endstream
+endobj
+6 0 obj
+<< /Type /Filespec /F (kept-note.txt) /UF (kept-note.txt) /EF << /F 5 0 R >> >>
+endobj
+7 0 obj
+<< /Type /Annot /Subtype /Text /Rect [500 700 520 720] /Contents (Private reviewer comment) /Popup 8 0 R /Open false >>
+endobj
+8 0 obj
+<< /Type /Annot /Subtype /Popup /Rect [520 620 620 720] /Parent 7 0 R >>
+endobj
+9 0 obj
+<< /Type /Annot /Subtype /FileAttachment /Rect [540 740 556 756] /FS 6 0 R /Contents (Attached file) >>
+endobj
+10 0 obj
+<<  /Length 68 >>
+stream
+BT /F1 12 Tf 72 700 Td (A page with a note and an attachment) Tj ET
+
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [7 0 R 8 0 R 9 0 R] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>  >> /Contents 10 0 R >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000116 00000 n 
+0000000252 00000 n 
+0000000347 00000 n 
+0000000441 00000 n 
+0000000536 00000 n 
+0000000671 00000 n 
+0000000759 00000 n 
+0000000878 00000 n 
+0000000998 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R >>
+startxref
+1165
+%%EOF

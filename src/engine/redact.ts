@@ -9,8 +9,14 @@ import { takeInventory } from "./inventory";
 import { loadEngine, type MuPdf } from "./load";
 import { boxPass, paddedPass, textPass, type Pass } from "./passes";
 import { prepareDocument } from "./prepare";
-import { graftPages, stripToAllowlist, sweepCarriers, WRITE_OPTIONS } from "./rebuild";
-import { checkOutput } from "./self-check";
+import {
+  graftPages,
+  pruneToRoles,
+  stripToAllowlist,
+  sweepCarriers,
+  WRITE_OPTIONS,
+} from "./rebuild";
+import { checkOutput, structureIsClean, type StructureVerdict } from "./self-check";
 import { targetsByPage, validateTargets } from "./targets";
 import { trimToVisibleArea } from "./trim";
 import type {
@@ -29,7 +35,10 @@ import type {
  * skipped leaves a glyph, the padded pass skipped leaves scan ink, removal on
  * the exact quads takes the lines around a target, the sweep skipped leaves a
  * carrier. Spec 0006 adds the trim: skipped, it leaves text outside the
- * visible area, and swapped, it disagrees with the open. A parameter with a
+ * visible area, and swapped, it disagrees with the open. Spec 0019 adds the
+ * prune and the structure check: the prune skipped, every kept object case
+ * fails the check on its own (AC-6), and both skipped, a run writes main's
+ * output, which every fixture's pixels are compared with (AC-7). A parameter with a
  * frozen default, rather than a setter, so the walled module holds no mutable
  * hook and the worker can only ever run the real thing.
  */
@@ -40,8 +49,15 @@ export interface Pipeline {
     pdf: PDFDocument,
     isCancelled?: () => boolean,
   ) => Promise<readonly TrimOutcome[]>;
+  /** The typed allowlist below the pages (`rebuild.ts`). Spec 0019, AC-1. */
+  readonly pruneToRoles: (out: PDFDocument) => void;
   /** The carrier sweep over the rebuilt document (`rebuild.ts`). */
   readonly sweepCarriers: (out: PDFDocument) => void;
+  /** The structure part of the self check (`self-check.ts`). Spec 0019, AC-5. */
+  readonly checkStructure: (
+    check: PDFDocument,
+    sourcePageCount: number,
+  ) => StructureVerdict;
   /** The pass that removes text (`passes.ts`). */
   readonly textPass: Pass;
   /** The pass that blanks pixels and removes covered line art (`passes.ts`). */
@@ -52,7 +68,9 @@ export interface Pipeline {
 
 export const PIPELINE: Pipeline = Object.freeze({
   trim: trimToVisibleArea,
+  pruneToRoles,
   sweepCarriers,
+  checkStructure: structureIsClean,
   textPass,
   paddedPass,
   removalArea: removalBand,
@@ -159,7 +177,11 @@ export async function redactDocumentWith(
     work.destroy();
     work = null;
 
+    // The catalog and the pages first, then every object below them (spec
+    // 0019): the prune walks from the cut catalog, so nothing a dropped
+    // catalog key reached is walked at all. The sweep stays as a backstop.
     stripToAllowlist(out);
+    pipeline.pruneToRoles(out);
     pipeline.sweepCarriers(out);
     await checkpoint();
 
@@ -174,7 +196,7 @@ export async function redactDocumentWith(
     const output = takeOutput(written);
 
     onPhase?.("verifying");
-    const failure = checkOutput(mupdf, output, record, pages);
+    const failure = checkOutput(mupdf, output, record, pages, pipeline.checkStructure);
     if (failure !== null) {
       throw new EngineFailure(failure);
     }

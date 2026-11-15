@@ -30,6 +30,14 @@ import {
   detectWraps,
   sampleAgreement,
 } from "./lib/detection-fixtures.mjs";
+import {
+  keptAnnotations,
+  keptCatalog,
+  keptEmbedded,
+  keptFigure,
+  keptPicture,
+  keptProgramKeys,
+} from "./lib/kept-fixtures.mjs";
 import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { termsDense, termsPdf } from "./lib/terms-fixtures.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
@@ -580,6 +588,29 @@ const FIXTURES = [
     "trim-ocr.pdf",
     trimOcr(),
     "a scan with Tesseract's text layer, cropped through its lines",
+  ],
+  // Spec 0019: what a kept object points at.
+  ["kept-figure.pdf", keptFigure(), "a font's private key on the original figure"],
+  ["kept-picture.pdf", keptPicture(), "a font's private key on the original image mask"],
+  [
+    "kept-annotations.pdf",
+    keptAnnotations(),
+    "a font's private key on a page's note, popup and attachment",
+  ],
+  [
+    "kept-catalog.pdf",
+    keptCatalog(),
+    "a font's private key on page labels, preferences, an action and a tree",
+  ],
+  [
+    "kept-program-keys.pdf",
+    keptProgramKeys(),
+    "pdfTeX's keys on a figure and on an image",
+  ],
+  [
+    "kept-embedded.pdf",
+    keptEmbedded(),
+    "embedded files through a figure's /Ref and /OPI and an image's /OPI",
   ],
 ];
 

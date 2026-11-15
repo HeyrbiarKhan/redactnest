@@ -190,9 +190,19 @@ describe("failure copy (AC-16, AC-17)", () => {
       "unsupported",
       "edge-text",
       "no-readable-text",
+      "unreadable-structure",
     ] as const) {
       expect(failureText(kind, FREE).body, kind).toMatch(/made no file|no file was made/);
     }
+  });
+
+  /** Spec 0019, AC-3: its words from its kind alone, the new copy as its next step. */
+  it("says a file built in a way RedactNest can't check safely stopped it", () => {
+    expect(failureText("unreadable-structure", FREE)).toEqual({
+      title: "RedactNest stopped to be safe",
+      body: "Part of this file is built in a way RedactNest can't check safely, so it stopped rather than guess, and made no file.",
+      next: failureText("unsupported", FREE).next,
+    });
   });
 
   /**

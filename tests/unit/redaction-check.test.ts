@@ -102,9 +102,17 @@ describe("the self check fires", () => {
     ).resolves.toBe("redaction-overreach");
   });
 
+  /**
+   * Since spec 0019 the prune deletes every carrier first, as keys off every
+   * role's list, so the sweep is a backstop and both are skipped here.
+   */
   it("fails with redaction-incomplete when a carrier survives the rebuild", async () => {
     await expect(
-      kindOf(fixture("metadata.pdf"), [], { ...PIPELINE, sweepCarriers: () => {} }),
+      kindOf(fixture("metadata.pdf"), [], {
+        ...PIPELINE,
+        pruneToRoles: () => {},
+        sweepCarriers: () => {},
+      }),
     ).resolves.toBe("redaction-incomplete");
   });
 

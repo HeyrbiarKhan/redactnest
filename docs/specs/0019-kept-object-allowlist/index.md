@@ -1,7 +1,7 @@
 # 0019. A typed allowlist below the pages
 
 **Date**: 2026-11-15
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 

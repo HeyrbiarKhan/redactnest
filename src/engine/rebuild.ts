@@ -1,5 +1,7 @@
 import type { PDFDocument } from "mupdf";
 
+import { walkRoles } from "./allowlist";
+import { EngineFailure } from "./failure";
 import type { MuPdf } from "./load";
 import { forEachDictionary, keepOnly } from "./objects";
 
@@ -8,7 +10,8 @@ import { forEachDictionary, keepOnly } from "./objects";
  *
  * Spec 0004, INV-3. The output carries nothing from the source that the rebuild
  * did not choose to carry. It is an allowlist at the catalog and at each page,
- * a sweep for known carriers below them, and a write that keeps only the
+ * a typed allowlist for every object below them (`pruneToRoles`, spec 0019), a
+ * sweep for known carriers kept as a backstop, and a write that keeps only the
  * resources each page actually draws. Subtracting known keys from the source
  * instead would carry across anything nobody thought to list, and a future PDF
  * feature that hides data somewhere new would ride along until somebody
@@ -49,6 +52,11 @@ export const CATALOG_KEYS: readonly string[] = Object.freeze(["Type", "Pages", "
  * object in the new document wherever a producer nested them: XMP packets,
  * private application data, thumbnails, automatic actions, associated files and
  * modification dates.
+ *
+ * Since spec 0019 the prune deletes all of them first, as keys off every
+ * role's list, so the sweep is a backstop. Never widened key by key: a key the
+ * output must not keep is already off the lists, and one it must keep is a
+ * `ROLES` change with a failing fixture as its proof (INV-6).
  */
 export const CARRIER_KEYS: readonly string[] = Object.freeze([
   "Metadata",
@@ -126,6 +134,28 @@ export function stripToAllowlist(out: PDFDocument): void {
   const pageCount = out.countPages();
   for (let index = 0; index < pageCount; index += 1) {
     keepOnly(out.findPage(index), PAGE_KEYS);
+  }
+}
+
+/**
+ * Every object below the catalog and the pages, cut to its role's list. Spec
+ * 0019, AC-1 to AC-3.
+ *
+ * Runs on the rebuilt document after `stripToAllowlist` and before the sweep.
+ * The walk gives each object a role from the key that reached it and deletes
+ * every key, at any depth, that the role does not need to draw, so whatever
+ * only that key reached is left unreferenced and the write's
+ * `garbage=deduplicate` drops it: a font's private key on the original copy of
+ * a redacted figure, a figure's embedded file, pdfTeX's notes on where a figure
+ * came from. It deletes keys and nothing else, so it never removes less than
+ * main from what a page draws (INV-7).
+ *
+ * A shape the walk cannot read refuses the run with `unreadable-structure`
+ * before anything is written, and leaves the document as it was.
+ */
+export function pruneToRoles(out: PDFDocument): void {
+  if (walkRoles(out, "prune").problem !== null) {
+    throw new EngineFailure("unreadable-structure");
   }
 }
 

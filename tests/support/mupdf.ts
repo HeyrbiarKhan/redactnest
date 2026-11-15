@@ -146,6 +146,28 @@ export function everyDictionary(doc: PDFDocument): PDFObject[] {
   return found;
 }
 
+/**
+ * Every stream object in the file, decoded through its filters, one entry per
+ * numbered object. Read through the reference itself: MuPDF knows a stream only
+ * by its indirect reference, so a resolved one reads as a plain dictionary.
+ */
+export function decodedStreams(
+  doc: PDFDocument,
+): { readonly dict: PDFObject; readonly data: Uint8Array }[] {
+  const found: { dict: PDFObject; data: Uint8Array }[] = [];
+  for (let num = 1; num < doc.countObjects(); num += 1) {
+    const ref = doc.newIndirect(num);
+    if (!ref.isStream()) continue;
+    const buffer = ref.readStream();
+    try {
+      found.push({ dict: ref.resolve(), data: buffer.asUint8Array().slice() });
+    } finally {
+      buffer.destroy();
+    }
+  }
+  return found;
+}
+
 /** Every key used anywhere in the file. */
 export function everyKey(doc: PDFDocument): Set<string> {
   return new Set(everyDictionary(doc).flatMap(keysOf));
