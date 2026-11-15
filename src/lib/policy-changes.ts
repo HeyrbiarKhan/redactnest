@@ -52,11 +52,16 @@ export const TERMS_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
 export const SECURITY_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
   // Spec 0019, AC-14: dated the day it merges. "First published." holds
   // 2026-11-15 and no two entries share a day, so this is the earliest day it
-  // can merge; move it to the real merge day if that is later.
+  // can merge; move it to the real merge day if that is later. Said as the
+  // structure item says it, what the check does and one "can" line: the walk
+  // holds keys and strings to lists and no name a file chooses (spec 0019's
+  // *Consequences*). "A warning on each page where RedactNest finds some" is
+  // the descriptions line's own reach (AC-9: a description written another
+  // way than as a string stays with no warning), never "with a warning".
   Object.freeze({
     date: "2026-11-16",
     summary:
-      "The check now holds every object and key in the file to a fixed list, so this page says where the original copy of a redacted figure or picture can still be, what else RedactNest strips, and that descriptions written into a page can stay, with a warning. The check’s text part now says it reads selectable text. What it finds is now What it looks for.",
+      "The check now fails a file holding an object it does not reach from the file’s starting point, or an entry off the fixed list for that object’s kind, though names a file chooses stay as written and can carry words. So this page says where the original copy of a redacted figure or picture can still be, what else RedactNest strips, and that descriptions written into a page can stay, with a warning on each page where RedactNest finds some. The check’s text part now says it reads selectable text. What it finds is now What it looks for.",
   }),
   Object.freeze({ date: "2026-11-15", summary: "First published." }),
 ]);

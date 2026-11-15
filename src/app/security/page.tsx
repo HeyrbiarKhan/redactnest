@@ -206,33 +206,45 @@ export default function SecurityPage() {
             removed item is blank there, or no file leaves (spec 0004, AC-13
             and INV-15). No colour is named: blank is white, or unpainted for a
             stencil picture (AC-13). The reach past the edges is the pass's own
-            area, the same on every item ("Padded area"). The last line is spec
-            0019, AC-14 and AC-5. MuPDF redacts a figure or picture into a new
-            copy, which the page draws. "Only where a page's drawing
-            instructions still reach it" sits behind the structure check, which
-            every file passes: it fails any object the walk from the catalog
-            does not reach, and any resource entry the drawing streams owning
-            its dictionary never name (*Resource use*), so a figure or picture
-            left in the file is one those streams draw, directly or through
-            what they use (a soft mask's group, an image's mask). "Such as
-            another page where you ticked nothing" is one way it happens: a
-            figure two pages share keeps its original for the page that still
-            draws it. As built: "a figure or picture they do not reach", where
-            "an object they do not reach" read wider than the gate, since the
-            catalog and each page's own dictionary are objects no drawing
-            reaches. The six `kept-*.pdf` fixtures fail on main and pass now
-            (AC-4), and fail the check with the prune skipped (AC-6). Never
-            "untouched", which reads as harmless (the review on a fresh model,
-            2026-11-15). */}
+            area, the same on every item ("Padded area"). The last two lines
+            are spec 0019, AC-14 and AC-5. MuPDF redacts a figure or picture
+            into a new copy, which the page draws. "Fails any file holding a
+            figure or picture that no page's drawing instructions reach" is the
+            structure check, which every file passes: it fails any object the
+            walk from the catalog does not reach, and any resource entry the
+            drawing streams owning its dictionary never name (*Resource use*),
+            so a figure or picture left in the file is one those streams name,
+            directly or through what they use (a soft mask's group, an image's
+            mask, a Type 3 font's glyph procedures). Name, not draw: a Type 3
+            font's glyph procedures count together, drawn or not, so the
+            original copy's line is the gate's "can" line, never "only where a
+            page still draws it". "On another page where you ticked nothing" is
+            one way it happens: a figure two pages share keeps its original for
+            the page that still draws it. "In a font character that no text
+            shows" is another, measured 2026-11-15 (/debug, after the verify)
+            on a document built in a scratch test: a page drawing a form that
+            holds a ticked value, with a Type 3 font whose glyph no text draws
+            naming the same form, kept the value in the output while the check
+            passed, and kept none without that glyph; main kept it too. As
+            built: "a figure or picture they do not reach", where "an object
+            they do not reach" read wider than the gate, since the catalog and
+            each page's own dictionary are objects no drawing reaches; then,
+            after the verify, the check first and the original copy as its
+            "can" line, where "stays only where a page's drawing instructions
+            still reach it, such as another page" read as though the original
+            were always drawn somewhere. The six `kept-*.pdf` fixtures fail on
+            main and pass now (AC-4), and fail the check with the prune skipped
+            (AC-6). Never "untouched", which reads as harmless (the review on a
+            fresh model, 2026-11-15). */}
         <p>
           Under each removed item it also blanks the pictures MuPDF reports there, over an
           area reaching a little past the item’s edges, and small drawn marks lying wholly
           inside that area, such as an underline, can go with it. Ink of a scanned page
-          lying further out than that can stay visible. The original copy of a figure or
-          picture it redacts stays only where a page’s drawing instructions still reach
-          it, such as another page where you ticked nothing: the check fails any file
-          holding a figure or picture they do not reach, directly or through what they
-          use.
+          lying further out than that can stay visible. The check fails any file holding a
+          figure or picture that no page’s drawing instructions reach, directly or through
+          what they use. So the original copy of a figure or picture it redacts can stay
+          only where a page’s instructions still reach it, such as on another page where
+          you ticked nothing, or in a font character that no text shows.
         </p>
         {/* Spec 0004, INV-5 (every setting written out), its *Decision*
             bullet "Redaction settings are explicit at the call site", whose
@@ -296,31 +308,50 @@ export default function SecurityPage() {
             repeating pattern, or used only as a soft mask (to fade or shape something
             else), can escape both the blanking and this check.
           </li>
-          {/* Spec 0019, AC-1, AC-2 and AC-5; spec 0004, AC-13 and INV-3. Every
-              absolute here is the structure check's own rule, which every file
+          {/* Spec 0019, AC-1, AC-2, AC-5 and AC-14; spec 0004, AC-13 and INV-3.
+              What the check does, then one "can" line, so no absolute rests on
+              anything but the structure check's own rules, which every file
               passes or does not leave. "A single version" is the version
-              count. "Every object in it" is reachability: an object the walk
-              from the catalog does not reach fails. "Every key on each" is the
-              role lists (`ROLES`, with `CATALOG_KEYS`, `PAGE_KEYS` and
-              `TRAILER_KEYS`), at any depth, with every string outside
-              `STRING_PLACES` failing too. "Almost all of it what a page needs
-              to draw", as built: a role's list is what MuPDF needs to draw it,
-              less every key that carries data (spec 0019, *Role table*), but
-              the list also keeps the catalog's `/Lang`, a property list's
+              count. "Follows the file from its starting point" is the walk
+              from the trailer's `/Root`; "any object is left unreached" is
+              reachability, over every numbered object. "Any attached file" is
+              an embedded file stream, a file specification or a dictionary
+              holding `/EF`, anywhere, reached or not. "An entry that is not on
+              the fixed list for its kind" is the role lists (`ROLES`, with
+              `CATALOG_KEYS`, `PAGE_KEYS` and `TRAILER_KEYS`), at any depth;
+              "such as entries a program adds" is one kind of such an entry,
+              held on `tests/fixtures/kept-program-keys.pdf` (AC-4), never a
+              claim that every entry a program adds is off the lists. "Almost
+              every entry on those lists": a role's list is what MuPDF needs
+              to draw it, less every key that carries data (*Role table*), but
+              the lists also keep the catalog's `/Lang`, a property list's
               `/ActualText` and `/MCID`, and a resource dictionary's
-              `/Properties` and `/ProcSet`, which no page needs to draw, so "a
-              fixed list of what a page needs to draw" read wider than the list.
-              "Anything else ... fails the check": an embedded file stream or a
-              file specification fails anywhere, reached or not, and a key a
-              program adds is on no list. The "can" line spec 0018 kept here is
-              gone: each measurement behind it (spec 0018, items 13, 15 and 17)
-              is now a `kept-*.pdf` fixture that fails on main, passes now and
-              fails the check with the prune skipped (spec 0019, AC-4, AC-6). */}
+              `/Properties` and `/ProcSet`, which no page needs to draw. The
+              "can" line is spec 0019's *Security model* row on spec 0004 and
+              its *Consequences* bullet "The names and numbers on listed keys
+              leave as written": the walk holds keys and strings to lists, and
+              no name. Measured 2026-11-15 (the verify, run again by /debug on
+              9a7e999) on a document built in a scratch test, nothing ticked,
+              the check passing: the names a file gives its fonts, pictures,
+              graphics states, colour spaces and property lists in a page's
+              resources, a Type 3 font's glyph names, a spot colour's name and
+              a font's `/BaseFont` all stayed as written. As built after the
+              verify: "every object in it, and every key on each, comes from a
+              fixed list ... Anything else ... fails the check" read as though
+              those names were held too. The "can" line spec 0018 kept here
+              for hidden data is gone: each measurement behind it (spec 0018,
+              items 13, 15 and 17) is now a `kept-*.pdf` fixture that fails on
+              main, passes now and fails the check with the prune skipped
+              (spec 0019, AC-4, AC-6). */}
           <li>
-            Structure: the file holds a single version, and every object in it, and every
-            key on each, comes from a fixed list, almost all of it what a page needs to
-            draw. Anything else, such as an attached file or entries a program adds to the
-            file’s objects for its own use, fails the check.
+            Structure: the file holds a single version. The check follows the file from
+            its starting point, and fails it if any object is left unreached, if any
+            attached file is in it, or if an object holds an entry that is not on the
+            fixed list for its kind (a font, a picture, a colour and so on), such as
+            entries a program adds to the file’s objects for its own use. Almost every
+            entry on those lists is one a page needs to draw. Names a file chooses, such
+            as those it gives its fonts, pictures and colours, are held to no list: they
+            stay as written, and can carry words.
           </li>
         </ul>
         {/* Spec 0004, AC-14 (no output, one kind); spec 0007, AC-16 (each
@@ -336,10 +367,9 @@ export default function SecurityPage() {
         <SectionHeading sections={SECURITY_SECTIONS} name="hiddenData" />
         {/* The band linked, not restated (spec 0018, AC-6): a plain pointer
             that says only that the home page lists the kinds, with no claim
-            of its own. What the check does with them ("looks for", spec 0004,
-            AC-13) and what can stay are said once, in the structure item under
-            The check on every file, so the pointer never says "looks for"
-            (the review on a fresh model, 2026-11-15). Never "strips": an
+            of its own. What the check does is said once, in the structure item
+            under The check on every file, so the pointer never says "looks
+            for" (the review on a fresh model, 2026-11-15). Never "strips": an
             attachment a kept object points to stays while it is reported
             stripped (the eighth verify, 2026-11-15, measured on
             `tests/fixtures/metadata.pdf`); nor "where the PDF format keeps

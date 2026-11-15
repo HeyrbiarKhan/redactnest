@@ -163,10 +163,12 @@ describe("the security page", () => {
     ],
     ["removedNotCovered", "a little past the item’s edges"],
     ["removedNotCovered", "further out than that can stay visible"],
-    // Spec 0019, AC-14, as built: "a figure or picture they do not reach".
+    // Spec 0019, AC-14, as built after the verify: the check first, then the
+    // original copy as its "can" line, a font character no text shows among
+    // the places it can stay.
     [
       "removedNotCovered",
-      "The original copy of a figure or picture it redacts stays only where a page’s drawing instructions still reach it, such as another page where you ticked nothing: the check fails any file holding a figure or picture they do not reach, directly or through what they use.",
+      "The check fails any file holding a figure or picture that no page’s drawing instructions reach, directly or through what they use. So the original copy of a figure or picture it redacts can stay only where a page’s instructions still reach it, such as on another page where you ticked nothing, or in a font character that no text shows.",
     ],
     ["removedNotCovered", "a change in the engine’s defaults cannot quietly change"],
     ["removedNotCovered", "a ticked item MuPDF cannot remove stops the run"],
@@ -180,10 +182,11 @@ describe("the security page", () => {
     ["theCheck", "none lying in one is left"],
     ["theCheck", "a character crossing the page’s edge can go with what lies outside it"],
     ["theCheck", "can escape both the blanking and this check"],
-    // Spec 0019, AC-14, as built: "almost all of it what a page needs to draw".
+    // Spec 0019, AC-14, as built after the verify: what the check does, then
+    // one "can" line for the names a file chooses.
     [
       "theCheck",
-      "Structure: the file holds a single version, and every object in it, and every key on each, comes from a fixed list, almost all of it what a page needs to draw. Anything else, such as an attached file or entries a program adds to the file’s objects for its own use, fails the check.",
+      "Structure: the file holds a single version. The check follows the file from its starting point, and fails it if any object is left unreached, if any attached file is in it, or if an object holds an entry that is not on the fixed list for its kind (a font, a picture, a colour and so on), such as entries a program adds to the file’s objects for its own use. Almost every entry on those lists is one a page needs to draw. Names a file chooses, such as those it gives its fonts, pictures and colours, are held to no list: they stay as written, and can carry words.",
     ],
     ["theCheck", "If any part fails, you get no file"],
     ["theCheck", "a file the check could not vouch for"],
@@ -464,8 +467,9 @@ describe("the security page", () => {
    * picture's `/OPI` breaks (measured: the self check passed and the file
    * stayed). The structure line says only what the check does, so the Hidden
    * data pointer makes no claim of its own. Since spec 0019 (AC-14) the check
-   * holds every object and key to a fixed list, and entries a program adds
-   * are named once, in the structure item, never in Hidden data.
+   * fails any object it does not reach and any entry off the fixed list for
+   * its kind, and entries a program adds are named once, in the structure
+   * item, never in Hidden data.
    */
   it("says what the structure check does, never that nothing is left", () => {
     render(<SecurityPage />);
@@ -490,12 +494,12 @@ describe("the security page", () => {
    * picture's original stayed byte for byte, a note's text and an attached
    * file stayed while reported stripped, and page labels, viewer preferences,
    * an opening action and alternate text stayed. Spec 0019 closed that leak:
-   * every object and key is now held to a fixed list, and each of those cases
-   * is a `kept-*.pdf` fixture. So the page now says what the structure check
-   * strips (AC-14), and where the original copy of a figure or picture can
-   * still be, but still never that text leaves the file, since the check reads
-   * the text each page draws and a figure another page draws keeps its
-   * original.
+   * the check now fails any object it does not reach and any entry off the
+   * fixed list for its kind, and each of those cases is a `kept-*.pdf`
+   * fixture. So the page now says what the structure check strips (AC-14),
+   * and where the original copy of a figure or picture can still be, but
+   * still never that text leaves the file, since the check reads the text
+   * each page draws and a figure another page draws keeps its original.
    */
   it("claims nothing gone that the checks do not hold", () => {
     render(<SecurityPage />);
@@ -506,7 +510,7 @@ describe("the security page", () => {
     expect(text).not.toContain("is gone");
     expect(text).not.toContain("looks for and strips");
     expect(text).not.toContain("when another part of the file points to it");
-    expect(text.split("The original copy of a figure or picture").length - 1).toBe(1);
+    expect(text.split("original copy of a figure or picture").length - 1).toBe(1);
   });
 
   /**
@@ -517,8 +521,9 @@ describe("the security page", () => {
    * tags, which the result does report (as annotations and as tags); and the
    * Hidden data pointer saying "looks for", so the pointer says only that the
    * home page lists the kinds. Since spec 0019 (AC-14) the structure item names
-   * the fixed list in place of "looks for the hidden data", and the four kinds
-   * not reported are named, with links and tags outside that clause.
+   * the fixed list for each kind in place of "looks for the hidden data", and
+   * the four kinds not reported are named, with links and tags outside that
+   * clause.
    */
   it("never calls the original copy untouched, says which kinds go unreported, and keeps the pointer plain", () => {
     render(<SecurityPage />);
@@ -528,7 +533,7 @@ describe("the security page", () => {
     expect(text).not.toMatch(/none of these is reported/i);
     expect(text).not.toContain("hidden data RedactNest looks for");
     expect(text).not.toContain("looks for the hidden data");
-    expect(text.split("comes from a fixed list").length - 1).toBe(1);
+    expect(text.split("not on the fixed list for its kind").length - 1).toBe(1);
     expect(sectionText(SECURITY_SECTIONS.hiddenData)).toContain(
       "The home page lists the kinds of hidden data.",
     );
@@ -579,7 +584,14 @@ describe("the security page", () => {
    * drawing reaches), "a fixed list of what a page needs to draw" (the list
    * also keeps a language, replacement text and marked content numbers), and
    * "any page that may have them" (the scan counts a description only when it
-   * is a string).
+   * is a string). After the verify (2026-11-15), three more: "every key on
+   * each, comes from a fixed list" and "anything else ... fails the check"
+   * (the names a file gives its fonts, pictures and colours are held to no
+   * list and stay, measured with the check passing), "stays only where a
+   * page's drawing instructions still reach it" (a Type 3 font's glyph that
+   * no text draws kept the original copy of a figure holding a ticked value,
+   * the check passing), and the change entry's "can stay, with a warning"
+   * (wider than "each page where it finds some").
    */
   it("keeps the wider readings of spec 0019's lines off the page", () => {
     render(<SecurityPage />);
@@ -588,6 +600,36 @@ describe("the security page", () => {
     expect(text).not.toContain("holding an object they do not reach");
     expect(text).not.toContain("a fixed list of what a page needs to draw");
     expect(text).not.toContain("any page that may have them");
+    expect(text).not.toContain("every key on each");
+    expect(text).not.toContain("every object in it");
+    expect(text).not.toContain("comes from a fixed list");
+    expect(text).not.toMatch(/anything else/i);
+    expect(text).not.toContain("stays only where");
+    expect(text).not.toContain("can stay, with a warning.");
+  });
+
+  /**
+   * covers: spec 0019, AC-14, as built after the verify, and spec 0018, AC-5
+   * (said once). The names a file chooses are the structure item's one "can"
+   * line, so the page says it there and nowhere else, and the change entry
+   * says the descriptions warning reaches each page where RedactNest finds
+   * some, as the Pages list does.
+   */
+  it("says once, in the structure item, that names a file chooses can carry words", () => {
+    render(<SecurityPage />);
+    const text = mainText();
+
+    expect(sectionText(SECURITY_SECTIONS.theCheck)).toContain(
+      "Names a file chooses, such as those it gives its fonts, pictures and colours, are held to no list: they stay as written, and can carry words.",
+    );
+    expect(text.split("Names a file chooses").length - 1).toBe(1);
+    expect(text.split("are held to no list").length - 1).toBe(1);
+    expect(SECURITY_CHANGES[0].summary).toContain(
+      "names a file chooses stay as written and can carry words",
+    );
+    expect(SECURITY_CHANGES[0].summary).toContain(
+      "with a warning on each page where RedactNest finds some",
+    );
   });
 
   /**
