@@ -377,27 +377,28 @@ export default function SecurityPage() {
         </p>
 
         <h3>Notes and attachments</h3>
-        {/* Spec 0019, AC-4, AC-5 and AC-14; spec 0004, AC-22 (comments and
-            form fields flattened) and AC-7; the measurement spec 0018's AC-7
-            records (`tests/fixtures/metadata.pdf`, 2026-11-14, a run with
-            nothing ticked: both icons still drawn). "Can keep": one fixture
-            measured, so the icon is a "can" line. "Taken off the page with
-            what it held" sits behind the self check's structure part, which
-            every file passes: no page keeps `/Annots` (`PAGE_KEYS`), no object
-            the walk from the catalog does not reach is left, no string stays
-            outside `STRING_PLACES`, and no embedded file stream or file
-            specification is left anywhere (spec 0019, AC-5). Held on
+        {/* Spec 0018, AC-6: the band's note says how comments and form fields
+            are flattened and what goes with them (a note's hidden text and any
+            attached file, held by spec 0019's structure check, AC-5), so the
+            pointer names that subject and never the fact, and this paragraph
+            adds only what is its own. "Taken off the page" sits behind the self
+            check's structure part, which every file passes: no page keeps
+            `/Annots` (`PAGE_KEYS`), and no object the walk from the catalog
+            does not reach is left (spec 0019, AC-5), held on
             `tests/fixtures/kept-annotations.pdf`, where a font points at the
-            page's annotations (AC-4). As built: "the note's hidden text",
-            where "the note's text" read wider, since what a note shows is
-            flattened into the page and stays (spec 0004, AC-22), as the band's
-            note says. */}
+            page's annotations (AC-4). "Can keep" is the measurement spec 0018's
+            AC-7 records (`tests/fixtures/metadata.pdf`, 2026-11-14, a run with
+            nothing ticked: both icons still drawn); one fixture measured, so
+            the icon is a "can" line. As built: spec 0019's AC-14 gave "with what
+            it held, the note's text or the attached file", which restated the
+            band's note. */}
         <p>
           The home page notes{" "}
-          <a href={HOME_BAND}>how comments and form fields are flattened</a>. A sticky
-          note or a file attachment is taken off the page with what it held, the note’s
-          hidden text or the attached file, though one that shows as an icon can keep that
-          icon as a mark on the page.
+          <a href={HOME_BAND}>
+            how comments and form fields are flattened, and what goes with them
+          </a>
+          . A sticky note or a file attachment is taken off the page, though one that
+          shows as an icon can keep that icon as a mark on the page.
         </p>
 
         <h3>Passwords and fonts</h3>

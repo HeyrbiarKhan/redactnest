@@ -194,10 +194,11 @@ describe("the security page", () => {
       "hiddenData",
       "That list leaves some things out. RedactNest also strips the file’s identifier, page labels, viewer preferences and automatic actions that are not scripts, and does not report these four. Links and accessibility tags are stripped too, so links in the cleaned copy no longer work and screen readers read it less well.",
     ],
-    // Spec 0019, AC-14, as built: "the note’s hidden text".
+    // Spec 0019, AC-14, as built to spec 0018's AC-6: the band's note linked
+    // for what goes with comments, and only the page's own line said here.
     [
       "hiddenData",
-      "A sticky note or a file attachment is taken off the page with what it held, the note’s hidden text or the attached file, though one that shows as an icon can keep that icon as a mark on the page.",
+      "The home page notes how comments and form fields are flattened, and what goes with them. A sticky note or a file attachment is taken off the page, though one that shows as an icon can keep that icon as a mark on the page.",
     ],
     ["hiddenData", "the cleaned copy carries no restriction"],
     ["hiddenData", "which characters the document used"],
@@ -570,14 +571,13 @@ describe("the security page", () => {
   });
 
   /**
-   * covers: spec 0019, AC-14, as built. Four of its lines read wider than
+   * covers: spec 0019, AC-14, as built. Three of its lines read wider than
    * their gates, so each was narrowed (spec 0018, AC-5): "an object they do
    * not reach" (the catalog and each page's own dictionary are objects no
    * drawing reaches), "a fixed list of what a page needs to draw" (the list
-   * also keeps a language, replacement text and marked content numbers), "the
-   * note's text" (what a note shows is flattened and stays), and "any page
-   * that may have them" (the scan counts a description only when it is a
-   * string).
+   * also keeps a language, replacement text and marked content numbers), and
+   * "any page that may have them" (the scan counts a description only when it
+   * is a string).
    */
   it("keeps the wider readings of spec 0019's lines off the page", () => {
     render(<SecurityPage />);
@@ -585,8 +585,27 @@ describe("the security page", () => {
 
     expect(text).not.toContain("holding an object they do not reach");
     expect(text).not.toContain("a fixed list of what a page needs to draw");
-    expect(text).not.toContain("the note’s text or");
     expect(text).not.toContain("any page that may have them");
+  });
+
+  /**
+   * covers: spec 0018, AC-6, and spec 0019, AC-14, as built. The home band's
+   * note says what goes with comments and form fields (a note's hidden text
+   * and any attached file), so Notes and attachments links it by its subject
+   * and never says it again: its own words are only that a note or an
+   * attachment is taken off the page, and the icon's "can" line.
+   */
+  it("links the band's note for what goes with comments, and never restates it", () => {
+    render(<SecurityPage />);
+
+    const pointer = within(screen.getByRole("main")).getByRole("link", {
+      name: "how comments and form fields are flattened, and what goes with them",
+    });
+    expect(pointer).toHaveAttribute("href", `/#${HOME_BAND_ID}`);
+    const hidden = sectionText(SECURITY_SECTIONS.hiddenData);
+    expect(hidden).not.toMatch(/hidden text/i);
+    expect(hidden).not.toMatch(/attached file/i);
+    expect(hidden).not.toContain("with what it held");
   });
 
   /** covers: AC-9. No cap, size or price as a number, and no repository. */
