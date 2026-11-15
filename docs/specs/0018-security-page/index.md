@@ -1,6 +1,6 @@
 # 0018. Security page
 
-**Status**: In Progress
+**Status**: Accepted
 **Date**: 2026-11-14
 **Authorized by**: Heyrbiar Khan, during /develop
 **Ratified**: 2026-11-14, by /architect. The page, its way in, its frame and the drawing held as built. AC-5 now sets one rule for every claim, AC-6 covers any fact a linkable page already states, and AC-7 names the limits at a buyer's level. Spec 0013's AC-8 now names the footer's Security link.
