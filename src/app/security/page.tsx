@@ -338,7 +338,12 @@ export default function SecurityPage() {
               a font's `/BaseFont` all stayed as written. As built after the
               verify: "every object in it, and every key on each, comes from a
               fixed list ... Anything else ... fails the check" read as though
-              those names were held too. The "can" line spec 0018 kept here
+              those names were held too. "Can stay", never "stay": the open
+              steps verify (2026-11-15) measured a name going with what it
+              named, on documents built in a scratch test (a font entry no
+              drawing uses, a font whose only text is ticked, a picture wholly
+              under a ticked value), so the limit is a "can" line as spec
+              0018's AC-5 writes one. The "can" line spec 0018 kept here
               for hidden data is gone: each measurement behind it (spec 0018,
               items 13, 15 and 17) is now a `kept-*.pdf` fixture that fails on
               main, passes now and fails the check with the prune skipped
@@ -351,7 +356,7 @@ export default function SecurityPage() {
             entries a program adds to the file’s objects for its own use. Almost every
             entry on those lists is one a page needs to draw. Names a file chooses, such
             as those it gives its fonts, pictures and colours, are held to no list: they
-            stay as written, and can carry words.
+            can stay as written, and can carry words.
           </li>
         </ul>
         {/* Spec 0004, AC-14 (no output, one kind); spec 0007, AC-16 (each

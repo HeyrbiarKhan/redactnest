@@ -186,7 +186,7 @@ describe("the security page", () => {
     // one "can" line for the names a file chooses.
     [
       "theCheck",
-      "Structure: the file holds a single version. The check follows the file from its starting point, and fails it if any object is left unreached, if any attached file is in it, or if an object holds an entry that is not on the fixed list for its kind (a font, a picture, a colour and so on), such as entries a program adds to the file’s objects for its own use. Almost every entry on those lists is one a page needs to draw. Names a file chooses, such as those it gives its fonts, pictures and colours, are held to no list: they stay as written, and can carry words.",
+      "Structure: the file holds a single version. The check follows the file from its starting point, and fails it if any object is left unreached, if any attached file is in it, or if an object holds an entry that is not on the fixed list for its kind (a font, a picture, a colour and so on), such as entries a program adds to the file’s objects for its own use. Almost every entry on those lists is one a page needs to draw. Names a file chooses, such as those it gives its fonts, pictures and colours, are held to no list: they can stay as written, and can carry words.",
     ],
     ["theCheck", "If any part fails, you get no file"],
     ["theCheck", "a file the check could not vouch for"],
@@ -620,12 +620,16 @@ describe("the security page", () => {
     const text = mainText();
 
     expect(sectionText(SECURITY_SECTIONS.theCheck)).toContain(
-      "Names a file chooses, such as those it gives its fonts, pictures and colours, are held to no list: they stay as written, and can carry words.",
+      "Names a file chooses, such as those it gives its fonts, pictures and colours, are held to no list: they can stay as written, and can carry words.",
     );
+    // A name can go with what it named (a font no drawing uses any more), so
+    // the limit is a "can" line, never "they stay as written".
+    expect(text).not.toContain("they stay as written");
+    expect(SECURITY_CHANGES[0].summary).not.toContain("chooses stay as written");
     expect(text.split("Names a file chooses").length - 1).toBe(1);
     expect(text.split("are held to no list").length - 1).toBe(1);
     expect(SECURITY_CHANGES[0].summary).toContain(
-      "names a file chooses stay as written and can carry words",
+      "names a file chooses can stay as written and can carry words",
     );
     expect(SECURITY_CHANGES[0].summary).toContain(
       "with a warning on each page where RedactNest finds some",
