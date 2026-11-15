@@ -1,0 +1,61 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [7 0 R 9 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /N 3 /Alternate /DeviceRGB /Length 128 >>
+stream
+This is not an ICC colour profile. This is not an ICC colour profile. This is not an ICC colour profile. This is not an ICC colo
+endstream
+endobj
+5 0 obj
+<< /N 4 /Alternate /DeviceCMYK /Length 128 >>
+stream
+This is not an ICC colour profile. This is not an ICC colour profile. This is not an ICC colour profile. This is not an ICC colo
+endstream
+endobj
+6 0 obj
+<<  /Length 115 >>
+stream
+BT /F1 18 Tf 72 700 Td (An unreadable profile over DeviceRGB) Tj ET
+q /CS0 cs 0.2 0.4 0.6 sc 72 500 100 100 re f Q
+
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> /ColorSpace << /CS0 [/ICCBased 4 0 R] >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<<  /Length 120 >>
+stream
+BT /F1 18 Tf 72 700 Td (An unreadable profile over DeviceCMYK) Tj ET
+q /CS0 cs 0.1 0.2 0.3 0.4 sc 72 500 100 100 re f Q
+
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> /ColorSpace << /CS0 [/ICCBased 5 0 R] >> >> /Contents 8 0 R >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000218 00000 n 
+0000000424 00000 n 
+0000000631 00000 n 
+0000000798 00000 n 
+0000000965 00000 n 
+0000001137 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+1304
+%%EOF

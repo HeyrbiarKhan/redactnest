@@ -11,9 +11,19 @@ import type { PDFDocument, PDFObject } from "mupdf";
  * dictionary written directly inside one (an annotation's action, an image's
  * decode parameters, a page's inline resources).
  *
- * Indirect references are not followed from here. Each one is a numbered object
- * of its own and gets its own turn, so following them would only visit things
- * twice and loop on a cycle.
+ * A numbered object reaches `visit` as its indirect reference,
+ * `doc.newIndirect(num)`, never resolved: MuPDF 1.28.1 writes a stream it was
+ * asked to resolve as a dictionary with no data whenever the deduplicating
+ * write merges an object that stream points to, so a picture or a figure
+ * would lose its drawing (spec 0019, AC-16, INV-9). `get`, `delete` and
+ * `forEach` on the reference read and edit the object itself. A dictionary
+ * written directly inside one reaches `visit` as itself.
+ *
+ * The top level visit cannot go through `walkDirect`, whose first line passes
+ * over any indirect object and so would visit nothing. Below it, indirect
+ * references are not followed: each one is a numbered object of its own and
+ * gets its own turn, so following them would only visit things twice and loop
+ * on a cycle.
  *
  * Spec 0004 asks for "any object anywhere", recursing into direct sub
  * dictionaries and arrays, because a producer can nest a carrier wherever it
@@ -27,7 +37,15 @@ export function forEachDictionary(
   const count = doc.countObjects();
 
   for (let num = 1; num < count; num += 1) {
-    walkDirect(doc.newIndirect(num).resolve(), visit);
+    const ref = doc.newIndirect(num);
+
+    if (ref.isDictionary() || ref.isStream()) {
+      // Visited before its children are read, as `walkDirect` does.
+      visit(ref);
+      ref.forEach((value) => walkDirect(value, visit));
+    } else if (ref.isArray()) {
+      ref.forEach((value) => walkDirect(value, visit));
+    }
   }
 }
 

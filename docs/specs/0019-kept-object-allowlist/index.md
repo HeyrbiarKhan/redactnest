@@ -328,4 +328,4 @@ The fourth pass, still skateboard: the failing fixtures first, then the engine c
 - [ ] `/sync`: `src/engine/AGENTS.md` lines for `allowlist.ts`, `marked.ts`, the prune's place in the pipeline and the new structure checks; root `AGENTS.md`'s engine wall and *Rules* lines for spec 0001's exception and INV-6.
 - [ ] Feature 30 keeps the `off-page-picture` words (spec 0018's Follow-up item 4); nothing here changes them.
 - [ ] Fourth pass: add both MuPDF behaviours to the upstream MuPDF report spec 0004 keeps (`sanitize` keeping a `/ColorSpace` entry for a space it fails to load; a resolved stream written empty after a deduplicating merge). If a release fixes the second, the pin in `redaction-kept.test.ts` fails and the ban can be revisited; if it fixes the first, the colour fixtures' runs with `rewrite` returning its input stop failing, and that test is the signal to drop the second write.
-- [ ] Fourth pass: feature 30's row drops its empty stream item, answered here (AC-16), at task 21.
+- [x] Fourth pass: feature 30's row drops its empty stream item, answered here (AC-16), at task 21.

@@ -181,11 +181,18 @@ export {
   CATALOG_KEYS,
   PAGE_KEYS,
   pruneToRoles,
+  rewriteOutput,
   stripToAllowlist,
   sweepCarriers,
   WRITE_OPTIONS,
 } from "./rebuild";
-export { structureIsClean, type StructureVerdict } from "./self-check";
+export {
+  drawnShape,
+  structureIsClean,
+  type DrawnShape,
+  type StructureCheck,
+  type StructureVerdict,
+} from "./self-check";
 export type {
   FindOptions,
   FoundMatch,

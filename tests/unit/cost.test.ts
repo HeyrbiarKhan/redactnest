@@ -53,6 +53,9 @@ import { documentImages, LIMITS, mupdf } from "../support/mupdf";
  * together add at most 200 ms of CPU on the text heavy document, and at most
  * 15% to a run's CPU on one page drawing 10,000 form XObjects. The open's
  * budgets above count the walk and the scan too, since the open does both.
+ * The second write (AC-15) runs on neither document, and a test of its own
+ * says so, so both budgets stand as written: the path that writes twice has
+ * no budget, since those files were refused before it.
  */
 
 const PAGES = 50;
@@ -389,6 +392,14 @@ const MAIN: Pipeline = {
   checkStructure: () => "clean",
 };
 
+/** A second write that must never run: its throw would fail the run with `redaction-incomplete`. */
+const NO_REWRITE: Pipeline = {
+  ...PIPELINE,
+  rewrite: () => {
+    throw new Error("the second write ran");
+  },
+};
+
 /**
  * Spec 0019, AC-11. One page drawing 10,000 form XObjects, each with resources
  * of its own naming one shared font, and a figure in it.
@@ -547,6 +558,26 @@ describe("the cost of reading every page", () => {
         `run CPU per pass: ${run.passes.map(Math.round).join(", ")} ms`,
     ).toBeLessThan(0.15 * run.least);
   }, 600_000);
+
+  /**
+   * Spec 0019, AC-11 and AC-15. Measured on their outputs, a second write
+   * costs 16 ms on the 50 page document and 12.4 s on the 10,000 form page,
+   * 54% of its run, which is why it runs only on the check's verdict. Each run
+   * here is untimed and takes the whole pipeline but a second write that
+   * throws, so a file made proves neither budget pays for one.
+   */
+  it("writes neither budget document a second time", async () => {
+    for (const source of [densePdf(), tenThousandForms()]) {
+      const { output } = await redactDocumentWith(
+        mupdf,
+        toBuffer(source),
+        [],
+        {},
+        NO_REWRITE,
+      );
+      expect(output.byteLength).toBeGreaterThan(0);
+    }
+  }, 300_000);
 
   it("notices a cancel within one page of the 50", async () => {
     await withPrepared(densePdf(), async (pdf) => {

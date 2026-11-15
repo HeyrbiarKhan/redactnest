@@ -1,4 +1,4 @@
-import type { PDFDocument } from "mupdf";
+import type { Buffer as MuBuffer, PDFDocument } from "mupdf";
 
 import { walkRoles } from "./allowlist";
 import { EngineFailure } from "./failure";
@@ -12,7 +12,9 @@ import { forEachDictionary, keepOnly } from "./objects";
  * did not choose to carry. It is an allowlist at the catalog and at each page,
  * a typed allowlist for every object below them (`pruneToRoles`, spec 0019), a
  * sweep for known carriers kept as a backstop, and a write that keeps only the
- * resources each page actually draws. Subtracting known keys from the source
+ * resources each page actually draws, run a second time only on the self
+ * check's `unused-colour-space` verdict (`rewriteOutput`, spec 0019, AC-15).
+ * Subtracting known keys from the source
  * instead would carry across anything nobody thought to list, and a future PDF
  * feature that hides data somewhere new would ride along until somebody
  * noticed.
@@ -78,6 +80,52 @@ export const CARRIER_KEYS: readonly string[] = Object.freeze([
  * (spec 0004, AC-10: the output is unrestricted), never `linearize`.
  */
 export const WRITE_OPTIONS = "garbage=deduplicate,compress,sanitize";
+
+/**
+ * Copy the written file out of MuPDF's heap into a fresh `ArrayBuffer`, then
+ * hand MuPDF's buffer straight back. Shared by both writes, so the bytes the
+ * self check reads are always the engine's own copy (spec 0004, INV-2).
+ *
+ * `asUint8Array()` is a view into the WebAssembly heap, not a copy, so the
+ * `slice()` is load bearing: without it the output would be memory MuPDF is
+ * about to reuse.
+ */
+export function takeOutput(written: MuBuffer): ArrayBuffer {
+  try {
+    return written.asUint8Array().slice().buffer;
+  } finally {
+    written.destroy();
+  }
+}
+
+/**
+ * The second write: the first write's bytes, opened and saved again with
+ * `WRITE_OPTIONS`, and nothing else called on that document. Spec 0019, AC-15
+ * and INV-8.
+ *
+ * MuPDF's `sanitize` keeps the `/ColorSpace` entry of a space it fails to
+ * load and draws with a device colour instead, so nothing names the entry; a
+ * second pass of the same filter reads only the device colour and drops it.
+ * The engine never deletes the entry itself (spec 0004, INV-13): which spaces
+ * MuPDF can load is MuPDF's call, and so is what its filter keeps.
+ *
+ * Nothing is called on the document but `asPDF` and `saveToBuffer`, never a
+ * `.resolve()`, because a stream MuPDF was asked to resolve leaves with no
+ * data when the deduplicating write merges what it points to (AC-16). A file
+ * that does not open as a PDF fails the run with `redaction-incomplete`, and
+ * the run treats any throw from here the same way. The document and the buffer
+ * are destroyed on every path out.
+ */
+export function rewriteOutput(mupdf: MuPdf, bytes: ArrayBuffer): ArrayBuffer {
+  const doc = mupdf.Document.openDocument(bytes, "application/pdf");
+  try {
+    const pdf = doc.asPDF();
+    if (!pdf) throw new EngineFailure("redaction-incomplete");
+    return takeOutput(pdf.saveToBuffer(WRITE_OPTIONS));
+  } finally {
+    doc.destroy();
+  }
+}
 
 /**
  * Graft every page of the working copy into a new document.

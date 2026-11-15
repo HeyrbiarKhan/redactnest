@@ -4,6 +4,7 @@ import type { EngineErrorKind } from "@/worker/protocol";
 
 import { TRAILER_KEYS, walkRoles, type ResourceOwner } from "./allowlist";
 import { comparePage, type PageRecord } from "./characters";
+import { EngineFailure } from "./failure";
 import { lineBox } from "./geometry";
 import type { MuPdf } from "./load";
 import { forEachDictionary, hasKey, keysOf } from "./objects";
@@ -49,17 +50,38 @@ import type { RedactionTarget } from "./types";
  * the trim, so a trimmed character is never expected back, and a trim that
  * silently did nothing is caught here. The trim changes no pixel (INV-11), so
  * there is no pixel outside to check.
+ *
+ * Spec 0019, AC-15: when the structure part's only finding is a colour space
+ * entry no drawing names (`unused-colour-space`) and `mayRewrite` is set, the
+ * answer is `"rewrite"`, given before the page loop inside this one open of
+ * the bytes, so the usual path still opens and walks the output once. The run
+ * then writes once more and checks the new bytes with `mayRewrite` clear, where
+ * the same verdict is `redaction-incomplete`, a leak like any unused entry.
  */
 export function checkOutput(
   mupdf: MuPdf,
   output: ArrayBuffer,
   record: readonly PageRecord[],
   targets: ReadonlyMap<number, readonly RedactionTarget[]>,
-  checkStructure: (
-    check: PDFDocument,
-    sourcePageCount: number,
-  ) => StructureVerdict = structureIsClean,
-): EngineErrorKind | null {
+  checkStructure: StructureCheck,
+  mayRewrite: true,
+): EngineErrorKind | "rewrite" | null;
+export function checkOutput(
+  mupdf: MuPdf,
+  output: ArrayBuffer,
+  record: readonly PageRecord[],
+  targets: ReadonlyMap<number, readonly RedactionTarget[]>,
+  checkStructure?: StructureCheck,
+  mayRewrite?: false,
+): EngineErrorKind | null;
+export function checkOutput(
+  mupdf: MuPdf,
+  output: ArrayBuffer,
+  record: readonly PageRecord[],
+  targets: ReadonlyMap<number, readonly RedactionTarget[]>,
+  checkStructure: StructureCheck = structureIsClean,
+  mayRewrite = false,
+): EngineErrorKind | "rewrite" | null {
   const ticked = targets.size > 0;
   let leaked = false;
   let escaped = false;
@@ -74,6 +96,12 @@ export function checkOutput(
     if (!pdf) return "redaction-incomplete";
     const structure = checkStructure(pdf, record.length);
     if (structure === "leak") return "redaction-incomplete";
+    // Spec 0019, AC-15: a colour space MuPDF could not load leaves an entry
+    // its own filter drops on a second pass, so the run may write once more.
+    // On the bytes that cross it is a leak like any unused entry.
+    if (structure === "unused-colour-space") {
+      return mayRewrite ? "rewrite" : "redaction-incomplete";
+    }
     // Spec 0019, AC-5: a drawing stream the scan cannot read is `unsupported`,
     // since nothing was found to leak, unless a page below finds a leak, which
     // outranks it; every page is still compared.
@@ -125,10 +153,19 @@ export function checkOutput(
 
 /**
  * What the structure part found: nothing, something the rebuild should not
- * have carried (a leak), or a drawing stream it could not read to its end
- * (spec 0019, AC-5).
+ * have carried (a leak), a drawing stream it could not read to its end, or,
+ * as its only finding, a colour space entry no drawing names (spec 0019,
+ * AC-5). They rank in that order from the leak down: a leak outranks an
+ * unreadable stream, and both outrank an unused colour space, so a file
+ * holding either is never written twice (AC-15).
  */
-export type StructureVerdict = "clean" | "leak" | "unreadable";
+export type StructureVerdict = "clean" | "leak" | "unreadable" | "unused-colour-space";
+
+/** The structure part of the self check, as the `Pipeline` seam holds it. */
+export type StructureCheck = (
+  check: PDFDocument,
+  sourcePageCount: number,
+) => StructureVerdict;
 
 /**
  * The structural half. Does the output hold only what the rebuild chose to
@@ -149,7 +186,9 @@ export type StructureVerdict = "clean" | "leak" | "unreadable";
  * specification or `/EF` is anywhere, reached or not; and every resource entry
  * is named by a drawing that draws with its dictionary (*Resource use*). A
  * drawing stream the scan cannot read to its end answers `"unreadable"`,
- * which any leak outranks.
+ * which any leak outranks. An unused colour space entry answers
+ * `"unused-colour-space"` only when nothing else was found, so the carrier
+ * and embedded file checks run before resource use's answer is returned.
  */
 export function structureIsClean(
   check: PDFDocument,
@@ -216,9 +255,18 @@ const DEFAULT_SPACES: ReadonlySet<string> = new Set([
  * names is something `sanitize` should have dropped, so a leak. A drawing the
  * scan cannot read to its end makes the answer `"unreadable"`, unless another
  * dictionary holds a leak, which outranks it.
+ *
+ * Since the fourth pass, an unused entry under `/ColorSpace` only sets a flag
+ * and the comparison goes on, because MuPDF's `sanitize` keeps the entry of a
+ * space it fails to load and draws with a device colour instead, and a second
+ * pass of the same filter drops it (AC-15). An unused entry in any other
+ * category is still a leak at once. After every owner the answer ranks
+ * `"unreadable"` over `"unused-colour-space"` over `"clean"`, so a drawing
+ * the scan cannot read, anywhere in the file, means no second write.
  */
 function resourceUse(owners: readonly ResourceOwner[]): StructureVerdict {
   let unreadable = false;
+  let unusedColourSpace = false;
 
   for (const { resources, units } of owners) {
     const properties = resources.get("Properties");
@@ -252,12 +300,14 @@ function resourceUse(owners: readonly ResourceOwner[]): StructureVerdict {
       const entries = resources.get(category);
       if (!entries.isDictionary()) continue;
       for (const key of keysOf(entries)) {
-        if (category === "ColorSpace" && DEFAULT_SPACES.has(key)) continue;
-        if (!used.get(category)?.has(key)) return "leak";
+        if (used.get(category)?.has(key)) continue;
+        if (category !== "ColorSpace") return "leak";
+        if (!DEFAULT_SPACES.has(key)) unusedColourSpace = true;
       }
     }
   }
-  return unreadable ? "unreadable" : "clean";
+  if (unreadable) return "unreadable";
+  return unusedColourSpace ? "unused-colour-space" : "clean";
 }
 
 /**
@@ -300,4 +350,67 @@ function holdsEmbeddedFile(dict: PDFObject): boolean {
 
 function holdsOnly(dict: PDFObject, allowed: readonly string[]): boolean {
   return keysOf(dict).every((key) => allowed.includes(key));
+}
+
+/**
+ * What a file draws, as far as a second write could change it unseen. Spec
+ * 0019, AC-15 and INV-8.
+ *
+ * The full check on the second write's bytes holds text, structure and the
+ * pixels under ticked items, but reads no picture nobody ticked and counts no
+ * figure, so a second write that dropped a picture's data or a form would
+ * pass it. The shape is how many objects the role walk reaches as a form, and
+ * the stored length of every object it reaches as an image, read through the
+ * reference and sorted. A reached image that is not a stream counts as -1.
+ */
+export interface DrawnShape {
+  readonly forms: number;
+  readonly images: readonly number[];
+}
+
+/**
+ * The drawn shape of written bytes, opened on their own and destroyed before
+ * this returns. Called only on bytes the check already opened once, so a file
+ * that does not open as a PDF is a check that cannot finish:
+ * `redaction-incomplete`.
+ */
+export function drawnShape(mupdf: MuPdf, bytes: ArrayBuffer): DrawnShape {
+  const doc = mupdf.Document.openDocument(bytes, "application/pdf");
+  try {
+    const pdf = doc.asPDF();
+    if (!pdf) throw new EngineFailure("redaction-incomplete");
+
+    let forms = 0;
+    const images: number[] = [];
+    for (const [num, labels] of walkRoles(pdf, "read").reached) {
+      if (labels.has("form")) forms += 1;
+      if (labels.has("image")) images.push(storedLength(pdf.newIndirect(num)));
+    }
+    return Object.freeze({
+      forms,
+      images: Object.freeze(images.sort((a, b) => a - b)),
+    });
+  } finally {
+    doc.destroy();
+  }
+}
+
+/** Do two files draw the same number of forms, and pictures of the same stored lengths? */
+export function sameDrawnShape(first: DrawnShape, second: DrawnShape): boolean {
+  return (
+    first.forms === second.forms &&
+    first.images.length === second.images.length &&
+    first.images.every((length, index) => length === second.images[index])
+  );
+}
+
+/** A stream's stored length, read raw through its reference, or -1 if it is not one. */
+function storedLength(ref: PDFObject): number {
+  if (!ref.isStream()) return -1;
+  const raw = ref.readRawStream();
+  try {
+    return raw.getLength();
+  } finally {
+    raw.destroy();
+  }
 }

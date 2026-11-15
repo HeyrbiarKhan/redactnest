@@ -14,6 +14,7 @@ import {
 } from "@/engine";
 import type { EngineErrorKind, SanitizedKind } from "@/worker/protocol";
 
+import { COLOUR_TEXT } from "../../scripts/lib/kept-fixtures.mjs";
 import { fixture } from "./bytes";
 import { LIMITS, mupdf, pageRenders } from "./mupdf";
 import { findTargets } from "./targets";
@@ -32,13 +33,25 @@ import { findTargets } from "./targets";
  *    Those rows were read once from main's code at 5c4e0d7, the commit this
  *    branch started from, and are frozen as literals below. Never regenerate a
  *    row from the current code, or the gate holds nothing: a new fixture's row
- *    is read from 5c4e0d7's code.
+ *    is read from 5c4e0d7's code. The eight fixtures the fourth pass adds
+ *    (AC-17) were read from that commit's code too, from a `git archive` of
+ *    it, on 2026-11-15.
  *  - Against the same run with the pipeline's prune and structure check both
  *    swapped out, which writes main's output byte for byte (`MAIN`): the same
  *    outcome, the same `removedByType`, and every page rendered pixel for pixel
  *    the same. Once with nothing ticked, and once with each ticked set the
  *    redaction tests already run on the fixture, since a pass makes new figures
- *    and pictures the prune also walks.
+ *    and pictures the prune also walks. Its structure check always answers
+ *    clean, so the second write (AC-15) can never run in it, and it keeps
+ *    today's carrier sweep, which reads through references (AC-16): measured,
+ *    every check here passes the same against main's own resolving sweep.
+ *
+ * Two fixtures change on purpose (AC-7). `shared-forms.pdf`, which main
+ * refused with `unsupported` when its forms lost their text in the write, now
+ * makes a file (`RUN_NOW`). `shared-pictures.pdf`'s pictures, which main wrote
+ * blank, now keep their data, so its pages match `MAIN`, which reads through
+ * references, and not main's real output; its own test in
+ * `tests/unit/redaction-kept.test.ts` compares it with the source.
  *
  * The ticked sets are the redaction suites' own, recorded from a run of them:
  * the needles they search for (`NEEDLES`), and for the fixtures they tick
@@ -61,12 +74,23 @@ const MAIN: Pipeline = Object.freeze({
 
 type Ticked = readonly (readonly [page: number, text: string])[];
 
-/** Every committed fixture main's code read, at 5c4e0d7. */
+/** One set ticking every page's line, as AC-17's colour fixtures are ticked. */
+function everyLine(lines: readonly string[]): Ticked {
+  return lines.map((text, page) => [page, text] as const);
+}
+
+/** Every committed fixture, each with its rows read from main's code at 5c4e0d7. */
 const MAIN_FIXTURES: readonly string[] = [
   "actual-text.pdf",
   "angled-text.pdf",
   "bounds-pin.pdf",
   "carlito.pdf",
+  "colour-calgray.pdf",
+  "colour-calrgb.pdf",
+  "colour-icc-alternate.pdf",
+  "colour-icc-bare.pdf",
+  "colour-inline.pdf",
+  "colour-loaded.pdf",
   "combining.pdf",
   "damaged.pdf",
   "detect-blocked.pdf",
@@ -136,6 +160,8 @@ const MAIN_FIXTURES: readonly string[] = [
   "read-unmapped.pdf",
   "rotated-page.pdf",
   "sample-agreement.pdf",
+  "shared-forms.pdf",
+  "shared-pictures.pdf",
   "shared-xobject.pdf",
   "single-spacing.pdf",
   "superscript.pdf",
@@ -184,6 +210,7 @@ const MAIN_RUN_REFUSALS: Readonly<Record<string, EngineErrorKind>> = {
   "next-line-0.pdf": "redaction-incomplete",
   "next-line-1.pdf": "redaction-incomplete",
   "next-line-3.pdf": "redaction-incomplete",
+  "shared-forms.pdf": "unsupported",
 };
 
 /** `sanitized` from a run with nothing ticked on main, where it named any kind. */
@@ -226,6 +253,13 @@ const NEEDLES: Readonly<Record<string, readonly Ticked[]>> = {
     [[3, "after150"]],
     [[3, "after300"]],
   ],
+  // Spec 0019's fourth pass (AC-17): every page's line in one set.
+  "colour-calgray.pdf": [everyLine(COLOUR_TEXT.calGray)],
+  "colour-calrgb.pdf": [everyLine(COLOUR_TEXT.calRgb)],
+  "colour-icc-alternate.pdf": [everyLine(COLOUR_TEXT.iccAlternate)],
+  "colour-icc-bare.pdf": [everyLine(COLOUR_TEXT.iccBare)],
+  "colour-inline.pdf": [everyLine(COLOUR_TEXT.inline)],
+  "colour-loaded.pdf": [everyLine(COLOUR_TEXT.loaded)],
   "combining.pdf": [[[0, "Rene\u0301e"]], [[0, "Jose\u0301"]]],
   "detect-blocked.pdf": [[[0, "slanted@example.com"]], [[0, "image@example.com"]]],
   "detect-date-forms.pdf": [
@@ -311,6 +345,8 @@ const NEEDLES: Readonly<Record<string, readonly Ticked[]>> = {
       [0, "morgan"],
     ],
   ],
+  // Spec 0019's fourth pass (AC-17): the first page's line.
+  "shared-pictures.pdf": [[[0, COLOUR_TEXT.sharedPictures[0]]]],
   "shared-xobject.pdf": [[[0, "SECRET-SHARED"]]],
   "single-spacing.pdf": [
     [[0, "Jeremy Quigley"]],
@@ -412,6 +448,20 @@ const DETECTED: Readonly<Record<string, "each" | "all" | "each and all">> = {
 const SANITIZED_NOW: Readonly<Record<string, readonly SanitizedKind[]>> = {
   "kept-embedded.pdf": ["attachments"],
 };
+
+/**
+ * Where this spec changes a run's outcome with nothing ticked on purpose
+ * (AC-7, AC-16): `null` for a file made where main refused. Read with `in`,
+ * never `??`, which would fall through a `null` to main's refusal.
+ */
+const RUN_NOW: Readonly<Record<string, EngineErrorKind | null>> = {
+  "shared-forms.pdf": null,
+};
+
+/** What a run with nothing ticked must do now: `RUN_NOW`'s row wins, even a `null`. */
+function runKindNow(name: string): EngineErrorKind | null {
+  return name in RUN_NOW ? RUN_NOW[name] : (MAIN_RUN_REFUSALS[name] ?? null);
+}
 
 /** The kind an open refuses with, or `null` if it opened. */
 async function openKind(bytes: ArrayBuffer): Promise<EngineErrorKind | null> {
@@ -527,8 +577,13 @@ const NAMES = readdirSync(new URL("../fixtures/", import.meta.url))
 /** The gate's own tables, held to the fixtures they describe. */
 function gateTables(): void {
   describe("the gate's tables", () => {
-    it("cover every committed fixture main's code read, and only those", () => {
+    it("cover every committed fixture, each with rows read from main's code, and only those", () => {
       expect(NAMES).toEqual(MAIN_FIXTURES);
+    });
+
+    it("change a run's outcome only for fixtures main read", () => {
+      for (const name of Object.keys(RUN_NOW))
+        expect(MAIN_FIXTURES, name).toContain(name);
     });
 
     it("tick only fixtures that open and run", () => {
@@ -554,7 +609,7 @@ function gateFixture(name: string): void {
     it("runs with nothing ticked as it did on main, every page drawn as main drew it", async () => {
       const now = await expectSameAsMain(name, [], "nothing ticked");
 
-      expect(now.kind).toBe(MAIN_RUN_REFUSALS[name] ?? null);
+      expect(now.kind).toBe(runKindNow(name));
       if (now.result) {
         expect(now.result.sanitized).toEqual(
           SANITIZED_NOW[name] ?? MAIN_SANITIZED[name] ?? [],

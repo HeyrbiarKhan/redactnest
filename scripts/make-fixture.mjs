@@ -31,6 +31,12 @@ import {
   sampleAgreement,
 } from "./lib/detection-fixtures.mjs";
 import {
+  colourCalGray,
+  colourCalRgb,
+  colourIccAlternate,
+  colourIccBare,
+  colourInline,
+  colourLoaded,
   keptAnnotations,
   keptCatalog,
   keptEmbedded,
@@ -38,6 +44,8 @@ import {
   keptPicture,
   keptProgramKeys,
   markedDescriptions,
+  sharedForms,
+  sharedPictures,
 } from "./lib/kept-fixtures.mjs";
 import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { termsDense, termsPdf } from "./lib/terms-fixtures.mjs";
@@ -617,6 +625,36 @@ const FIXTURES = [
     "marked-descriptions.pdf",
     markedDescriptions(),
     "one page per case of descriptions written into a page, warned and quiet",
+  ],
+  // Spec 0019's fourth pass: colour spaces MuPDF cannot load, and small
+  // objects a deduplicating write merges (AC-17).
+  [
+    "colour-icc-alternate.pdf",
+    colourIccAlternate(),
+    "an unreadable ICC profile with /Alternate, three and four channels",
+  ],
+  [
+    "colour-icc-bare.pdf",
+    colourIccBare(),
+    "an unreadable ICC profile with no /Alternate, filled, stroked, scn and in a form",
+  ],
+  ["colour-calrgb.pdf", colourCalRgb(), "CalRGB with a zero and a wrong white point"],
+  ["colour-calgray.pdf", colourCalGray(), "CalGray with a zero white point"],
+  ["colour-inline.pdf", colourInline(), "an inline image naming an unreadable profile"],
+  [
+    "colour-loaded.pdf",
+    colourLoaded(),
+    "the control: broken colour spaces MuPDF keeps naming, one per page",
+  ],
+  [
+    "shared-pictures.pdf",
+    sharedPictures(),
+    "pairs of pictures pointing at identical small objects",
+  ],
+  [
+    "shared-forms.pdf",
+    sharedForms(),
+    "two forms pointing at an identical group and resources",
   ],
 ];
 

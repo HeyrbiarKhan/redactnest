@@ -117,6 +117,17 @@ describe("the self check fires", () => {
   });
 
   /**
+   * Spec 0019, AC-16: the sweep reads every object through its reference,
+   * never resolved, and its deletes still reach the object itself. With the
+   * prune skipped, the sweep alone strips every carrier, so the run passes.
+   */
+  it("makes a file when the sweep alone strips every carrier", async () => {
+    await expect(
+      kindOf(fixture("metadata.pdf"), [], { ...PIPELINE, pruneToRoles: () => {} }),
+    ).resolves.toBeNull();
+  });
+
+  /**
    * A run with nothing ticked cannot have leaked or reached too far, so a
    * difference in its characters, forced here by dropping a page's drawing
    * after the rebuild, is `unsupported`.

@@ -133,3 +133,26 @@ _Tasks 12 to 15. Five lines changed from the words AC-12 and AC-14 first gave, e
 - [ ] "A figure or picture they do not reach": every figure or picture in an output is reached through a resource entry a drawing stream names, or through what that uses (a soft mask's group, an image's mask), and an unreached one fails the check → AC-5
 - [ ] "Warns about each page where it finds some": an inline property list whose `/Alt` is written as a name stays quiet (`holdsString` in `src/engine/marked.ts` counts strings only) → the line claims no more than the scan → AC-9
 - [ ] Said once: follow the Notes and attachments link → it lands on the band, whose note names a note's hidden text and any attached file; the security page names neither (spec 0018, AC-6). `prepareDocument` deletes unseen annotations and bakes the rest (`doc.bake(true, true)`), so what a note's appearance draws is page text and stays, which is why the band says "hidden" → spec 0004, AC-22
+
+## As built: the fourth pass (added by /develop, 2026-11-15)
+
+_Steps the build added beside the architect's fourth pass steps above. Same rules: only `tests/fixtures` and documents built in a test or a scratch script._
+
+### Each guard fires on its own
+
+- [ ] In a scratch copy of `src/engine/redact.ts`, skip the `sameDrawnShape` comparison, then run "fails with unsupported when the second write changes what a page draws" → the run makes a file, so the drawn shape is what catches a picture written empty → AC-15, INV-8
+- [ ] In a scratch copy of `src/engine/objects.ts`, send each numbered object through `walkDirect(doc.newIndirect(num), visit)` → the `forEachDictionary` count tests and "makes a file when the sweep alone strips every carrier" fail, so the top level visit is what keeps the sweep, the inventory and the carrier check reading → AC-16
+- [ ] Write an unbalanced string into a page's contents, a form, a tiling pattern and a Type 3 glyph procedure beside the unreadable profile, and run each → every one makes a file through the second write, since `sanitize` rewrites all four kinds; that is why the run level "beside an unreadable drawing" test uses a structure stub over the real verdict → AC-5, AC-15
+- [ ] Cancel at the checkpoint before the second write (an `isCancelled` that turns true once the structure check has answered) → `RunCancelled`, and `rewrite` is never called → AC-15
+
+### Value sourcing, the fourth pass
+
+- [ ] Whether to write twice: a counting `checkStructure` over the real one on `colour-calgray.pdf` → `["unused-colour-space", "clean"]` and one `rewrite` call; on `text-page.pdf` → one call and no `rewrite` → AC-5, AC-15
+- [ ] The bytes that cross after a second write: read `rewriteOutput` in `src/engine/rebuild.ts` → it calls `Document.openDocument`, `asPDF`, `saveToBuffer(WRITE_OPTIONS)`, `takeOutput` and `destroy`, nothing else; the run returns the second bytes, and the second `checkOutput` is called with `mayRewrite` clear → INV-8
+- [ ] Whether the second write kept every form and picture: `drawnShape` on both outputs of a colour fixture → the same form count and the same sorted image stored lengths → AC-15
+- [ ] An unused colour space entry: `structureIsClean` on a document built in a test with an unused `/ColorSpace` entry alone → `unused-colour-space`; beside an unused font in a later owner → `leak`; beside an unsure drawing in another owner → `unreadable`; beside an off list key → `leak` → AC-5
+- [ ] Every numbered object: `grep -rn "resolve(" src/engine` → only comments; add `ref.resolve()` or `ref["resolve"]()` to a file in `src/engine` → `pnpm lint` fails with the ban's message → AC-16, INV-9
+
+### Commands
+
+- [ ] `pnpm test` → everything passes but, on this machine, possibly a stopwatch in `tests/unit/cost.test.ts`; then `pnpm exec vitest run tests/unit/cost.test.ts` alone → all nine pass, "writes neither budget document a second time" among them → AC-11
