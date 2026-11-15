@@ -119,3 +119,10 @@ Two of its points were not taken: refusing only on malformed entries a page uses
 ### Cost of the walk
 
 On a 50 page text heavy document (60 lines a page), the least of three runs: 1,312 ms of CPU on main and 1,156 ms with the prototype, nothing ticked; 1,687 ms and 1,765 ms with one address ticked a page. The difference is noise. The walk alone, reopening the output and scanning for unreached objects, measured under the timer's 16 ms resolution. `terms-dense.pdf` and `detect-dense.pdf` behaved the same.
+
+### The page lines held to spec 0018's AC-5 (2026-11-15)
+
+Read before task 12 was built, three lines AC-12 and AC-14 gave would have failed spec 0018's AC-5 once written. Each now holds in every case it covers, states a limit by kind, or rests its absolute on a gate every file passes or a step that does not exist:
+- **The lead.** "RedactNest finds" the kinds, with no "can", claimed every value is found, while a value can be missed (spec 0018, AC-5's own example). It now "looks for" them, as the security page's What it finds says it.
+- **The "Removed, not covered" card.** "Hidden data such as document info and attachments is stripped" can be read as all hidden data, while descriptions written into a page (AC-9) and a picture's own details (AC-14) can stay. It now names only document info and attachments, each held by the structure check (no `/Info`, no trailer key outside `TRAILER_KEYS`, no embedded file or file specification anywhere), and the Strips card names the rest.
+- **The hidden data paragraph.** "It does not report the last four" after a list of six implied the first two, the file's identifier and links, are reported. The identifier never is: `SANITIZED_KINDS` has no kind for it. The paragraph now names the four with no kind (the identifier, page labels, viewer preferences, automatic actions that are not scripts) as stripped and never reported, then links and tags, which are reported, in a sentence of their own. Entries a program adds for its own use leave this paragraph, since the structure item names them and AC-5 says each fact once.
