@@ -270,14 +270,22 @@ export default function SecurityPage() {
               ticked by where it lies (inside a ticked item, on its line), not
               by which row held it, and fails on any character under a box
               (spec 0004, INV-10), so "lying in an item you ticked". Every
-              "every" and "none" here is the check's own rule. */}
+              "every" and "none" here is the check's own rule. It reads only
+              text the page holds as text, so "selectable": a scan's words are
+              a picture, and its ink beside a ticked item can be blanked with
+              the item (spec 0004's *Decision* bullet "Padded area"; spec 0019,
+              AC-14, as built, measured 2026-11-15 on the fixture script's
+              Tesseract style scan with its lines 14.4 and 13 pt apart, where
+              ink of the line above went and the run passed), and a picture's
+              part beyond the visible edge can stay (spec 0006, AC-15). The
+              blanking line and the Pages list say both. */}
           <li>
-            Text, spaces aside: for each page’s visible area, every character wholly
-            inside it is still there, in its place, except those lying in an item you
-            ticked, and none lying in one is left. Outside the visible area, none is left
-            at all, and a character crossing the page’s edge can go with what lies outside
-            it. It reads the pages twice, the second time ignoring replacement text (the
-            words a copy gives instead of what is drawn).
+            Selectable text, spaces aside: for each page’s visible area, every character
+            wholly inside it is still there, in its place, except those lying in an item
+            you ticked, and none lying in one is left. Outside the visible area, none is
+            left at all, and a character crossing the page’s edge can go with what lies
+            outside it. It reads the pages twice, the second time ignoring replacement
+            text (the words a copy gives instead of what is drawn).
           </li>
           {/* Spec 0004, AC-13 (a picture it cannot decode counts as not blank)
               and INV-15, and its *Security model* bullet "The pixel check sees

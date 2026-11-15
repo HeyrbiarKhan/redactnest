@@ -51,11 +51,12 @@ describe("the hero (AC-10)", () => {
         "Never uploaded to us or to anyone else, and nothing is stored.",
       ],
       // Spec 0019, AC-12: two kinds, each held by the structure check, never
-      // hidden data as a whole.
+      // hidden data as a whole. As built: "selectable", since a ticked word's
+      // scan ink further out than the padded area stays.
       [
         "Eraser",
         "Removed, not covered",
-        "Ticked text is taken out of the page, and document info and attachments are stripped.",
+        "Selectable text you tick is taken out of the page, and document info and attachments are stripped.",
       ],
       [
         "ShieldCheck",
@@ -158,7 +159,8 @@ describe("the finds and strips cards (AC-11)", () => {
    * After task 32: each card's subtitle, and "Whenever a file carries them:" is
    * Strips' own. Spec 0019, AC-12, as built: "looks for" in the heading and the
    * first card's title, and a closing line that reaches no further than the
-   * self check's text part, characters wholly inside a page's visible area.
+   * self check's text part, selectable characters wholly inside a page's
+   * visible area (a scan's ink beside a ticked item can be blanked with it).
    */
   it("holds the words around the two lists", () => {
     expect(HOME_TEXT.band).toEqual({
@@ -166,7 +168,7 @@ describe("the finds and strips cards (AC-11)", () => {
       finds: {
         title: "Looks for",
         subtitle: "Sensitive details we can detect in your files.",
-        line: "No text wholly inside a page's visible area is removed unless you tick it.",
+        line: "No selectable text wholly inside a page's visible area is removed unless you tick it.",
       },
       strips: {
         title: "Strips",

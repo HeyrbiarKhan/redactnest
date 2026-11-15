@@ -56,7 +56,7 @@ export const SECURITY_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
   Object.freeze({
     date: "2026-11-16",
     summary:
-      "The check now holds every object and key in the file to a fixed list, so this page says where the original copy of a redacted figure or picture can still be, what else RedactNest strips, and that descriptions written into a page can stay, with a warning. What it finds is now What it looks for.",
+      "The check now holds every object and key in the file to a fixed list, so this page says where the original copy of a redacted figure or picture can still be, what else RedactNest strips, and that descriptions written into a page can stay, with a warning. The check’s text part now says it reads selectable text. What it finds is now What it looks for.",
   }),
   Object.freeze({ date: "2026-11-15", summary: "First published." }),
 ]);

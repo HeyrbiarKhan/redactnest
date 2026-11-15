@@ -171,9 +171,11 @@ describe("the security page", () => {
     ["removedNotCovered", "a change in the engine’s defaults cannot quietly change"],
     ["removedNotCovered", "a ticked item MuPDF cannot remove stops the run"],
     ["theCheck", "from the exact bytes you will download"],
+    // Spec 0019, AC-14, as built: the text part reads selectable text, since
+    // a scan's ink beside a ticked item can be blanked with it.
     [
       "theCheck",
-      "every character wholly inside it is still there, in its place, except those lying in an item you ticked",
+      "Selectable text, spaces aside: for each page’s visible area, every character wholly inside it is still there, in its place, except those lying in an item you ticked",
     ],
     ["theCheck", "none lying in one is left"],
     ["theCheck", "a character crossing the page’s edge can go with what lies outside it"],

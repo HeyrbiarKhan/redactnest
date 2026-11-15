@@ -143,17 +143,25 @@ export const HOME_TEXT = Object.freeze({
      * Each absolute sits behind a gate every file passes (spec 0019, AC-12).
      * Ticked text: the self check's text part, which reads what each page
      * draws, so "the page", never "the file" (spec 0004, AC-13 and INV-2).
-     * Document info: no `/Info` and no trailer key outside `TRAILER_KEYS`.
-     * Attachments: no embedded file stream or file specification anywhere,
-     * reached or not (spec 0019, AC-5 and AC-8). It names those two kinds and
-     * never hidden data as a whole, because descriptions written into a page
-     * (spec 0019, AC-9) and a picture's own details (spec 0006, AC-29) can
-     * stay. The Strips card lists the other kinds.
+     * That part reads the text a page holds as text, so "selectable": a
+     * scan's words are a picture, blanked only over the padded area, and ink
+     * lying further out stays (spec 0004's *Security model* bullet "Scan ink
+     * further from the OCR text"). Measured 2026-11-15 on the fixture
+     * script's Tesseract style scan (`ocrPage` in
+     * `scripts/lib/redaction-fixtures.mjs`) with its text layer 0.6 em low:
+     * the ticked word's text went, the run passed, and the tops of its ink
+     * stayed. The security page's blanking line says so. Document info: no
+     * `/Info` and no trailer key outside `TRAILER_KEYS`. Attachments: no
+     * embedded file stream or file specification anywhere, reached or not
+     * (spec 0019, AC-5 and AC-8). It names those two kinds and never hidden
+     * data as a whole, because descriptions written into a page (spec 0019,
+     * AC-9) and a picture's own details (spec 0006, AC-29) can stay. The
+     * Strips card lists the other kinds. Spec 0019, AC-12, as built.
      */
     Object.freeze({
       icon: Eraser,
       title: "Removed, not covered",
-      body: "Ticked text is taken out of the page, and document info and attachments are stripped.",
+      body: "Selectable text you tick is taken out of the page, and document info and attachments are stripped.",
     }),
     Object.freeze({
       icon: ShieldCheck,
@@ -193,9 +201,20 @@ export const HOME_TEXT = Object.freeze({
        * place in two rows (spec 0017, AC-12): ticking either ticks that text.
        * The check skips spaces; the removal band stops short of each end of a
        * ticked item (`REMOVAL_INSET_RATIO`) so that it takes the item's glyphs
-       * and not its neighbours'. Spec 0019, AC-12, as built.
+       * and not its neighbours'.
+       *
+       * "Selectable": the text part reads only text the page holds as text,
+       * and a scan's words are a picture, blanked over the padded area, which
+       * grows past the ticked item into the lines beside it (spec 0004's
+       * *Decision* bullet "Padded area"). Measured 2026-11-15 on the fixture
+       * script's Tesseract style scan (`ocrPage` in
+       * `scripts/lib/redaction-fixtures.mjs`) with its lines 14.4 and 13 pt
+       * apart: ticking "Quigley" blanked ink of the line above, the run passed
+       * and every word of the text layer stayed; at 18 pt, `ocr-aligned.pdf`'s
+       * spacing, none. The security page's blanking line says the scan case.
+       * Spec 0019, AC-12, as built.
        */
-      line: "No text wholly inside a page's visible area is removed unless you tick it.",
+      line: "No selectable text wholly inside a page's visible area is removed unless you tick it.",
     }),
     strips: Object.freeze({
       title: "Strips",

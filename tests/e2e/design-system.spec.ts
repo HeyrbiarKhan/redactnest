@@ -1827,7 +1827,7 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     ]);
     await expect(finds).toContainText("Sensitive details we can detect in your files.");
     await expect(finds).toContainText(
-      "No text wholly inside a page's visible area is removed unless you tick it.",
+      "No selectable text wholly inside a page's visible area is removed unless you tick it.",
     );
     await expect(strips).toContainText("Whenever a file carries them:");
     // Spec 0019, AC-12: no XMP metadata while a picture can carry it.
