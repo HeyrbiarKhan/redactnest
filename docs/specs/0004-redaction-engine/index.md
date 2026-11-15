@@ -303,7 +303,7 @@ No message is added or renamed. The envelope is spec 0001's, extended by 0002; t
 - **INV-2**: No output crosses the boundary unless all three parts of the self check (characters, pixels, structure) passed on those exact bytes. All or nothing.
 - **INV-3**: The output carries nothing from the source that the rebuild did not choose to carry: an allowlist at the catalog and the page, a recursive sweep for known carriers below them, and a write that keeps only the resources each page draws.
 - **INV-4**: The non PDF check reads bytes before MuPDF sees them. The name and the declared type are never consulted anywhere in the engine.
-- **INV-5**: Redaction settings are written out at all three call sites, never left to MuPDF's defaults.
+- **INV-5**: Redaction settings are written out at every `applyRedactions` call site, never left to MuPDF's defaults. (As built, 2026-11-15: "all three call sites" became "every", since the trim's pass that spec 0006 added is one more call site and writes them out the same way.)
 - **INV-6**: Targets come only from the worker's private map (spec 0002, INV-2). The main thread sends ids and nothing else.
 - **INV-7**: At most one working copy exists per session at any moment, and none survives into the next session.
 - **INV-8**: The output crosses exactly once, transferred, and the worker keeps no reference to it.
