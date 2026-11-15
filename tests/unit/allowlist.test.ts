@@ -203,6 +203,30 @@ describe("kinds for objects that are not dictionaries", () => {
     ]);
     withDoc(objects, (doc) => expect(labelsOf(doc, 6)).toEqual(["scalar"]));
   });
+
+  // covers: AC-1, "an indirect number or name is resolved and counts as reached"
+  it("resolves an indirect name and counts it as reached", () => {
+    const objects = onePage("<< /Font << /F1 5 0 R >> >>", [
+      "<< /Type /Font /Subtype /Type1 /BaseFont 6 0 R >>",
+      "/Helvetica",
+    ]);
+    withDoc(objects, (doc) => {
+      expect(walkRoles(doc, "read").problem).toBeNull();
+      expect(labelsOf(doc, 6)).toEqual(["scalar"]);
+    });
+  });
+
+  // covers: AC-1, the palette of an /Indexed space may be a stream as well as a string
+  it("walks a stream palette as a plain stream", () => {
+    const objects = onePage(
+      "<< /ColorSpace << /CS1 [/Indexed /DeviceRGB 1 5 0 R] >> >>",
+      [stream("", "\u0000\u0000\u0000ÿÿÿ")],
+    );
+    withDoc(objects, (doc) => {
+      expect(walkRoles(doc, "read").problem).toBeNull();
+      expect(labelsOf(doc, 5)).toEqual(["plain-stream"]);
+    });
+  });
 });
 
 describe("shapes", () => {
@@ -233,6 +257,60 @@ describe("shapes", () => {
     expect(
       problemOf(space("[/CalRGB << /WhitePoint [1 1 1] /Gamma [1 1 1] >>]")),
     ).toBeNull();
+  });
+
+  /**
+   * AC-3: each family the table knows takes exactly the items the format
+   * gives it. A valid space that is refused would stop a file main cleans; a
+   * malformed one that passes would leave the walk guessing.
+   */
+  const TINT = "<< /FunctionType 2 /Domain [0 1] /N 1 >>";
+  it.each([
+    [
+      "a DeviceN space with its attributes",
+      `[/DeviceN [/Cyan /Spot] /DeviceCMYK ${TINT} << /Subtype /NChannel ` +
+        `/Colorants << /Spot [/Separation /Spot /DeviceGray ${TINT}] >> >>]`,
+      null,
+    ],
+    [
+      "a DeviceN space with no attributes",
+      `[/DeviceN [/Spot] /DeviceGray ${TINT}]`,
+      null,
+    ],
+    ["a CalGray space with its dictionary", "[/CalGray << /WhitePoint [1 1 1] >>]", null],
+    [
+      "a DeviceN space missing its tint function",
+      "[/DeviceN [/Spot] /DeviceGray]",
+      "shape",
+    ],
+    [
+      "a DeviceN space whose colorant names hold a number",
+      `[/DeviceN [/Spot 1] /DeviceGray ${TINT}]`,
+      "shape",
+    ],
+    [
+      "a Separation space missing its tint function",
+      "[/Separation /Spot /DeviceGray]",
+      "shape",
+    ],
+    ["an Indexed space missing its palette", "[/Indexed /DeviceRGB 1]", "shape"],
+    ["an Indexed space whose palette is null", "[/Indexed /DeviceRGB 1 null]", "shape"],
+    ["an Indexed space whose palette is a number", "[/Indexed /DeviceRGB 1 7]", "shape"],
+    ["a Pattern space naming two spaces", "[/Pattern /DeviceRGB /DeviceGray]", "shape"],
+    ["a Lab space with no dictionary", "[/Lab]", "shape"],
+  ] as const)("reads %s as the format gives it", (_label, value, problem) => {
+    expect(problemOf(onePage(`<< /ColorSpace << /CS1 ${value} >> >>`, []))).toBe(problem);
+  });
+
+  // covers: AC-1, AC-3, a transfer function is a function or one of two names, never text
+  it("takes /Identity and /Default where a function is due, and refuses any other name or a string", () => {
+    const state = (keys: string) =>
+      onePage(`<< /ExtGState << /G1 << ${keys} >> >> >>`, []);
+    expect(problemOf(state("/TR /Identity"))).toBeNull();
+    expect(problemOf(state("/TR2 /Default"))).toBeNull();
+    expect(problemOf(state(`/TR [${TINT} ${TINT} ${TINT} ${TINT}]`))).toBeNull();
+    expect(problemOf(state("/TR /Inverse"))).toBe("shape");
+    expect(problemOf(state("/TR (Identity)"))).toBe("shape");
   });
 
   it("takes the option of an either by the value's outer form", () => {
@@ -355,6 +433,27 @@ describe("what the prune deletes", () => {
     });
   });
 
+  // covers: AC-1, "at any depth, from direct and indirect objects alike"
+  it("deletes a key off its role's list inside a dictionary written in place, at any depth", () => {
+    const objects = onePage("<< /Font << /F1 5 0 R >> /XObject << /Im1 6 0 R >> >>", [
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica " +
+        "/Encoding << /Differences [32 /space] /Private (in an encoding) >> >>",
+      stream(
+        "/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray " +
+          "/BitsPerComponent 8 /DecodeParms [<< /Columns 1 /Private (in decode parameters) >>]",
+        "\u0080",
+      ),
+    ]);
+    withDoc(objects, (doc) => {
+      expect(walkRoles(doc, "read").strays).toBe(2);
+
+      walkRoles(doc, "prune");
+      expect(keysOf(doc.newIndirect(5).get("Encoding"))).toEqual(["Differences"]);
+      expect(keysOf(doc.newIndirect(6).get("DecodeParms").get(0))).toEqual(["Columns"]);
+      expect(walkRoles(doc, "read").strays).toBe(0);
+    });
+  });
+
   it("changes nothing in read mode", () => {
     const objects = onePage("<< /Font << /F1 5 0 R >> >>", [
       "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Private (data) >>",
@@ -407,6 +506,35 @@ describe("objects reached more than once", () => {
       expect(labelsOf(doc, 5)).toEqual(["graphics-state", "property-list"]);
     });
   });
+
+  /**
+   * AC-1: an explicit work list and no recursion, so a deep nesting cannot
+   * stop the walk. A walk that recursed per level would run out of stack long
+   * before 20,000 forms, each drawn inside the last.
+   */
+  it("walks a chain of 20,000 forms, each drawn inside the last, to its end", () => {
+    const DEPTH = 20_000;
+    // Form `index` is object 5 + index, and draws the next one, object 6 + index.
+    const forms = Array.from({ length: DEPTH }, (_, index) => {
+      const last = index === DEPTH - 1;
+      const inner = last ? "" : `/Resources << /XObject << /Fm ${6 + index} 0 R >> >>`;
+      return stream(
+        `/Type /XObject /Subtype /Form /BBox [0 0 1 1] ${inner}`,
+        last ? "" : "/Fm Do",
+      );
+    });
+    const objects = onePage("<< /XObject << /Fm 5 0 R >> >>", forms, "/Fm Do");
+
+    withDoc(objects, (doc) => {
+      const walk = walkRoles(doc, "read");
+      expect(walk.problem).toBeNull();
+      const reachedForms = [...walk.reached.values()].filter((labels) =>
+        labels.has("form"),
+      );
+      expect(reachedForms).toHaveLength(DEPTH);
+      expect(walk.pages[0]).toHaveLength(DEPTH + 1);
+    });
+  }, 60_000);
 
   it("refuses one stream reached as page contents and as a form", () => {
     const objects = [

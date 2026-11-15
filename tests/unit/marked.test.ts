@@ -348,6 +348,106 @@ async function warnedPages(bytes: ArrayBuffer): Promise<number[] | null> {
   }
 }
 
+/**
+ * AC-9, through the open: the scan reads every drawing the role walk names on
+ * a page, its contents and every form, tiling pattern and Type 3 glyph
+ * procedure it draws, with the owning `/Properties`, inherited resources
+ * included. `marked-descriptions.pdf` holds a form; these hold the rest. Each
+ * page also draws a line of Helvetica, so it is readable and the open goes on.
+ */
+describe("at open, from every drawing the walk names", () => {
+  beforeAll(() => {
+    silenceEngineLog(mupdf);
+  });
+
+  const HELVETICA = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+  const LINE = "BT /F1 12 Tf 72 700 Td (A line anybody can read) Tj ET";
+  const TILE =
+    "/Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10";
+  const TYPE3 =
+    "<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1000 1000] /FontMatrix [0.001 0 0 0.001 0 0] " +
+    "/CharProcs << /a 7 0 R >> /Encoding << /Type /Encoding /Differences [97 /a] >> " +
+    "/FirstChar 97 /LastChar 97 /Widths [1000] >>";
+
+  /** One page: `resources` on it, `contents` after the readable line, `rest` from object 5. */
+  function onePage(
+    resources: string,
+    contents: string,
+    rest: (string | ReturnType<typeof stream>)[],
+  ): ArrayBuffer {
+    const { bytes: file } = writePdf({
+      objects: [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources ${resources} /Contents 4 0 R >>`,
+        stream("", `${LINE}\n${contents}`),
+        ...rest,
+      ],
+      trailer: "/Root 1 0 R",
+    });
+    return file.slice().buffer;
+  }
+
+  const tiling = (drawing: string) =>
+    onePage(
+      "<< /Font << /F1 5 0 R >> /Pattern << /P1 6 0 R >> >>",
+      "/Pattern cs /P1 scn 72 500 100 100 re f",
+      [HELVETICA, stream(TILE, drawing)],
+    );
+
+  const glyph = (drawing: string) =>
+    onePage("<< /Font << /F1 5 0 R /T3 6 0 R >> >>", "BT /T3 12 Tf 72 600 Td (a) Tj ET", [
+      HELVETICA,
+      TYPE3,
+      stream("", `1000 0 0 0 1000 1000 d1 ${drawing}`),
+    ]);
+
+  it("warns about a description inside a tiling pattern the page fills with", async () => {
+    await expect(
+      warnedPages(tiling("/Span << /Alt (A tile's description) >> BDC 0 0 5 5 re f EMC")),
+    ).resolves.toEqual([1]);
+    await expect(warnedPages(tiling("0 0 5 5 re f"))).resolves.toEqual([]);
+  });
+
+  it("warns about a description inside a Type 3 glyph procedure", async () => {
+    await expect(
+      warnedPages(
+        glyph("/Span << /Alt (A glyph's description) >> BDC 0 0 1000 1000 re f EMC"),
+      ),
+    ).resolves.toEqual([1]);
+    await expect(warnedPages(glyph("0 0 1000 1000 re f"))).resolves.toEqual([]);
+  });
+
+  it("reads a named property list through resources the page inherits from its tree", async () => {
+    const inherited = (properties: string) => {
+      const { bytes: file } = writePdf({
+        objects: [
+          "<< /Type /Catalog /Pages 2 0 R >>",
+          "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 612 792] " +
+            `/Resources << /Font << /F1 5 0 R >> /Properties << /P1 6 0 R >> >> >>`,
+          "<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>",
+          stream("", `${LINE}\n/Figure /P1 BDC 72 500 100 100 re f EMC`),
+          HELVETICA,
+          properties,
+        ],
+        trailer: "/Root 1 0 R",
+      });
+      return file.slice().buffer;
+    };
+
+    await expect(
+      warnedPages(inherited("<< /ActualText (Words no text shows) >>")),
+    ).resolves.toEqual([1]);
+    await expect(warnedPages(inherited("<< /MCID 0 >>"))).resolves.toEqual([]);
+  });
+
+  it("warns about a page whose contents the scan cannot read to its end, and still opens it", async () => {
+    await expect(
+      warnedPages(onePage("<< /Font << /F1 5 0 R >> >>", "q ] Q", [HELVETICA])),
+    ).resolves.toEqual([1]);
+  });
+});
+
 /** AC-9 and AC-10: the limit, pinned on its own fixture. */
 describe("marked-descriptions.pdf", () => {
   beforeAll(() => {

@@ -4,18 +4,21 @@ import type { PDFDocument } from "mupdf";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import {
+  drawnShape,
   EngineFailure,
   PIPELINE,
   redactDocumentWith,
   RunCancelled,
   silenceEngineLog,
   structureIsClean,
+  walkRoles,
   WRITE_OPTIONS,
   type Pipeline,
   type RedactionTarget,
   type StructureVerdict,
 } from "@/engine";
 import { forEachDictionary } from "@/engine/objects";
+import { sameDrawnShape } from "@/engine/self-check";
 
 import {
   COLOUR_TEXT,
@@ -228,14 +231,23 @@ function withUnusedSpace(objects: Body[]): Body[] {
   return changed;
 }
 
-function verdictOf(objects: Body[], trailer = "/Root 1 0 R"): string {
+/** Open `objects` as a document, hand it to `read`, and destroy it after. */
+function withDoc<T>(
+  objects: Body[],
+  read: (doc: PDFDocument) => T,
+  trailer = "/Root 1 0 R",
+): T {
   const { bytes } = writePdf({ objects, trailer });
   const doc = mupdf.Document.openDocument(bytes, "application/pdf");
   try {
-    return structureIsClean(doc.asPDF() as PDFDocument, 1);
+    return read(doc.asPDF() as PDFDocument);
   } finally {
     doc.destroy();
   }
+}
+
+function verdictOf(objects: Body[], trailer = "/Root 1 0 R", pages = 1): string {
+  return withDoc(objects, (doc) => structureIsClean(doc, pages), trailer);
 }
 
 /** AC-6: one fault per document fails the check, and the same document without it passes. */
@@ -248,6 +260,8 @@ describe("the structure check, one fault at a time", () => {
     ["a key off a font's list", document({ font: "/RedactNestPrivate 1 " })],
     ["a string on a form", document({ form: "/PTEX.FileName (secret/path.pdf) " })],
     ["an object nothing reaches", document({ extra: ["<< /Orphan 1 >>"] })],
+    // covers: AC-5, an unreached object need not be a dictionary to hold words
+    ["a string nothing reaches", document({ extra: ["(SECRET-42)"] })],
     [
       "an embedded file stream nothing reaches",
       document({ extra: [stream("/Type /EmbeddedFile", "attached")] }),
@@ -285,6 +299,44 @@ describe("the structure check, one fault at a time", () => {
       ),
     ).toBe("leak");
   });
+
+  /**
+   * AC-5: an embedded file or a file specification fails the check "reached
+   * or not". Each object here is reached, and every key on it is on its
+   * role's list (roles come from the path, INV-1, so `/Type` is any name), so
+   * the walk and reachability find nothing: the embedded file rule alone
+   * fails it.
+   */
+  it.each([
+    [
+      "a font whose /Type says /Filespec",
+      4,
+      "<< /Type /Filespec /Subtype /Type1 /BaseFont /Helvetica >>",
+    ],
+    [
+      "a picture whose /Type says /EmbeddedFile",
+      6,
+      stream(
+        "/Type /EmbeddedFile /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray " +
+          "/BitsPerComponent 8",
+        "\u0080",
+      ),
+    ],
+  ] as const)(
+    "fails %s, though the walk reaches it and keeps every key",
+    (_label, at, body) => {
+      const objects = document();
+      objects[at] = body;
+
+      withDoc(objects, (doc) => {
+        const walk = walkRoles(doc, "read");
+        expect(walk.problem).toBeNull();
+        expect(walk.strays).toBe(0);
+        expect(walk.reached.has(at + 1)).toBe(true);
+      });
+      expect(verdictOf(objects)).toBe("leak");
+    },
+  );
 
   /** Two emptied dictionaries the write merged into one object (AC-5). */
   it("passes one empty dictionary reached as a property list and a graphics state", () => {
@@ -376,6 +428,39 @@ describe("resource use", () => {
     expect(verdictOf(withUnusedSpace(document({ font: "/RedactNestPrivate 1 " })))).toBe(
       "leak",
     );
+  });
+
+  /**
+   * *Resource use*: a form with no resources of its own draws with the
+   * dictionary it was found under, so what it names counts there. The same
+   * font named by no drawing is "a resource its stream never names", above.
+   */
+  it("counts a name used inside a form with no resources of its own toward the page's dictionary", () => {
+    const objects = document({
+      extra: ["<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>"],
+    });
+    objects[2] = (objects[2] as string).replace("/F1 5 0 R", "/F1 5 0 R /F2 8 0 R");
+    objects[5] = stream(
+      "/Type /XObject /Subtype /Form /BBox [0 0 10 10]",
+      "BT /F2 12 Tf (x) Tj ET",
+    );
+    expect(verdictOf(objects)).toBe("clean");
+  });
+
+  /** Many producers share one resource dictionary across every page, each page naming some of it. */
+  it("joins the names of every page that draws with one shared dictionary", () => {
+    const objects: Body[] = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 7 0 R /Contents 5 0 R >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 7 0 R /Contents 6 0 R >>",
+      stream("", "BT /F1 12 Tf 72 700 Td (One) Tj ET"),
+      stream("", "BT /F2 12 Tf 72 700 Td (Two) Tj ET"),
+      "<< /Font << /F1 8 0 R /F2 9 0 R >> >>",
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>",
+    ];
+    expect(verdictOf(objects, "/Root 1 0 R", 2)).toBe("clean");
   });
 
   it("answers unreadable for a drawing stream the scan cannot read to its end", () => {
@@ -698,6 +783,52 @@ describe("the second write", () => {
       ),
     ).rejects.toBeInstanceOf(RunCancelled);
     expect(calls.count).toBe(0);
+  });
+});
+
+/**
+ * AC-15, INV-8: what the second write's bytes are held to besides the full
+ * check, which reads no picture nobody ticked and counts no figure. The run
+ * level guard is "fails with unsupported when the second write changes what a
+ * page draws", above; these hold what the shape counts.
+ */
+describe("the drawn shape a second write is held to", () => {
+  it("counts each form once and lists every picture's stored length, smallest first", () => {
+    const { bytes } = writePdf({
+      objects: [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+          "/Resources << /XObject << /Fm1 7 0 R /Im1 9 0 R >> >> /Contents 5 0 R >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+          "/Resources << /XObject << /Fm1 7 0 R /Fm2 8 0 R /Im2 10 0 R >> >> /Contents 6 0 R >>",
+        stream("", "/Fm1 Do /Im1 Do"),
+        stream("", "/Fm1 Do /Fm2 Do /Im2 Do"),
+        stream("/Type /XObject /Subtype /Form /BBox [0 0 10 10]", ""),
+        stream("/Type /XObject /Subtype /Form /BBox [0 0 10 10]", ""),
+        stream(
+          "/Type /XObject /Subtype /Image /Width 3 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8",
+          "\u0010\u0080ð",
+        ),
+        stream(
+          "/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8",
+          "\u0080",
+        ),
+      ],
+      trailer: "/Root 1 0 R",
+    });
+
+    expect(drawnShape(mupdf, bytes.slice().buffer)).toEqual({ forms: 2, images: [1, 3] });
+  });
+
+  it("tells two shapes apart by their forms and by any picture's stored length", () => {
+    const shape = { forms: 2, images: [1, 3] };
+
+    expect(sameDrawnShape(shape, { forms: 2, images: [1, 3] })).toBe(true);
+    expect(sameDrawnShape(shape, { forms: 1, images: [1, 3] })).toBe(false);
+    expect(sameDrawnShape(shape, { forms: 2, images: [0, 3] })).toBe(false);
+    expect(sameDrawnShape(shape, { forms: 2, images: [1] })).toBe(false);
+    expect(sameDrawnShape(shape, { forms: 2, images: [1, 3, 3] })).toBe(false);
   });
 });
 
