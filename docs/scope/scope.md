@@ -425,7 +425,7 @@ spec [0019](../specs/0019-kept-object-allowlist/index.md) (2026-11-15: a typed a
 - [ ] Build it: `/develop leaks through kept objects`
   - [x] The leak closed: the six `kept-*.pdf` fixtures failing first, the role table and its walk, the prune, and the structure check's trailer, roles, reachability and embedded files · AC-1, AC-2, AC-4 to AC-6
   - [x] Fail closed and honest: the `unreadable-structure` refusal at open and in a run, the `attachments` rule, and the gate over every committed fixture (same outcome, counts and pixels, ticked and not) · AC-3, AC-7, AC-8
-  - [ ] What can't be removed is said: the read only scan, the `marked-descriptions` warning with its fixture and pins, resource use in the check, and both budgets · AC-5, AC-9 to AC-11
+  - [x] What can't be removed is said: the read only scan, the `marked-descriptions` warning with its fixture and pins, resource use in the check, and both budgets · AC-5, AC-9 to AC-11
   - [ ] The words and the amends: the home page's four lines, the security page's lines, `/tool`'s new warning and refusal words, and specs 0001, 0004, 0006, 0007, 0013 and 0018 amended · AC-3, AC-12 to AC-14
 - [ ] Verify it: `/check verify leaks through kept objects`
 - [ ] Test it: `/test leaks through kept objects`

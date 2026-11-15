@@ -4,11 +4,19 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   inspectPages,
   openDocumentWith,
+  PIPELINE,
   prepareDocument,
+  pruneToRoles,
+  readDrawing,
   redactDocumentWith,
   RunCancelled,
   silenceEngineLog,
+  stripToAllowlist,
+  structureIsClean,
   trimToVisibleArea,
+  walkRoles,
+  type DrawingUnit,
+  type Pipeline,
 } from "@/engine";
 
 import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
@@ -39,6 +47,12 @@ import { documentImages, LIMITS, mupdf } from "../support/mupdf";
  * against the drawn and invisible glyph origins, and a scan and a photo under
  * a dense layer with no word both searched to the end. The three cases above
  * still pass, though their scans now take the run search too.
+ *
+ * Spec 0019, AC-11 adds the typed allowlist's work: the open's role walk, the
+ * scan for descriptions, the rebuild's prune and the check's structure part
+ * together add at most 200 ms of CPU on the text heavy document, and at most
+ * 15% to a run's CPU on one page drawing 10,000 form XObjects. The open's
+ * budgets above count the walk and the scan too, since the open does both.
  */
 
 const PAGES = 50;
@@ -276,17 +290,141 @@ function withPrepared<T>(
  * the machine's cores, and the budget is the work, not the contention.
  */
 async function leastCpu(pdf: PDFDocument): Promise<{ least: number; passes: number[] }> {
-  await inspectPages(mupdf, pdf);
+  await inspectPages(mupdf, pdf, undefined, walkRoles(pdf, "read", "pages").pages);
 
   const passes: number[] = [];
   for (let pass = 0; pass < 3; pass += 1) {
     const start = process.cpuUsage();
-    await inspectPages(mupdf, pdf);
+    // Spec 0019: the open walks the roles and scans each drawing as it reads.
+    await inspectPages(mupdf, pdf, undefined, walkRoles(pdf, "read", "pages").pages);
     await trimToVisibleArea(mupdf, pdf);
     const used = process.cpuUsage(start);
     passes.push((used.user + used.system) / 1000);
   }
   return { least: Math.min(...passes), passes };
+}
+
+/** Milliseconds of CPU `work` takes. */
+function cpuOf(work: () => void): number {
+  const start = process.cpuUsage();
+  work();
+  const used = process.cpuUsage(start);
+  return (used.user + used.system) / 1000;
+}
+
+/** The least of three passes, after one to warm the engine (as `leastCpu`). */
+async function leastOf(
+  pass: () => Promise<number>,
+): Promise<{ least: number; passes: number[] }> {
+  await pass();
+  const passes = [await pass(), await pass(), await pass()];
+  return { least: Math.min(...passes), passes };
+}
+
+/** Open `bytes` as a PDF document; the caller destroys it. */
+function openPdf(bytes: Uint8Array | ArrayBuffer): PDFDocument {
+  return mupdf.Document.openDocument(bytes, "application/pdf").asPDF() as PDFDocument;
+}
+
+/**
+ * Spec 0019, AC-11: the typed allowlist's work on one document, in CPU
+ * milliseconds per pass: the open's role walk over the prepared copy and the
+ * scan of every drawing it names, the rebuild's prune over a copy grafted the
+ * way the rebuild grafts it, and the check's structure part over a run's real
+ * output. Every document is made before the clock starts.
+ */
+async function allowlistCpu(
+  source: Uint8Array,
+  output?: ArrayBuffer,
+): Promise<{ least: number; passes: number[] }> {
+  const checked =
+    output ?? (await redactDocumentWith(mupdf, toBuffer(source), [])).output;
+
+  return leastOf(async () => {
+    const review = openPdf(source);
+    prepareDocument(mupdf, review);
+    const work = openPdf(source);
+    prepareDocument(mupdf, work);
+    const rebuilt = new mupdf.PDFDocument();
+    const map = rebuilt.newGraftMap();
+    for (let index = 0; index < work.countPages(); index += 1) {
+      map.graftPage(index, work, index);
+    }
+    map.destroy();
+    stripToAllowlist(rebuilt);
+    const check = openPdf(checked);
+
+    try {
+      return cpuOf(() => {
+        const roles = walkRoles(review, "read", "pages");
+        for (const drawings of roles.pages) scanAll(drawings);
+        pruneToRoles(rebuilt);
+        structureIsClean(check, check.countPages());
+      });
+    } finally {
+      review.destroy();
+      work.destroy();
+      rebuilt.destroy();
+      check.destroy();
+    }
+  });
+}
+
+/** The scan over a page's drawings, as inspection runs it. */
+function scanAll(drawings: readonly DrawingUnit[]): void {
+  for (const drawing of drawings) {
+    const properties = drawing.resources?.get("Properties") ?? null;
+    readDrawing(
+      drawing.streams,
+      properties !== null && properties.isDictionary() ? properties : null,
+      drawing.joined,
+    );
+  }
+}
+
+/** Main's pipeline, with the prune and the structure check swapped out. */
+const MAIN: Pipeline = {
+  ...PIPELINE,
+  pruneToRoles: () => {},
+  checkStructure: () => "clean",
+};
+
+/**
+ * Spec 0019, AC-11. One page drawing 10,000 form XObjects, each with resources
+ * of its own naming one shared font, and a figure in it.
+ */
+function tenThousandForms(): Uint8Array {
+  const forms = 10_000;
+  const first = 6;
+  const names = Array.from(
+    { length: forms },
+    (_, index) => `/Fm${index} ${first + index} 0 R`,
+  );
+  const draws = Array.from(
+    { length: forms },
+    (_, index) =>
+      `q 1 0 0 1 ${6 * (index % 100)} ${8 * Math.floor(index / 100)} cm /Fm${index} Do Q`,
+  );
+  return writePdf({
+    objects: [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 812] " +
+        `/Resources << /Font << /F1 5 0 R >> /XObject << ${names.join(" ")} >> >> /Contents 4 0 R >>`,
+      stream(
+        "",
+        `BT /F1 9 Tf 36 806 Td (Ten thousand forms) Tj ET\n${draws.join("\n")}\n`,
+      ),
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+      ...Array.from({ length: forms }, (_, index) =>
+        stream(
+          "/Type /XObject /Subtype /Form /BBox [0 0 6 8] /Resources << /Font << /F1 5 0 R >> >>",
+          `BT /F1 3 Tf 0 2 Td (${index % 10}) Tj ET`,
+        ),
+      ),
+    ],
+    trailer: "/Root 1 0 R",
+  }).bytes;
 }
 
 beforeAll(() => {
@@ -380,6 +518,35 @@ describe("the cost of reading every page", () => {
       expect(page).toEqual([expect.objectContaining({ filter: "DCTDecode" })]);
     expect(documentImages(output)).toEqual(before);
   }, 120_000);
+
+  it("adds at most 200 ms of CPU for the allowlist's work on a 50 page text heavy document", async () => {
+    const { least, passes } = await allowlistCpu(densePdf());
+    expect(least, `CPU per pass: ${passes.map(Math.round).join(", ")} ms`).toBeLessThan(
+      200,
+    );
+  }, 120_000);
+
+  it("adds at most 15% to a run's CPU for the allowlist's work on one page drawing 10,000 forms", async () => {
+    const source = tenThousandForms();
+    // About 20 seconds of CPU a run, so the real run that gives the check its
+    // output is also the warm up before main's three timed runs.
+    const { output } = await redactDocumentWith(mupdf, toBuffer(source), []);
+    const runs: number[] = [];
+    for (let pass = 0; pass < 3; pass += 1) {
+      const start = process.cpuUsage();
+      await redactDocumentWith(mupdf, toBuffer(source), [], {}, MAIN);
+      const used = process.cpuUsage(start);
+      runs.push((used.user + used.system) / 1000);
+    }
+    const run = { least: Math.min(...runs), passes: runs };
+    const added = await allowlistCpu(source, output);
+
+    expect(
+      added.least,
+      `allowlist CPU per pass: ${added.passes.map(Math.round).join(", ")} ms; ` +
+        `run CPU per pass: ${run.passes.map(Math.round).join(", ")} ms`,
+    ).toBeLessThan(0.15 * run.least);
+  }, 600_000);
 
   it("notices a cancel within one page of the 50", async () => {
     await withPrepared(densePdf(), async (pdf) => {

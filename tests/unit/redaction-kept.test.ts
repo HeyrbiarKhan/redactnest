@@ -231,6 +231,16 @@ describe("the structure check, one fault at a time", () => {
       document({ image: "/SMask 6 0 R " }),
     ],
     ["a value outside its key's shape", document({ font: "/Widths << /A 1 >> " })],
+    [
+      "a resource its stream never names",
+      (() => {
+        const objects = document({
+          extra: ["<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>"],
+        });
+        objects[2] = (objects[2] as string).replace("/F1 5 0 R", "/F1 5 0 R /F2 8 0 R");
+        return objects;
+      })(),
+    ],
   ])("fails %s", (_label, objects) => {
     expect(verdictOf(objects)).toBe("leak");
   });
@@ -297,5 +307,64 @@ describe("dictionaries the prune empties", () => {
       expect(state.isIndirect() && properties.isIndirect()).toBe(true);
       expect(state.asIndirect()).toBe(properties.asIndirect());
     });
+  });
+});
+
+/** AC-5, *Resource use*: what the drawings name, and what they cannot be read for. */
+describe("resource use", () => {
+  it("counts /DefaultRGB as used, since a device colour uses it unnamed", () => {
+    const objects = document();
+    objects[2] = (objects[2] as string).replace(
+      "/XObject",
+      "/ColorSpace << /DefaultRGB [/CalRGB << /WhitePoint [0.95 1 1.09] >>] >> /XObject",
+    );
+    expect(verdictOf(objects)).toBe("clean");
+  });
+
+  it("fails a colour space nothing names", () => {
+    const objects = document();
+    objects[2] = (objects[2] as string).replace(
+      "/XObject",
+      "/ColorSpace << /CS9 [/CalRGB << /WhitePoint [0.95 1 1.09] >>] >> /XObject",
+    );
+    expect(verdictOf(objects)).toBe("leak");
+  });
+
+  it("answers unreadable for a drawing stream the scan cannot read to its end", () => {
+    const objects = document();
+    objects[3] = stream("", "BT /F1 12 Tf 72 700 Td (Clean Tj ET /Fm1 Do /Im1 Do");
+    expect(verdictOf(objects)).toBe("unreadable");
+  });
+
+  it("lets a leak elsewhere outrank an unreadable stream", () => {
+    const objects = document({ font: "/RedactNestPrivate 1 " });
+    objects[3] = stream("", "BT /F1 12 Tf 72 700 Td (Clean Tj ET /Fm1 Do /Im1 Do");
+    expect(verdictOf(objects)).toBe("leak");
+  });
+});
+
+/** AC-5: in a run, an unreadable output stream is `unsupported`, unless a leak outranks it. */
+describe("an unreadable output stream in a run", () => {
+  const unreadable: Pipeline = { ...PIPELINE, checkStructure: () => "unreadable" };
+  const EMAIL = "jane.doe@example.com";
+
+  it("fails a run with nothing ticked with unsupported", async () => {
+    await expect(kindOf(fixture("text-page.pdf"), [], unreadable)).resolves.toBe(
+      "unsupported",
+    );
+  });
+
+  it("fails a clean ticked run with unsupported", async () => {
+    const bytes = fixture("text-page.pdf");
+    await expect(kindOf(bytes, [findTarget(bytes, 0, EMAIL)], unreadable)).resolves.toBe(
+      "unsupported",
+    );
+  });
+
+  it("lets a glyph that survived outrank it with redaction-incomplete", async () => {
+    const bytes = fixture("text-page.pdf");
+    await expect(
+      kindOf(bytes, [findTarget(bytes, 0, EMAIL)], { ...unreadable, textPass: () => {} }),
+    ).resolves.toBe("redaction-incomplete");
   });
 });

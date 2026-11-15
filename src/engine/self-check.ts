@@ -2,11 +2,12 @@ import type { Document, PDFDocument, PDFObject } from "mupdf";
 
 import type { EngineErrorKind } from "@/worker/protocol";
 
-import { TRAILER_KEYS, walkRoles } from "./allowlist";
+import { TRAILER_KEYS, walkRoles, type ResourceOwner } from "./allowlist";
 import { comparePage, type PageRecord } from "./characters";
 import { lineBox } from "./geometry";
 import type { MuPdf } from "./load";
 import { forEachDictionary, hasKey, keysOf } from "./objects";
+import { readDrawing, type ResourceCategory } from "./marked";
 import { imagesAreBlank } from "./pixels";
 import { CARRIER_KEYS, CATALOG_KEYS, PAGE_KEYS } from "./rebuild";
 import type { RedactionTarget } from "./types";
@@ -144,8 +145,11 @@ export type StructureVerdict = "clean" | "leak" | "unreadable";
  * meets no key off its role's list, no value outside its key's shape and no
  * string outside `STRING_PLACES`, at any depth; every object satisfies every
  * role and kind it is reached in, so two empty dictionaries the write merged
- * pass; every object in the file is reached; and no embedded file stream, file
- * specification or `/EF` is anywhere, reached or not.
+ * pass; every object in the file is reached; no embedded file stream, file
+ * specification or `/EF` is anywhere, reached or not; and every resource entry
+ * is named by a drawing that draws with its dictionary (*Resource use*). A
+ * drawing stream the scan cannot read to its end answers `"unreadable"`,
+ * which any leak outranks.
  */
 export function structureIsClean(
   check: PDFDocument,
@@ -167,6 +171,9 @@ export function structureIsClean(
   if (walk.problem !== null || walk.strays > 0) return "leak";
   if (!everyObjectReached(check, walk.reached)) return "leak";
 
+  const use = resourceUse(walk.owners);
+  if (use === "leak") return "leak";
+
   let clean = true;
   forEachDictionary(check, (dict) => {
     if (!clean) return;
@@ -178,7 +185,79 @@ export function structureIsClean(
       clean = false;
     }
   });
-  return clean ? "clean" : "leak";
+  if (!clean) return "leak";
+  return use;
+}
+
+/** The dictionaries a resource dictionary keeps its entries in, as `marked.ts` names them. */
+const RESOURCE_CATEGORIES: readonly ResourceCategory[] = Object.freeze([
+  "Font",
+  "XObject",
+  "ExtGState",
+  "ColorSpace",
+  "Pattern",
+  "Shading",
+  "Properties",
+]);
+
+/**
+ * Colour spaces a device colour uses without naming them, so they count as
+ * used wherever they are listed (spec 0019, *Resource use*).
+ */
+const DEFAULT_SPACES: ReadonlySet<string> = new Set([
+  "DefaultGray",
+  "DefaultRGB",
+  "DefaultCMYK",
+]);
+
+/**
+ * Spec 0019, AC-5, *Resource use*. Each resource dictionary against the union
+ * of the names every drawing that draws with it uses: an entry none of them
+ * names is something `sanitize` should have dropped, so a leak. A drawing the
+ * scan cannot read to its end makes the answer `"unreadable"`, unless another
+ * dictionary holds a leak, which outranks it.
+ */
+function resourceUse(owners: readonly ResourceOwner[]): StructureVerdict {
+  let unreadable = false;
+
+  for (const { resources, units } of owners) {
+    const properties = resources.get("Properties");
+    const used = new Map<ResourceCategory, Set<string>>();
+    let unsure = false;
+    for (const unit of units) {
+      const read = readDrawing(
+        unit.streams,
+        properties.isDictionary() ? properties : null,
+        unit.joined,
+      );
+      if (read === "unsure") {
+        unsure = true;
+        continue;
+      }
+      for (const [category, names] of read.names) {
+        const into = used.get(category) ?? new Set<string>();
+        for (const name of names) into.add(name);
+        used.set(category, into);
+      }
+    }
+
+    // A drawing that cannot be read names nothing anybody knows, so this
+    // dictionary's entries cannot be judged; the answer is unreadable.
+    if (unsure) {
+      unreadable = true;
+      continue;
+    }
+
+    for (const category of RESOURCE_CATEGORIES) {
+      const entries = resources.get(category);
+      if (!entries.isDictionary()) continue;
+      for (const key of keysOf(entries)) {
+        if (category === "ColorSpace" && DEFAULT_SPACES.has(key)) continue;
+        if (!used.get(category)?.has(key)) return "leak";
+      }
+    }
+  }
+  return unreadable ? "unreadable" : "clean";
 }
 
 /**

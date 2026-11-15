@@ -236,7 +236,7 @@ describe("the things a redaction strips besides the targeted text", () => {
  * so it is written out rather than derived, and a change is deliberate.
  */
 describe("what reading a page can find", () => {
-  it("is exactly the ten findings spec 0006 fixes, warnings first", () => {
+  it("is exactly the ten findings spec 0006 fixes and spec 0019's one, warnings first", () => {
     expect([...PAGE_FINDINGS]).toEqual([
       "covered-text",
       "hidden-text",
@@ -245,6 +245,8 @@ describe("what reading a page can find", () => {
       "unreadable-text",
       "bare-picture",
       "off-page-picture",
+      // Spec 0019, AC-9: descriptions written into the page.
+      "marked-descriptions",
       "machine-read-text",
       "off-page-content",
       "blank",

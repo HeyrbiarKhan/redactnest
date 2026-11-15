@@ -37,6 +37,7 @@ import {
   keptFigure,
   keptPicture,
   keptProgramKeys,
+  markedDescriptions,
 } from "./lib/kept-fixtures.mjs";
 import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { termsDense, termsPdf } from "./lib/terms-fixtures.mjs";
@@ -611,6 +612,11 @@ const FIXTURES = [
     "kept-embedded.pdf",
     keptEmbedded(),
     "embedded files through a figure's /Ref and /OPI and an image's /OPI",
+  ],
+  [
+    "marked-descriptions.pdf",
+    markedDescriptions(),
+    "one page per case of descriptions written into a page, warned and quiet",
   ],
 ];
 

@@ -340,3 +340,120 @@ export function keptEmbedded() {
     };
   });
 }
+
+/**
+ * Strings `marked-descriptions.pdf` writes into its pages' drawing
+ * instructions, for the pins on what MuPDF's `sanitize` keeps (spec 0019,
+ * AC-10).
+ */
+export const MARKED_TEXT = Object.freeze({
+  /** The value on page 1, ticked by the pin. */
+  value: "jane.doe@example.com",
+  /** Page 1's inline alternate text, around the value. */
+  alt: "Alternate text naming Jane Doe",
+  /** Page 4's inline replacement text, around only a filled shape. */
+  shape: "A chart of quarterly sales",
+});
+
+/**
+ * Spec 0019, AC-10. One page per case of the `marked-descriptions` warning,
+ * each a marked content sequence or point written into the page's drawing
+ * instructions, each page with a line anybody can read:
+ *
+ *  1. an inline `/Span` with `/Alt` and `/E` around a line holding a value (warns);
+ *  2. a `DP` point with a private string (warns);
+ *  3. an inline span holding only `/ActualText` around text (quiet);
+ *  4. an inline `/ActualText` around only a filled shape (warns);
+ *  5. a property list named in `/Properties`, its `/ActualText` around only a
+ *     filled shape (warns);
+ *  6. a span holding only `/MCID` (quiet);
+ *  7. `/Lang (en-GB)` and `/Lang (en_US)` (quiet);
+ *  8. `/Lang (Jane Smith)` (warns);
+ *  9. an inline `/E` inside a form XObject the page draws (warns);
+ * 10. an artifact holding only names (quiet).
+ */
+export function markedDescriptions() {
+  return keptDocument(({ add, fonts }) => {
+    const named = add(`<< /ActualText ${literal("A named figure")} >>`);
+    const figure = form(add, fonts, "Words inside a form");
+    const inForm = add(
+      stream(
+        `/Type /XObject /Subtype /Form /BBox [0 0 400 40] /Resources << /Font << ${fonts} >> >>`,
+        `/Span << /E ${literal("Expansion inside a form")} >> BDC ` +
+          line("F1", 12, 4, 20, "Words inside a form") +
+          "EMC\n",
+      ),
+    );
+    const shape = "0.6 g 72 560 120 60 re f 0 g\n";
+    return {
+      pages: [
+        {
+          content:
+            line("F1", 12, 72, 720, "Page one: alternate text around a value") +
+            `/Span << /Alt ${literal(MARKED_TEXT.alt)} /E (JD) >> BDC ` +
+            line("F1", 12, 72, 690, `Contact: ${MARKED_TEXT.value}`) +
+            "EMC\n",
+        },
+        {
+          content:
+            line("F1", 12, 72, 720, "Page two: a point with a private string") +
+            `/Note << /Private ${literal("A private note on this page")} >> DP\n`,
+        },
+        {
+          content:
+            line("F1", 12, 72, 720, "Page three: replacement text around text") +
+            `/Span << /ActualText ${literal("Shown words")} >> BDC ` +
+            line("F1", 12, 72, 690, "Shown words") +
+            "EMC\n",
+        },
+        {
+          content:
+            line("F1", 12, 72, 720, "Page four: replacement text around a shape") +
+            `/Figure << /ActualText ${literal(MARKED_TEXT.shape)} >> BDC ${shape}EMC\n`,
+        },
+        {
+          resources: `/Properties << /MC0 ${named} 0 R >>`,
+          content:
+            line("F1", 12, 72, 720, "Page five: a named list around a shape") +
+            `/Figure /MC0 BDC ${shape}EMC\n`,
+        },
+        {
+          content:
+            line("F1", 12, 72, 720, "Page six: a marked content identifier") +
+            "/P << /MCID 0 >> BDC " +
+            line("F1", 12, 72, 690, "A tagged paragraph") +
+            "EMC\n",
+        },
+        {
+          content:
+            line("F1", 12, 72, 720, "Page seven: language tags") +
+            "/Span << /Lang (en-GB) >> BDC " +
+            line("F1", 12, 72, 690, "Colour") +
+            "EMC /Span << /Lang (en_US) >> BDC " +
+            line("F1", 12, 72, 670, "Color") +
+            "EMC\n",
+        },
+        {
+          content:
+            line("F1", 12, 72, 720, "Page eight: a language that is a name") +
+            "/Span << /Lang (Jane Smith) >> BDC " +
+            line("F1", 12, 72, 690, "Bonjour") +
+            "EMC\n",
+        },
+        {
+          resources: `/XObject << /Fm1 ${inForm} 0 R /Fm2 ${figure} 0 R >>`,
+          content:
+            line("F1", 12, 72, 720, "Page nine: an expansion inside a form") +
+            "q 1 0 0 1 72 600 cm /Fm1 Do Q q 1 0 0 1 72 500 cm /Fm2 Do Q\n",
+        },
+        {
+          content:
+            "/Artifact << /Type /Pagination /Subtype /Header >> BDC " +
+            line("F1", 12, 72, 760, "Page ten header") +
+            "EMC " +
+            line("F1", 12, 72, 720, "Page ten: an artifact holding only names"),
+        },
+      ],
+    };
+  });
+}

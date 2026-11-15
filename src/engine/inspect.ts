@@ -18,6 +18,7 @@ import {
   type Rect,
   type Transform,
 } from "./device";
+import type { DrawingUnit } from "./allowlist";
 import { checkpoint, EngineFailure } from "./failure";
 import {
   clipToConvex,
@@ -30,6 +31,7 @@ import {
   quadWidth,
 } from "./geometry";
 import type { MuPdf } from "./load";
+import { readDrawing as scanDrawing } from "./marked";
 import type { ConcealedGlyph, PageInspection, Quad } from "./types";
 
 /**
@@ -158,12 +160,13 @@ export async function inspectPages(
   mupdf: MuPdf,
   pdf: PDFDocument,
   isCancelled?: () => boolean,
+  drawings: readonly (readonly DrawingUnit[])[] = [],
 ): Promise<readonly PageInspection[]> {
   const inspections: PageInspection[] = [];
   const pageCount = pdf.countPages();
 
   for (let index = 0; index < pageCount; index += 1) {
-    inspections.push(inspectOne(mupdf, pdf, index));
+    inspections.push(inspectOne(mupdf, pdf, index, drawings[index] ?? []));
     await checkpoint(isCancelled);
   }
   return inspections;
@@ -181,16 +184,45 @@ export function readsAsNothing(inspection: PageInspection): boolean {
 }
 
 /** One page, loaded, read and handed back to MuPDF whatever happens. */
-function inspectOne(mupdf: MuPdf, pdf: PDFDocument, index: number): PageInspection {
+function inspectOne(
+  mupdf: MuPdf,
+  pdf: PDFDocument,
+  index: number,
+  drawings: readonly DrawingUnit[],
+): PageInspection {
   let page: PDFPage | null = null;
   try {
     page = pdf.loadPage(index);
-    return inspectPage(mupdf, page);
+    const inspection = inspectPage(mupdf, page);
+    if (!describesAnything(drawings)) return inspection;
+    const found = new Set<PageFinding>([...inspection.findings, "marked-descriptions"]);
+    return {
+      ...inspection,
+      findings: PAGE_FINDINGS.filter((finding) => found.has(finding)),
+    };
   } catch {
     throw new EngineFailure("unsupported");
   } finally {
     page?.destroy();
   }
+}
+
+/**
+ * Spec 0019, AC-9: does any drawing on the page hold a marked content property
+ * list with a string that counts, or one the scan cannot read to its end? The
+ * page's contents, and every form, tiling pattern and Type 3 glyph procedure
+ * it draws, as the role walk names them, each with its owning `/Properties`.
+ */
+function describesAnything(drawings: readonly DrawingUnit[]): boolean {
+  return drawings.some((drawing) => {
+    const properties = drawing.resources?.get("Properties") ?? null;
+    const read = scanDrawing(
+      drawing.streams,
+      properties !== null && properties.isDictionary() ? properties : null,
+      drawing.joined,
+    );
+    return read === "unsure" || read.describes;
+  });
 }
 
 /** What the ordinary mode read says about a page's text. */

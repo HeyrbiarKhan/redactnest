@@ -150,7 +150,7 @@ export async function openDocumentWith(
 
     // Spec 0006, AC-1: every page read once, on the prepared page, before
     // detection. A page that throws fails the open (AC-11).
-    const inspections = await inspectPages(mupdf, pdf, isCancelled);
+    const inspections = await inspectPages(mupdf, pdf, isCancelled, roles.pages);
 
     // AC-10, decided from the readings before anything else happens (INV-2).
     // No session exists for a refused document, so no run can ever start on

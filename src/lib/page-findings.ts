@@ -34,6 +34,7 @@ export const FINDING_TONE: Readonly<Record<PageFinding, FindingTone>> = Object.f
   "unreadable-text": "warning",
   "bare-picture": "warning",
   "off-page-picture": "warning",
+  "marked-descriptions": "warning",
   "machine-read-text": "note",
   "off-page-content": "note",
   blank: "quiet",
@@ -174,6 +175,15 @@ const FINDING_TEXT: Readonly<Record<Exclude<PageFinding, "blank">, Worded>> =
         `${pages} has a picture that reaches outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.`,
       many: (pages) =>
         `${pages} have pictures that reach outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.`,
+    },
+    // Spec 0019, AC-9: "may", because the scan cannot tell a description
+    // from other strings a property list holds, and "can stay", because
+    // RedactNest cannot remove what is written inline.
+    "marked-descriptions": {
+      one: (pages) =>
+        `${pages} may have descriptions written into the page, such as alternate text for screen readers. RedactNest can't remove them, so they can stay in the file, even around text you tick.`,
+      many: (pages) =>
+        `${pages} may have descriptions written into the page, such as alternate text for screen readers. RedactNest can't remove them, so they can stay in the file, even around text you tick.`,
     },
     // Spec 0008, AC-9: the last sentence says what the text recognition may
     // have missed, since one word it read is enough to clear a picture.

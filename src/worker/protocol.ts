@@ -425,6 +425,9 @@ export const PAGE_FINDINGS = Object.freeze([
   "unreadable-text",
   "bare-picture",
   "off-page-picture",
+  // Spec 0019, AC-9: descriptions written into the page's drawing
+  // instructions, which RedactNest cannot remove.
+  "marked-descriptions",
   "machine-read-text",
   "off-page-content",
   "blank",
