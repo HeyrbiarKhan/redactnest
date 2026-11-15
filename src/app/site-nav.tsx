@@ -1,7 +1,7 @@
 import { config } from "@/config";
 import { cx } from "@/lib/cx";
 import { LEGAL } from "@/lib/legal";
-import { ACCOUNT_PATH, PRICING_PATH, TOOL_PATH } from "@/lib/routes";
+import { ACCOUNT_PATH, PRICING_PATH, SECURITY_PATH, TOOL_PATH } from "@/lib/routes";
 import { Button } from "@/ui/button";
 import { LinkGroup } from "@/ui/link-group";
 import { SiteHeader } from "@/ui/site-header";
@@ -18,13 +18,15 @@ import { FOOTER_LINK_CLASS } from "./footer-link";
  * Product link, which names the page by its title as the Legal links name
  * theirs. There is no nav item for the tool: the button is the way in.
  * `menu` names the button that holds those links on a small screen (feature
- * 28, amending AC-7).
+ * 28, amending AC-7). `security` is the footer's Product link to the security
+ * page, named by its title too (spec 0018, AC-2).
  */
 export const NAV_TEXT = Object.freeze({
   pricing: "Pricing",
   account: "Account",
   tryFree: "Try it free",
   redactPdf: "Redact a PDF",
+  security: "Security",
   menu: "Menu",
 });
 
@@ -141,9 +143,11 @@ export function PageHeader({ current }: { readonly current?: NavItem }) {
 }
 
 /**
- * The footer's Product group: Redact a PDF and, with billing on, Pricing.
- * Spec 0013, AC-8. Plain links in the same tab, underlined like every footer
- * link, so the way into `/tool` is a real page load (INV-4).
+ * The footer's Product group: Redact a PDF, Security and, with billing on,
+ * Pricing. Spec 0013, AC-8, with the security page spec 0018 adds (AC-2).
+ * Plain links in the same tab, underlined like every footer link, so the way
+ * into `/tool` is a real page load (INV-4), and on `/tool` following one is a
+ * real page load too, so spec 0007's leave warning still guards ticked work.
  */
 export function ProductNav() {
   return (
@@ -151,6 +155,11 @@ export function ProductNav() {
       <li>
         <a href={TOOL_PATH} className={FOOTER_LINK_CLASS}>
           {NAV_TEXT.redactPdf}
+        </a>
+      </li>
+      <li>
+        <a href={SECURITY_PATH} className={FOOTER_LINK_CLASS}>
+          {NAV_TEXT.security}
         </a>
       </li>
       {config.billingEnabled && (

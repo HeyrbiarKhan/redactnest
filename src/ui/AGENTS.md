@@ -1,6 +1,6 @@
 # src/ui
 
-The design system primitives: twenty four small React components, each a thin layer over a native HTML element. The decision is [spec 0003](../../docs/specs/0003-design-system-ui-foundation/index.md), and the art direction is [`docs/design/design.md`](../../docs/design/design.md). A page that needs a piece these do not have adds it here, with its tests, rather than inline.
+The design system primitives: twenty five small React components, each a thin layer over a native HTML element. The decision is [spec 0003](../../docs/specs/0003-design-system-ui-foundation/index.md), and the art direction is [`docs/design/design.md`](../../docs/design/design.md). A page that needs a piece these do not have adds it here, with its tests, rather than inline.
 
 ## Files
 
@@ -28,6 +28,7 @@ The design system primitives: twenty four small React components, each a thin la
 - `Spinner`'s `current` tone is the arc alone in the text colour around it, for a busy button. `IconCircle`'s `sm` size keeps the 20 pixel icon, and its `square` shape is the home page cards' tile. `Card`'s `spacious` form (28 pixels in, 24 between parts) is kept for those two cards; every other card keeps 20 and 16. Spec 0013, AC-11, AC-34.
 - `Spinner`'s sizes each have one job: `sm` in a busy button, `md` beside a line of text, and `lg` (40 pixels) holding the place of something larger while it arrives, with its line centred under it, as on `/tool` while a document opens and in Clerk's place on sign in. Spec 0013, AC-16, AC-23.
 - `BrandMark` draws `MARK_PATHS`, which `tests/unit/brand-files.test.ts` holds equal to `src/app/icon.svg`. Always in `currentColor` and hidden from assistive technology, because the name RedactNest sits beside it. Spec 0013, AC-1.
+- `CoverFigure` hides its page drawings from assistive technology and puts each panel's meaning in its visible words (its title, and what a copy of the text gives, in a `samp`), so nothing rests on the picture. Its black box is an SVG filled with `currentColor`, never a background, so forced colours keep it solid. The panels pair up once the figure itself is 40rem wide (a container query), so the legal pages' reading column pairs them at the default text size and stacks them at 200% text. Spec 0018, AC-8.
 - A primitive sets no live region role of its own. The caller passes `role="alert"` when a callout appears because of something the visitor did.
 - Document derived text reaches a primitive only as a prop and renders only as React text children. It never goes into `document.title` or the URL, because the browser writes both to history. Spec 0003, INV-7.
 - `Button` with `href` renders `next/link`; add `reload` for a plain `a` whenever the link enters `/tool`. The `SiteHeader` lockup is a plain `a` for the way out, because only a real page load fires `pagehide`, which ends the session (spec 0002, INV-6).

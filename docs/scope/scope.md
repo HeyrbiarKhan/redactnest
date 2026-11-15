@@ -24,22 +24,23 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 11 | Telemetry & error monitoring | Release 3 | done |
 | 12 | Remaining detectors | Release 3 | done |
 | 13 | Custom terms | Release 4 | done |
-| 14 | Manual rectangle redaction | Release 5 | planned |
-| 15 | Marketing site | Release 6 | planned |
-| 16 | Security & how it works page | Release 6 | planned |
-| 17 | Data processing agreement | Release 6 | planned |
+| 14 | Manual rectangle redaction | Release 6 | planned |
+| 15 | Marketing site | Release 5 | planned |
+| 16 | Security & how it works page | Release 5 | done |
+| 17 | Data processing agreement | Release 5 | planned |
 | 18 | AGPL compliance & source publication | Release 1 | done |
 | 19 | Sparse OCR scans | Release 1 | done |
 | 20 | Dense text layers over pictures | Release 1 | done |
 | 21 | Launch readiness | Release 2 | done |
 | 22 | Brand & UI refresh | Release 2 | done |
-| 23 | Legal review | Release 6 | planned |
+| 23 | Legal review | Release 5 | planned |
 | 24 | Detector follow ups | Release 3 | done |
 | 25 | More date forms | Release 3 | done |
 | 26 | UI polish | Release 3 | done |
 | 27 | Detector and fixture gates | Release 3 | done |
 | 28 | UI polish 2 | Release 3 | done |
-| 29 | Home page reflow | Release 6 | planned |
+| 29 | Home page reflow | Release 5 | planned |
+| 30 | Engine and code follow ups | Release 6 | planned |
 
 ## Foundations
 
@@ -391,20 +392,31 @@ spec [0017](../specs/0017-custom-terms/index.md) · code in `src/detect/terms.ts
 - [x] Test it: `/test custom terms`
 - [x] Review it (fresh model): `/check review custom terms`
 
-## Release 5: Second paid capability
+## Release 5: Get found and get trusted
 
-### 14. Manual rectangle redaction · needs a decision · GA
-Draw a box, and everything under it goes. The only way to remove signatures, logos, handwriting, table cells and images, and the only useful answer for a scanned page.
-**Done when:** a paid user can draw boxes on rendered pages, everything under a box is genuinely removed from the output including image data, screen coordinates map correctly to page coordinates at every zoom level, and there is a keyboard path to place and adjust a box.
-**Also owed here:** the page preview (spec 0013 left it with this feature): whether review shows rendered pages, the amendment to spec 0002 INV-1 and INV-2 that page images on the main thread need, and where rendered pages sit in `/tool`'s three area grid.
-- [ ] Design it (spec): `/architect manual rectangle redaction`
+Pulled ahead of rectangles (your call, 2026-11-14). Pro already has two things worth paying for, no page cap and custom terms, and the product is live, so visitors are what is missing now. The first month of counts (from about 2026-12-08) also says more once they arrive. The security page goes first, since it needs no spec; then the search pages, with the home page reflow built beside them. Features 23 and 17 stay in this release but wait for 100+ users and the lawyer, so release 6 can start while they wait.
 
-## Release 6: Get found and get trusted
+### 16. Security & how it works page · done · Alpha + review · spec 0018
+The page that closes the sale for HR, legal and healthcare buyers: what in memory processing means, what the logs do and do not hold, and why covering text with a box is not redaction.
+**Done when:** the page describes the real implementation accurately, with no claim the code does not support.
+**Also owed here:** a sticky note or a file attachment that shows in the source is flattened into the page like any other visible annotation (spec 0004, AC-22), so its icon stays as a mark on the page even though the note's text and the attached file are gone. Say so plainly, so the page does not suggest every trace of them was removed.
+**Also owed here:** the honest limits from spec 0006. A picture reaching past the crop keeps its hidden pixels, and text a clip hides wholly stays in the file. Both are warned about and the file is named partly redacted, but neither is removed. The page warnings lean toward saying too much, so a brochure photo or a thin legal line can raise one.
+**Also owed here:** the plan check (claim C5) and why the page cap is honesty based (spec 0012), linking the privacy policy's claims rather than restating them (spec 0011).
+**Also owed here:** what the counts and error reports hold, and what they never hold (spec 0016), linking claims C14 to C16 rather than restating them.
+spec [0018](../specs/0018-security-page/index.md) (ratified 2026-11-14: one claim rule in AC-5, limits stated broadly; spec 0013's AC-8 now names the footer link) · code in `src/app/security/page.tsx`, `src/ui/cover-figure.tsx`, `src/app/site-nav.tsx` (the footer's Security link), `src/lib/policy-sections.ts` and `src/lib/policy-changes.ts`
+- [x] Build it: `/develop security & how it works page`
+- [x] Rework it to the ratified spec: `/develop security & how it works page`
+  - [x] The page's words by spec 0018's *Page changes*, items 1 to 42, every source comment in AC-5's order · AC-5, AC-6, AC-7
+  - [x] The tests: the banned outcome phrases, one pin per AC-7 line, the What we do not do link, the second verify's phrases; the browser and unit suites still green · AC-1 to AC-11
+  - [x] `verify.md`'s claim walk to the coverage table, and the change entry dated the day it merges (2026-11-14; `verify.md`'s *Before merge* moves it if the merge falls later) · AC-3, AC-5, AC-7
+- [x] Verify it: `/check verify security & how it works page`
+- [x] Review it (fresh model): `/check review security & how it works page`
 
 ### 15. Marketing site · needs a decision
 A small set of pages on what this audience actually searches for, since search is the acquisition channel for a self serve tool at this price. The landing page itself, the brand and the site wide social preview image are built in feature 22.
 **Done when:** the search pages are server rendered with metadata, a sitemap and their own social cards, they lead into the tool, and Core Web Vitals pass on mobile.
 **Also owed here:** the search pages reuse the shell, `FeatureList` and the social card's composition (spec 0013). Per page social cards, and whether a manifest is worth a policy change, are this feature's calls.
+**Also owed here:** the search pages may name custom terms, which Pro has done since spec 0017, under spec 0012's INV-8 (only what Pro does today, every cap from `config`).
 - [ ] Design it (spec): `/architect marketing site`
 
 ### 29. Home page reflow · from spec 0013
@@ -412,15 +424,6 @@ At 320 pixels wide with text at 200%, the home page's main content scrolls sidew
 **Done when:** at 320 pixels with 200% text, `/` has no sideways scroll with the menu shut or open; the element that was wider than the window wraps or shrinks rather than being clipped; wider screens look as today; and a browser test holds 320 pixels and 200% text together on `/`, which feature 15's search pages can join.
 **Also owed here:** find the wide element first, with `/debug` if it is not obvious. Spec 0013's AC-26 amended to name the combined case, and `scripts/make-brand.mjs` rerun only if a brand picture changes (each is drawn at desktop width, so none should).
 - [ ] Build it: `/develop home page reflow`
-
-### 16. Security & how it works page · Alpha
-The page that closes the sale for HR, legal and healthcare buyers: what in memory processing means, what the logs do and do not hold, and why covering text with a box is not redaction.
-**Done when:** the page describes the real implementation accurately, with no claim the code does not support.
-**Also owed here:** a sticky note or a file attachment that shows in the source is flattened into the page like any other visible annotation (spec 0004, AC-22), so its icon stays as a mark on the page even though the note's text and the attached file are gone. Say so plainly, so the page does not suggest every trace of them was removed.
-**Also owed here:** the honest limits from spec 0006. A picture reaching past the crop keeps its hidden pixels, and text a clip hides wholly stays in the file. Both are warned about and the file is named partly redacted, but neither is removed. The page warnings lean toward saying too much, so a brochure photo or a thin legal line can raise one.
-**Also owed here:** the plan check (claim C5) and why the page cap is honesty based (spec 0012), linking the privacy policy's claims rather than restating them (spec 0011).
-**Also owed here:** what the counts and error reports hold, and what they never hold (spec 0016), linking claims C14 to C16 rather than restating them.
-- [ ] Build it: `/develop security & how it works page`
 
 ### 23. Legal review · needs a decision · Alpha · from spec 0011
 The lawyer questions launch left open, asked once RedactNest has 100+ users, on a tech lawyer's advice (2026-10-03). PECA section 32, Pakistani law and courts, and a full review of both pages (spec 0011 steps 3 and 4), plus two from spec 0012: does Polar's own use of billing details as merchant of record (fraud, security, tax records) make it a controller for that part, and does every cookie claim C6 calls strictly necessary meet that exemption, given Clerk's `__refresh_<suffix>` stays after sign out on production. It sits before feature 17 because the Polar answer can change what the DPA says.
@@ -432,6 +435,26 @@ Something a business buyer can sign, ready before somebody asks for it under tim
 **Done when:** a DPA is available, reflects the no storage reality, and lists any subprocessors.
 **Also owed here:** it lists every entry in `OUTSIDE_SERVICES` (spec 0011), Umami and Sentry included since spec 0016, with Clerk and Polar as processors, as Polar's own DPA says (spec 0012). Feature 23's answer on Polar may change Polar's role.
 - [ ] Build it: `/develop data processing agreement`
+
+## Release 6: Second paid capability
+
+Moved after release 5 (your call, 2026-11-14), so counts from real visitors can inform the biggest build left. Feature 30 goes first: small engine gaps that fail safe and code nits, and its rotated page fixture is one rectangles will need too.
+
+### 30. Engine and code follow ups · Alpha · from specs 0006, 0007 and 0013
+Small open items from older specs' Follow-ups, gathered in one row so they stay visible (your call, 2026-11-14). Two are engine gaps that fail safe, never a leak; the rest are code nits from reviews.
+**Done when:** a rotated and cropped fixture, with text past the crop and a line straddling it, is pinned through open, run and self check, so `planTrim`'s strips, the media box fallback and the annotation quad points are shown to agree on a `/Rotate` page (spec 0006); a line box that is not finite gets the same answer at open as at Redact, either as a trim trigger or as an `unsupported` refusal at open, never a `redaction-incomplete` after the visitor has ticked (spec 0006); `partlyNamed` in `src/app/tool/result-card.tsx` comes from the same `OutputForm` that named the file, not from the name's ending (spec 0007, nit 2); `countRemoved` moves out of `src/lib/detectors.ts`, so `src/lib/session.ts` stays plain data with no `lucide-react` (spec 0007, nit 3); and `IconCircle`'s unused `sm` size is removed with its tests, its `design.md` radius rule and its `src/ui/AGENTS.md` line, or kept on purpose, your call at the build (spec 0013).
+**Also owed here:** if choosing between the trim trigger and the refusal turns out to change what a visitor sees beyond a plain refusal, bring it to `/architect` rather than picking in the build. The rotated fixture also gives feature 14 a rotated page to map boxes onto. Each item is ticked in its spec's Follow-up as it lands.
+**Also owed here:** the tool's line for a trimmed page (`removedOffPageLine` in `src/lib/page-findings.ts`, the `off-page-content` finding) says text and drawings outside the visible area were removed, while a shape wrapping a page corner stays (spec 0006, AC-14, a recorded limit). Beside it, the `off-page-picture` line in the same file says "RedactNest doesn't clear pictures", while a run blanks the pictures under each removed item (spec 0004, *Decision*, the padded pass); only the trim never touches a picture (spec 0006, AC-15), so the true words are that RedactNest doesn't clear the part outside. Reword both lines together under spec 0006 (its words for `off-page-picture`, and the `trim-kept.pdf` step in its `verify.md`), with the tests that pin them (`tests/unit/page-findings.test.ts`, `tests/component/tool-client.test.tsx`). Both found by feature 16's verify (2026-11-14), and left alone on that branch because the lines were there before it; spec 0018 points here.
+**Also owed here:** spec 0004's *Security model* bullet "Embedded fonts keep the shapes of removed characters" says that inventory is "never their order". RedactNest leaves fonts as the source wrote them, and an app that subsets a font can number its characters in the order each first appears (LibreOffice and Cairo based apps do), so part of that order can survive. Reword the bullet to say which characters existed, and in some files the order they first appeared in, or drop the order clause. Found by feature 16's third verify (2026-11-14) from how the format works, not measured, since no fixture holds a subset font. The bullet was there before that branch, so it was left alone there; spec 0018's page already says only which characters.
+**Also owed here:** the home page's Strips card says "Whenever a file carries them:" over a list that names XMP metadata (`HOME_STRIPPED` and the band's subtitle in `src/lib/home-text.ts`, spec 0013, AC-11). The rebuild strips XMP held in the file's own structure (a `/Metadata` entry on any object), and the self check holds that. A picture under no removed item leaves with the bytes the source stored (spec 0006, AC-29, `tests/unit/cost.test.ts`), so an XMP packet, or a photo's camera details, written inside a picture's own data stays in the cleaned copy. The card lists Attachments too, and the note below shows an embedded file can stay, so narrowing the card to where the PDF format keeps each kind would not make it true either: reword it after `/architect` settles the general rule below, or bring stripping inside pictures to `/architect` with it. Found by feature 16's fifth verify (2026-11-15) from the byte copy the test proves, with no packet watched, since no fixture holds a JPEG. The eighth verify's measurement in the note below touches three more lines in the same file, to reword with the card: `HOME_TEXT.lead` says RedactNest "takes that text out of the file itself", while a ticked value can stay in the file's bytes when another part of the file points to the original figure that held it; and the band's note (`HOME_TEXT.band.strips.note`) says nothing hidden behind flattened comments and form fields stays ("nothing hidden behind them does"), while a note's text can stay the same way, even as annotations are reported stripped; and the "Removed, not covered" card under the hero (its `body` in `HOME_TEXT.features`) says "hidden data such as metadata and attachments is stripped", while an attached file can stay the same way, even as attachments are reported stripped. The card and these lines were there before that branch, so they were left alone there; spec 0018's page now says only what the structure check looks for, and that details inside a picture's own data can stay.
+**Also owed here:** measured, so it goes to `/architect`: what an object below the catalog and the pages refers to survives a clean run and the self check, a program's own keys and embedded files alike. The allowlists cover only the catalog and the pages (`CATALOG_KEYS`, `PAGE_KEYS`), and the sweep below them deletes only the six `CARRIER_KEYS` in `src/engine/rebuild.ts`, so any other key on a kept object (a form XObject, an image, a font) is grafted with its object and everything it refers to, and `structureIsClean` does not look for it. Feature 16's sixth verify (2026-11-15) took `tests/fixtures/form-xobject.pdf`, added pdfTeX's two default keys in memory to its form XObject, `/PTEX.InfoDict` (an author and a title) and `/PTEX.FileName` (a path), and ran it with nothing ticked: the self check passed, nothing was reported stripped, and the output kept both keys, the author's name and the path. pdfTeX writes these on every included PDF figure, so such keys do carry document content. Its seventh verify (2026-11-15) found the same family through keys the PDF format itself defines: an embedded file stream (a `/Type /EmbeddedFile` stream in a file specification's `/EF`) reached through the form XObject's `/Ref` (a reference XObject) or `/OPI` on `form-xobject.pdf`, or through an image's `/OPI` on `tests/fixtures/images-under.pdf`, each added in memory and run with nothing ticked, stayed whole: the self check passed and nothing was reported stripped, while the same file through `/AF` was stripped and reported as `attachments`. pdfTeX's two keys on that image stayed too. So such a file breaks spec 0004's AC-7 (no attachments, "embedded and associated files"), and the home page's Strips card, which lists Attachments (`HOME_STRIPPED` in `src/lib/home-text.ts`), claims more than the engine does. Its eighth verify (2026-11-15) showed the family reaches the core rule, not only metadata. Each fixture was opened in memory with a private key on page 1's first font pointing at an object, then run through `redactDocumentWith`; every run passed the self check, and without the pointer nothing stayed. (1) `form-xobject.pdf` with SECRET-42 ticked and the key pointing at the original form XObject kept SECRET-42 in the output's bytes, though not in its drawn text, which breaks spec 0004's AC-4 (a ticked target in a simple encoding appears nowhere in the decompressed output). (2) `images-under.pdf` with both values ticked and the key pointing at the original image mask kept the unblanked original byte for byte, while the drawn copy was blanked. (1) and (2) are a ticked value surviving in the file: MuPDF redacts a figure or picture into a new copy, which the page draws, and the original stays whenever something else points to it. Unlike this row's first two items, that does not fail safe. (3) `tests/fixtures/metadata.pdf` with nothing ticked and the key pointing at page 1's `/Annots` kept the note's text ("Private reviewer comment") and an `/EmbeddedFile`, while `annotations` and `attachments` were reported stripped. (4) `form-xobject.pdf` with nothing ticked, its catalog given `/PageLabels`, `/ViewerPreferences`, `/OpenAction` and a `/StructTreeRoot` with an `/Alt`, and the key pointing at all four, kept every string. (3) and (4) break AC-7 as well. Ask `/architect` for one general rule, not one key at a time: an allowlist for what the rebuild keeps on every object below the catalog and the pages, fonts included (the eighth verify's pointer was a key on a font), and a structure check that holds it and fails on any embedded file stream, with these measurements as the failing fixtures' recipes (spec 0004, INV-3: changing a list is a reviewed change with a failing fixture as its proof). Never widen `CARRIER_KEYS` key by key in the build. First found by feature 16's sweep after its fifth verify (2026-11-15) from reading the code; spec 0018's page now says only what the structure check looks for, that hidden data in less common places the PDF format allows (a file or details attached to a picture or figure, or entries a program adds for its own use) can stay, and that the original copy of a figure or picture under a removed item can stay when another part of the file points to it (its items 13, 15 and 17).
+- [ ] Build it: `/develop engine and code follow ups`
+
+### 14. Manual rectangle redaction · needs a decision · GA
+Draw a box, and everything under it goes. The only way to remove signatures, logos, handwriting, table cells and images, and the only useful answer for a scanned page.
+**Done when:** a paid user can draw boxes on rendered pages, everything under a box is genuinely removed from the output including image data, screen coordinates map correctly to page coordinates at every zoom level, and there is a keyboard path to place and adjust a box.
+**Also owed here:** the page preview (spec 0013 left it with this feature): whether review shows rendered pages, the amendment to spec 0002 INV-1 and INV-2 that page images on the main thread need, and where rendered pages sit in `/tool`'s three area grid.
+- [ ] Design it (spec): `/architect manual rectangle redaction`
 
 ## Deferred
 Out of scope for the current build pass, kept so the plan stays honest.
@@ -461,7 +484,7 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **A date piece that starts with punctuation**: a new date a higher kind's row holds in part is listed as its free pieces, and the piece rule trims whitespace only, so `212 918 8665 1119 21. June 2014` lists `. June 2014` (pinned in `detect.test.ts`). Harmless to the bar, but the row reads oddly in the checklist and removes the full stop. Trim a date piece's leading punctuation, measured through `detect` against main first (the review's third Minor) · needs a decision · from spec 0015
 - **Date variants still missed after feature 25**: `A.D.` or `in the year` before a year, number words (`twenty-seventh day`), a day range in a new form (`3-5 Jan-2026`), a written year first date with spaces (`2026 Sep 27`), uneven spacing round a separator, an ordinal or mixed dashes in a flush form, a space before a comma, a number right before a month first date read as a two digit year (`19 December, 16 2015`), and two dates joined where one is unseparated (`20260927-20260928`, which main misses too). Bring one to `/architect` when a review or a visitor meets it, measured through `detect` against main · needs a decision · from spec 0015
 - **A natural text corpus for detector noise**: spec 0015's noise figures come from synthetic shapes and token soup; a corpus of made up but natural documents would tighten them, the two digit year and numbered list figures first · needs a decision · from spec 0015
-- **Read the first month of counts**: once feature 11 has run for a month (it went live on 2026-11-08, so from about 2026-12-08), bring its numbers to `/architect` for spec 0006's thresholds and `off-page-picture`, spec 0005's `replacement-text` refusals and spec 0007's named refused item (*Name the item behind a refused run*, above) · needs a decision · from spec 0016
+- **Read the first month of counts**: once feature 11 has run for a month (it went live on 2026-11-08, so from about 2026-12-08), bring its numbers to `/architect` for spec 0006's thresholds and `off-page-picture`, spec 0005's `replacement-text` refusals and spec 0007's named refused item (*Name the item behind a refused run*, above); and read spec 0017's counts (`term` rows, `terms` and `termsSetAside`) to see whether Pro's custom terms are used and how often a Free job meets a kept list · needs a decision · from specs 0016 and 0017
 - **Automated browsers in the counts**: if page visits look inflated, measure, then consider skipping `navigator.webdriver`, keeping the e2e flag so the privacy proof still runs · needs a decision · from spec 0016
 - **A custom term split by a running footer**: spec 0017 carries a page's end into the next page, so a term split by a page break is found, but text drawn between the two parts in reading order (a running footer or a page number) still keeps them apart. Measure how often real documents do this before any design · needs a decision · from spec 0017
 - **Patterns in a custom term**: a term today is literal text; a reference number's shape (`INV-` and any four digits) or a wildcard would be a decision of its own, with its own noise measured · needs a decision · from spec 0017

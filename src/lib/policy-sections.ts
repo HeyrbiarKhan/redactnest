@@ -14,6 +14,9 @@
  *
  * Spec 0016 adds "Counts and error reports" after "What we receive when you
  * visit" in the privacy policy (AC-22), for claims C14 to C16.
+ *
+ * Spec 0018 adds the security page's headings, which share the legal pages'
+ * frame and so the same rule (AC-4).
  */
 
 export const PRIVACY_SECTIONS = Object.freeze({
@@ -46,6 +49,25 @@ export const TERMS_SECTIONS = Object.freeze({
   consumers: "If you are a consumer",
   ending: "Ending",
   lawAndCourts: "Law and courts",
+  changes: "Changes",
+});
+
+/**
+ * The security page (spec 0018, AC-4): how RedactNest works, then its honest
+ * limits, then where to check it.
+ */
+export const SECURITY_SECTIONS = Object.freeze({
+  inYourBrowser: "Your document stays in your browser",
+  removedNotCovered: "Removed, not just covered",
+  theCheck: "The check on every file",
+  hiddenData: "Hidden data",
+  whatItFinds: "What it finds",
+  whatItCanMiss: "What it can miss",
+  pagesItCannotRead: "Pages it can’t fully read",
+  whenItStops: "When it stops instead",
+  plans: "Plans and the page limit",
+  logsAndCounts: "Logs, counts and error reports",
+  checkIt: "Check it yourself",
   changes: "Changes",
 });
 

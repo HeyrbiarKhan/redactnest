@@ -127,8 +127,9 @@
 
   /*
    * The legal pages' On this page links glide to their heading (spec 0013,
-   * AC-25). Only where `main` carries `data-smooth-scroll`, which those two
-   * pages alone set, so no other page changes how it scrolls, `/tool`'s focus
+   * AC-25), and the security page's, in the same frame (spec 0018, AC-3). Only
+   * where `main` carries `data-smooth-scroll`, which that frame alone sets, so
+   * no other page changes how it scrolls, `/tool`'s focus
    * moves included; and only for a visitor who has not asked for reduced
    * motion, who still jumps at once.
    */

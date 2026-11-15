@@ -59,6 +59,33 @@ describe("the legal pages", () => {
 });
 
 /**
+ * The security page ships no script of its own either. Spec 0018, AC-11: it
+ * shares the legal pages' frame, and its drawing is a server primitive.
+ */
+const SECURITY_FILES = [
+  ...filesUnder("src/app/security"),
+  "src/app/legal-page.tsx",
+  "src/app/site-nav.tsx",
+  "src/lib/home-text.ts",
+  "src/ui/cover-figure.tsx",
+  "src/ui/prose.tsx",
+  "src/ui/link-group.tsx",
+];
+
+describe("the security page", () => {
+  it("is built from files that exist", () => {
+    expect(SECURITY_FILES.map((file) => file.replaceAll("\\", "/"))).toContain(
+      "src/app/security/page.tsx",
+    );
+  });
+
+  /** covers: spec 0018, AC-11 */
+  it.each(SECURITY_FILES)("%s is not a client component", (file) => {
+    expect(readFileSync(join(ROOT, file), "utf8")).not.toMatch(USE_CLIENT);
+  });
+});
+
+/**
  * Pricing ships no script of its own either. Spec 0012, AC-13: a static page
  * with no client component, so nothing on it runs before the visitor chooses
  * Subscribe.

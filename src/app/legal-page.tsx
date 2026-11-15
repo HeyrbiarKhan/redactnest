@@ -12,8 +12,9 @@ import { FOOTER_LINK_CLASS } from "./footer-link";
 import { PageHeader } from "./site-nav";
 
 /**
- * The frame both legal pages share. Spec 0011, AC-1, AC-2 and AC-18, laid out
- * as spec 0013 amends it (AC-25).
+ * The frame both legal pages share, and the security page too (spec 0018,
+ * AC-3). Spec 0011, AC-1, AC-2 and AC-18, laid out as spec 0013 amends it
+ * (AC-25).
  *
  * The shell every page has, the h1 and "Last updated" from the page's own
  * change list, an On this page list of plain links to every h2, then the
@@ -40,8 +41,8 @@ import { PageHeader } from "./site-nav";
  * page's own root size, so enlarged text gets one column and nothing sticky
  * (WCAG 1.4.4 and 1.4.10).
  *
- * `data-smooth-scroll` on `main` turns on smooth scrolling for these two
- * pages alone, from one rule in `globals.css`, and only for a visitor who has
+ * `data-smooth-scroll` on `main` turns on smooth scrolling for the pages in
+ * this frame alone, from one rule in `globals.css`, and only for a visitor who has
  * not asked for reduced motion. Each section heading has a 1.5rem scroll
  * margin, so a link lands it just below the top edge rather than against it.
  * All of it is CSS: no script, so the pages stay static (spec 0011, INV-7).

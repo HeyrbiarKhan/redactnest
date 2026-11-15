@@ -104,6 +104,13 @@ export function capLine(billingEnabled: boolean, free: number, paid: number): st
     : `Up to ${free} pages a document.`;
 }
 
+/**
+ * The `id` of the band's heading, which the band's section is labelled by and
+ * the security page links to, so its list of what RedactNest finds and strips
+ * is said here once and pointed at there (spec 0018, AC-6).
+ */
+export const HOME_BAND_ID = "home-band";
+
 export const HOME_TEXT = Object.freeze({
   /** A true one, above the headline (AC-10), and the page's one "in your browser". */
   eyebrow: "PDF redaction in your browser",
