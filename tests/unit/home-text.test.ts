@@ -26,13 +26,19 @@ describe("the hero (AC-10)", () => {
     expect(HOME_TEXT.pricing).toBe("See pricing");
   });
 
+  /**
+   * Spec 0019, AC-12: "looks for" says what RedactNest does and claims nothing
+   * about what it finds, and the lead leaves removal to the headline and the
+   * "Removed, not covered" card.
+   */
   it("names exactly the detectors that exist, in the lead", () => {
     expect(HOME_TEXT.lead).toBe(
-      `RedactNest finds ${lookedFor("conjunction")} in your PDF, lets you tick what to remove, and takes that text out of the file itself.`,
+      `RedactNest looks for ${lookedFor("conjunction")} in your PDF and lets you tick what to remove.`,
     );
-    expect(HOME_TEXT.lead).toContain(
-      "email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers",
+    expect(HOME_TEXT.lead).toBe(
+      "RedactNest looks for email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers in your PDF and lets you tick what to remove.",
     );
+    expect(HOME_TEXT.lead).not.toMatch(/\bfinds\b/i);
   });
 
   it("gives the trio its three icons, titles and lines, in order", () => {
@@ -44,10 +50,12 @@ describe("the hero (AC-10)", () => {
         "Stays on your device",
         "Never uploaded to us or to anyone else, and nothing is stored.",
       ],
+      // Spec 0019, AC-12: two kinds, each held by the structure check, never
+      // hidden data as a whole.
       [
         "Eraser",
         "Removed, not covered",
-        "Ticked text is taken out of the page, and hidden data such as metadata and attachments is stripped.",
+        "Ticked text is taken out of the page, and document info and attachments are stripped.",
       ],
       [
         "ShieldCheck",
@@ -95,10 +103,19 @@ describe("what the home page says is stripped (AC-11)", () => {
     }
   });
 
+  /**
+   * Spec 0019, AC-12: XMP written inside a picture's own data leaves with the
+   * picture's stored bytes (spec 0006, AC-29), so the card does not claim XMP
+   * metadata until feature 32 strips it there too.
+   */
+  it("does not claim XMP metadata while a picture can carry it", () => {
+    expect(HOME_STRIPPED["xmp-metadata"]).toBe(false);
+    expect(strippedItems()).not.toContain("XMP metadata");
+  });
+
   it("claims the rest, in SANITIZED_KINDS order, each capitalised", () => {
     expect(strippedItems()).toEqual([
       "Document info",
-      "XMP metadata",
       "Attachments",
       "Bookmarks",
       "JavaScript",
@@ -137,22 +154,52 @@ describe("the finds and strips cards (AC-11)", () => {
     expect(Object.isFrozen(findsItems())).toBe(true);
   });
 
-  /** After task 32: each card's subtitle, and "Whenever a file carries them:" is Strips' own. */
+  /**
+   * After task 32: each card's subtitle, and "Whenever a file carries them:" is
+   * Strips' own. Spec 0019, AC-12, as built: "looks for" in the heading and the
+   * first card's title, and a closing line that reaches no further than the
+   * self check's text part, characters wholly inside a page's visible area.
+   */
   it("holds the words around the two lists", () => {
     expect(HOME_TEXT.band).toEqual({
-      title: "What RedactNest finds and strips",
+      title: "What RedactNest looks for and strips",
       finds: {
-        title: "Finds",
+        title: "Looks for",
         subtitle: "Sensitive details we can detect in your files.",
-        line: "Nothing is removed until you tick it.",
+        line: "No text wholly inside a page's visible area is removed unless you tick it.",
       },
       strips: {
         title: "Strips",
         subtitle: "Whenever a file carries them:",
-        note: "Comments and form fields are flattened into the page: what showed stays, and nothing hidden behind them does.",
+        note: "Comments and form fields are flattened into the page: what showed stays, and the comments and fields themselves are removed, with a note's hidden text and any attached file.",
       },
     });
     expect(HOME_TEXT.band.strips).not.toHaveProperty("lead");
+  });
+
+  /**
+   * Spec 0019, AC-12: lines that claimed more than a gate holds stay gone.
+   * "Finds" as a heading claims every value is found; "Nothing is removed
+   * until you tick it" reached hidden data and the trim, which need no tick;
+   * "on the page" reached a character crossing the visible edge; and
+   * "hidden data such as" read as all hidden data.
+   */
+  it("keeps the words that claimed more than their gates off the page", () => {
+    // The page's words only: code names such as `band.finds` stay (AC-12).
+    const strings = (value: unknown): string[] =>
+      typeof value === "string"
+        ? [value]
+        : typeof value === "object" && value !== null
+          ? Object.values(value).flatMap(strings)
+          : [];
+    const words = strings(HOME_TEXT).join("\n");
+
+    expect(words).toContain("Looks for");
+    expect(words).not.toMatch(/\bfinds\b/i);
+    expect(words).not.toContain("Nothing is removed until you tick it");
+    expect(words).not.toContain("No text on the page");
+    expect(words).not.toContain("hidden data such as");
+    expect(words).not.toContain("nothing hidden behind them");
   });
 });
 

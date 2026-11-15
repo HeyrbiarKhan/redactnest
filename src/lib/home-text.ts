@@ -36,7 +36,7 @@ export interface HomeFeature {
   readonly body: string;
 }
 
-/** One line of the Finds card: the detector's own icon and group name. */
+/** One line of the Looks for card: the detector's own icon and group name. */
 export interface HomeFind {
   readonly icon: LucideIcon;
   readonly label: string;
@@ -47,13 +47,16 @@ export interface HomeFind {
  * every kind, so a kind added to `SANITIZED_KINDS` fails `pnpm typecheck` here
  * until someone decides whether the page claims it.
  *
- * False for four on purpose: comments and form fields are flattened, so what
+ * False for five on purpose: comments and form fields are flattened, so what
  * showed stays (spec 0004, AC-22); a file with hidden layers is refused, never
- * stripped; and losing accessibility tags is a cost, not a benefit.
+ * stripped; losing accessibility tags is a cost, not a benefit; and XMP
+ * written inside a picture's own data leaves with the picture's stored bytes
+ * (spec 0006, AC-29), so "whenever a file carries them" would not hold for XMP
+ * metadata until feature 32 strips it there too (spec 0019, AC-12).
  */
 export const HOME_STRIPPED: Readonly<Record<SanitizedKind, boolean>> = Object.freeze({
   "document-info": true,
-  "xmp-metadata": true,
+  "xmp-metadata": false,
   annotations: false,
   "form-fields": false,
   attachments: true,
@@ -66,7 +69,7 @@ export const HOME_STRIPPED: Readonly<Record<SanitizedKind, boolean>> = Object.fr
 });
 
 /**
- * The Finds card's list (AC-11): one item per detector, in `DETECTOR_KINDS`
+ * The Looks for card's list (AC-11): one item per detector, in `DETECTOR_KINDS`
  * order, with the checklist's own icon and group name, so the card names
  * exactly the detectors that exist and grows with feature 12.
  */
@@ -106,8 +109,9 @@ export function capLine(billingEnabled: boolean, free: number, paid: number): st
 
 /**
  * The `id` of the band's heading, which the band's section is labelled by and
- * the security page links to, so its list of what RedactNest finds and strips
- * is said here once and pointed at there (spec 0018, AC-6).
+ * the security page links to, so its list of what RedactNest looks for and
+ * strips is said here once and pointed at there (spec 0018, AC-6). It stays
+ * when the heading's words change, so the security page's links still land.
  */
 export const HOME_BAND_ID = "home-band";
 
@@ -115,7 +119,15 @@ export const HOME_TEXT = Object.freeze({
   /** A true one, above the headline (AC-10), and the page's one "in your browser". */
   eyebrow: "PDF redaction in your browser",
   headline: "Redaction that actually removes the text",
-  lead: `RedactNest finds ${lookedFor("conjunction")} in your PDF, lets you tick what to remove, and takes that text out of the file itself.`,
+  /**
+   * "Looks for" says what RedactNest does and claims nothing about what it
+   * finds, as the security page's What it looks for says it: "finds" with no
+   * "can" would claim every value is found, while one can be missed (spec
+   * 0018, AC-5). The headline and the "Removed, not covered" card carry
+   * removal, so the lead does not say it again (AC-30, INV-11). Spec 0019,
+   * AC-12.
+   */
+  lead: `RedactNest looks for ${lookedFor("conjunction")} in your PDF and lets you tick what to remove.`,
   /** The hero's way into the tool, named for what it does (AC-30). */
   primary: "Remove text from a PDF",
   pricing: "See pricing",
@@ -127,10 +139,21 @@ export const HOME_TEXT = Object.freeze({
       title: "Stays on your device",
       body: "Never uploaded to us or to anyone else, and nothing is stored.",
     }),
+    /**
+     * Each absolute sits behind a gate every file passes (spec 0019, AC-12).
+     * Ticked text: the self check's text part, which reads what each page
+     * draws, so "the page", never "the file" (spec 0004, AC-13 and INV-2).
+     * Document info: no `/Info` and no trailer key outside `TRAILER_KEYS`.
+     * Attachments: no embedded file stream or file specification anywhere,
+     * reached or not (spec 0019, AC-5 and AC-8). It names those two kinds and
+     * never hidden data as a whole, because descriptions written into a page
+     * (spec 0019, AC-9) and a picture's own details (spec 0006, AC-29) can
+     * stay. The Strips card lists the other kinds.
+     */
     Object.freeze({
       icon: Eraser,
       title: "Removed, not covered",
-      body: "Ticked text is taken out of the page, and hidden data such as metadata and attachments is stripped.",
+      body: "Ticked text is taken out of the page, and document info and attachments are stripped.",
     }),
     Object.freeze({
       icon: ShieldCheck,
@@ -143,18 +166,52 @@ export const HOME_TEXT = Object.freeze({
    * The two cards in place of "Trusted by" (AC-11). The lists themselves come
    * from `findsItems()` and `strippedItems()`; these are the words around them:
    * each card's subtitle under its title, and the line that closes it.
+   *
+   * The heading and the first card's title say "looks for" for the lead's
+   * reason: "finds" as a heading claims every value is found (spec 0019,
+   * AC-12). The band's section is labelled by its heading, so its accessible
+   * name follows; `HOME_BAND_ID` stays. "Strips" sits behind the Strips card's
+   * list, each kind held by the self check's structure part.
    */
   band: Object.freeze({
-    title: "What RedactNest finds and strips",
+    title: "What RedactNest looks for and strips",
     finds: Object.freeze({
-      title: "Finds",
+      title: "Looks for",
       subtitle: "Sensitive details we can detect in your files.",
-      line: "Nothing is removed until you tick it.",
+      /**
+       * The self check's text part, which every file passes: for each page's
+       * visible area, every character wholly inside it is still there unless
+       * it lies in an item you ticked (spec 0004, AC-13 and INV-2; spec 0006,
+       * AC-16 and AC-17). "Wholly inside a page's visible area" is that gate's
+       * reach, and no more. "On the page" read wider: a character crossing
+       * the visible edge is partly on the page you see, and the trim can take
+       * it with nothing ticked (spec 0006, AC-16, measured on
+       * `tests/fixtures/trim-text.pdf`, whose "Edge" goes), as can text
+       * outside the visible area. "Nothing is removed until you tick it" also
+       * reached hidden data, which is stripped with no tick (spec 0004,
+       * AC-7). "Unless you tick it" holds where a term and a detector list one
+       * place in two rows (spec 0017, AC-12): ticking either ticks that text.
+       * The check skips spaces; the removal band stops short of each end of a
+       * ticked item (`REMOVAL_INSET_RATIO`) so that it takes the item's glyphs
+       * and not its neighbours'. Spec 0019, AC-12, as built.
+       */
+      line: "No text wholly inside a page's visible area is removed unless you tick it.",
     }),
     strips: Object.freeze({
       title: "Strips",
       subtitle: "Whenever a file carries them:",
-      note: "Comments and form fields are flattened into the page: what showed stays, and nothing hidden behind them does.",
+      /**
+       * "What showed stays" is the flattening every copy goes through (spec
+       * 0004, AC-22). "Themselves are removed" sits behind the self check's
+       * structure part: no page keeps `/Annots` (`PAGE_KEYS`), the catalog
+       * keeps no `/AcroForm` (`CATALOG_KEYS`), and no object the walk from the
+       * catalog does not reach is left (spec 0019, AC-5). "A note's hidden
+       * text" goes with them, since no string stays outside `STRING_PLACES`
+       * (AC-2), and "any attached file", since no embedded file is left
+       * anywhere (AC-5). "Hidden", because what a note showed is flattened
+       * into the page and stays. Spec 0019, AC-12.
+       */
+      note: "Comments and form fields are flattened into the page: what showed stays, and the comments and fields themselves are removed, with a note's hidden text and any attached file.",
     }),
   }),
 

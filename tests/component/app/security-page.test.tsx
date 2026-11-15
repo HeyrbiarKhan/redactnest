@@ -110,7 +110,7 @@ describe("the security page", () => {
     }
 
     // AC-6's list: C1 to C5, C7 to C9, C10, C14 to C16, the review duty, and
-    // the finds and strips band with its note.
+    // the looks for and strips band with its note.
     expect(new Set(hrefs)).toEqual(
       new Set([
         `/privacy#${sectionId("yourDocuments")}`,
@@ -156,11 +156,17 @@ describe("the security page", () => {
     ["inYourBrowser", "swap or page files"],
     // Removed, not just covered, and The check on every file (spec 0004).
     ["removedNotCovered", "removed, then marked"],
-    ["removedNotCovered", "a little past the item’s edges"],
-    ["removedNotCovered", "further out than that can stay visible"],
+    // Spec 0019, AC-14.
     [
       "removedNotCovered",
-      "The original copy of a figure or picture under a removed item can stay in the file, still holding what you ticked",
+      "It takes each item you ticked out of the text the page draws (its drawing instructions, the part of the file that says what text goes where), then draws the black box where it was.",
+    ],
+    ["removedNotCovered", "a little past the item’s edges"],
+    ["removedNotCovered", "further out than that can stay visible"],
+    // Spec 0019, AC-14, as built: "a figure or picture they do not reach".
+    [
+      "removedNotCovered",
+      "The original copy of a figure or picture it redacts stays only where a page’s drawing instructions still reach it, such as another page where you ticked nothing: the check fails any file holding a figure or picture they do not reach, directly or through what they use.",
     ],
     ["removedNotCovered", "a change in the engine’s defaults cannot quietly change"],
     ["removedNotCovered", "a ticked item MuPDF cannot remove stops the run"],
@@ -172,30 +178,30 @@ describe("the security page", () => {
     ["theCheck", "none lying in one is left"],
     ["theCheck", "a character crossing the page’s edge can go with what lies outside it"],
     ["theCheck", "can escape both the blanking and this check"],
+    // Spec 0019, AC-14, as built: "almost all of it what a page needs to draw".
     [
       "theCheck",
-      "the file holds a single version, and the check looks for the hidden data the home page lists",
+      "Structure: the file holds a single version, and every object in it, and every key on each, comes from a fixed list, almost all of it what a page needs to draw. Anything else, such as an attached file or entries a program adds to the file’s objects for its own use, fails the check.",
     ],
-    ["theCheck", "less common places the PDF format allows"],
-    ["theCheck", "a file or details attached to a picture or figure"],
-    ["theCheck", "entries a program adds for its own use, can stay"],
     ["theCheck", "If any part fails, you get no file"],
     ["theCheck", "a file the check could not vouch for"],
     // Hidden data (spec 0004).
     ["hiddenData", "The home page lists the kinds of hidden data."],
     ["hiddenData", "Details stored inside a picture’s own data"],
     ["hiddenData", "a photo’s camera details, can stay"],
-    ["hiddenData", "RedactNest strips the file’s identifier"],
+    // Spec 0019, AC-14.
     [
       "hiddenData",
-      "Page labels, viewer preferences and automatic actions that are not scripts no longer work either, and are not reported.",
+      "That list leaves some things out. RedactNest also strips the file’s identifier, page labels, viewer preferences and automatic actions that are not scripts, and does not report these four. Links and accessibility tags are stripped too, so links in the cleaned copy no longer work and screen readers read it less well.",
     ],
-    ["hiddenData", "links and accessibility tags no longer work"],
-    ["hiddenData", "A sticky note or a file attachment is taken off the page"],
-    ["hiddenData", "can keep that icon as a mark on the page"],
+    // Spec 0019, AC-14, as built: "the note’s hidden text".
+    [
+      "hiddenData",
+      "A sticky note or a file attachment is taken off the page with what it held, the note’s hidden text or the attached file, though one that shows as an icon can keep that icon as a mark on the page.",
+    ],
     ["hiddenData", "the cleaned copy carries no restriction"],
     ["hiddenData", "which characters the document used"],
-    // What it finds (specs 0005 and 0017).
+    // What it looks for (specs 0005 and 0017; the heading, spec 0019, AC-14).
     ["whatItFinds", "kinds of detail the home page lists"],
     ["whatItFinds", "does not look for names or postal addresses"],
     ["whatItFinds", "you can add those as custom terms"],
@@ -226,6 +232,11 @@ describe("the security page", () => {
     ["pagesItCannotRead", "beyond the page’s visible edge can stay in the file"],
     ["pagesItCannotRead", "Text a clip hides completely can stay in the file"],
     ["pagesItCannotRead", "Drawings outside the visible area can stay in the file"],
+    // Spec 0019, AC-14, as built: "warns about each page where it finds some".
+    [
+      "pagesItCannotRead",
+      "Descriptions written into a page, such as alternate text for screen readers, can stay in the file, even around text you tick. RedactNest looks for them and warns about each page where it finds some.",
+    ],
     ["pagesItCannotRead", "it warns you that the text is still in the file"],
     ["pagesItCannotRead", "This search can miss hidden text"],
     // When it stops instead (specs 0004, 0005, 0006 and 0007).
@@ -448,9 +459,10 @@ describe("the security page", () => {
    * (2026-11-15): no hidden data the home page lists left "where the PDF format
    * keeps it", which an embedded file reached through a figure's `/Ref` or a
    * picture's `/OPI` breaks (measured: the self check passed and the file
-   * stayed). The structure line now says only what the check does, with one
-   * "can" line for what can stay, said once, so the Hidden data pointer makes
-   * no claim of its own.
+   * stayed). The structure line says only what the check does, so the Hidden
+   * data pointer makes no claim of its own. Since spec 0019 (AC-14) the check
+   * holds every object and key to a fixed list, and entries a program adds
+   * are named once, in the structure item, never in Hidden data.
    */
   it("says what the structure check does, never that nothing is left", () => {
     render(<SecurityPage />);
@@ -459,7 +471,12 @@ describe("the security page", () => {
     expect(text).not.toContain("none of the hidden data");
     expect(text).not.toContain("where the PDF format keeps it");
     expect(text).not.toContain("what LaTeX records about an included figure");
-    expect(text.split("entries a program adds for its own use").length - 1).toBe(1);
+    expect(text.split("a program adds").length - 1).toBe(1);
+    expect(
+      text.split("entries a program adds to the file’s objects for its own use").length -
+        1,
+    ).toBe(1);
+    expect(sectionText(SECURITY_SECTIONS.hiddenData)).not.toContain("a program adds");
   });
 
   /**
@@ -469,12 +486,15 @@ describe("the security page", () => {
    * font: a ticked value inside a figure stayed in the file's bytes, a blanked
    * picture's original stayed byte for byte, a note's text and an attached
    * file stayed while reported stripped, and page labels, viewer preferences,
-   * an opening action and alternate text stayed. So no line says text leaves
-   * the file, that what a note held is gone, or that RedactNest strips what
-   * the band lists or what no longer works, and the original copy is one
-   * "can" line, said once.
+   * an opening action and alternate text stayed. Spec 0019 closed that leak:
+   * every object and key is now held to a fixed list, and each of those cases
+   * is a `kept-*.pdf` fixture. So the page now says what the structure check
+   * strips (AC-14), and where the original copy of a figure or picture can
+   * still be, but still never that text leaves the file, since the check reads
+   * the text each page draws and a figure another page draws keeps its
+   * original.
    */
-  it("claims nothing gone that a kept object can point to", () => {
+  it("claims nothing gone that the checks do not hold", () => {
     render(<SecurityPage />);
     const text = mainText();
 
@@ -482,9 +502,8 @@ describe("the security page", () => {
     expect(text).not.toContain("took the words out of the file");
     expect(text).not.toContain("is gone");
     expect(text).not.toContain("looks for and strips");
-    expect(text).not.toContain("also strips page labels");
-    expect(text).not.toContain("loses its links");
-    expect(text.split("when another part of the file points to it").length - 1).toBe(1);
+    expect(text).not.toContain("when another part of the file points to it");
+    expect(text.split("The original copy of a figure or picture").length - 1).toBe(1);
   });
 
   /**
@@ -493,17 +512,81 @@ describe("the security page", () => {
    * "untouched", which reads as harmless when it can still hold what you
    * ticked; "none of these is reported" just before links and accessibility
    * tags, which the result does report (as annotations and as tags); and the
-   * Hidden data pointer saying "looks for", which the structure item says, so
-   * the pointer now says only that the home page lists the kinds.
+   * Hidden data pointer saying "looks for", so the pointer says only that the
+   * home page lists the kinds. Since spec 0019 (AC-14) the structure item names
+   * the fixed list in place of "looks for the hidden data", and the four kinds
+   * not reported are named, with links and tags outside that clause.
    */
-  it("says what the original copy can hold, which kinds go unreported, and looks for once", () => {
+  it("never calls the original copy untouched, says which kinds go unreported, and keeps the pointer plain", () => {
     render(<SecurityPage />);
     const text = mainText();
 
     expect(text).not.toMatch(/\buntouched\b/i);
     expect(text).not.toMatch(/none of these is reported/i);
     expect(text).not.toContain("hidden data RedactNest looks for");
-    expect(text.split("looks for the hidden data").length - 1).toBe(1);
+    expect(text).not.toContain("looks for the hidden data");
+    expect(text.split("comes from a fixed list").length - 1).toBe(1);
+    expect(sectionText(SECURITY_SECTIONS.hiddenData)).toContain(
+      "The home page lists the kinds of hidden data.",
+    );
+  });
+
+  /**
+   * covers: spec 0019, AC-14. The section once named What it finds reads What
+   * it looks for, and keeps its key, so its `id` stays `what-it-finds` and a
+   * link anyone shared to it still lands.
+   */
+  it("names What it looks for, at the address What it finds had", () => {
+    render(<SecurityPage />);
+
+    const heading = screen.getByRole("heading", { level: 2, name: "What it looks for" });
+    expect(heading).toHaveAttribute("id", "what-it-finds");
+    expect(SECURITY_SECTIONS.whatItFinds).toBe("What it looks for");
+    expect(
+      screen.queryByRole("heading", { level: 2, name: "What it finds" }),
+    ).not.toBeInTheDocument();
+  });
+
+  /**
+   * covers: spec 0019, AC-14. The Hidden data paragraph names the four things
+   * RedactNest strips and never reports, and leaves out entries a program adds,
+   * which the structure item names once.
+   */
+  it("names the four unreported kinds, and no program entries, in Hidden data", () => {
+    render(<SecurityPage />);
+
+    const hidden = sectionText(SECURITY_SECTIONS.hiddenData);
+    for (const kind of [
+      "the file’s identifier",
+      "page labels",
+      "viewer preferences",
+      "automatic actions that are not scripts",
+    ]) {
+      expect(hidden).toContain(kind);
+    }
+    expect(hidden).toContain("does not report these four");
+    expect(hidden).not.toMatch(/the last four/i);
+    expect(hidden).not.toContain("program");
+  });
+
+  /**
+   * covers: spec 0019, AC-14, as built. Four of its lines read wider than
+   * their gates, so each was narrowed (spec 0018, AC-5): "an object they do
+   * not reach" (the catalog and each page's own dictionary are objects no
+   * drawing reaches), "a fixed list of what a page needs to draw" (the list
+   * also keeps a language, replacement text and marked content numbers), "the
+   * note's text" (what a note shows is flattened and stays), and "any page
+   * that may have them" (the scan counts a description only when it is a
+   * string).
+   */
+  it("keeps the wider readings of spec 0019's lines off the page", () => {
+    render(<SecurityPage />);
+    const text = mainText();
+
+    expect(text).not.toContain("holding an object they do not reach");
+    expect(text).not.toContain("a fixed list of what a page needs to draw");
+    expect(text).not.toContain("the note’s text or");
+    expect(text).not.toContain("any page that may have them");
   });
 
   /** covers: AC-9. No cap, size or price as a number, and no repository. */

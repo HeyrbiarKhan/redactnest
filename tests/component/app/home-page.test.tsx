@@ -154,16 +154,24 @@ describe("the trio and the band (AC-10, AC-11)", () => {
     }
   });
 
-  it("says what RedactNest finds and strips, as two cards with their headings", () => {
+  /**
+   * Spec 0019, AC-12: the band is labelled by its heading, so its accessible
+   * name is "What RedactNest looks for and strips", and its first card is
+   * titled "Looks for", since "finds" as a heading claims every value is found.
+   */
+  it("says what RedactNest looks for and strips, as two cards with their headings", () => {
     render(<HomePage />);
 
-    const band = screen.getByRole("region", { name: HOME_TEXT.band.title });
+    const band = screen.getByRole("region", {
+      name: "What RedactNest looks for and strips",
+    });
+    expect(band).toBe(screen.getByRole("region", { name: HOME_TEXT.band.title }));
     expect(
       within(band)
         .getAllByRole("heading", { level: 3 })
         .map((heading) => heading.textContent),
-    ).toEqual(["Finds", "Strips"]);
-    // Finds comes first in the page, so it comes first when the cards stack.
+    ).toEqual(["Looks for", "Strips"]);
+    // Looks for comes first in the page, so it comes first when the cards stack.
     const finds = within(band).getByTestId("home-finds");
     const strips = within(band).getByTestId("home-strips");
     expect(
@@ -267,15 +275,15 @@ describe("the trio and the band (AC-10, AC-11)", () => {
   });
 
   /**
-   * Feature 26: each claimed kind on the Finds card's own row, its check on
-   * the same square tile, and the list in the same unruled columns, so the
+   * Feature 26: each claimed kind on the Looks for card's own row, its check
+   * on the same square tile, and the list in the same unruled columns, so the
    * two cards read as one pair.
    */
-  it("ticks every claimed kind in one Strips list, each on the Finds card's row", () => {
+  it("ticks every claimed kind in one Strips list, each on the Looks for card's row", () => {
     render(<HomePage />);
 
     const strips = screen.getByTestId("home-strips");
-    // One list of seven, so a screen reader hears them together.
+    // One list, so a screen reader hears them together.
     const list = within(strips).getByRole("list");
     expect(list).toHaveAttribute("role", "list");
     const items = within(list).getAllByRole("listitem");

@@ -1769,7 +1769,7 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     );
     const main = page.getByRole("main");
     await expect(main).toContainText(
-      "RedactNest finds email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers in your PDF, lets you tick what to remove, and takes that text out of the file itself.",
+      "RedactNest looks for email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers in your PDF and lets you tick what to remove.",
     );
     // Spec 0013, AC-30: said once. "in your browser" is the eyebrow's alone.
     await expect(main).not.toContainText("Your file never leaves your browser.");
@@ -1792,18 +1792,22 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       "Stays on your device",
       "Removed, not covered",
       "Checked before you download",
-      "What RedactNest finds and strips",
+      "What RedactNest looks for and strips",
     ]);
-    await expect(main.getByRole("heading", { level: 3 })).toHaveText(["Finds", "Strips"]);
+    await expect(main.getByRole("heading", { level: 3 })).toHaveText([
+      "Looks for",
+      "Strips",
+    ]);
   });
 
   /**
    * Spec 0013, AC-11. Two white cards on the page's canvas, after your mockup
    * (`docs/design/references/05-finds-and-strips.png`): each a tile beside its
    * heading and subtitle, a list, then a rule and its closing line. Side by
-   * side and equal height from `md`, Finds first when stacked.
+   * side and equal height from `md`, Looks for first when stacked. Spec 0019,
+   * AC-12, gives the heading, the first card's title and the closing lines.
    */
-  test("shows what it finds and strips as two cards, side by side from md", async ({
+  test("shows what it looks for and strips as two cards, side by side from md", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -1822,11 +1826,13 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       "UK National Insurance numbers",
     ]);
     await expect(finds).toContainText("Sensitive details we can detect in your files.");
-    await expect(finds).toContainText("Nothing is removed until you tick it.");
+    await expect(finds).toContainText(
+      "No text wholly inside a page's visible area is removed unless you tick it.",
+    );
     await expect(strips).toContainText("Whenever a file carries them:");
+    // Spec 0019, AC-12: no XMP metadata while a picture can carry it.
     await expect(strips.getByRole("listitem")).toHaveText([
       "Document info",
-      "XMP metadata",
       "Attachments",
       "Bookmarks",
       "JavaScript",
@@ -1834,7 +1840,7 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       "Page thumbnails",
     ]);
     await expect(strips).toContainText(
-      "Comments and form fields are flattened into the page: what showed stays, and nothing hidden behind them does.",
+      "Comments and form fields are flattened into the page: what showed stays, and the comments and fields themselves are removed, with a note's hidden text and any attached file.",
     );
     // Every item carries its icon on a tile hidden from assistive technology,
     // and nothing in the band acts: no chevron, link, button or tab stop.
@@ -1867,8 +1873,10 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     // Card numbers, then the IBAN row to UK National Insurance numbers. The
     // rows are soft tiles, so the columns sit 12 pixels apart with no rule
     // between them (spec 0014, AC-12, the pin spec 0013's AC-11 owed).
-    // Feature 26: the seven strips sit on the same rows in the same columns,
-    // Document info to Bookmarks, then JavaScript to Page thumbnails.
+    // Feature 26: the strips sit on the same rows in the same columns. Six
+    // while XMP metadata waits on feature 32 (spec 0019, AC-12): Document info
+    // to Bookmarks, then JavaScript to Page thumbnails. The first column holds
+    // the larger half, so the split is read from each list's own count.
     for (const card of [finds, strips]) {
       expect(await columnsOf(card.getByRole("list"))).toEqual({
         count: "2",
@@ -1876,14 +1884,15 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
         rule: "none",
       });
       const rows = card.getByRole("listitem");
-      const [firstRow, fourthRow, fifthRow] = [
+      const firstColumn = Math.ceil((await rows.count()) / 2);
+      const [firstRow, lastOfFirst, firstOfSecond] = [
         await rows.nth(0).boundingBox(),
-        await rows.nth(3).boundingBox(),
-        await rows.nth(4).boundingBox(),
+        await rows.nth(firstColumn - 1).boundingBox(),
+        await rows.nth(firstColumn).boundingBox(),
       ];
-      expect(fifthRow?.y).toBe(firstRow?.y);
-      expect((fourthRow?.x ?? 0) + (fourthRow?.width ?? 0)).toBeLessThan(
-        fifthRow?.x ?? 0,
+      expect(firstOfSecond?.y).toBe(firstRow?.y);
+      expect((lastOfFirst?.x ?? 0) + (lastOfFirst?.width ?? 0)).toBeLessThan(
+        firstOfSecond?.x ?? 0,
       );
     }
     // A strip's row is a find's row: the same height, fill and type.
@@ -1958,7 +1967,7 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     await expectNoHorizontalScroll(page);
   });
 
-  test("stacks the two cards below md, Finds first", async ({ page }) => {
+  test("stacks the two cards below md, Looks for first", async ({ page }) => {
     await page.setViewportSize({ width: 600, height: 900 });
     await page.goto("/");
 

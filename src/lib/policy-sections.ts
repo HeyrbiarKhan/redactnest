@@ -61,7 +61,9 @@ export const SECURITY_SECTIONS = Object.freeze({
   removedNotCovered: "Removed, not just covered",
   theCheck: "The check on every file",
   hiddenData: "Hidden data",
-  whatItFinds: "What it finds",
+  // Spec 0019, AC-14: "finds" with no "can" would claim every value is found.
+  // The key stays, so the section's `id` stays `what-it-finds`.
+  whatItFinds: "What it looks for",
   whatItCanMiss: "What it can miss",
   pagesItCannotRead: "Pages it can’t fully read",
   whenItStops: "When it stops instead",
