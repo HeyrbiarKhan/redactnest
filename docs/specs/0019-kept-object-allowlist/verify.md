@@ -46,6 +46,35 @@ Run each from a scratch test that loads the real engine (`redactDocumentWith`, `
 - AC-12 … the `/` read and the AC-5 walk
 - AC-13 … the `/tool` steps, `tool-client.test.tsx`
 - AC-14 … the `/security` read and the AC-5 walk
+- AC-15 … the fourth pass's colour steps, `redaction-kept.test.ts`
+- AC-16 … the shared fixture steps, the pin, the lint step, `engine-wall.test.ts`
+- AC-17 … the fourth pass's fixture steps on both branches, `fixtures.test.ts`
+
+## Fourth pass (added by /architect, 2026-11-15)
+
+_Steps for AC-15 to AC-17 and the sentences they add to AC-5, AC-7 and AC-11. Same rules: only `tests/fixtures` and documents built in a test or a scratch script._
+
+### Engine, by script
+
+- [ ] Run each of `colour-icc-alternate.pdf`, `colour-icc-bare.pdf`, `colour-calrgb.pdf`, `colour-calgray.pdf` and `colour-inline.pdf` with nothing ticked → a file is made; every page renders as the run with the prune, the structure check and `rewrite` swapped out; no resource dictionary in the output holds a `/ColorSpace` entry → AC-15, AC-17
+- [ ] The same five through a pipeline whose `rewrite` returns its input → each fails with `redaction-incomplete`, which is what this branch did before the change → AC-15, AC-17
+- [ ] The same five checked out on main → each makes a file, with the entry still in its resources, which is why the gate rows say they run → AC-7, AC-17
+- [ ] `colour-loaded.pdf` through a pipeline whose `rewrite` throws → a file is made, and every page's entry is still there and still named → AC-15, AC-17
+- [ ] Try to make the second write pass something: an output that keeps an unused colour space entry through both writes, one beside an unreadable drawing stream, one beside an off list key, one beside an unused font → `redaction-incomplete`, `unsupported` with no second write, `redaction-incomplete` with no second write, `redaction-incomplete` with no second write → AC-5, AC-15, INV-8
+- [ ] Count how often the second write runs over the whole unit suite and the gate (a scratch log in `rewrite`) → never, outside the colour fixtures → AC-7, AC-15
+- [ ] Count `checkStructure` calls with a counting stub → once on a clean run, twice when the first answer is `unused-colour-space`, once on a leak and on an unreadable stream → AC-15
+- [ ] On a document built in a scratch test with the unreadable profile beside a picture: a `rewrite` that throws → `redaction-incomplete`; a `rewrite` that writes the picture's data empty → `unsupported`; the real `rewrite` → a file, with the same forms and picture lengths in both outputs → AC-15, INV-8
+- [ ] Over `metadata.pdf` and every `kept-*.pdf`, count what `forEachDictionary` visits → more than nothing, and as many dictionaries as `everyDictionary` in `tests/support/mupdf.ts` finds → AC-16
+- [ ] Run `shared-pictures.pdf` with nothing ticked and with the first page's line ticked, and `shared-forms.pdf` with nothing ticked → a file each time, every picture's stored bytes equal to the source's, every form's text there, every page with nothing ticked drawn as the source draws it; on main the pictures come out blank and the forms run refuses with `unsupported` → AC-16, AC-17
+- [ ] Open `shared-pictures.pdf` from bytes in a scratch test, resolve every stream, write with `WRITE_OPTIONS` → its pictures leave with no data; write it without the resolve → they keep it (the pin) → AC-16
+- [ ] Add a `.resolve()` call to any file in `src/engine` → `pnpm lint` fails with the ban's message; the same call in a scratch file under `tests/` → no lint error → AC-16
+
+### Commands
+
+- [ ] `pnpm exec vitest run --project unit tests/unit/redaction-kept.test.ts tests/unit/redaction.test.ts tests/unit/redaction-check.test.ts tests/unit/engine-wall.test.ts` → all pass → AC-5, AC-15 to AC-17
+- [ ] `pnpm exec vitest run --project unit tests/unit/redaction-gate-0.test.ts tests/unit/redaction-gate-1.test.ts tests/unit/redaction-gate-2.test.ts tests/unit/redaction-gate-3.test.ts` → all pass, the eight new fixtures included, `shared-forms.pdf` the one run outcome changed on purpose → AC-7
+- [ ] `pnpm exec vitest run --project unit tests/unit/cost.test.ts`, alone → both allowlist budgets pass, and both budget documents run through a `rewrite` that throws → AC-11
+- [ ] `node scripts/make-fixture.mjs`, then `git status tests/fixtures` → clean → AC-17
 
 ## As built (added by /develop, 2026-11-15)
 
