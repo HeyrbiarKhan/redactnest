@@ -146,6 +146,28 @@ export function everyDictionary(doc: PDFDocument): PDFObject[] {
   return found;
 }
 
+/**
+ * Every stream object in the file, decoded through its filters, one entry per
+ * numbered object. Read through the reference itself: MuPDF knows a stream only
+ * by its indirect reference, so a resolved one reads as a plain dictionary.
+ */
+export function decodedStreams(
+  doc: PDFDocument,
+): { readonly dict: PDFObject; readonly data: Uint8Array }[] {
+  const found: { dict: PDFObject; data: Uint8Array }[] = [];
+  for (let num = 1; num < doc.countObjects(); num += 1) {
+    const ref = doc.newIndirect(num);
+    if (!ref.isStream()) continue;
+    const buffer = ref.readStream();
+    try {
+      found.push({ dict: ref.resolve(), data: buffer.asUint8Array().slice() });
+    } finally {
+      buffer.destroy();
+    }
+  }
+  return found;
+}
+
 /** Every key used anywhere in the file. */
 export function everyKey(doc: PDFDocument): Set<string> {
   return new Set(everyDictionary(doc).flatMap(keysOf));
@@ -248,6 +270,35 @@ export function render(bytes: ArrayBuffer, index: number, scale = 4): Render {
       page.destroy();
     }
   });
+}
+
+/**
+ * Every page rendered in RGB at `scale` times its size, as a digest of its
+ * pixels and its size, opened once. Two files whose lists are equal draw every
+ * page pixel for pixel the same (spec 0019, AC-7).
+ */
+export function pageRenders(bytes: ArrayBuffer, scale = 2): string[] {
+  return inspect(bytes, (doc) =>
+    Array.from({ length: doc.countPages() }, (_, index) => {
+      const page = doc.loadPage(index);
+      try {
+        const pixmap = page.toPixmap(
+          [scale, 0, 0, scale, 0, 0],
+          mupdf.ColorSpace.DeviceRGB,
+          false,
+          true,
+        );
+        try {
+          const digest = createHash("sha256").update(pixmap.getPixels()).digest("hex");
+          return `${pixmap.getWidth()}x${pixmap.getHeight()} ${digest}`;
+        } finally {
+          pixmap.destroy();
+        }
+      } finally {
+        page.destroy();
+      }
+    }),
+  );
 }
 
 /**

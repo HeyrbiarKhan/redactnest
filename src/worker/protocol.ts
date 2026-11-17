@@ -61,6 +61,10 @@ export const ENGINE_ERROR_KINDS = [
   "slanted-text",
   "no-readable-text",
   "edge-text",
+  // Spec 0019, AC-3: a file whose shape the typed allowlist cannot read,
+  // refused at open on the prepared review copy, or by a run on its own
+  // rebuilt document before anything is written.
+  "unreadable-structure",
 ] as const;
 
 export type EngineErrorKind = (typeof ENGINE_ERROR_KINDS)[number];
@@ -421,6 +425,9 @@ export const PAGE_FINDINGS = Object.freeze([
   "unreadable-text",
   "bare-picture",
   "off-page-picture",
+  // Spec 0019, AC-9: descriptions written into the page's drawing
+  // instructions, which RedactNest cannot remove.
+  "marked-descriptions",
   "machine-read-text",
   "off-page-content",
   "blank",

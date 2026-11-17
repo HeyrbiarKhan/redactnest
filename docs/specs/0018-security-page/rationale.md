@@ -37,6 +37,16 @@ Option 2 answers the force that made verify fail twice: the claims were exact wh
 
 The two option sets the engineer settled: the rule covers every outcome claim, not only detection; examples are kinds of writing, never quoted values; AC-6 covers any fact on a linkable page; "What it can miss" becomes one short list; the earlier specs' Follow-ups get a note pointing here; a test bans positive outcome wording. The tool's own `off-page-picture` line, which shares a false phrase with the page, is recorded on feature 30 rather than fixed here, so this branch stays on the page and the footer.
 
+### When a verify fails the page (2026-11-15, the owner's call)
+
+Wording and the verify's rule only, no page design and no code but one word. The page was verified nine times on its own branch and again under spec 0019. The early verifies paid for themselves: they measured a ticked value staying in the file through a kept object, which became feature 31. The later ones found less each time, and the last failed on one word, "they stay as written", where a name can also go with what it named. That line undersold the product. Nobody who read it would trust a file they should not.
+
+Two things made the loop: AC-5 failed a limit worded too strongly exactly as it failed a promise worded too strongly, and the walk had no edge, so each pass built new documents to break lines an earlier pass had walked. Every fix was new wording, and new wording gave the next pass something to break, while the leak fix itself sat unmerged.
+
+So the two directions now weigh differently. A line that promises more than the code does still fails, with no exception, since that is the one way the page can hurt a buyer. A line that admits more weakness than the code has is a note, fixed with the next change to its section. The walk covers changed lines only and uses the committed fixtures, and building documents to break the engine stays where it found the real leaks, in the verify of an engine feature, whose findings still fail any page line that promises more. The writing rule is untouched: a new limit is still written with "can".
+
+Considered and left out: dropping the walk altogether (the page's bar is that no claim outruns the code, and the walk is what holds that for a new line), and a test that scans every limit for "can" (the banned phrases and the pins already hold the lines that exist).
+
 ## Evidence
 
 - The two verify reports of 2026-11-14 (in the session transcripts, not committed): the first against eebd476, the second against 26d281c, with the scripts that ran `detect` and `findTerms` on the two failing cases.

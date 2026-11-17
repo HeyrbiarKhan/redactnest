@@ -30,6 +30,23 @@ import {
   detectWraps,
   sampleAgreement,
 } from "./lib/detection-fixtures.mjs";
+import {
+  colourCalGray,
+  colourCalRgb,
+  colourIccAlternate,
+  colourIccBare,
+  colourInline,
+  colourLoaded,
+  keptAnnotations,
+  keptCatalog,
+  keptEmbedded,
+  keptFigure,
+  keptPicture,
+  keptProgramKeys,
+  markedDescriptions,
+  sharedForms,
+  sharedPictures,
+} from "./lib/kept-fixtures.mjs";
 import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { termsDense, termsPdf } from "./lib/terms-fixtures.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
@@ -580,6 +597,64 @@ const FIXTURES = [
     "trim-ocr.pdf",
     trimOcr(),
     "a scan with Tesseract's text layer, cropped through its lines",
+  ],
+  // Spec 0019: what a kept object points at.
+  ["kept-figure.pdf", keptFigure(), "a font's private key on the original figure"],
+  ["kept-picture.pdf", keptPicture(), "a font's private key on the original image mask"],
+  [
+    "kept-annotations.pdf",
+    keptAnnotations(),
+    "a font's private key on a page's note, popup and attachment",
+  ],
+  [
+    "kept-catalog.pdf",
+    keptCatalog(),
+    "a font's private key on page labels, preferences, an action and a tree",
+  ],
+  [
+    "kept-program-keys.pdf",
+    keptProgramKeys(),
+    "pdfTeX's keys on a figure and on an image",
+  ],
+  [
+    "kept-embedded.pdf",
+    keptEmbedded(),
+    "embedded files through a figure's /Ref and /OPI and an image's /OPI",
+  ],
+  [
+    "marked-descriptions.pdf",
+    markedDescriptions(),
+    "one page per case of descriptions written into a page, warned and quiet",
+  ],
+  // Spec 0019's fourth pass: colour spaces MuPDF cannot load, and small
+  // objects a deduplicating write merges (AC-17).
+  [
+    "colour-icc-alternate.pdf",
+    colourIccAlternate(),
+    "an unreadable ICC profile with /Alternate, three and four channels",
+  ],
+  [
+    "colour-icc-bare.pdf",
+    colourIccBare(),
+    "an unreadable ICC profile with no /Alternate, filled, stroked, scn and in a form",
+  ],
+  ["colour-calrgb.pdf", colourCalRgb(), "CalRGB with a zero and a wrong white point"],
+  ["colour-calgray.pdf", colourCalGray(), "CalGray with a zero white point"],
+  ["colour-inline.pdf", colourInline(), "an inline image naming an unreadable profile"],
+  [
+    "colour-loaded.pdf",
+    colourLoaded(),
+    "the control: broken colour spaces MuPDF keeps naming, one per page",
+  ],
+  [
+    "shared-pictures.pdf",
+    sharedPictures(),
+    "pairs of pictures pointing at identical small objects",
+  ],
+  [
+    "shared-forms.pdf",
+    sharedForms(),
+    "two forms pointing at an identical group and resources",
   ],
 ];
 

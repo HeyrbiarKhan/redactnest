@@ -1,0 +1,140 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [7 0 R 9 0 R 11 0 R 13 0 R 15 0 R 17 0 R 19 0 R 21 0 R] /Count 8 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /N 3 /Length 128 >>
+stream
+This is not an ICC colour profile. This is not an ICC colour profile. This is not an ICC colour profile. This is not an ICC colo
+endstream
+endobj
+5 0 obj
+<< /Type /Pattern /PatternType 1 /PaintType 2 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10 /Resources << >> /Length 13 >>
+stream
+0 0 5 5 re f
+
+endstream
+endobj
+6 0 obj
+<<  /Length 101 >>
+stream
+BT /F1 18 Tf 72 700 Td (Lab with a zero white point) Tj ET
+q /CS0 cs 50 0 0 sc 72 500 100 100 re f Q
+
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> /ColorSpace << /CS0 [/Lab << /WhitePoint [0 0 0] >>] >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<<  /Length 110 >>
+stream
+BT /F1 18 Tf 72 700 Td (A separation over an unreadable profile) Tj ET
+q /CS0 cs 0.5 sc 72 500 100 100 re f Q
+
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> /ColorSpace << /CS0 [/Separation /Spot [/ICCBased 4 0 R] << /FunctionType 2 /Domain [0 1] /C0 [0 0 0] /C1 [0.2 0.4 0.6] /N 1 >>] >> >> /Contents 8 0 R >>
+endobj
+10 0 obj
+<<  /Length 108 >>
+stream
+BT /F1 18 Tf 72 700 Td (A separation whose tint arrays differ) Tj ET
+q /CS0 cs 0.5 sc 72 500 100 100 re f Q
+
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> /ColorSpace << /CS0 [/Separation /Spot /DeviceRGB << /FunctionType 2 /Domain [0 1] /C0 [0 0 0] /C1 [0.2 0.4] /N 1 >>] >> >> /Contents 10 0 R >>
+endobj
+12 0 obj
+<<  /Length 105 >>
+stream
+BT /F1 18 Tf 72 700 Td (DeviceN over an unreadable profile) Tj ET
+q /CS0 cs 0.5 sc 72 500 100 100 re f Q
+
+endstream
+endobj
+13 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> /ColorSpace << /CS0 [/DeviceN [/Spot] [/ICCBased 4 0 R] << /FunctionType 2 /Domain [0 1] /C0 [0 0 0] /C1 [0.2 0.4 0.6] /N 1 >>] >> >> /Contents 12 0 R >>
+endobj
+14 0 obj
+<<  /Length 103 >>
+stream
+BT /F1 18 Tf 72 700 Td (Indexed over an unreadable profile) Tj ET
+q /CS0 cs 1 sc 72 500 100 100 re f Q
+
+endstream
+endobj
+15 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> /ColorSpace << /CS0 [/Indexed [/ICCBased 4 0 R] 1 <000000336699>] >> >> /Contents 14 0 R >>
+endobj
+16 0 obj
+<<  /Length 97 >>
+stream
+BT /F1 18 Tf 72 700 Td (Indexed with a short palette) Tj ET
+q /CS0 cs 2 sc 72 500 100 100 re f Q
+
+endstream
+endobj
+17 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> /ColorSpace << /CS0 [/Indexed /DeviceRGB 3 <000000336699>] >> >> /Contents 16 0 R >>
+endobj
+18 0 obj
+<<  /Length 120 >>
+stream
+BT /F1 18 Tf 72 700 Td (Indexed over calibrated RGB with a zero white point) Tj ET
+q /CS0 cs 1 sc 72 500 100 100 re f Q
+
+endstream
+endobj
+19 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> /ColorSpace << /CS0 [/Indexed [/CalRGB << /WhitePoint [0 0 0] >>] 1 <000000336699>] >> >> /Contents 18 0 R >>
+endobj
+20 0 obj
+<<  /Length 132 >>
+stream
+BT /F1 18 Tf 72 700 Td (An uncoloured pattern over an unreadable profile) Tj ET
+q /CS0 cs 0.2 0.4 0.6 /P0 scn 72 500 100 100 re f Q
+
+endstream
+endobj
+21 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> /ColorSpace << /CS0 [/Pattern [/ICCBased 4 0 R]] >> /Pattern << /P0 5 0 R >> >> /Contents 20 0 R >>
+endobj
+xref
+0 22
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000163 00000 n 
+0000000260 00000 n 
+0000000444 00000 n 
+0000000619 00000 n 
+0000000772 00000 n 
+0000000954 00000 n 
+0000001116 00000 n 
+0000001374 00000 n 
+0000001535 00000 n 
+0000001784 00000 n 
+0000001942 00000 n 
+0000002201 00000 n 
+0000002357 00000 n 
+0000002554 00000 n 
+0000002703 00000 n 
+0000002893 00000 n 
+0000003066 00000 n 
+0000003281 00000 n 
+0000003466 00000 n 
+trailer
+<< /Size 22 /Root 1 0 R >>
+startxref
+3671
+%%EOF

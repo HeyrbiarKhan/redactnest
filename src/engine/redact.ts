@@ -1,4 +1,4 @@
-import type { Buffer as MuBuffer, Document, PDFDocument, PDFPage } from "mupdf";
+import type { Document, PDFDocument, PDFPage } from "mupdf";
 
 import type { MatchKind, TermId, TermRemoval } from "@/worker/protocol";
 
@@ -9,8 +9,23 @@ import { takeInventory } from "./inventory";
 import { loadEngine, type MuPdf } from "./load";
 import { boxPass, paddedPass, textPass, type Pass } from "./passes";
 import { prepareDocument } from "./prepare";
-import { graftPages, stripToAllowlist, sweepCarriers, WRITE_OPTIONS } from "./rebuild";
-import { checkOutput } from "./self-check";
+import {
+  graftPages,
+  pruneToRoles,
+  rewriteOutput,
+  stripToAllowlist,
+  sweepCarriers,
+  takeOutput,
+  WRITE_OPTIONS,
+} from "./rebuild";
+import {
+  checkOutput,
+  drawnShape,
+  sameDrawnShape,
+  structureIsClean,
+  type DrawnShape,
+  type StructureCheck,
+} from "./self-check";
 import { targetsByPage, validateTargets } from "./targets";
 import { trimToVisibleArea } from "./trim";
 import type {
@@ -29,9 +44,14 @@ import type {
  * skipped leaves a glyph, the padded pass skipped leaves scan ink, removal on
  * the exact quads takes the lines around a target, the sweep skipped leaves a
  * carrier. Spec 0006 adds the trim: skipped, it leaves text outside the
- * visible area, and swapped, it disagrees with the open. A parameter with a
- * frozen default, rather than a setter, so the walled module holds no mutable
- * hook and the worker can only ever run the real thing.
+ * visible area, and swapped, it disagrees with the open. Spec 0019 adds the
+ * prune and the structure check: the prune skipped, every kept object case
+ * fails the check on its own (AC-6), and both skipped, a run writes main's
+ * output, which every fixture's pixels are compared with (AC-7). Its fourth
+ * pass adds the second write, so a test can make it keep the entry it should
+ * drop, throw, or change what a page draws, and watch the run fail (AC-15). A
+ * parameter with a frozen default, rather than a setter, so the walled module
+ * holds no mutable hook and the worker can only ever run the real thing.
  */
 export interface Pipeline {
   /** What lies outside each page's visible area, removed (`trim.ts`). */
@@ -40,8 +60,17 @@ export interface Pipeline {
     pdf: PDFDocument,
     isCancelled?: () => boolean,
   ) => Promise<readonly TrimOutcome[]>;
+  /** The typed allowlist below the pages (`rebuild.ts`). Spec 0019, AC-1. */
+  readonly pruneToRoles: (out: PDFDocument) => void;
   /** The carrier sweep over the rebuilt document (`rebuild.ts`). */
   readonly sweepCarriers: (out: PDFDocument) => void;
+  /** The structure part of the self check (`self-check.ts`). Spec 0019, AC-5. */
+  readonly checkStructure: StructureCheck;
+  /**
+   * The second write, on the check's `unused-colour-space` verdict alone
+   * (`rebuild.ts`). Spec 0019, AC-15.
+   */
+  readonly rewrite: (mupdf: MuPdf, bytes: ArrayBuffer) => ArrayBuffer;
   /** The pass that removes text (`passes.ts`). */
   readonly textPass: Pass;
   /** The pass that blanks pixels and removes covered line art (`passes.ts`). */
@@ -52,7 +81,10 @@ export interface Pipeline {
 
 export const PIPELINE: Pipeline = Object.freeze({
   trim: trimToVisibleArea,
+  pruneToRoles,
   sweepCarriers,
+  checkStructure: structureIsClean,
+  rewrite: rewriteOutput,
   textPass,
   paddedPass,
   removalArea: removalBand,
@@ -79,10 +111,12 @@ export async function redactDocument(
  * `redactDocument` with the engine already in hand: the same seam
  * `openDocumentWith` gives Vitest, so both run the real MuPDF in Node.
  *
- * The pipeline order is fixed (spec 0004, *State transitions*, as spec 0006
- * amends it): inventory, prepare, trim, validate targets, slant, images,
- * record every page, the three passes page by page, rebuild, write, self
- * check. The inventory comes before preparing, or flattened annotations would
+ * The pipeline order is fixed (spec 0004, *State transitions*, as specs 0006
+ * and 0019 amend it): inventory, prepare, trim, validate targets, slant,
+ * images, record every page, the three passes page by page, rebuild, write,
+ * self check; on the check's `unused-colour-space` verdict alone, a
+ * checkpoint, the second write and the whole self check on its bytes. The
+ * inventory comes before preparing, or flattened annotations would
  * no longer be found. Preparing comes before any Redact annotation is added,
  * or the flatten would bake the markers into the page. The trim comes right
  * after preparing, as it does at open, so targets are checked on the page
@@ -159,7 +193,11 @@ export async function redactDocumentWith(
     work.destroy();
     work = null;
 
+    // The catalog and the pages first, then every object below them (spec
+    // 0019): the prune walks from the cut catalog, so nothing a dropped
+    // catalog key reached is walked at all. The sweep stays as a backstop.
     stripToAllowlist(out);
+    pipeline.pruneToRoles(out);
     pipeline.sweepCarriers(out);
     await checkpoint();
 
@@ -171,12 +209,24 @@ export async function redactDocumentWith(
     // bytes the self check reads are the bytes that cross (INV-2).
     out.destroy();
     out = null;
-    const output = takeOutput(written);
+    let output = takeOutput(written);
 
     onPhase?.("verifying");
-    const failure = checkOutput(mupdf, output, record, pages);
-    if (failure !== null) {
-      throw new EngineFailure(failure);
+    const verdict = checkOutput(
+      mupdf,
+      output,
+      record,
+      pages,
+      pipeline.checkStructure,
+      true,
+    );
+    if (verdict === "rewrite") {
+      // Spec 0019, AC-15: the second write's bytes replace the first as the
+      // bytes that cross, so the run holds the first only until it is written
+      // again.
+      output = await writeAgain(mupdf, output, record, pages, pipeline, checkpoint);
+    } else if (verdict !== null) {
+      throw new EngineFailure(verdict);
     }
 
     return {
@@ -256,18 +306,61 @@ function openWorkingCopy(mupdf: MuPdf, bytes: ArrayBuffer): PDFDocument {
 }
 
 /**
- * Copy the written file out of MuPDF's heap into a fresh `ArrayBuffer`, then
- * hand MuPDF's buffer straight back.
+ * The second write, and the whole self check on its bytes. Spec 0019, AC-15
+ * and INV-8.
  *
- * `asUint8Array()` is a view into the WebAssembly heap, not a copy, so the
- * `slice()` is load bearing: without it the output would be memory MuPDF is
- * about to reuse.
+ * Run only when the check's one finding on the first bytes was a colour space
+ * entry no drawing names, and at most once. The first bytes' drawn shape is
+ * taken, the run yields at a checkpoint (a cancel there ends the run as a
+ * cancel, never a failure), and `pipeline.rewrite` writes them again. Once it
+ * has started it cannot be cancelled, as the first write cannot, and the phase
+ * stays `verifying`. The new bytes then face the whole check with no second
+ * chance, so an entry still unused is `redaction-incomplete`. Only once that
+ * passes are the two drawn shapes compared: the full check reads no picture
+ * nobody ticked and counts no figure, so a second write that dropped either is
+ * caught here, as `unsupported`, since nothing was found to leak but what a
+ * page draws changed. Any failure the full check finds outranks it.
+ *
+ * The rebuilt document is already gone, and the documents the check and the
+ * shape opened on the first bytes are destroyed before the second write opens
+ * them again, so the peak stays at about four copies (spec 0004's destroy
+ * order).
  */
-function takeOutput(written: MuBuffer): ArrayBuffer {
+async function writeAgain(
+  mupdf: MuPdf,
+  first: ArrayBuffer,
+  record: readonly PageRecord[],
+  pages: ReadonlyMap<number, readonly RedactionTarget[]>,
+  pipeline: Pipeline,
+  checkpoint: () => Promise<void>,
+): Promise<ArrayBuffer> {
+  const before = shapeOf(mupdf, first);
+  await checkpoint();
+
+  let second: ArrayBuffer;
   try {
-    return written.asUint8Array().slice().buffer;
-  } finally {
-    written.destroy();
+    second = pipeline.rewrite(mupdf, first);
+  } catch {
+    // A second write that throws vouches for nothing, the same as a throw
+    // while checking: `redaction-incomplete`.
+    throw new EngineFailure("redaction-incomplete");
+  }
+
+  const failure = checkOutput(mupdf, second, record, pages, pipeline.checkStructure);
+  if (failure !== null) throw new EngineFailure(failure);
+
+  if (!sameDrawnShape(before, shapeOf(mupdf, second))) {
+    throw new EngineFailure("unsupported");
+  }
+  return second;
+}
+
+/** A file's drawn shape; a throw while reading it is a check that cannot finish. */
+function shapeOf(mupdf: MuPdf, bytes: ArrayBuffer): DrawnShape {
+  try {
+    return drawnShape(mupdf, bytes);
+  } catch {
+    throw new EngineFailure("redaction-incomplete");
   }
 }
 

@@ -49,6 +49,15 @@
  *     area, on both copies, right after `prepareDocument`, proves its text
  *     work, and names a page whose picture reaches outside, never touching it.
  *
+ * Spec 0019 added the typed allowlist below the pages:
+ *
+ *   - `allowlist.ts` gives every object a role from the key that reached it,
+ *     and keeps only the keys that role needs to draw (`walkRoles`). The
+ *     rebuild prunes with it, the open and the self check read with it.
+ *   - `marked.ts` reads drawing instructions read only, for the marked content
+ *     descriptions RedactNest cannot remove and the resource names each
+ *     drawing uses: spec 0001's one named exception (spec 0019, INV-4).
+ *
  * Nothing in this folder calls `search()` (spec 0005, INV-11); lint holds it.
  *
  * The functions ending in `With` take the loaded MuPDF module as a parameter.
@@ -59,6 +68,28 @@
  * and its source is published. See feature 18.
  */
 
+export {
+  ROLE_NAMES,
+  ROLES,
+  STRING_PLACES,
+  TRAILER_KEYS,
+  walkRoles,
+  type DrawingUnit,
+  type ResourceOwner,
+  type Role,
+  type RoleProblem,
+  type RoleRule,
+  type RoleWalk,
+  type Shape,
+  type StringPlace,
+} from "./allowlist";
+export {
+  LANG_TAG,
+  readDrawing,
+  scanContent,
+  type DrawingRead,
+  type ResourceCategory,
+} from "./marked";
 export {
   CHECK_EXTRACTION_OPTIONS,
   EXTRACTION_OPTIONS,
@@ -149,10 +180,19 @@ export {
   CARRIER_KEYS,
   CATALOG_KEYS,
   PAGE_KEYS,
+  pruneToRoles,
+  rewriteOutput,
   stripToAllowlist,
   sweepCarriers,
   WRITE_OPTIONS,
 } from "./rebuild";
+export {
+  drawnShape,
+  structureIsClean,
+  type DrawnShape,
+  type StructureCheck,
+  type StructureVerdict,
+} from "./self-check";
 export type {
   FindOptions,
   FoundMatch,

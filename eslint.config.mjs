@@ -124,6 +124,15 @@ const SEARCH_MESSAGE =
   "saying so. Tests may compare against search(); src/engine and src/detect " +
   "may not use it.";
 
+const RESOLVE_MESSAGE =
+  "The engine never calls .resolve() on a MuPDF object (spec 0019, AC-16, " +
+  "INV-9). MuPDF 1.28.1 writes a stream it was asked to resolve as a " +
+  "dictionary with no data when the deduplicating write merges an object " +
+  "that stream points to, so a picture or a figure loses its drawing. Read " +
+  "and edit through the indirect reference (get, forEach, delete, put, " +
+  "isStream, isDictionary). Promise.resolve() is banned in src/engine too, " +
+  "since lint cannot tell the two apart: write an async function instead.";
+
 const DETECT_ZONE_MESSAGE =
   "src/detect is pure text in, offsets out (spec 0005, INV-5). It reaches for " +
   "no page, no interface, no config and no worker; the only thing it may take " +
@@ -160,6 +169,18 @@ const noPhoneLibraryAnywhere = [
 /** Any call to a member named `search`, `page.search()` and `stext.search()` alike. */
 const noSearch = [
   { selector: 'CallExpression[callee.property.name="search"]', message: SEARCH_MESSAGE },
+];
+
+/** Any call to a member named `resolve`, written `.resolve()` or `["resolve"]()`. */
+const noResolve = [
+  {
+    selector: 'CallExpression[callee.property.name="resolve"]',
+    message: RESOLVE_MESSAGE,
+  },
+  {
+    selector: 'CallExpression[callee.property.value="resolve"]',
+    message: RESOLVE_MESSAGE,
+  },
 ];
 
 /** What `src/detect` may not import besides the wall's own bans. */
@@ -648,7 +669,8 @@ const eslintConfig = defineConfig([
   {
     // The walled module itself. The one place MuPDF is named at all, and the
     // only importer of the detectors (spec 0005, INV-8). It finds matches by
-    // walking characters, never through `search()` (INV-11).
+    // walking characters, never through `search()` (INV-11), and reads every
+    // object through its reference, never `.resolve()` (spec 0019, INV-9).
     name: "redactnest/engine-wall-engine",
     files: ["src/engine/**/*.{ts,mts}"],
     rules: zone(
@@ -665,6 +687,7 @@ const eslintConfig = defineConfig([
         ...noNewWorker,
         ...noToolClientAnywhere,
         ...noSearch,
+        ...noResolve,
         ...BILLING_SYNTAX,
         ...NO_TELEMETRY_SYNTAX,
       ],

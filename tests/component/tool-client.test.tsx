@@ -1998,6 +1998,12 @@ describe("the page readings (spec 0006)", () => {
       "Text at a page's edge can't be removed cleanly",
       "so it made no file.",
     ],
+    // Spec 0019, AC-3: from its kind alone.
+    [
+      "unreadable-structure",
+      "RedactNest stopped to be safe",
+      "Part of this file is built in a way RedactNest can't check safely, so it stopped rather than guess, and made no file.",
+    ],
   ] as const)(
     "says plainly why no file was made for %s, above the full drop zone (AC-26)",
     async (kind, title, words) => {
@@ -2028,6 +2034,47 @@ describe("the page readings (spec 0006)", () => {
     await userEvent.setup().click(screen.getByTestId("redact"));
     await run.finish();
     await expectNoAxeViolations(container);
+  });
+
+  /**
+   * Spec 0019, AC-9 and AC-13. Descriptions written into a page, which
+   * RedactNest cannot remove: a warning at open through `findingLine`, again
+   * directly above Download, and the partly redacted name.
+   */
+  describe("descriptions written into a page", () => {
+    const DESCRIBED: DocumentSummary = Object.freeze({
+      pageCount: 2,
+      pages: Object.freeze([
+        Object.freeze({ findings: [] }),
+        Object.freeze({ findings: ["marked-descriptions"] }),
+      ]) as DocumentSummary["pages"],
+    });
+    const LINE =
+      "Page 2 may have descriptions written into the page, such as alternate text for screen readers. RedactNest can't remove them, so they can stay in the file, even around text you tick.";
+
+    it("warns at open and above Download, and names the file partly redacted", async () => {
+      const run = flagged(DESCRIBED);
+      await openWith(run.session);
+
+      expect(screen.getByTestId("page-warnings")).toHaveTextContent(LINE);
+      expect(screen.queryByTestId("all-clear")).not.toBeInTheDocument();
+
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("redact"));
+      await run.finish();
+
+      const warning = screen.getByTestId("download-warning");
+      expect(warning).toHaveTextContent(LINE);
+      expect(warning).toHaveTextContent(
+        "That is why the file's name ends in partly redacted.",
+      );
+
+      await user.click(screen.getByTestId("download"));
+      expect(mocks.offerDownload).toHaveBeenCalledWith(
+        expect.any(ArrayBuffer),
+        "report-partly-redacted.pdf",
+      );
+    });
   });
 
   /**

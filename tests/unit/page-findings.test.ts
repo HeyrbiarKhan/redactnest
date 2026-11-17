@@ -34,7 +34,7 @@ function summaryOf(...pages: readonly (readonly PageFinding[])[]): DocumentSumma
 }
 
 describe("the tone of each finding", () => {
-  it("makes the first seven warnings, then two notes, and blank quiet", () => {
+  it("makes the first eight warnings, then two notes, and blank quiet", () => {
     expect(WARNING_FINDINGS).toEqual([
       "covered-text",
       "hidden-text",
@@ -43,6 +43,7 @@ describe("the tone of each finding", () => {
       "unreadable-text",
       "bare-picture",
       "off-page-picture",
+      "marked-descriptions",
     ]);
     expect(NOTE_FINDINGS).toEqual(["machine-read-text", "off-page-content"]);
     expect(FINDING_TONE.blank).toBe("quiet");
@@ -137,6 +138,12 @@ describe("the line for each finding", () => {
       "Page 1 has a picture that reaches outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.",
       "Pages 1 and 2 have pictures that reach outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.",
     ],
+    // Spec 0019, AC-9: one sentence for one page and for several.
+    [
+      "marked-descriptions",
+      "Page 1 may have descriptions written into the page, such as alternate text for screen readers. RedactNest can't remove them, so they can stay in the file, even around text you tick.",
+      "Pages 1 and 2 may have descriptions written into the page, such as alternate text for screen readers. RedactNest can't remove them, so they can stay in the file, even around text you tick.",
+    ],
     // Spec 0008, AC-9: the last sentence, picture for one page, pictures for several.
     [
       "machine-read-text",
@@ -198,6 +205,7 @@ describe("the advice line", () => {
     "covered-text",
     "hidden-text",
     "off-page-picture",
+    "marked-descriptions",
     "machine-read-text",
   ] as const)("does not follow %s alone", (finding) => {
     expect(showsAdvice(summaryOf([finding]))).toBe(false);

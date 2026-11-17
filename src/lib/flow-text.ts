@@ -165,6 +165,13 @@ export const FAILURE_TEXT: Readonly<
     body: "This file holds something RedactNest can't handle safely, so it stopped rather than guess, and made no file. Two common causes: lines of text written in a way RedactNest can't rewrite, and content near a page's edge it couldn't prove it removed.",
     next: NEW_COPY,
   }),
+  // Spec 0019, AC-3: the role walk met a shape it cannot read, at open or in
+  // a run, from its kind alone.
+  "unreadable-structure": () => ({
+    title: "RedactNest stopped to be safe",
+    body: "Part of this file is built in a way RedactNest can't check safely, so it stopped rather than guess, and made no file.",
+    next: NEW_COPY,
+  }),
   "too-large": ({ maxFileBytes }) => ({
     title: "This file is too big",
     body: `RedactNest takes files up to ${megabytes(maxFileBytes)}.`,

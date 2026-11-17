@@ -1,0 +1,66 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [11 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Group /S /Transparency >>
+endobj
+5 0 obj
+<< /Font << /F1 3 0 R >> >>
+endobj
+6 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 200 100] /Group 4 0 R /Resources 5 0 R /Length 56 >>
+stream
+BT /F1 12 Tf 10 45 Td (The first form draws this) Tj ET
+
+endstream
+endobj
+7 0 obj
+<< /Type /Group /S /Transparency >>
+endobj
+8 0 obj
+<< /Font << /F1 3 0 R >> >>
+endobj
+9 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 200 100] /Group 7 0 R /Resources 8 0 R /Length 57 >>
+stream
+BT /F1 12 Tf 10 45 Td (The second form draws this) Tj ET
+
+endstream
+endobj
+10 0 obj
+<<  /Length 140 >>
+stream
+BT /F1 18 Tf 72 700 Td (Two forms with an identical group and resources) Tj ET
+q 1 0 0 1 72 500 cm /Fm0 Do Q q 1 0 0 1 300 500 cm /Fm1 Do Q
+
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> /XObject << /Fm0 6 0 R /Fm1 9 0 R >> >> /Contents 10 0 R >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000116 00000 n 
+0000000213 00000 n 
+0000000264 00000 n 
+0000000307 00000 n 
+0000000493 00000 n 
+0000000544 00000 n 
+0000000587 00000 n 
+0000000774 00000 n 
+0000000967 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R >>
+startxref
+1132
+%%EOF

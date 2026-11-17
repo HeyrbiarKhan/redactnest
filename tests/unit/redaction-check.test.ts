@@ -102,10 +102,29 @@ describe("the self check fires", () => {
     ).resolves.toBe("redaction-overreach");
   });
 
+  /**
+   * Since spec 0019 the prune deletes every carrier first, as keys off every
+   * role's list, so the sweep is a backstop and both are skipped here.
+   */
   it("fails with redaction-incomplete when a carrier survives the rebuild", async () => {
     await expect(
-      kindOf(fixture("metadata.pdf"), [], { ...PIPELINE, sweepCarriers: () => {} }),
+      kindOf(fixture("metadata.pdf"), [], {
+        ...PIPELINE,
+        pruneToRoles: () => {},
+        sweepCarriers: () => {},
+      }),
     ).resolves.toBe("redaction-incomplete");
+  });
+
+  /**
+   * Spec 0019, AC-16: the sweep reads every object through its reference,
+   * never resolved, and its deletes still reach the object itself. With the
+   * prune skipped, the sweep alone strips every carrier, so the run passes.
+   */
+  it("makes a file when the sweep alone strips every carrier", async () => {
+    await expect(
+      kindOf(fixture("metadata.pdf"), [], { ...PIPELINE, pruneToRoles: () => {} }),
+    ).resolves.toBeNull();
   });
 
   /**

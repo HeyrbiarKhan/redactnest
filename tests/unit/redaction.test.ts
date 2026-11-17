@@ -493,7 +493,8 @@ describe("the original a run starts from", () => {
 /**
  * Spec 0004, AC-13 and AC-14. The structural half of the self check, proved to
  * fire: with the carrier sweep skipped, the image's XMP packet survives the
- * rebuild, and the run must refuse to hand anything back.
+ * rebuild, and the run must refuse to hand anything back. Since spec 0019 the
+ * prune deletes the packet's key first, so it is skipped as well.
  */
 describe("the structural self check", () => {
   it("fails the run with redaction-incomplete when a carrier survives", async () => {
@@ -504,6 +505,7 @@ describe("the structural self check", () => {
       {},
       {
         ...PIPELINE,
+        pruneToRoles: () => {},
         sweepCarriers: () => {},
       },
     );

@@ -22,7 +22,7 @@ import { PageHeader } from "./site-nav";
 /**
  * The home page. Spec 0013, AC-10 to AC-13 and AC-30: reference 04's hero
  * with a real picture of the tool, the trio, and in place of 04's "Trusted by"
- * row two cards saying what RedactNest finds and strips.
+ * row two cards saying what RedactNest looks for and strips.
  *
  * Every word in the main content comes from `src/lib/home-text.ts`; the caps
  * and whether billing is on come from `config`, read here and passed in. A
@@ -93,7 +93,7 @@ export default function HomePage() {
           {/*
             On the page's own canvas, inside the container, rather than a full
             width white strip: the two cards are the white (AC-11). Side by side
-            and equal height from `md`, Finds first when stacked. Their
+            and equal height from `md`, Looks for first when stacked. Their
             proportion and spacing follow your mockup,
             `docs/design/references/05-finds-and-strips.png`, read at its true
             scale (it is this page at 1280 pixels, drawn at 1.5x).
@@ -107,7 +107,7 @@ export default function HomePage() {
               {HOME_TEXT.band.title}
             </h2>
             <div className="grid gap-6 md:grid-cols-2">
-              {/* The query container for the Finds columns below. */}
+              {/* The query container for the Looks for columns below. */}
               <Card data-testid="home-finds" spacious className="@container">
                 <BandCardHeader
                   icon={ScanSearch}
@@ -169,14 +169,16 @@ function BandCardHeader({
 
 /**
  * A band card's list: each item in its own soft row, its icon on a square
- * tile beside its words. Finds and Strips draw the same row (feature 26), so
- * the two cards read as one pair and, with seven items each, stand the same
- * height. Nothing here acts: no chevron, no link, no tab stop and no hover
+ * tile beside its words. Looks for and Strips draw the same row (feature 26),
+ * so the two cards read as one pair, and the grid stands them the same height
+ * whatever each list holds (seven detectors; six stripped kinds while XMP
+ * metadata waits on feature 32, spec 0019, AC-12). Nothing here acts: no
+ * chevron, no link, no tab stop and no hover
  * change, so the cursor rule leaves it the arrow (AC-33). `canvas`, not
  * `subtle`, which is the checklist's hover tint and would make a row look
  * pressable.
  *
- * One list, so a screen reader hears the seven together. Once the card's own
+ * One list, so a screen reader hears its items together. Once the card's own
  * content is 26rem wide the rows take two columns 12 pixels apart, the rows'
  * own spacing, read down the first, then the second. The card is the query
  * container, never the window, because from `md` to about 1020 pixels it sits

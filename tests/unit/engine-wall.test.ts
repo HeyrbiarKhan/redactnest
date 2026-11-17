@@ -74,6 +74,7 @@ const TOOL_CLIENT = /Only src\/app\/tool\/page\.tsx may render ToolClient/;
 const DETECT = /Only src\/engine may import @\/detect/;
 const PHONE_LIBRARY = /Only src\/detect may import libphonenumber-js/;
 const SEARCH = /it never calls search\(\)/;
+const RESOLVE = /The engine never calls \.resolve\(\)/;
 const DETECT_ZONE = /src\/detect is pure text in, offsets out/;
 const CONSOLE = /Unexpected console statement/;
 const STREAM = /RedactNest's own code writes no log/;
@@ -686,6 +687,38 @@ describe("calling search()", () => {
 
   it("is allowed in a test, which compares against it", async () => {
     expect(await wallErrors(UNIT_TEST, CALLS_SEARCH)).toEqual([]);
+  });
+});
+
+/**
+ * Spec 0019, AC-16 and INV-9. MuPDF 1.28.1 writes a stream it was asked to
+ * resolve as a dictionary with no data when the deduplicating write merges an
+ * object that stream points to, so the engine reads every object through its
+ * reference.
+ */
+describe("calling resolve()", () => {
+  const CALLS_RESOLVE =
+    "export const read = (ref: { resolve(): unknown }) => ref.resolve();\n";
+  const CALLS_RESOLVE_BY_NAME =
+    'export const read = (ref: { resolve(): unknown }) => ref["resolve"]();\n';
+  const CALLS_PROMISE_RESOLVE = "export const ready = () => Promise.resolve(1);\n";
+
+  it.each([
+    ["src/engine/objects.ts", CALLS_RESOLVE],
+    [ENGINE_MODULE, CALLS_RESOLVE],
+    ["src/engine/objects.ts", CALLS_RESOLVE_BY_NAME],
+    ["src/engine/redact.ts", CALLS_PROMISE_RESOLVE],
+  ])("is rejected in %s", async (path, code) => {
+    expect(await wallErrors(path, code)).toContainEqual(expect.stringMatching(RESOLVE));
+  });
+
+  it("is allowed in a test, which may resolve a document it never writes", async () => {
+    expect(await wallErrors(UNIT_TEST, CALLS_RESOLVE)).toEqual([]);
+    expect(await wallErrors(UNIT_TEST, CALLS_RESOLVE_BY_NAME)).toEqual([]);
+  });
+
+  it("is allowed outside the engine, where Promise.resolve() is ordinary", async () => {
+    expect(await wallErrors(LIBRARY, CALLS_PROMISE_RESOLVE)).toEqual([]);
   });
 });
 
