@@ -198,6 +198,64 @@ describe("inline images", () => {
   });
 });
 
+/**
+ * Spec 0020, AC-3: whether a drawing shows text, which the glyph rule reads.
+ * Only an operator counts, by the lexer's own rules, so the same bytes inside
+ * a string, an inline image's data or a comment never do.
+ */
+describe("whether a drawing shows text (spec 0020)", () => {
+  it.each([
+    ["Tj", "BT /F1 12 Tf (x) Tj ET"],
+    ["TJ", "BT /F1 12 Tf [(x) 10 (y)] TJ ET"],
+    ["'", "BT /F1 12 Tf (x) ' ET"],
+    ['"', 'BT /F1 12 Tf 1 2 (x) " ET'],
+  ])("reads %s as showing text", (_operator, text) => {
+    expect(read(text).showsText).toBe(true);
+  });
+
+  it("reads a drawing of paths, forms and a font change alone as showing none", () => {
+    expect(read("0 0 10 10 re f /Fm0 Do BT /F1 12 Tf ET").showsText).toBe(false);
+  });
+
+  it("never reads the operators held inside a string", () => {
+    expect(read("/Span << /Alt (Tj TJ ' \") >> BDC EMC").showsText).toBe(false);
+  });
+
+  it("never reads an operator in an inline image's data", () => {
+    expect(read("BI /W 3 /H 1 /CS /G /BPC 8 ID Tj EI").showsText).toBe(false);
+  });
+
+  it("never reads an operator in a comment", () => {
+    expect(read("% BT (x) Tj ET\n0 0 1 1 re f").showsText).toBe(false);
+  });
+
+  it("forgets an operator read past a false EI once the scan tries the next one", () => {
+    const result = read("BI /W 4 /H 1 /CS /G /BPC 8 ID a EI Tj ) EI Q");
+    expect(result.showsText).toBe(false);
+  });
+
+  it("keeps an operator read after the EI the scan settles on", () => {
+    expect(read("BI /W 1 /H 1 /CS /G /BPC 8 ID z EI BT (x) Tj ET").showsText).toBe(true);
+  });
+
+  it("shows text when any one glyph procedure does, read alone or joined", () => {
+    const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
+      stream("", "1000 0 d0 0 0 1000 1000 re f"),
+      stream("", "1000 0 d0 BT /F9 1 Tf (x) Tj ET"),
+    ];
+    withDoc(objects, (doc) => {
+      const square = [doc.newIndirect(4)];
+      const both = [doc.newIndirect(4), doc.newIndirect(5)];
+      expect(readDrawing(square, null, false)).toMatchObject({ showsText: false });
+      expect(readDrawing(both, null, false)).toMatchObject({ showsText: true });
+      expect(readDrawing(both, null, true)).toMatchObject({ showsText: true });
+    });
+  });
+});
+
 describe("what makes the scan unsure", () => {
   it.each([
     ["an unbalanced string", "BT (abc Tj ET"],

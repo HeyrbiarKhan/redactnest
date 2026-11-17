@@ -643,6 +643,182 @@ describe("drawings and their resource dictionaries", () => {
   });
 });
 
+/**
+ * Spec 0020, AC-1 and AC-2: what the walk hands the glyph rule. `glyphs` is
+ * each Type 3 font's procedures with the dictionary they draw with, and
+ * `outside` every object reached by a path that never passes through a Type 3
+ * font's `/CharProcs` or `/Resources`.
+ */
+describe("the glyph rule's two sides (spec 0020)", () => {
+  /** A Type 3 font with glyphs `a` and `b` at objects `a` and `b`, and `rest` added to it. */
+  const type3 = (a: number, b: number, rest = "") =>
+    "<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1 1] /FontMatrix [1 0 0 1 0 0] " +
+    `/CharProcs << /a ${a} 0 R /b ${b} 0 R >> /Encoding << /Differences [97 /a /b] >>${rest} >>`;
+  const FORM = "/Type /XObject /Subtype /Form /BBox [0 0 1 1]";
+  const sorted = (set: ReadonlySet<number>) => [...set].sort((x, y) => x - y);
+
+  it("puts everything a page reaches on the other side, and nothing reached only through a font's glyphs or resources", () => {
+    const objects = onePage(
+      "<< /Font << /T3 6 0 R >> /XObject << /Fm1 5 0 R /Unused 10 0 R >> >>",
+      [
+        stream(FORM, ""),
+        type3(7, 8, " /Resources << /XObject << /G 9 0 R /Fm1 5 0 R >> >>"),
+        stream("", "0 0 d0 /G Do"),
+        stream("", "0 0 d0 /Fm1 Do"),
+        stream(FORM, ""),
+        stream(FORM, ""),
+      ],
+      "/Fm1 Do",
+    );
+    withDoc(objects, (doc) => {
+      const walk = walkRoles(doc, "read");
+      // 10 is listed and never drawn, and still counts: judged by keys.
+      expect(sorted(walk.outside)).toEqual([1, 2, 3, 4, 5, 6, 10]);
+      expect(walk.reached.has(9)).toBe(true);
+    });
+  });
+
+  it("finds an object on the other side whichever path reaches it first", () => {
+    const font = type3(7, 8, " /Resources << /XObject << /Fm1 5 0 R >> >>");
+    const rest = [stream(FORM, ""), font, stream("", "0 0 d0"), stream("", "0 0 d0")];
+    for (const resources of [
+      "<< /Font << /T3 6 0 R >> /XObject << /Fm1 5 0 R >> >>",
+      "<< /XObject << /Fm1 5 0 R >> /Font << /T3 6 0 R >> >>",
+    ]) {
+      withDoc(onePage(resources, rest, "/Fm1 Do"), (doc) => {
+        expect(walkRoles(doc, "read").outside.has(5), resources).toBe(true);
+      });
+    }
+  });
+
+  it("bars a glyph procedure written in place under /CharProcs and a font's resources found through an indirect /CharProcs", () => {
+    const objects = onePage("<< /Font << /T3 6 0 R >> >>", [
+      HELVETICA,
+      "<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1 1] /FontMatrix [1 0 0 1 0 0] " +
+        "/CharProcs 7 0 R /Encoding << /Differences [97 /a] >> /Resources 9 0 R >>",
+      "<< /a 8 0 R >>",
+      stream("", "0 0 d0"),
+      "<< /Font << /F1 5 0 R >> >>",
+    ]);
+    withDoc(objects, (doc) => {
+      const walk = walkRoles(doc, "read");
+      expect(sorted(walk.outside)).toEqual([1, 2, 3, 4, 6]);
+      expect(walk.glyphs).toHaveLength(1);
+      expect(walk.glyphs[0].streams.map((part) => part.asIndirect())).toEqual([8]);
+      expect(walk.glyphs[0].resources?.asIndirect()).toBe(9);
+    });
+  });
+
+  it("puts a glyph procedure that is also part of a page's /Contents on the other side", () => {
+    const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+        "/Resources << /Font << /T3 5 0 R >> >> /Contents [4 0 R 6 0 R] >>",
+      stream("", "q"),
+      type3(6, 7),
+      stream("", "0 0 d0"),
+      stream("", "0 0 d0"),
+    ];
+    withDoc(objects, (doc) => {
+      const walk = walkRoles(doc, "read");
+      expect(walk.problem).toBeNull();
+      expect(walk.outside.has(6)).toBe(true);
+      expect(walk.outside.has(7)).toBe(false);
+    });
+  });
+
+  it("gives one glyph unit per dictionary a font with no resources of its own is found under", () => {
+    const objects = onePage(
+      "<< /Font << /T3 6 0 R >> /XObject << /Fm1 5 0 R >> >>",
+      [
+        stream(`${FORM} /Resources << /Font << /T3 6 0 R >> >>`, ""),
+        type3(7, 8),
+        stream("", "0 0 d0"),
+        stream("", "0 0 d0"),
+      ],
+      "/Fm1 Do",
+    );
+    withDoc(objects, (doc) => {
+      const { glyphs } = walkRoles(doc, "read");
+      expect(glyphs).toHaveLength(2);
+      for (const unit of glyphs) {
+        expect(unit.joined).toBe(false);
+        expect(unit.streams.map((part) => part.asIndirect())).toEqual([7, 8]);
+        expect(keysOf(unit.resources?.get("Font") ?? mupdf.PDFObject.Null)).toEqual([
+          "T3",
+        ]);
+      }
+    });
+  });
+
+  it("gives a font with resources of its own one glyph unit, drawing with them", () => {
+    const objects = onePage("<< /Font << /T3 5 0 R >> >>", [
+      type3(6, 7, " /Resources << /Font << /F9 8 0 R >> >>"),
+      stream("", "0 0 d0"),
+      stream("", "0 0 d0"),
+      HELVETICA,
+    ]);
+    withDoc(objects, (doc) => {
+      const { glyphs } = walkRoles(doc, "read");
+      expect(glyphs).toHaveLength(1);
+      expect(keysOf(glyphs[0].resources?.get("Font") ?? mupdf.PDFObject.Null)).toEqual([
+        "F9",
+      ]);
+    });
+  });
+
+  it("gives no owner without a drawing when a font written in place sits in another font's resources that a page lists too", () => {
+    const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 9 0 R /Contents 4 0 R >>",
+      stream("", "BT /T3 1 Tf (a) Tj /T4 1 Tf (a) Tj ET"),
+      type3(6, 7, " /Resources 9 0 R"),
+      stream("", "0 0 d0"),
+      stream("", "0 0 d0"),
+      stream("", "0 0 d0"),
+      `<< /Font << /T3 5 0 R /T4 ${type3(8, 8, " /Resources << /XObject << >> >>")} >> >>`,
+    ];
+    withDoc(objects, (doc) => {
+      const walk = walkRoles(doc, "read");
+      expect(walk.problem).toBeNull();
+      expect(walk.strays).toBe(0);
+      for (const owner of walk.owners) expect(owner.units.length).toBeGreaterThan(0);
+      expect(walk.glyphs).toHaveLength(2);
+      expect(walk.outside.has(9)).toBe(true);
+      expect(walk.outside.has(8)).toBe(false);
+    });
+  });
+
+  it("hands back no glyphs and no other side from a walk with a problem", () => {
+    const objects = onePage("<< /Font << /T3 5 0 R >> >>", [
+      type3(6, 7, " /Widths << >>"),
+      stream("", "0 0 d0"),
+      stream("", "0 0 d0"),
+    ]);
+    withDoc(objects, (doc) => {
+      for (const from of ["catalog", "pages"] as const) {
+        const walk = walkRoles(doc, "read", from);
+        expect(walk.problem).toBe("shape");
+        expect(walk.glyphs).toEqual([]);
+        expect(walk.outside.size).toBe(0);
+      }
+    });
+  });
+
+  it("starts the other side at each page when walking from the pages", () => {
+    const objects = onePage(
+      "<< /XObject << /Fm1 5 0 R >> >>",
+      [stream(FORM, "")],
+      "/Fm1 Do",
+    );
+    withDoc(objects, (doc) => {
+      expect(sorted(walkRoles(doc, "read", "pages").outside)).toEqual([3, 4, 5]);
+    });
+  });
+});
+
 describe("from the pages, at open (AC-3)", () => {
   it("reads inherited resources and never refuses a tree node with no /Type", () => {
     const objects = [

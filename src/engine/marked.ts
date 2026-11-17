@@ -14,10 +14,12 @@ import type { PDFObject } from "mupdf";
  * The one named exception to spec 0001's "one PDF parser" (INV-4). It reads the
  * bytes MuPDF decodes, never a raw filtered stream, edits nothing and computes
  * no geometry. Its only outputs are whether a property list holds a string
- * that counts and which resource names the streams use, and nothing it answers
- * changes what the rebuild keeps. Any doubt is `"unsure"`, which warns at open
- * and fails the check, so a fault in here can add a warning or a refusal, never
- * pass a file the rest of the check would fail.
+ * that counts, which resource names the streams use, and whether they show
+ * text (`showsText`, spec 0020, which the glyph rule reads), and nothing it
+ * answers changes what the rebuild keeps: the glyph rule refuses a file, it
+ * never deletes. Any doubt is `"unsure"`, which warns at open and fails the
+ * check, so a fault in here can add a warning or a refusal, never pass a file
+ * the rest of the check would fail.
  */
 
 /**
@@ -38,6 +40,12 @@ export interface DrawingRead {
   readonly describes: boolean;
   /** Every resource name the streams use, by the dictionary it is looked up in. */
   readonly names: ReadonlyMap<ResourceCategory, ReadonlySet<string>>;
+  /**
+   * The streams hold a text showing operator (`Tj`, `TJ`, `'` or `"`). Bytes
+   * inside a string, an inline image's data or a comment are never an
+   * operator. Spec 0020, AC-3.
+   */
+  readonly showsText: boolean;
 }
 
 /**
@@ -69,8 +77,10 @@ export function readDrawing(
 
   const names = new Map<ResourceCategory, Set<string>>();
   let describes = false;
+  let showsText = false;
   for (const read of reads as DrawingRead[]) {
     describes ||= read.describes;
+    showsText ||= read.showsText;
     for (const [category, found] of read.names) {
       let into = names.get(category);
       if (!into) {
@@ -80,7 +90,7 @@ export function readDrawing(
       for (const name of found) into.add(name);
     }
   }
-  return Object.freeze({ describes, names });
+  return Object.freeze({ describes, names, showsText });
 }
 
 /** A stream's decoded bytes, copied out of MuPDF's heap, or `null` if MuPDF cannot decode it. */
@@ -140,11 +150,18 @@ interface Sequence {
   drew: boolean;
 }
 
-/** What the scan carries forward, restored when an inline image's end is tried again. */
+/**
+ * What the scan carries forward, restored when an inline image's end is tried
+ * again. `showsText` lives here rather than beside the scan, so a retry after a
+ * false `EI` forgets an operator read from the image's data: kept outside, it
+ * would stick, and a bitmap font whose data holds `Tj` would be refused (spec
+ * 0020, *Data model sketch*).
+ */
 interface Semantics {
   readonly sequences: Sequence[];
   readonly names: Map<ResourceCategory, Set<string>>;
   describes: boolean;
+  showsText: boolean;
 }
 
 /** An inline image whose data's end may be tried again further on. */
@@ -175,7 +192,12 @@ export function scanContent(
   bytes: Uint8Array,
   properties: PDFObject | null,
 ): DrawingRead | "unsure" {
-  let state: Semantics = { sequences: [], names: new Map(), describes: false };
+  let state: Semantics = {
+    sequences: [],
+    names: new Map(),
+    describes: false,
+    showsText: false,
+  };
   const choices: Choice[] = [];
   // Whether the rest of a stream reads to its end depends only on where the
   // scan resumes after an `EI`, so a resume point that failed once fails again.
@@ -300,7 +322,11 @@ export function scanContent(
   for (const sequence of state.sequences) {
     if (sequence.actualText && !sequence.drew) state.describes = true;
   }
-  return Object.freeze({ describes: state.describes, names: state.names });
+  return Object.freeze({
+    describes: state.describes,
+    names: state.names,
+    showsText: state.showsText,
+  });
 }
 
 /** One operator, with the operands collected before it. */
@@ -317,6 +343,7 @@ function operate(
     operands[0]?.is === "name" ? (operands[0] as { name: string }).name : null;
 
   if (TEXT_SHOWING.has(word)) {
+    state.showsText = true;
     for (const sequence of state.sequences) sequence.drew = true;
     return;
   }
@@ -460,6 +487,7 @@ function copy(state: Semantics): Semantics {
       [...state.names].map(([category, found]) => [category, new Set(found)]),
     ),
     describes: state.describes,
+    showsText: state.showsText,
   };
 }
 

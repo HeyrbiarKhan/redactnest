@@ -58,6 +58,13 @@
  *     descriptions RedactNest cannot remove and the resource names each
  *     drawing uses: spec 0001's one named exception (spec 0019, INV-4).
  *
+ * Spec 0020 added the glyph rule:
+ *
+ *   - `glyphs.ts` judges what a Type 3 font's glyphs draw (`judgeGlyphs`): text
+ *     below a glyph, or a form, picture or tiling pattern something outside
+ *     every Type 3 font also reaches. The open and the run refuse such a file
+ *     before anything is removed, and the self check fails text below a glyph.
+ *
  * Nothing in this folder calls `search()` (spec 0005, INV-11); lint holds it.
  *
  * The functions ending in `With` take the loaded MuPDF module as a parameter.
@@ -119,6 +126,7 @@ export {
   type Transform,
 } from "./device";
 export { hasPdfHeader, PDF_HEADER_WINDOW } from "./door";
+export { glyphRuleOf, judgeGlyphs, type GlyphVerdict } from "./glyphs";
 export { checkpoint, EngineFailure, RunCancelled } from "./failure";
 export { findMatchesIn, findTermsIn, offLineGlyphs } from "./find";
 export {

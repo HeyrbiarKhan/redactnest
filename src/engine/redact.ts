@@ -5,6 +5,7 @@ import type { MatchKind, TermId, TermRemoval } from "@/worker/protocol";
 import { recordPage, targetArea, type PageRecord } from "./characters";
 import { checkpoint as yieldThenCheck, EngineFailure } from "./failure";
 import { lineBox, paddedArea, removalBand } from "./geometry";
+import { glyphRuleOf, type GlyphVerdict } from "./glyphs";
 import { takeInventory } from "./inventory";
 import { loadEngine, type MuPdf } from "./load";
 import { boxPass, paddedPass, textPass, type Pass } from "./passes";
@@ -49,11 +50,19 @@ import type {
  * fails the check on its own (AC-6), and both skipped, a run writes main's
  * output, which every fixture's pixels are compared with (AC-7). Its fourth
  * pass adds the second write, so a test can make it keep the entry it should
- * drop, throw, or change what a page draws, and watch the run fail (AC-15). A
- * parameter with a frozen default, rather than a setter, so the walled module
- * holds no mutable hook and the worker can only ever run the real thing.
+ * drop, throw, or change what a page draws, and watch the run fail (AC-15).
+ * Spec 0020 adds the glyph rule: swapped out, a run writes main's output, so
+ * a test can watch the check fail text below a glyph on its own, and the gate
+ * can compare what main drew (AC-7, AC-10). A parameter with a frozen default,
+ * rather than a setter, so the walled module holds no mutable hook and the
+ * worker can only ever run the real thing.
  */
 export interface Pipeline {
+  /**
+   * The glyph rule on the prepared working copy (`glyphs.ts`). Spec 0020,
+   * AC-6: the run refuses on any answer but `"clean"`, and on a throw.
+   */
+  readonly judgeGlyphs: (pdf: PDFDocument) => GlyphVerdict | "problem";
   /** What lies outside each page's visible area, removed (`trim.ts`). */
   readonly trim: (
     mupdf: MuPdf,
@@ -80,6 +89,7 @@ export interface Pipeline {
 }
 
 export const PIPELINE: Pipeline = Object.freeze({
+  judgeGlyphs: glyphRuleOf,
   trim: trimToVisibleArea,
   pruneToRoles,
   sweepCarriers,
@@ -111,17 +121,18 @@ export async function redactDocument(
  * `redactDocument` with the engine already in hand: the same seam
  * `openDocumentWith` gives Vitest, so both run the real MuPDF in Node.
  *
- * The pipeline order is fixed (spec 0004, *State transitions*, as specs 0006
- * and 0019 amend it): inventory, prepare, trim, validate targets, slant,
- * images, record every page, the three passes page by page, rebuild, write,
- * self check; on the check's `unused-colour-space` verdict alone, a
- * checkpoint, the second write and the whole self check on its bytes. The
- * inventory comes before preparing, or flattened annotations would
+ * The pipeline order is fixed (spec 0004, *State transitions*, as specs 0006,
+ * 0019 and 0020 amend it): inventory, prepare, the glyph rule, trim, validate
+ * targets, slant, images, record every page, the three passes page by page,
+ * rebuild, write, self check; on the check's `unused-colour-space` verdict
+ * alone, a checkpoint, the second write and the whole self check on its bytes.
+ * The inventory comes before preparing, or flattened annotations would
  * no longer be found. Preparing comes before any Redact annotation is added,
- * or the flatten would bake the markers into the page. The trim comes right
- * after preparing, as it does at open, so targets are checked on the page
- * detection read, prepared and trimmed alike (spec 0004, INV-9, as spec 0006
- * rewords it). Every page is recorded before any page is redacted, and after
+ * or the flatten would bake the markers into the page. The glyph rule comes
+ * right after preparing, on the page the bake drew, as it does at open, and
+ * before anything is removed. The trim comes next, as it does at open, so
+ * targets are checked on the page detection read, prepared and trimmed alike
+ * (spec 0004, INV-9, as spec 0006 rewords it). Every page is recorded before any page is redacted, and after
  * the trim, so a trimmed character is never expected back, and a pass that
  * changes a resource shared with a later page cannot change that page's
  * record too.
@@ -155,6 +166,12 @@ export async function redactDocumentWith(
 
     const sanitized = takeInventory(work);
     prepareDocument(mupdf, work);
+
+    // Spec 0020, AC-6: what a Type 3 font's glyphs draw, judged on the
+    // prepared copy before any pass removes anything, so a ticked value can
+    // never survive through a glyph. The open refused such a file already;
+    // this holds it for any bytes a run is handed.
+    refuseBrokenGlyphs(pipeline, work);
     await checkpoint();
 
     // Spec 0006, AC-14: on every working copy, with nothing ticked as well,
@@ -240,6 +257,22 @@ export async function redactDocumentWith(
     work?.destroy();
     out?.destroy();
   }
+}
+
+/**
+ * The glyph rule's refusal (spec 0020, AC-6): `unreadable-structure` on any
+ * answer but `"clean"`, a walk with a problem included, and on a throw, since
+ * a rule that cannot finish vouches for nothing. Its words are spec 0019's,
+ * unchanged, and name no page.
+ */
+function refuseBrokenGlyphs(pipeline: Pipeline, work: PDFDocument): void {
+  let verdict: GlyphVerdict | "problem";
+  try {
+    verdict = pipeline.judgeGlyphs(work);
+  } catch {
+    throw new EngineFailure("unreadable-structure");
+  }
+  if (verdict !== "clean") throw new EngineFailure("unreadable-structure");
 }
 
 /** Load a page, read it, and hand it back to MuPDF whatever happens. */

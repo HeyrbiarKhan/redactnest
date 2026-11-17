@@ -1,0 +1,57 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R /T3 7 0 R >> /XObject << /Fm0 6 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<<  /Length 111 >>
+stream
+BT /F1 12 Tf 72 700 Td (Glyph probe line) Tj ET q 1 0 0 1 72 500 cm /Fm0 Do Q BT /T3 24 Tf 72 300 Td (ab) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 300 100] /Resources << /Font << /F1 5 0 R >> >> /Length 39 >>
+stream
+BT /F1 12 Tf 10 50 Td (SECRET-42) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1000 1000] /FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << /ga 8 0 R /gb 9 0 R >> /Encoding << /Type /Encoding /Differences [97 /ga /gb] >> /FirstChar 97 /LastChar 98 /Widths [1000 1000] /Resources << /XObject << /Fm0 6 0 R >> >> >>
+endobj
+8 0 obj
+<<  /Length 42 >>
+stream
+1000 0 0 0 1000 1000 d1 0 0 1000 1000 re f
+endstream
+endobj
+9 0 obj
+<<  /Length 17 >>
+stream
+1000 0 d0 /Fm0 Do
+endstream
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000277 00000 n 
+0000000440 00000 n 
+0000000510 00000 n 
+0000000688 00000 n 
+0000000982 00000 n 
+0000001075 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+1143
+%%EOF
