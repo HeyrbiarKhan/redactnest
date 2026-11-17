@@ -50,6 +50,20 @@ export const TERMS_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
  * so a change to what it says adds an entry here the same way.
  */
 export const SECURITY_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
+  // Spec 0020, AC-11: dated the day it merges, a literal. 2026-11-17 holds
+  // spec 0019's entry and the list runs strictly newest first, so 2026-11-18
+  // is the earliest day it can merge; move it to the merge day if that is
+  // later. "Can no longer stay" sits behind gates every file passes: the
+  // glyph rule's refusal at open and before the passes (AC-5, AC-6), with the
+  // check failing text below a glyph (AC-7). "A figure or picture the rest of
+  // the file also uses" is narrower than the rule, which refuses a file whose
+  // glyphs name anything outside the fonts reaches, so it promises no more
+  // than the code holds.
+  Object.freeze({
+    date: "2026-11-18",
+    summary:
+      "The original copy of a redacted figure or picture can no longer stay in a font character. RedactNest now stops, at open and again before it removes anything, on a file whose font characters draw a figure or picture the rest of the file also uses, or draw text of their own.",
+  }),
   // Spec 0019, AC-14: dated the day it merges. "First published." holds
   // 2026-11-15 and no two entries share a day, so 2026-11-16 was the earliest
   // day it could merge; it merges on 2026-11-17. Said as the

@@ -14,6 +14,7 @@ import {
 } from "@/engine";
 import type { EngineErrorKind, SanitizedKind } from "@/worker/protocol";
 
+import { GLYPH_TEXT } from "../../scripts/lib/glyph-fixtures.mjs";
 import { COLOUR_TEXT } from "../../scripts/lib/kept-fixtures.mjs";
 import { fixture } from "./bytes";
 import { LIMITS, mupdf, pageRenders } from "./mupdf";
@@ -35,7 +36,9 @@ import { findTargets } from "./targets";
  *    row from the current code, or the gate holds nothing: a new fixture's row
  *    is read from 5c4e0d7's code. The eight fixtures the fourth pass adds
  *    (AC-17) were read from that commit's code too, from a `git archive` of
- *    it, on 2026-11-15.
+ *    it, on 2026-11-15, and so were spec 0020's six `glyph-*.pdf` fixtures,
+ *    on 2026-11-17: main opened and ran all six, so none has a main refusal
+ *    or `sanitized` row.
  *  - Against the same run with the pipeline's prune and structure check both
  *    swapped out, which writes main's output byte for byte (`MAIN`): the same
  *    outcome, the same `removedByType`, and every page rendered pixel for pixel
@@ -45,6 +48,13 @@ import { findTargets } from "./targets";
  *    clean, so the second write (AC-15) can never run in it, and it keeps
  *    today's carrier sweep, which reads through references (AC-16): measured,
  *    every check here passes the same against main's own resolving sweep.
+ *
+ * Spec 0020 refuses four of its fixtures at open on purpose (its AC-8), so
+ * `OPEN_NOW` holds `unreadable-structure` for them and `openKindNow` reads it
+ * wherever main's open row was read: such a fixture runs no further gate test,
+ * as a fixture main refused does. `MAIN` swaps the run's glyph rule out too,
+ * so its runs write main's output, and the two controls are ticked as
+ * `tests/unit/redaction-glyphs.test.ts` ticks them (its AC-10).
  *
  * Two fixtures change on purpose (AC-7). `shared-forms.pdf`, which main
  * refused with `unsupported` when its forms lost their text in the write, now
@@ -65,9 +75,13 @@ import { findTargets } from "./targets";
  * fourth one through `gateFixtures`, and Vitest runs them side by side.
  */
 
-/** Main's pipeline: the prune and the structure check both swapped out (AC-7). */
+/**
+ * Main's pipeline: the prune and the structure check both swapped out (AC-7),
+ * and spec 0020's glyph rule too (its AC-10).
+ */
 const MAIN: Pipeline = Object.freeze({
   ...PIPELINE,
+  judgeGlyphs: () => "clean" as const,
   pruneToRoles: () => {},
   checkStructure: () => "clean" as const,
 });
@@ -109,6 +123,12 @@ const MAIN_FIXTURES: readonly string[] = [
   "detect-us-ssn.pdf",
   "detect-wraps.pdf",
   "form-xobject.pdf",
+  "glyph-bitmap.pdf",
+  "glyph-drawn-form.pdf",
+  "glyph-emoji.pdf",
+  "glyph-shared-picture.pdf",
+  "glyph-text.pdf",
+  "glyph-undrawn-form.pdf",
   "header-at-1019.pdf",
   "header-at-1020.pdf",
   "images-under.pdf",
@@ -294,6 +314,9 @@ const NEEDLES: Readonly<Record<string, readonly Ticked[]>> = {
     ],
   ],
   "form-xobject.pdf": [[[0, "SECRET-42"]]],
+  // Spec 0020's controls (AC-9); its four other fixtures are refused at open.
+  "glyph-bitmap.pdf": [[[0, GLYPH_TEXT.bitmap]]],
+  "glyph-emoji.pdf": [[[0, GLYPH_TEXT.emoji]]],
   "images-under.pdf": [
     [
       [0, "12345678"],
@@ -463,6 +486,23 @@ function runKindNow(name: string): EngineErrorKind | null {
   return name in RUN_NOW ? RUN_NOW[name] : (MAIN_RUN_REFUSALS[name] ?? null);
 }
 
+/**
+ * Where spec 0020 changes an open's outcome on purpose (its AC-5, AC-8): the
+ * four fixtures whose Type 3 glyphs share a drawing or show text. Read with
+ * `in`, like `RUN_NOW`.
+ */
+const OPEN_NOW: Readonly<Record<string, EngineErrorKind | null>> = {
+  "glyph-drawn-form.pdf": "unreadable-structure",
+  "glyph-shared-picture.pdf": "unreadable-structure",
+  "glyph-text.pdf": "unreadable-structure",
+  "glyph-undrawn-form.pdf": "unreadable-structure",
+};
+
+/** What an open must do now: `OPEN_NOW`'s row wins, else main's. */
+function openKindNow(name: string): EngineErrorKind | null {
+  return name in OPEN_NOW ? OPEN_NOW[name] : (MAIN_OPEN_REFUSALS[name] ?? null);
+}
+
 /** The kind an open refuses with, or `null` if it opened. */
 async function openKind(bytes: ArrayBuffer): Promise<EngineErrorKind | null> {
   try {
@@ -586,10 +626,15 @@ function gateTables(): void {
         expect(MAIN_FIXTURES, name).toContain(name);
     });
 
+    it("change an open's outcome only for fixtures main read", () => {
+      for (const name of Object.keys(OPEN_NOW))
+        expect(MAIN_FIXTURES, name).toContain(name);
+    });
+
     it("tick only fixtures that open and run", () => {
       for (const name of [...Object.keys(NEEDLES), ...Object.keys(DETECTED)]) {
         expect(NAMES, name).toContain(name);
-        expect(MAIN_OPEN_REFUSALS[name], name).toBeUndefined();
+        expect(openKindNow(name), name).toBeNull();
       }
     });
   });
@@ -598,13 +643,11 @@ function gateTables(): void {
 /** Every fixture's three checks. */
 function gateFixture(name: string): void {
   describe(name, () => {
-    it("opens as it did on main", async () => {
-      await expect(openKind(fixture(name))).resolves.toBe(
-        MAIN_OPEN_REFUSALS[name] ?? null,
-      );
+    it("opens as it did on main, or as spec 0020 refuses it", async () => {
+      await expect(openKind(fixture(name))).resolves.toBe(openKindNow(name));
     });
 
-    if (MAIN_OPEN_REFUSALS[name] !== undefined) return;
+    if (openKindNow(name) !== null) return;
 
     it("runs with nothing ticked as it did on main, every page drawn as main drew it", async () => {
       const now = await expectSameAsMain(name, [], "nothing ticked");

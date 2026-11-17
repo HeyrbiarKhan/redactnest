@@ -215,18 +215,21 @@ export default function SecurityPage() {
             drawing streams owning its dictionary never name (*Resource use*),
             so a figure or picture left in the file is one those streams name,
             directly or through what they use (a soft mask's group, an image's
-            mask, a Type 3 font's glyph procedures). Name, not draw: a Type 3
-            font's glyph procedures count together, drawn or not, so the
+            mask, a Type 3 font's glyph procedures). Name, not draw, so the
             original copy's line is the gate's "can" line, never "only where a
-            page still draws it". "On another page where you ticked nothing" is
-            one way it happens: a figure two pages share keeps its original for
-            the page that still draws it. "In a font character that no text
-            shows" is another, measured 2026-11-15 (/debug, after the verify)
-            on a document built in a scratch test: a page drawing a form that
-            holds a ticked value, with a Type 3 font whose glyph no text draws
-            naming the same form, kept the value in the output while the check
-            passed, and kept none without that glyph; main kept it too. As
-            built: "a figure or picture they do not reach", where "an object
+            page still draws it". Its "only" rests on two gates every file
+            passes: that reachability (spec 0019, AC-5), and spec 0020's glyph
+            rule, which refuses at open and again before the passes any file
+            in which something a Type 3 font's glyphs draw names a form,
+            picture or tiling pattern something outside every Type 3 font also
+            reaches, or shows text (spec 0020, AC-5 and AC-6), with the check
+            failing text below a glyph on the written bytes (AC-7). So a font
+            character is never where an original copy stays. "On another page
+            where you ticked nothing" is one way it happens: a figure two pages
+            share keeps its original for the page that still draws it. The
+            font character case once named here, measured 2026-11-15 and
+            closed with the line's clause, is spec 0020 (its *Summary* and
+            AC-8). As built: "a figure or picture they do not reach", where "an object
             they do not reach" read wider than the gate, since the catalog and
             each page's own dictionary are objects no drawing reaches; then,
             after the verify, the check first and the original copy as its
@@ -244,7 +247,7 @@ export default function SecurityPage() {
           figure or picture that no page’s drawing instructions reach, directly or through
           what they use. So the original copy of a figure or picture it redacts can stay
           only where a page’s instructions still reach it, such as on another page where
-          you ticked nothing, or in a font character that no text shows.
+          you ticked nothing.
         </p>
         {/* Spec 0004, INV-5 (every setting written out), its *Decision*
             bullet "Redaction settings are explicit at the call site", whose

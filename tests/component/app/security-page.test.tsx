@@ -164,11 +164,12 @@ describe("the security page", () => {
     ["removedNotCovered", "a little past the item’s edges"],
     ["removedNotCovered", "further out than that can stay visible"],
     // Spec 0019, AC-14, as built after the verify: the check first, then the
-    // original copy as its "can" line, a font character no text shows among
-    // the places it can stay.
+    // original copy as its "can" line. Spec 0020, AC-11: the glyph rule
+    // refuses a file whose font characters could hold one, so the line no
+    // longer names a font character among the places it can stay.
     [
       "removedNotCovered",
-      "The check fails any file holding a figure or picture that no page’s drawing instructions reach, directly or through what they use. So the original copy of a figure or picture it redacts can stay only where a page’s instructions still reach it, such as on another page where you ticked nothing, or in a font character that no text shows.",
+      "The check fails any file holding a figure or picture that no page’s drawing instructions reach, directly or through what they use. So the original copy of a figure or picture it redacts can stay only where a page’s instructions still reach it, such as on another page where you ticked nothing.",
     ],
     ["removedNotCovered", "a change in the engine’s defaults cannot quietly change"],
     ["removedNotCovered", "a ticked item MuPDF cannot remove stops the run"],
@@ -618,6 +619,10 @@ describe("the security page", () => {
   it("says once, in the structure item, that names a file chooses can carry words", () => {
     render(<SecurityPage />);
     const text = mainText();
+    // Spec 0019's entry, read by its day, since spec 0020's sits above it.
+    const structureEntry = SECURITY_CHANGES.find(({ date }) => date === "2026-11-17");
+    expect(structureEntry).toBeDefined();
+    const summary = structureEntry?.summary ?? "";
 
     expect(sectionText(SECURITY_SECTIONS.theCheck)).toContain(
       "Names a file chooses, such as those it gives its fonts, pictures and colours, are held to no list: they can stay as written, and can carry words.",
@@ -625,15 +630,35 @@ describe("the security page", () => {
     // A name can go with what it named (a font no drawing uses any more), so
     // the limit is a "can" line, never "they stay as written".
     expect(text).not.toContain("they stay as written");
-    expect(SECURITY_CHANGES[0].summary).not.toContain("chooses stay as written");
+    expect(summary).not.toContain("chooses stay as written");
     expect(text.split("Names a file chooses").length - 1).toBe(1);
     expect(text.split("are held to no list").length - 1).toBe(1);
-    expect(SECURITY_CHANGES[0].summary).toContain(
+    expect(summary).toContain(
       "names a file chooses can stay as written and can carry words",
     );
+    expect(summary).toContain("with a warning on each page where RedactNest finds some");
+  });
+
+  /**
+   * covers: spec 0020, AC-11. The glyph rule refuses, at open and before the
+   * passes, a file in which a Type 3 font's glyphs name a figure or picture
+   * something outside the fonts reaches, or show text, and the check fails
+   * text below a glyph. So the original copy line drops its font character
+   * clause, and the change entry says it can no longer stay there.
+   */
+  it("names no font character where an original copy can stay, and dates the change", () => {
+    render(<SecurityPage />);
+    const removed = sectionText(SECURITY_SECTIONS.removedNotCovered);
+
+    // The change entry names the font character on purpose, so the clause's
+    // absence is held where the line lives, and its words across the page.
+    expect(removed).not.toContain("font character");
+    expect(mainText()).not.toContain("that no text shows");
+    expect(removed).toContain("such as on another page where you ticked nothing.");
     expect(SECURITY_CHANGES[0].summary).toContain(
-      "with a warning on each page where RedactNest finds some",
+      "The original copy of a redacted figure or picture can no longer stay in a font character.",
     );
+    expect(SECURITY_CHANGES[0].date > "2026-11-17").toBe(true);
   });
 
   /**
