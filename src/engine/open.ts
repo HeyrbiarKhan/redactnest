@@ -6,6 +6,7 @@ import { walkRoles } from "./allowlist";
 import { refuseAtTheDoor } from "./door";
 import { EngineFailure } from "./failure";
 import { findMatchesIn, findTermsIn } from "./find";
+import { judgeGlyphs, type GlyphVerdict } from "./glyphs";
 import { inspectPages, readsAsNothing } from "./inspect";
 import { loadEngine, type MuPdf } from "./load";
 import { prepareDocument } from "./prepare";
@@ -84,9 +85,10 @@ export async function openDocument(
  * cannot skip it. On the path through `openDocument` it has passed already and
  * costs a scan of at most 1024 bytes.
  *
- * The order is fixed (spec 0006, *State transitions*, as spec 0019 amends
- * it): door, open, password, page cap, layers, prepare, the role walk, inspect,
- * the refusal, the empty clip refusal, the role walk's refusal, trim.
+ * The order is fixed (spec 0006, *State transitions*, as specs 0019 and 0020
+ * amend it): door, open, password, page cap, layers, prepare, the role walk,
+ * inspect, the refusal, the empty clip refusal, the role walk's refusal, the
+ * glyph rule's refusal, trim.
  * Detection follows, when the worker asks the handle for its matches, on the
  * trimmed page.
  */
@@ -171,6 +173,21 @@ export async function openDocumentWith(
     // Spec 0019, AC-3: a shape the role walk cannot read. It names no page,
     // and no review exists.
     if (roles.problem !== null) {
+      throw new EngineFailure("unreadable-structure");
+    }
+
+    // Spec 0020, AC-5: what a Type 3 font's glyphs draw, judged from the same
+    // walk, so the visitor hears before ticking anything that this file's
+    // font characters draw something RedactNest cannot see into. The words
+    // are the role walk's own, and no session exists for the file. A throw
+    // while judging is a refusal too.
+    let glyphs: GlyphVerdict;
+    try {
+      glyphs = judgeGlyphs(roles);
+    } catch {
+      throw new EngineFailure("unreadable-structure");
+    }
+    if (glyphs !== "clean") {
       throw new EngineFailure("unreadable-structure");
     }
 

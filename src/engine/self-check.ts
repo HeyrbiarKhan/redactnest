@@ -6,6 +6,7 @@ import { TRAILER_KEYS, walkRoles, type ResourceOwner } from "./allowlist";
 import { comparePage, type PageRecord } from "./characters";
 import { EngineFailure } from "./failure";
 import { lineBox } from "./geometry";
+import { judgeGlyphs } from "./glyphs";
 import type { MuPdf } from "./load";
 import { forEachDictionary, hasKey, keysOf } from "./objects";
 import { readDrawing, type ResourceCategory } from "./marked";
@@ -189,6 +190,17 @@ export type StructureCheck = (
  * which any leak outranks. An unused colour space entry answers
  * `"unused-colour-space"` only when nothing else was found, so the carrier
  * and embedded file checks run before resource use's answer is returned.
+ *
+ * Spec 0020's, AC-7: no drawing below a Type 3 glyph shows text, judged by
+ * the same `judgeGlyphs` the open and the run refuse with, on this walk, which
+ * scans only the glyph side (empty in a file with no Type 3 font). A glyph
+ * side drawing the scan cannot read is judged as its worst, so it can answer
+ * a leak where resource use said `"unreadable"`. A drawing both sides reach
+ * is not judged here: after the passes the page names MuPDF's redacted copy
+ * and the glyph the original, so no written file shows the sharing, and a
+ * write that merged two identical pictures would make a clean file look
+ * shared. The refusals at open and before the passes hold that part, on the
+ * bytes a run redacts.
  */
 export function structureIsClean(
   check: PDFDocument,
@@ -225,6 +237,9 @@ export function structureIsClean(
     }
   });
   if (!clean) return "leak";
+  // Text below a glyph is a leak that outranks `"unreadable"` and
+  // `"unused-colour-space"`, so it never leads to a second write.
+  if (judgeGlyphs(walk) === "text") return "leak";
   return use;
 }
 

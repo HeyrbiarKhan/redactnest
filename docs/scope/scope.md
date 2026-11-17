@@ -449,7 +449,7 @@ spec [0020](../specs/0020-type3-glyphs-stay-in-font/index.md) (2026-11-17: the g
 - [x] Decide the glyph rule first (spec): `/architect engine and code follow ups: a Type 3 glyph no text draws`
 - [ ] Build it: `/develop engine and code follow ups`
   - [x] The glyph rule closes the leak: the four `glyph-*.pdf` fixtures failing first and the two controls, the scan's `showsText`, the walk's `glyphs` and `outside`, `judgeGlyphs`, and the run's refusal before the trim (spec 0020, tasks 1 to 5) · AC-1 to AC-4, AC-6, AC-8, AC-9
-  - [ ] Refused at open and held by the check: the open's refusal after the role walk's, and the check's text part with its seam tests (spec 0020, tasks 6 and 7) · AC-5, AC-7, AC-8
+  - [x] Refused at open and held by the check: the open's refusal after the role walk's, and the check's text part with its seam tests (spec 0020, tasks 6 and 7) · AC-5, AC-7, AC-8
   - [ ] The gate, the words and the amends: the gate's rows with `OPEN_NOW`, both budgets, the security page's original copy line and its change entry (dated 2026-11-18 or later), specs 0004, 0018 and 0019 amended, and feature 31's Done when (spec 0020, tasks 8 to 10) · AC-10 to AC-12
   - [ ] This row's other items, from their own specs: the rotated and cropped fixture and the line box that is not finite (spec 0006), `partlyNamed` and `countRemoved` (spec 0007), `IconCircle`'s `sm` size (spec 0013), the two trimmed page lines, the font order bullet, and feature 31's review minors
 - [ ] Verify it: `/check verify engine and code follow ups`
