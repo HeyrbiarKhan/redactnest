@@ -239,7 +239,7 @@ Skateboard: the thinnest whole that closes the leak comes first (the failing fix
 - [ ] When spec 0019's month of counts is read (from about 2026-12-08), read `unreadable-structure` knowing it now has two causes.
 - [ ] Feature 30's other items build from their own specs (0006, 0007, 0013); this spec decides only the glyph rule.
 - [ ] `/debug`: a made up matplotlib chart (matplotlib 3.11.2, Type 3 by default) refuses a run with `redaction-incomplete` when `12345678` in its title is ticked, on today's engine, while ticking `Jane` in its legend, and ticking nothing, make a file (measured 2026-11-17, `rationale.md`, *What matplotlib writes*). It fails closed and is older than this spec, so it is not part of it; find why before a visitor meets it on a chart.
-- [ ] `/sync`: the `src/engine/AGENTS.md` lines in task 10.
+- [x] `/sync`: the `src/engine/AGENTS.md` lines in task 10. Done in 55d57ec.
 
 ## Rationale
 
