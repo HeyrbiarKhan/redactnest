@@ -82,8 +82,10 @@ import {
   trimOcr,
   trimQuote,
   trimRefused,
+  trimRotated,
   trimScan,
   trimText,
+  trimUnplaced,
 } from "./lib/reading-fixtures.mjs";
 import {
   actualText,
@@ -611,6 +613,16 @@ const FIXTURES = [
     "trim-ocr.pdf",
     trimOcr(),
     "a scan with Tesseract's text layer, cropped through its lines",
+  ],
+  [
+    "trim-rotated.pdf",
+    trimRotated(),
+    "pages turned 90, 180 and 270 degrees, cropped, with text past every edge",
+  ],
+  [
+    "trim-unplaced.pdf",
+    trimUnplaced(),
+    "a line drawn past the float range, which MuPDF cannot place",
   ],
   // Spec 0019: what a kept object points at.
   ["kept-figure.pdf", keptFigure(), "a font's private key on the original figure"],

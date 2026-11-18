@@ -16,7 +16,7 @@ import type { EngineErrorKind, SanitizedKind } from "@/worker/protocol";
 
 import { GLYPH_TEXT } from "../../scripts/lib/glyph-fixtures.mjs";
 import { COLOUR_TEXT } from "../../scripts/lib/kept-fixtures.mjs";
-import { TRIM_CARRY } from "../../scripts/lib/reading-fixtures.mjs";
+import { TRIM_CARRY, TRIM_ROTATED } from "../../scripts/lib/reading-fixtures.mjs";
 import { fixture } from "./bytes";
 import { LIMITS, mupdf, pageRenders } from "./mupdf";
 import { findTargets } from "./targets";
@@ -41,7 +41,11 @@ import { findTargets } from "./targets";
  *    on 2026-11-17: main opened and ran all six, so none has a main refusal
  *    or `sanitized` row. So was `trim-carry.pdf`, on 2026-11-18: main opened
  *    it and made a file with nothing ticked, and refused its ticked set with
- *    `redaction-incomplete`, the MuPDF limit it pins.
+ *    `redaction-incomplete`, the MuPDF limit it pins. So were feature 30's
+ *    `trim-rotated.pdf` and `trim-unplaced.pdf`, the same day: main opened
+ *    both, made a file from the first with nothing ticked (each of its first
+ *    two pages' addresses ticked alone removed one), and refused the second's
+ *    run with `redaction-incomplete`.
  *  - Against the same run with the pipeline's prune and structure check both
  *    swapped out, which writes main's output byte for byte (`MAIN`): the same
  *    outcome, the same `removedByType`, and every page rendered pixel for pixel
@@ -55,7 +59,9 @@ import { findTargets } from "./targets";
  * Spec 0020 refuses four of its fixtures at open on purpose (its AC-8), so
  * `OPEN_NOW` holds `unreadable-structure` for them and `openKindNow` reads it
  * wherever main's open row was read: such a fixture runs no further gate test,
- * as a fixture main refused does. `MAIN` swaps the run's glyph rule out too,
+ * as a fixture main refused does. Spec 0006's Follow-up on a line box that is
+ * not finite (feature 30) refuses `trim-unplaced.pdf` at open the same way,
+ * with `unsupported`, where main failed every run on it. `MAIN` swaps the run's glyph rule out too,
  * so its runs write main's output, and the two controls are ticked as
  * `tests/unit/redaction-glyphs.test.ts` ticks them (its AC-10).
  *
@@ -197,8 +203,10 @@ const MAIN_FIXTURES: readonly string[] = [
   "trim-ocr.pdf",
   "trim-quote.pdf",
   "trim-refused.pdf",
+  "trim-rotated.pdf",
   "trim-scan.pdf",
   "trim-text.pdf",
+  "trim-unplaced.pdf",
   "two-lines.pdf",
   "two-pages.pdf",
   "user-password.pdf",
@@ -235,6 +243,7 @@ const MAIN_RUN_REFUSALS: Readonly<Record<string, EngineErrorKind>> = {
   "next-line-1.pdf": "redaction-incomplete",
   "next-line-3.pdf": "redaction-incomplete",
   "shared-forms.pdf": "unsupported",
+  "trim-unplaced.pdf": "redaction-incomplete",
 };
 
 /** `sanitized` from a run with nothing ticked on main, where it named any kind. */
@@ -435,6 +444,9 @@ const NEEDLES: Readonly<Record<string, readonly Ticked[]>> = {
   ],
   // The recorded MuPDF limit: refused alike here and on main's pipeline.
   "trim-carry.pdf": [[[0, TRIM_CARRY.ticked]]],
+  // Not the last page: its shading reads as a picture under every item there
+  // to the self check's pixel part, which refused a ticked run on main too.
+  "trim-rotated.pdf": [[[0, TRIM_ROTATED.inside[0]]], [[1, TRIM_ROTATED.inside[1]]]],
   "two-lines.pdf": [[[0, "jane.doe@ example.com"]]],
   "watermark.pdf": [[[0, "SECRET-WM"]]],
   "xobject-twice.pdf": [[[0, "SECRET-99"]]],
@@ -494,14 +506,17 @@ function runKindNow(name: string): EngineErrorKind | null {
 
 /**
  * Where spec 0020 changes an open's outcome on purpose (its AC-5, AC-8): the
- * four fixtures whose Type 3 glyphs share a drawing or show text. Read with
- * `in`, like `RUN_NOW`.
+ * four fixtures whose Type 3 glyphs share a drawing or show text. And where
+ * spec 0006's Follow-up does (feature 30): a page holding a character MuPDF
+ * cannot place, refused at open rather than in every run. Read with `in`,
+ * like `RUN_NOW`.
  */
 const OPEN_NOW: Readonly<Record<string, EngineErrorKind | null>> = {
   "glyph-drawn-form.pdf": "unreadable-structure",
   "glyph-shared-picture.pdf": "unreadable-structure",
   "glyph-text.pdf": "unreadable-structure",
   "glyph-undrawn-form.pdf": "unreadable-structure",
+  "trim-unplaced.pdf": "unsupported",
 };
 
 /** What an open must do now: `OPEN_NOW`'s row wins, else main's. */
@@ -649,7 +664,7 @@ function gateTables(): void {
 /** Every fixture's three checks. */
 function gateFixture(name: string): void {
   describe(name, () => {
-    it("opens as it did on main, or as spec 0020 refuses it", async () => {
+    it("opens as it did on main, or as OPEN_NOW refuses it", async () => {
       await expect(openKind(fixture(name))).resolves.toBe(openKindNow(name));
     });
 
