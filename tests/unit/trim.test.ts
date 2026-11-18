@@ -7,8 +7,10 @@ import {
   PIPELINE,
   prepareDocument,
   redactDocumentWith,
+  removalBand,
   RunCancelled,
   silenceEngineLog,
+  textPass,
   trimToVisibleArea,
   type Pipeline,
   type TrimOutcome,
@@ -16,7 +18,7 @@ import {
 
 import { isPartly } from "@/lib/page-findings";
 
-import { TRIM_EDGE, TRIM_TEXT } from "../../scripts/lib/reading-fixtures.mjs";
+import { TRIM_CARRY, TRIM_EDGE, TRIM_TEXT } from "../../scripts/lib/reading-fixtures.mjs";
 import { document, line } from "../../scripts/lib/redaction-fixtures.mjs";
 import { fixture } from "../support/bytes";
 import { documentImages, inspect, LIMITS, mupdf, pageText } from "../support/mupdf";
@@ -571,6 +573,72 @@ describe("the self check's outside rule", () => {
       ).rejects.toEqual(new EngineFailure("redaction-incomplete"));
     },
   );
+});
+
+/**
+ * A recorded MuPDF limit, pinned on MuPDF.js 1.28.1 (spec 0020's Follow-up,
+ * found by `/debug` on a matplotlib chart). The trim's pass rewrites the page
+ * it touches and drops every `0 0 Td`, so text objects placed by `cm` keep no
+ * text positioning operator. MuPDF's text pass then carries the advance of
+ * the glyphs it removed at the end of one text object across `ET` and `BT`
+ * into the next, which moves that text, and the self check refuses the run
+ * with `redaction-incomplete`. It fails closed: nothing leaks. An upgrade
+ * that fixes the carry fails these pins; take the chart back to spec 0020's
+ * Follow-up and feature 30 then, never loosen a pin.
+ */
+describe("MuPDF's carry into the next text object after the trim (pin)", () => {
+  const NAME = "trim-carry.pdf";
+
+  /** Where the next text object's first glyph starts once the text pass ran. */
+  async function nextStart(trim: boolean): Promise<number | undefined> {
+    const source = fixture(NAME);
+    const [target] = findTargets(source, 0, TRIM_CARRY.ticked);
+    const doc = mupdf.Document.openDocument(source, "application/pdf");
+    try {
+      const pdf = doc.asPDF() as PDFDocument;
+      prepareDocument(mupdf, pdf);
+      if (trim) await trimToVisibleArea(mupdf, pdf);
+      const page = pdf.loadPage(0);
+      try {
+        textPass(mupdf, page, [target.quads.map(removalBand)]);
+      } finally {
+        page.destroy();
+      }
+      const buffer = pdf.saveToBuffer("");
+      try {
+        const after = buffer.asUint8Array().slice().buffer as ArrayBuffer;
+        return characters(after, 0).find(({ code }) => code === TRIM_CARRY.next[0])
+          ?.origin[0];
+      } finally {
+        buffer.destroy();
+      }
+    } finally {
+      doc.destroy();
+    }
+  }
+
+  it("makes a file with nothing ticked, the trim's pass removing nothing", async () => {
+    const { output, trim } = await openAndRun(NAME);
+    expect(trim).toEqual([{ removed: true, pictureOutside: false }]);
+    for (const text of [TRIM_CARRY.first, TRIM_CARRY.next, TRIM_CARRY.edge]) {
+      expect(unclipped(output)).toContain(text);
+    }
+  });
+
+  it("refuses with redaction-incomplete when the last word of the first text object is ticked", async () => {
+    const source = fixture(NAME);
+    await expect(
+      redactDocumentWith(mupdf, source, findTargets(source, 0, TRIM_CARRY.ticked)),
+    ).rejects.toEqual(new EngineFailure("redaction-incomplete"));
+  });
+
+  it("moves the next text object by the removed word's advance, only after the trim's rewrite", async () => {
+    // Every line starts at x 72. `12345678` is eight Helvetica digits of 556
+    // thousandths each, carried into `Revenue` at its 10 pt.
+    const carried = (8 * 556 * 10) / 1000;
+    expect(await nextStart(true)).toBeCloseTo(72 + carried, 2);
+    expect(await nextStart(false)).toBeCloseTo(72, 2);
+  });
 });
 
 /** AC-29: a cancel is noticed within one page of the trim. */

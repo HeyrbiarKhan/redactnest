@@ -16,6 +16,7 @@ import type { EngineErrorKind, SanitizedKind } from "@/worker/protocol";
 
 import { GLYPH_TEXT } from "../../scripts/lib/glyph-fixtures.mjs";
 import { COLOUR_TEXT } from "../../scripts/lib/kept-fixtures.mjs";
+import { TRIM_CARRY } from "../../scripts/lib/reading-fixtures.mjs";
 import { fixture } from "./bytes";
 import { LIMITS, mupdf, pageRenders } from "./mupdf";
 import { findTargets } from "./targets";
@@ -38,7 +39,9 @@ import { findTargets } from "./targets";
  *    (AC-17) were read from that commit's code too, from a `git archive` of
  *    it, on 2026-11-15, and so were spec 0020's six `glyph-*.pdf` fixtures,
  *    on 2026-11-17: main opened and ran all six, so none has a main refusal
- *    or `sanitized` row.
+ *    or `sanitized` row. So was `trim-carry.pdf`, on 2026-11-18: main opened
+ *    it and made a file with nothing ticked, and refused its ticked set with
+ *    `redaction-incomplete`, the MuPDF limit it pins.
  *  - Against the same run with the pipeline's prune and structure check both
  *    swapped out, which writes main's output byte for byte (`MAIN`): the same
  *    outcome, the same `removedByType`, and every page rendered pixel for pixel
@@ -188,6 +191,7 @@ const MAIN_FIXTURES: readonly string[] = [
   "terms-dense.pdf",
   "terms.pdf",
   "text-page.pdf",
+  "trim-carry.pdf",
   "trim-edge.pdf",
   "trim-kept.pdf",
   "trim-ocr.pdf",
@@ -429,6 +433,8 @@ const NEEDLES: Readonly<Record<string, readonly Ticked[]>> = {
     ],
     [[1, "0958"]],
   ],
+  // The recorded MuPDF limit: refused alike here and on main's pipeline.
+  "trim-carry.pdf": [[[0, TRIM_CARRY.ticked]]],
   "two-lines.pdf": [[[0, "jane.doe@ example.com"]]],
   "watermark.pdf": [[[0, "SECRET-WM"]]],
   "xobject-twice.pdf": [[[0, "SECRET-99"]]],

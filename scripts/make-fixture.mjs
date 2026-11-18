@@ -76,6 +76,7 @@ import {
   readSlides,
   readStamped,
   readUnmapped,
+  trimCarry,
   trimEdge,
   trimKept,
   trimOcr,
@@ -601,6 +602,11 @@ const FIXTURES = [
     "a size change between glyphs outside and inside the crop",
   ],
   ["trim-quote.pdf", trimQuote(), "a trimmed page that shows a line with a quote"],
+  [
+    "trim-carry.pdf",
+    trimCarry(),
+    "a trimmed page where a removed word's advance moves the next text object",
+  ],
   [
     "trim-ocr.pdf",
     trimOcr(),

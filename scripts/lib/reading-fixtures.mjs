@@ -1632,3 +1632,39 @@ export function trimQuote() {
     },
   ]);
 }
+
+/**
+ * The words of `trim-carry.pdf`: the first text object ends with `ticked`,
+ * `next` is the text object after it, and `edge` is the line whose box
+ * reaches past the page's bottom.
+ */
+export const TRIM_CARRY = Object.freeze({
+  ticked: "12345678",
+  first: "Totals for account 12345678",
+  next: "Revenue",
+  edge: "Quarter",
+});
+
+/**
+ * A recorded MuPDF limit, found by `/debug` on a matplotlib chart (spec
+ * 0020's Follow-up). Each line is its own text object, placed by `cm` and
+ * then `0 0 Td`, as matplotlib places every label. The edge line sits 2 pt
+ * above the page's bottom, so its box reaches past the edge and the trim
+ * runs its pass, which removes nothing here but rewrites the page without
+ * any `0 0 Td`. Ticking the last word of the first text object then lets
+ * MuPDF's text pass carry the removed word's advance across `ET` and `BT`
+ * into the next text object, which moves `Revenue`, so the self check
+ * refuses the run with `redaction-incomplete`. Nothing ticked makes a file.
+ */
+export function trimCarry() {
+  const placed = (size, y, text) =>
+    `q 1 0 0 1 72 ${y} cm BT /F1 ${size} Tf 0 0 Td ${literal(text)} Tj ET Q\n`;
+  return document(() => [
+    {
+      content:
+        placed(12, 700, TRIM_CARRY.first) +
+        placed(10, 650, TRIM_CARRY.next) +
+        placed(10, 2, TRIM_CARRY.edge),
+    },
+  ]);
+}
