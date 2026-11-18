@@ -60,6 +60,7 @@ import {
   canMake,
   hasUnsavedWork,
   IDLE,
+  outputFormFor,
   sessionReducer,
   type LiveSession,
   type ToolSession,
@@ -1075,6 +1076,16 @@ export function ToolClient() {
   );
 
   /**
+   * What the file's name says it is (spec 0007, AC-12): the reducer's own
+   * `outputFormFor` over the summary and outcome it named the file from, both
+   * frozen while a session is `complete`, so the card and the name agree.
+   */
+  const outputForm =
+    session.state === "complete" && session.outcome
+      ? outputFormFor(session.summary, session.outcome)
+      : null;
+
+  /**
    * The custom terms as this job holds them, in the tab's list order (spec
    * 0017, AC-1, AC-14): the panel's chips, the checklist's groups, and what
    * the result card says for each.
@@ -1429,13 +1440,13 @@ export function ToolClient() {
             />
           )}
 
-          {session.state === "complete" && counts !== null && (
+          {session.state === "complete" && counts !== null && outputForm !== null && (
             <ResultCard
               counts={counts}
               terms={termView?.results}
               setAside={termView?.setAside}
               summary={session.summary}
-              outputName={session.outputName}
+              outputForm={outputForm}
               downloaded={session.downloaded}
               onDownload={handleDownload}
               onRedactAnother={handleStartOver}
