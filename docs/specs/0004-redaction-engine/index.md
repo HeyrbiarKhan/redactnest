@@ -338,7 +338,7 @@ No message is added or renamed. The envelope is spec 0001's, extended by 0002; t
 - **Owner password restrictions are removed on purpose** (AC-10). The visitor already holds the content, and the restriction protects nothing from them. Feature 16 should say so.
 - **MuPDF's diagnostics are silenced** (AC-24), so nothing it says about a document reaches the console, where feature 11 could otherwise pick it up.
 - **What this design does not remove, stated honestly** so feature 16 does not overclaim:
-  - Embedded fonts keep the shapes of removed characters. That is an inventory of which characters existed, never their order.
+  - Embedded fonts keep the shapes of removed characters. That is an inventory of which characters existed and, in a font the app that made the file numbered as each character first appeared (LibreOffice and Cairo based apps do), part of the order they first appeared in. (Until 2026-11-18 it said "never their order", which RedactNest cannot promise, since it leaves fonts as the source wrote them; feature 30, found by feature 16's third verify from how the format works, not measured.)
   - Text drawn as vector outlines, or shown only as pixels with no text layer, is never detected. Features 7 and 14 own those.
   - Text that no detector matched passes through as it is, including text a viewer does not show: outside the crop box, white on white, or under a black rectangle the source already had. That last one is a fake redaction the visitor received and may not know about.
   - Scan ink further from the OCR text than the padding reaches stays legible. The padding covers ordinary misalignment, not an OCR layer that is badly wrong.

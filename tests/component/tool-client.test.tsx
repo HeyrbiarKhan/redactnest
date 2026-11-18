@@ -2098,10 +2098,10 @@ describe("the page readings (spec 0006)", () => {
       await openWith(run.session);
 
       expect(screen.getByTestId("page-notes")).toHaveTextContent(
-        "Page 1 has text or drawings outside its visible area. RedactNest removes them when you redact, since nobody can see them. A found item crossing a page's edge is listed by the part inside the page; the part outside is removed with the rest.",
+        "Page 1 has text or drawings outside its visible area, where nobody can see them. RedactNest removes the text when you redact, and most of the drawings. A found item crossing a page's edge is listed by the part inside the page; the part outside is removed with the rest.",
       );
       expect(screen.getByTestId("page-warnings")).toHaveTextContent(
-        "Page 2 has a picture that reaches outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.",
+        "Page 2 has a picture that reaches outside the visible page. RedactNest doesn't clear the part outside, so it is still in the file.",
       );
 
       const user = userEvent.setup();
@@ -2111,7 +2111,7 @@ describe("the page readings (spec 0006)", () => {
       const card = screen.getByRole("region", { name: "Your redacted file is ready" });
       const removed = within(card).getByTestId("off-page-removed");
       expect(removed).toHaveTextContent(
-        "Text and drawings outside the visible area of page 1 were removed.",
+        "Text outside the visible area of page 1 was removed, and most drawings there. A drawing that crosses the edge of the visible area, or wraps round a corner, can stay.",
       );
       expect(removed).toHaveTextContent(/^Note:/);
       // Before the download warning, which stays directly above Download.

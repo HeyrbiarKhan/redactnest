@@ -464,11 +464,10 @@ export default function SecurityPage() {
             from you.
           </li>
           {/* Spec 0004's *Security model* bullet "Embedded fonts keep the shapes
-              of removed characters" (an inventory of which characters existed).
-              Nothing about order: an app that numbers a subset font's
-              characters as each first appears keeps some of it (the third
-              verify, 2026-11-14), so that bullet's "never their order" is
-              owed on feature 30 in the scope. */}
+              of removed characters" (an inventory of which characters existed,
+              and in some files part of the order they first appeared in, as
+              feature 30 reworded it on 2026-11-18). This line says nothing
+              about order, so it promises no more than that bullet. */}
           <li>
             A font in the file can still hold the shapes of characters that were removed.
             That can tell someone which characters the document used.

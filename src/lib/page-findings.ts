@@ -170,11 +170,14 @@ const FINDING_TEXT: Readonly<Record<Exclude<PageFinding, "blank">, Worded>> =
       many: (pages) =>
         `${pages} have pictures RedactNest can't read. Words inside a picture can't be found or removed.`,
     },
+    // Spec 0006, AC-15: the trim never clears a picture, but a run still
+    // blanks a picture under each removed item (spec 0004's padded pass), so
+    // the line says only that the part outside stays.
     "off-page-picture": {
       one: (pages) =>
-        `${pages} has a picture that reaches outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.`,
+        `${pages} has a picture that reaches outside the visible page. RedactNest doesn't clear the part outside, so it is still in the file.`,
       many: (pages) =>
-        `${pages} have pictures that reach outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.`,
+        `${pages} have pictures that reach outside the visible page. RedactNest doesn't clear the parts outside, so they are still in the file.`,
     },
     // Spec 0019, AC-9: "may", because the scan cannot tell a description
     // from other strings a property list holds, and "can stay", because
@@ -193,13 +196,15 @@ const FINDING_TEXT: Readonly<Record<Exclude<PageFinding, "blank">, Worded>> =
       many: (pages) =>
         `${pages} are scans with machine read text. RedactNest reads that text, so it can only find what the text recognition got right. Words it missed, such as handwriting, stamps or tables it couldn't read, stay in the pictures.`,
     },
-    // Spec 0007, AC-19: the last sentence says why a found item at the edge
-    // is listed shorter than it is drawn.
+    // Spec 0006, AC-14: the trim proves its text work, but a drawing goes
+    // only when one strip covers it, so "most of the drawings". Spec 0007,
+    // AC-19: the last sentence says why a found item at the edge is listed
+    // shorter than it is drawn.
     "off-page-content": {
       one: (pages) =>
-        `${pages} has text or drawings outside its visible area. RedactNest removes them when you redact, since nobody can see them. ${EDGE_FRAGMENT}`,
+        `${pages} has text or drawings outside its visible area, where nobody can see them. RedactNest removes the text when you redact, and most of the drawings. ${EDGE_FRAGMENT}`,
       many: (pages) =>
-        `${pages} have text or drawings outside their visible area. RedactNest removes them when you redact, since nobody can see them. ${EDGE_FRAGMENT}`,
+        `${pages} have text or drawings outside their visible area, where nobody can see them. RedactNest removes the text when you redact, and most of the drawings. ${EDGE_FRAGMENT}`,
     },
   });
 
@@ -304,9 +309,13 @@ export const CONCEALED_TEXT: Readonly<Record<Concealment, string>> = Object.free
  * The line at `complete` naming the pages the trim removed text or drawings
  * from (AC-22), in an untitled note before the download warning, or null when
  * it removed nothing.
+ *
+ * Spec 0006, AC-14: text outside is removed and proved, while a drawing goes
+ * only when one strip covers it whole, so one that crosses the edge or wraps
+ * round a corner can stay (a recorded limit).
  */
 export function removedOffPageLine(summary: DocumentSummary): string | null {
   const pages = pagesWith(summary, "off-page-content");
   if (pages.length === 0) return null;
-  return `Text and drawings outside the visible area of ${pageList(pages, { lower: true })} were removed.`;
+  return `Text outside the visible area of ${pageList(pages, { lower: true })} was removed, and most drawings there. A drawing that crosses the edge of the visible area, or wraps round a corner, can stay.`;
 }
