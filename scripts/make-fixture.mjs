@@ -47,6 +47,14 @@ import {
   sharedForms,
   sharedPictures,
 } from "./lib/kept-fixtures.mjs";
+import {
+  glyphBitmap,
+  glyphDrawnForm,
+  glyphEmoji,
+  glyphSharedPicture,
+  glyphText,
+  glyphUndrawnForm,
+} from "./lib/glyph-fixtures.mjs";
 import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { termsDense, termsPdf } from "./lib/terms-fixtures.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
@@ -655,6 +663,34 @@ const FIXTURES = [
     "shared-forms.pdf",
     sharedForms(),
     "two forms pointing at an identical group and resources",
+  ],
+  // Spec 0020: what a Type 3 font's glyphs draw. Four cases main left a
+  // ticked value in (AC-8), then two controls that must open as today (AC-9).
+  [
+    "glyph-undrawn-form.pdf",
+    glyphUndrawnForm(),
+    "an undrawn glyph naming the form the page draws",
+  ],
+  [
+    "glyph-drawn-form.pdf",
+    glyphDrawnForm(),
+    "a drawn glyph naming the form the page draws",
+  ],
+  [
+    "glyph-shared-picture.pdf",
+    glyphSharedPicture(),
+    "an undrawn glyph naming the image mask the page draws",
+  ],
+  ["glyph-text.pdf", glyphText(), "an undrawn glyph writing text of its own"],
+  [
+    "glyph-emoji.pdf",
+    glyphEmoji(),
+    "the control: Chrome's colour emoji shape, a form, a pattern and a picture",
+  ],
+  [
+    "glyph-bitmap.pdf",
+    glyphBitmap(),
+    "the control: a bitmap font with no resources, inline masks holding EI and Tj",
   ],
 ];
 

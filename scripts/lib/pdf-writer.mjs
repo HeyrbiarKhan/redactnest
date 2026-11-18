@@ -65,10 +65,13 @@ function writeObject(sink, num, body) {
 /**
  * Serialise a whole file.
  *
- * `objects[i]` becomes object `i + 1`. `trailer` is the trailer's entries
- * besides `/Size`, for example `/Root 1 0 R /Info 9 0 R`. `prefix` is written
- * ahead of the `%PDF-` header, and the offsets count it, the way junk ahead of
- * a real file's header does.
+ * `objects[i]` becomes object `i + 1`. A `null` there writes no object and
+ * leaves that number free in the cross reference table, so a recipe that
+ * names its objects by number can skip one (spec 0020's emoji and bitmap
+ * fixtures have no object 6). `trailer` is the trailer's entries besides
+ * `/Size`, for example `/Root 1 0 R /Info 9 0 R`. `prefix` is written ahead of
+ * the `%PDF-` header, and the offsets count it, the way junk ahead of a real
+ * file's header does.
  *
  * Returns the bytes and what an incremental update needs to follow on.
  */
@@ -78,6 +81,7 @@ export function writePdf({ objects, trailer, prefix = "", header = "%PDF-1.7\n" 
   sink.push(header);
 
   const offsets = objects.map((body, index) => {
+    if (body === null) return null;
     const offset = sink.length;
     writeObject(sink, index + 1, body);
     return offset;
@@ -86,11 +90,21 @@ export function writePdf({ objects, trailer, prefix = "", header = "%PDF-1.7\n" 
   const xrefOffset = sink.length;
   const size = objects.length + 1;
 
+  // The free list: object 0 names the first free number, each free entry the
+  // next, and the last names 0 again. With no gap, object 0 names 0, as it
+  // always has, so every other fixture keeps its bytes.
+  const free = offsets.flatMap((offset, index) => (offset === null ? [index + 1] : []));
+  const nextFree = (num) => free[free.indexOf(num) + 1] ?? 0;
+
   sink.push(`xref\n0 ${size}\n`);
-  sink.push("0000000000 65535 f \n");
-  for (const offset of offsets) {
-    sink.push(`${String(offset).padStart(10, "0")} 00000 n \n`);
-  }
+  sink.push(`${String(free[0] ?? 0).padStart(10, "0")} 65535 f \n`);
+  offsets.forEach((offset, index) => {
+    if (offset === null) {
+      sink.push(`${String(nextFree(index + 1)).padStart(10, "0")} 00001 f \n`);
+    } else {
+      sink.push(`${String(offset).padStart(10, "0")} 00000 n \n`);
+    }
+  });
   sink.push(`trailer\n<< /Size ${size} ${trailer} >>\n`);
   sink.push(`startxref\n${xrefOffset}\n%%EOF\n`);
 

@@ -166,7 +166,10 @@ export const FAILURE_TEXT: Readonly<
     next: NEW_COPY,
   }),
   // Spec 0019, AC-3: the role walk met a shape it cannot read, at open or in
-  // a run, from its kind alone.
+  // a run, from its kind alone. Spec 0020, AC-5 and AC-6, gives it a second
+  // cause with the same words: a Type 3 font's glyphs draw text, or something
+  // outside the fonts also reaches, refused at open or before a run removes
+  // anything.
   "unreadable-structure": () => ({
     title: "RedactNest stopped to be safe",
     body: "Part of this file is built in a way RedactNest can't check safely, so it stopped rather than guess, and made no file.",

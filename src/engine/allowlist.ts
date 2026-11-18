@@ -534,7 +534,7 @@ export interface ResourceOwner {
  */
 export type RoleProblem = "shape" | "roles";
 
-/** What `walkRoles` found. */
+/** What `walkRoles` found. When it names a problem, `pages`, `owners`, `glyphs` and `outside` are empty. */
 export interface RoleWalk {
   /** The first problem, or `null`. When set, the walk stopped and nothing was deleted. */
   readonly problem: RoleProblem | null;
@@ -550,6 +550,21 @@ export interface RoleWalk {
   readonly pages: readonly (readonly DrawingUnit[])[];
   /** One entry per resource dictionary reached, with every drawing that draws with it. */
   readonly owners: readonly ResourceOwner[];
+  /**
+   * The glyph side's starting drawings (spec 0020, AC-1): one unit per Type 3
+   * font found and each dictionary it draws with (its own `/Resources`, or,
+   * holding none, each dictionary it was found under), its streams every glyph
+   * procedure in `/CharProcs`, drawn by text or not, `joined` false. A font
+   * written in place and found twice gives two units.
+   */
+  readonly glyphs: readonly DrawingUnit[];
+  /**
+   * The other side (spec 0020, AC-2): every indirect object reached from the
+   * walk's starting point by a path that never passes through a Type 3 font's
+   * `/CharProcs` or `/Resources`. Judged by keys, not by what a drawing names,
+   * so an entry a page lists and never draws still counts.
+   */
+  readonly outside: ReadonlySet<number>;
 }
 
 type Outer = "missing" | "scalar" | "string" | "array" | "dict" | "stream";
@@ -617,8 +632,18 @@ interface Place {
   readonly key: string;
 }
 
+/**
+ * Where a value hangs, for the other side (spec 0020, AC-2): its nearest
+ * indirect ancestor (`null` at a starting point), and whether a Type 3 font's
+ * `/CharProcs` or `/Resources` lies between that ancestor and the value.
+ */
+interface Lineage {
+  readonly parent: number | null;
+  readonly barred: boolean;
+}
+
 /** One value still to visit. */
-interface Item {
+interface Item extends Lineage {
   readonly value: PDFObject;
   readonly shape: Shape;
   readonly at: Place | null;
@@ -628,8 +653,13 @@ interface Item {
   readonly id?: string;
 }
 
+/** The three kinds of drawing below a page that draw with a resource dictionary. */
+type DrawerKind = "form" | "tiling-pattern" | "type3-font";
+
 /** A form, a tiling pattern or a Type 3 font, and where it draws from. */
 interface Drawer {
+  /** Which of the three, so a font's drawer is known by its kind, never by `joined` (spec 0020). */
+  readonly kind: DrawerKind;
   readonly streams: PDFObject[];
   readonly joined: boolean;
   own: string | null;
@@ -666,6 +696,17 @@ interface RoleVisit {
  *
  * An explicit work list, each indirect object visited once per role or kind,
  * and no recursion, so a cycle or a deep nesting cannot stop it.
+ *
+ * Spec 0020 adds what the glyph rule reads: `glyphs`, from each Type 3 font's
+ * drawer, and `outside`, from the edges between indirect objects. Each item
+ * carries its nearest indirect ancestor and whether a Type 3 font's
+ * `/CharProcs` or `/Resources` lies between (`barred`), and every edge is
+ * recorded as its item is visited, before `reach` can stop a second visit, so
+ * an object found again by another path still gains that path. `outside` is
+ * then every object reachable from the starting points over edges that are
+ * not barred, worked out after the loop. Never by visiting an object again: a
+ * second visit would mint fresh ids for dictionaries written in place, giving
+ * the check an owner with no drawings, and count its deletions twice.
  */
 export function walkRoles(
   doc: PDFDocument,
@@ -683,6 +724,11 @@ export function walkRoles(
   const pageCount = doc.countPages();
   const pageAt = new Map<number, number>();
   const pageDrawings: PageDrawing[] = [];
+  // The other side's graph (spec 0020, AC-2): the objects a starting point
+  // holds, and each object's edges to the objects it holds, barred ones left
+  // out, since no path to the other side may cross one.
+  const roots = new Set<number>();
+  const edges = new Map<number, number[]>();
   // State the visits change, in one object, so the problem a closure records
   // is read back as it is rather than as TypeScript last narrowed it.
   const state: { problem: RoleProblem | null; anonymous: number } = {
@@ -727,32 +773,57 @@ export function walkRoles(
     stack.push(item);
   };
 
+  /**
+   * Where the children of `item` hang: below an indirect object, that object
+   * and no bar; below a value written in place, wherever it hangs itself, so
+   * a bar is carried through direct containers.
+   */
+  const below = (item: Item): Lineage =>
+    item.value.isIndirect()
+      ? { parent: item.value.asIndirect(), barred: false }
+      : { parent: item.parent, barred: item.barred };
+
+  /** Record the edge to an indirect value, unless it is barred (spec 0020, AC-2). */
+  const link = (value: PDFObject, from: Lineage): void => {
+    if (from.barred || !value.isIndirect()) return;
+    const num = value.asIndirect();
+    if (from.parent === null) {
+      roots.add(num);
+      return;
+    }
+    let next = edges.get(from.parent);
+    if (!next) {
+      next = [];
+      edges.set(from.parent, next);
+    }
+    next.push(num);
+  };
+
   const remove = (at: Place | null): void => {
     if (at) deletions.push(at);
     else fail("shape");
   };
 
   /** Each item of an array of `item`, nulls left where they are. */
-  const visitArray = (
-    value: PDFObject,
-    item: Shape,
-    label: string,
-    res: string | null,
-  ) => {
+  const visitArray = (array: Item, item: Shape, label: string) => {
+    const { value, res } = array;
     if (outerOf(value) !== "array") return fail("shape");
     if (!reach(value, label)) return;
+    const lineage = below(array);
     const length = value.length;
     for (let index = 0; index < length; index += 1) {
       const entry = value.get(index);
       if (outerOf(entry) === "missing") continue;
-      push({ value: entry, shape: item, at: null, res });
+      push({ value: entry, shape: item, at: null, res, ...lineage });
     }
   };
 
   /** An array of numbers, names and booleans, nested arrays allowed. */
-  const visitNumbers = (value: PDFObject, label: string, namesOnly: boolean) => {
+  const visitNumbers = (array: Item, label: string, namesOnly: boolean) => {
+    const { value } = array;
     if (outerOf(value) !== "array") return fail("shape");
     if (!reach(value, label)) return;
+    const lineage = below(array);
     const length = value.length;
     for (let index = 0; index < length; index += 1) {
       const entry = value.get(index);
@@ -760,9 +831,10 @@ export function walkRoles(
       if (outer === "missing") continue;
       if (outer === "scalar") {
         if (namesOnly && !entry.isName()) return fail("shape");
+        link(entry, lineage);
         reach(entry, "scalar");
       } else if (outer === "array" && !namesOnly) {
-        push({ value: entry, shape: NUMBERS, at: null, res: null });
+        push({ value: entry, shape: NUMBERS, at: null, res: null, ...lineage });
       } else {
         return fail("shape");
       }
@@ -770,7 +842,8 @@ export function walkRoles(
   };
 
   /** A name, or a colour space array of a family the table knows (AC-3). */
-  const visitColour = (value: PDFObject, res: string | null) => {
+  const visitColour = (item: Item) => {
+    const { value, res } = item;
     const outer = outerOf(value);
     if (outer === "scalar") {
       if (!value.isName()) return fail("shape");
@@ -782,11 +855,12 @@ export function walkRoles(
 
     const length = value.length;
     const family = length > 0 ? nameOf(value.get(0)) : null;
+    const lineage = below(item);
     const items = (...shapes: Shape[]) => {
       shapes.forEach((shape, index) => {
         const entry = value.get(index + 1);
         if (outerOf(entry) === "missing") return fail("shape");
-        push({ value: entry, shape, at: null, res });
+        push({ value: entry, shape, at: null, res, ...lineage });
       });
     };
 
@@ -836,6 +910,16 @@ export function walkRoles(
     const res = name === "resources" ? (item.id ?? resourceId(value)) : item.res;
     if (name === "resources") resources.set(res as string, value);
 
+    // Spec 0020, AC-2: what a Type 3 font's glyphs draw with, and the glyphs
+    // themselves, hang below a bar, so nothing reached only through them is on
+    // the other side.
+    const lineage = below(item);
+    const barred: Lineage = { parent: lineage.parent, barred: true };
+    const lineageOf = (key: string): Lineage =>
+      name === "type3-font" && (key === "CharProcs" || key === "Resources")
+        ? barred
+        : lineage;
+
     value.forEach((child, key) => {
       if (typeof key !== "string") return;
       if (outerOf(child) === "missing") {
@@ -851,11 +935,24 @@ export function walkRoles(
       if (key === "Resources") {
         const id = resourceId(child);
         ownResources = id;
-        push({ value: child, shape, at: { container: value, key }, res, id });
+        push({
+          value: child,
+          shape,
+          at: { container: value, key },
+          res,
+          id,
+          ...lineageOf(key),
+        });
         return;
       }
       if (name === "page" && key === "Contents") contents = child;
-      push({ value: child, shape, at: { container: value, key }, res });
+      push({
+        value: child,
+        shape,
+        at: { container: value, key },
+        res,
+        ...lineageOf(key),
+      });
     });
 
     if (value.isIndirect()) {
@@ -881,9 +978,16 @@ export function walkRoles(
           const shape = rule.keys[key];
           if (key === "Resources") {
             ownResources = resourceId(inherited);
-            push({ value: inherited, shape, at: null, res: null, id: ownResources });
+            push({
+              value: inherited,
+              shape,
+              at: null,
+              res: null,
+              id: ownResources,
+              ...lineage,
+            });
           } else {
-            push({ value: inherited, shape, at: null, res: null });
+            push({ value: inherited, shape, at: null, res: null, ...lineage });
           }
         }
       }
@@ -921,7 +1025,13 @@ export function walkRoles(
           : value.isIndirect()
             ? [value]
             : [];
-      drawer = { streams, joined: name !== "type3-font", own: null, from: new Set() };
+      drawer = {
+        kind: name,
+        streams,
+        joined: name !== "type3-font",
+        own: null,
+        from: new Set(),
+      };
       drawers.set(id, drawer);
     }
     if (item.res !== null) {
@@ -938,6 +1048,9 @@ export function walkRoles(
 
   const visit = (item: Item): void => {
     const { value, shape, res } = item;
+    // The edge first, before any `reach` can end a second visit (spec 0020,
+    // AC-2). An `either` visits again with its option, which records it.
+    if (shape.is !== "either") link(value, item);
     switch (shape.is) {
       case "scalar":
         if (outerOf(value) !== "scalar") return fail("shape");
@@ -948,9 +1061,9 @@ export function walkRoles(
         reach(value, "string");
         return;
       case "numbers":
-        return visitNumbers(value, "number array", false);
+        return visitNumbers(item, "number array", false);
       case "names":
-        return visitNumbers(value, "name array", true);
+        return visitNumbers(item, "name array", true);
       case "role":
         return visitRole(item, shape.role);
       case "either": {
@@ -960,26 +1073,33 @@ export function walkRoles(
         return visit({ ...item, shape: option });
       }
       case "array":
-        return visitArray(value, shape.item, shape.label, res);
+        return visitArray(item, shape.item, shape.label);
       case "dict": {
         if (outerOf(value) !== "dict") return fail("shape");
         if (!reach(value, shape.label)) return;
+        const lineage = below(item);
         value.forEach((entry, key) => {
           if (typeof key !== "string") return;
           if (outerOf(entry) === "missing") {
             deletions.push({ container: value, key });
             return;
           }
-          push({ value: entry, shape: shape.value, at: { container: value, key }, res });
+          push({
+            value: entry,
+            shape: shape.value,
+            at: { container: value, key },
+            res,
+            ...lineage,
+          });
         });
         return;
       }
       case "colour":
-        return visitColour(value, res);
+        return visitColour(item);
       case "function": {
         const outer = outerOf(value);
         if (outer === "dict" || outer === "stream") return visitRole(item, "function");
-        if (outer === "array") return visitArray(value, FUNCTION, "function", res);
+        if (outer === "array") return visitArray(item, FUNCTION, "function");
         const name = nameOf(value);
         if (name === "Identity" || name === "Default") return;
         return fail("shape");
@@ -1039,11 +1159,25 @@ export function walkRoles(
         return;
       }
       const shape = key === "Root" ? role("catalog") : SCALAR;
-      push({ value, shape, at: { container: trailer, key }, res: null });
+      push({
+        value,
+        shape,
+        at: { container: trailer, key },
+        res: null,
+        parent: null,
+        barred: false,
+      });
     });
   } else {
     for (let index = pageCount - 1; index >= 0; index -= 1) {
-      push({ value: doc.findPage(index), shape: role("page"), at: null, res: null });
+      push({
+        value: doc.findPage(index),
+        shape: role("page"),
+        at: null,
+        res: null,
+        parent: null,
+        barred: false,
+      });
     }
   }
 
@@ -1076,6 +1210,8 @@ export function walkRoles(
       reached,
       pages: [],
       owners: [],
+      glyphs: [],
+      outside: new Set<number>(),
     });
   }
 
@@ -1091,7 +1227,55 @@ export function walkRoles(
     reached,
     pages: pageDrawings.map((page) => drawingsOf(page, resources, children, drawers)),
     owners: ownersOf(pageDrawings, resources, drawers),
+    glyphs: glyphsOf(resources, drawers),
+    outside: reachable(roots, edges),
   });
+}
+
+/**
+ * Each Type 3 font's glyph procedures, once per dictionary they draw with:
+ * the font's own `/Resources`, or, holding none, each dictionary it was found
+ * under (spec 0020, AC-1). A font found under none still gives one unit, with
+ * no dictionary, so its glyphs are judged all the same.
+ */
+function glyphsOf(
+  resources: ReadonlyMap<string, PDFObject>,
+  drawers: ReadonlyMap<string, Drawer>,
+): readonly DrawingUnit[] {
+  const units: DrawingUnit[] = [];
+  for (const drawer of drawers.values()) {
+    if (drawer.kind !== "type3-font") continue;
+    const draws = drawer.own === null ? [...drawer.from] : [drawer.own];
+    if (draws.length === 0) draws.push("");
+    for (const id of draws) {
+      units.push(
+        Object.freeze({
+          streams: drawer.streams,
+          joined: false,
+          resources: resources.get(id) ?? null,
+        }),
+      );
+    }
+  }
+  return Object.freeze(units);
+}
+
+/** Every object reachable from `roots` over `edges`, each edge followed once. */
+function reachable(
+  roots: ReadonlySet<number>,
+  edges: ReadonlyMap<number, readonly number[]>,
+): ReadonlySet<number> {
+  const found = new Set(roots);
+  const pending = [...roots];
+  while (pending.length > 0) {
+    const num = pending.pop() as number;
+    for (const next of edges.get(num) ?? []) {
+      if (found.has(next)) continue;
+      found.add(next);
+      pending.push(next);
+    }
+  }
+  return found;
 }
 
 /** A page's `/Contents`: one stream, or an array of them read as one. */
