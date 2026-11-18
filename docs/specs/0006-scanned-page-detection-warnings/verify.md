@@ -136,3 +136,20 @@ On the build machine, the unit project, MuPDF.js 1.28.1:
 - AC-28 · the loggable gate, the privacy run over `read-mixed.pdf`, the worker's key lists
 - AC-29 · `cost.test.ts` (the CPU budget and the unchanged image streams), the cancel tests in `reading.test.ts`, `trim.test.ts` and `engine-worker.test.ts`, and *Measured*
 - AC-30 · the real scan steps above
+
+## Feature 30's follow ups (added 2026-11-18)
+
+_From this spec's Follow-up items on a `/Rotate` page and on a line box that is not finite, and the reworded trimmed page lines. The three reworded steps under UI / manual are reopened above. Same production build as the rest of this file._
+
+### UI / manual
+
+- [ ] Open `trim-rotated.pdf` → an untitled note "Pages 1 to 3 have text or drawings outside their visible area, where nobody can see them. RedactNest removes the text when you redact, and most of the drawings." followed by the found item sentence; the only rows are `ninety.person@example.com` (page 1), `half.turn@example.com` (page 2) and `three.quarter@example.com` (page 3), never `below.the.crop@example.com` → AC-8, AC-14, Follow-up (`/Rotate`)
+- [ ] On `trim-rotated.pdf`, untick page 3's address first (its page paints a shading under everything, which the self check's pixel part reads as a picture, so a ticked item there refuses the run; older than this item, measured on main's code too), redact → "Your redacted file is ready" and the note "Text outside the visible area of pages 1 to 3 was removed, and most drawings there. A drawing that crosses the edge of the visible area, or wraps round a corner, can stay."; download `trim-rotated-redacted.pdf`; read it with no crop (`mutool draw -F txt`, or a reader showing the media box) → no "Above the crop", "below.the.crop@example.com", "Left", "Right" or "Offside"; "inside words stay put", "Everything on this line stays where it is." and page 3's address are there; pages 1 and 2's addresses are gone → AC-14, AC-16, AC-17, Follow-up (`/Rotate`)
+- [ ] Each page of that file still shows turned as the source showed it (90, 180 and 270 degrees), with the blue square below each crop gone when the media box is shown → AC-14
+- [ ] Open `trim-unplaced.pdf` → the open is refused: "RedactNest stopped to be safe", with the `unsupported` words and no review → Follow-up (a line box that is not finite)
+
+### Commands
+
+- [ ] `pnpm exec vitest run tests/unit/trim.test.ts` → *a turned and cropped page* (the boxes pin, the open, a run with nothing ticked, the ticked runs) and *a character MuPDF cannot place* (the empty box pin, the refusal at open and in a run, the self check with the trim skipped, a lone space opening) pass → Follow-up items
+- [ ] `pnpm exec vitest run tests/unit/redaction-gate-0.test.ts tests/unit/redaction-gate-1.test.ts tests/unit/redaction-gate-2.test.ts tests/unit/redaction-gate-3.test.ts` → pass, with `trim-unplaced.pdf` in `OPEN_NOW` and `trim-rotated.pdf` drawn as main drew it, nothing ticked and each of its first two pages ticked
+- [ ] `node scripts/make-fixture.mjs && git status tests/fixtures` → nothing changes
