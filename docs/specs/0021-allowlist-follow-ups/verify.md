@@ -1,4 +1,4 @@
-# Verify: allowlist follow ups · spec 0021 · updated 2026-11-18
+# Verify: allowlist follow ups · spec 0021 · updated 2026-11-21
 _Steps derived from spec 0021 acceptance criteria. `/check verify` runs these; `/test` locks the durable ones._
 
 Use only the committed fixtures in `tests/fixtures`. Never open a PDF from anywhere else on the machine.
@@ -31,6 +31,13 @@ Use only the committed fixtures in `tests/fixtures`. Never open a PDF from anywh
 - [ ] The retries left come from `INLINE_END_RETRIES` and the count in `retry` → AC-6
 - [ ] The colour space an inline picture names comes from its `/CS` or `/ColorSpace`, a name or an indexed array's second item → AC-7
 - [ ] Whether the second write kept what the first drew comes from `drawnShape` of both bytes over the stream roles `ROLES` names, and `sameDrawnShape` with `BELOW_COLOUR_ROLES` (colour profiles only) → AC-8
+
+## As built (2026-11-21, /develop tasks 1 to 12)
+- [ ] `tests/support/redaction-gate.ts` has no `NEEDLES` row for `kept-cid-strings.pdf`: the gate's own table check ("tick only fixtures that open and run") forbids a ticked set for a fixture in `OPEN_NOW`, as for spec 0020's refused glyph fixtures. Its ticked run's refusal is held in `redaction-kept.test.ts` instead ("refuses a run handed its bytes with the name ticked") → AC-5
+- [ ] In `redaction-kept.test.ts`, "fails beside an unused colour space entry and never writes twice" puts the square on a second page nobody ticks: a ticked page's contents go through MuPDF's filter in the pass, which drops the unused entry before the write. Expect the structure verdicts `["unused-colour-space"]`, `redaction-incomplete`, and no second write → AC-4
+- [ ] A string at the catalog's `/Lang`, a `/Registry` or an `/Ordering` that cannot be decoded (a UTF-16 string of odd length) fails `checkOutput` closed whenever anything is ticked (`placeHoldsTicked` in `self-check.ts`); the walk refuses such a string first, so only a swapped structure check meets it → AC-4, INV-3
+- [ ] `decodeTextString` in `allowlist.ts` reads true PDFDocEncoding (bytes 0x18 to 0x1F and 0x80 to 0xA0 differ from Latin 1), so a byte string holding `Ł` (0x95) or the fi ligature (0x93) folds as the ticked text does; `allowlist.test.ts` pins it → AC-1, AC-4
+- [ ] The retry count measured on every committed fixture: no drawing stream takes a single retry, sources (815 drawings) or nothing ticked outputs (`rationale.md`, *The scan's retries*); the 1 MB recipe takes about 635 ms a pass → AC-6
 
 ## Acceptance-criteria coverage
 | AC | Covered by |
