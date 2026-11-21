@@ -153,8 +153,8 @@ Skateboard, as the scope asks: the catalog's `/Lang` goes first as a thin whole 
 8. [x] Add `INLINE_END_RETRIES` and the count in `retry`; AC-6's count test (N = 17 failing first) and cost test; run `cost.test.ts` alone, and record in `rationale.md` the most retries any committed fixture's stream takes, satisfies **AC-6**
 9. [x] Read the indexed base in `inlineImage`; the scan cases (failing first) and the MuPDF pin in `redaction-kept.test.ts`, satisfies **AC-7**
 10. [x] Write AC-8's positive document and run it through the real `rewrite` under today's `drawnShape` and a scratch copy of the new rule; stop here if it fails. Then change `DrawnShape`, `drawnShape` and `sameDrawnShape` to AC-8, with `BELOW_COLOUR_ROLES`; rewrite the two existing `drawnShape` tests in `redaction-kept.test.ts` to the new record; add the `sameDrawnShape` cases and the run level `rewrite` cases; the five colour fixtures still make a file, satisfies **AC-8**
-11. Change the security page's source comment; run the gate, both budgets and the page tests again, satisfies **AC-9**
-12. Amend specs 0004 and 0019 per *Amends*; record the lost inline picture in feature 30's row as an item owed to `/debug` then `/architect` (*Follow-up*); `/sync` writes the `AGENTS.md` lines, satisfies **AC-1** to **AC-9**
+11. [x] Change the security page's source comment; run the gate, both budgets and the page tests again, satisfies **AC-9**
+12. [x] Amend specs 0004 and 0019 per *Amends*; record the lost inline picture in feature 30's row as an item owed to `/debug` then `/architect` (*Follow-up*); `/sync` writes the `AGENTS.md` lines, satisfies **AC-1** to **AC-9**
 
 ## Consequences
 

@@ -327,8 +327,9 @@ export default function SecurityPage() {
               claim that every entry a program adds is off the lists. "Almost
               every entry on those lists": a role's list is what MuPDF needs
               to draw it, less every key that carries data (*Role table*), but
-              the lists also keep the catalog's `/Lang`, a property list's
-              `/ActualText` and `/MCID`, and a resource dictionary's
+              the lists also keep the catalog's `/Lang` when it reads as a
+              language tag and holds nothing ticked (spec 0021), a property
+              list's `/ActualText` and `/MCID`, and a resource dictionary's
               `/Properties` and `/ProcSet`, which no page needs to draw. The
               "can" line is spec 0019's *Security model* row on spec 0004 and
               its *Consequences* bullet "The names and numbers on listed keys
