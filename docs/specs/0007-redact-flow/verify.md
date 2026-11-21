@@ -108,6 +108,6 @@ _From [the review](../../reviews/2026-09-30-feat-redact-flow.md): Start over now
 
 _From this spec's Follow-up nits 2 and 3 (the redact flow review): the result card reads the partly reason from the `OutputForm` that named the file, and `countRemoved` lives beside `RedactionOutcome` in `src/worker/protocol.ts`. Nothing the visitor sees should change._
 
-- [ ] Run the three AC-12 steps under UI / manual again on `read-mixed.pdf` (untick everything; then tick the email): "Nothing was removed" and `read-mixed-cleaned.pdf` with no "partly redacted" line, then `read-mixed-partly-redacted.pdf` with the line → AC-12, nit 2
-- [ ] Rename a copy of `text-page.pdf` (every page readable) to `notes-partly.pdf`, open it and redact with `jane.doe@example.com` ticked → the file is `notes-partly-redacted.pdf`, a name the old ending test would have read as partly, and the card shows no download warning and no "partly redacted" line, since the form decides (`redacted`) → AC-12, nit 2
-- [ ] `src/lib/session.ts` imports nothing from `@/lib/detectors`, and `pnpm test` passes `detectors`, `session` and `tool-client` → nit 3
+- [x] Run the three AC-12 steps under UI / manual again on `read-mixed.pdf` (untick everything; then tick the email): "Nothing was removed" and `read-mixed-cleaned.pdf` with no "partly redacted" line, then `read-mixed-partly-redacted.pdf` with the line → AC-12, nit 2
+- [x] Rename a copy of `text-page.pdf` (every page readable) to `notes-partly.pdf`, open it and redact with `jane.doe@example.com` ticked → the file is `notes-partly-redacted.pdf`, a name the old ending test would have read as partly, and the card shows no download warning and no "partly redacted" line, since the form decides (`redacted`) → AC-12, nit 2
+- [x] `src/lib/session.ts` imports nothing from `@/lib/detectors`, and `pnpm test` passes `detectors`, `session` and `tool-client` → nit 3
