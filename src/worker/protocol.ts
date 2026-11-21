@@ -485,6 +485,23 @@ export interface RedactionOutcome {
 }
 
 /**
+ * How many items a run removed, over every kind, `term` included, so a run
+ * that removed only term rows is never named cleaned. The one sum behind the
+ * result card's title and the file's name (spec 0007, AC-12 and INV-2; spec
+ * 0017, AC-21).
+ *
+ * It lives beside the type it reads, so the session reducer can name a file
+ * from it without importing the checklist's words and their icons (spec 0007,
+ * the review's nit 3).
+ */
+export function countRemoved(outcome: RedactionOutcome): number {
+  return MATCH_KINDS.reduce(
+    (total, kind) => total + (outcome.removedByType[kind] ?? 0),
+    0,
+  );
+}
+
+/**
  * How many pages carry each finding. Spec 0006, AC-28.
  *
  * Pure, and derived from the same readings the warnings are, so the count a

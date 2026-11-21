@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   BLOCKED_REASON_TEXT,
-  countRemoved,
   DETECTOR_LABELS,
   detectionCounts,
   resultCounts,
@@ -10,6 +9,7 @@ import {
 import {
   asMatchId,
   BLOCKED_REASONS,
+  countRemoved,
   DETECTOR_KINDS,
   type RedactionOutcome,
   type ReviewMatch,

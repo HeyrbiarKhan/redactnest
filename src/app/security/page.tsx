@@ -327,8 +327,9 @@ export default function SecurityPage() {
               claim that every entry a program adds is off the lists. "Almost
               every entry on those lists": a role's list is what MuPDF needs
               to draw it, less every key that carries data (*Role table*), but
-              the lists also keep the catalog's `/Lang`, a property list's
-              `/ActualText` and `/MCID`, and a resource dictionary's
+              the lists also keep the catalog's `/Lang` when it reads as a
+              language tag and holds nothing ticked (spec 0021), a property
+              list's `/ActualText` and `/MCID`, and a resource dictionary's
               `/Properties` and `/ProcSet`, which no page needs to draw. The
               "can" line is spec 0019's *Security model* row on spec 0004 and
               its *Consequences* bullet "The names and numbers on listed keys
@@ -464,11 +465,10 @@ export default function SecurityPage() {
             from you.
           </li>
           {/* Spec 0004's *Security model* bullet "Embedded fonts keep the shapes
-              of removed characters" (an inventory of which characters existed).
-              Nothing about order: an app that numbers a subset font's
-              characters as each first appears keeps some of it (the third
-              verify, 2026-11-14), so that bullet's "never their order" is
-              owed on feature 30 in the scope. */}
+              of removed characters" (an inventory of which characters existed,
+              and in some files part of the order they first appeared in, as
+              feature 30 reworded it on 2026-11-18). This line says nothing
+              about order, so it promises no more than that bullet. */}
           <li>
             A font in the file can still hold the shapes of characters that were removed.
             That can tell someone which characters the document used.

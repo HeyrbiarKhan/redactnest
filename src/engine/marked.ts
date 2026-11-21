@@ -1,5 +1,7 @@
 import type { PDFObject } from "mupdf";
 
+import { readsAsLanguageTag } from "./allowlist";
+
 /**
  * The read only scan of a page's drawing instructions. Spec 0019, AC-9, *Scan
  * rules* and INV-4.
@@ -21,14 +23,6 @@ import type { PDFObject } from "mupdf";
  * check, so a fault in here can add a warning or a refusal, never pass a file
  * the rest of the check would fail.
  */
-
-/**
- * A `/Lang` value that reads as a language tag: two or three ASCII letters,
- * then any number of groups of a hyphen or an underscore and one to eight ASCII
- * letters or digits, so `en-GB` and `en_US` pass and a name does not (AC-9). A
- * rule about the format, not a cap on the visitor (INV-5).
- */
-export const LANG_TAG = /^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{1,8})*$/;
 
 /** The resource dictionaries a drawing names entries of. */
 export type ResourceCategory =
@@ -183,6 +177,18 @@ const INLINE_DEVICE_SPACES = new Set([
 const TEXT_SHOWING = new Set(["Tj", "TJ", "'", '"']);
 
 /**
+ * How many times one scan may give an inline image a new end before the
+ * stream counts as unsure (spec 0021, AC-6). Each retry reads the rest of the
+ * stream again, so with no cap a crafted stream of false ends grows with the
+ * square of its length (1 MB would take about an hour); with it the scan
+ * reads one stream at most 17 times (INV-4). Random data holds a false end
+ * about once in 45 MB, and no committed fixture's stream takes one. Running
+ * out is doubt, which warns or refuses, never passes a file. A rule about the
+ * scan, not a cap on the visitor (spec 0019, INV-5).
+ */
+export const INLINE_END_RETRIES = 16;
+
+/**
  * Scan decoded drawing instructions (spec 0019, *Scan rules*), or `"unsure"`
  * when they cannot be read to their end: an unbalanced string, array or
  * dictionary, a stray closing delimiter, or an inline image with no workable
@@ -202,6 +208,8 @@ export function scanContent(
   // Whether the rest of a stream reads to its end depends only on where the
   // scan resumes after an `EI`, so a resume point that failed once fails again.
   const failed = new Set<number>();
+  // Spec 0021, AC-6: one count per call, of new ends given.
+  let retries = 0;
   let pos = 0;
   let operands: Value[] = [];
   let open: Open[] = [];
@@ -221,13 +229,19 @@ export function scanContent(
     else operands.push(value);
   };
 
-  /** Back to the latest inline image with an `EI` still to try, or false if none. */
+  /**
+   * Back to the latest inline image with an `EI` still to try, or false if
+   * none, or once `INLINE_END_RETRIES` new ends have been given. A choice with
+   * no end left takes none and counts for nothing.
+   */
   const retry = (): boolean => {
     while (choices.length > 0) {
       const choice = choices.pop() as Choice;
       failed.add(choice.end + 2);
       const next = nextEnd(bytes, choice.dataStart, choice.end + 1, failed);
       if (next === null) continue;
+      if (retries >= INLINE_END_RETRIES) return false;
+      retries += 1;
       choices.push({ ...choice, end: next });
       state = copy(choice.saved);
       pos = next + 2;
@@ -410,7 +424,8 @@ interface ListReading {
 /**
  * A property list written inline. Every string anywhere inside it counts,
  * except an `/ActualText`, which waits for its sequence's end, and a `/Lang`
- * that reads as a language tag (AC-9).
+ * that reads as a language tag (AC-9), by the one rule the catalog's `/Lang`
+ * is held to too (`readsAsLanguageTag`, spec 0021, AC-2).
  */
 function readInlineList(list: Extract<Value, { is: "dict" }>): ListReading {
   let counts = false;
@@ -419,7 +434,7 @@ function readInlineList(list: Extract<Value, { is: "dict" }>): ListReading {
     if (key === "ActualText" && value.is === "string") {
       actualText = true;
     } else if (key === "Lang" && value.is === "string") {
-      if (!isLanguageTag(value.bytes)) counts = true;
+      if (!readsAsLanguageTag(value.bytes)) counts = true;
     } else if (holdsString(value)) {
       counts = true;
     }
@@ -449,24 +464,6 @@ function holdsString(value: Value): boolean {
     if (next.is === "dict") pending.push(...next.entries.values());
   }
   return false;
-}
-
-/**
- * Does this string read as a language tag? Bytes starting with the UTF-16BE
- * mark are read as UTF-16, others as PDFDocEncoding, which agrees with ASCII
- * over every character the tag allows. One that cannot be decoded is no tag.
- */
-function isLanguageTag(bytes: Uint8Array): boolean {
-  let text = "";
-  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
-    if (bytes.length % 2 !== 0) return false;
-    for (let at = 2; at < bytes.length; at += 2) {
-      text += String.fromCharCode((bytes[at] << 8) | bytes[at + 1]);
-    }
-  } else {
-    for (const byte of bytes) text += String.fromCharCode(byte);
-  }
-  return LANG_TAG.test(text);
 }
 
 /** A dictionary from its items read in order: each name key and the value after it. */
@@ -720,7 +717,24 @@ function inlineImage(
   const dictionary = dictionaryOf(items) as Extract<Value, { is: "dict" }>;
   const space = dictionary.entries.get("CS") ?? dictionary.entries.get("ColorSpace");
   const dataStart = pos < bytes.length && isWhite(bytes[pos]) ? pos + 1 : pos;
-  return { colourSpace: space?.is === "name" ? space.name : null, dataStart };
+  return { colourSpace: inlineSpaceName(space), dataStart };
+}
+
+/**
+ * The colour space name an inline image's `/CS` uses: the name itself, or the
+ * base of an `/I` or `/Indexed` array when the base is a name (spec 0021,
+ * AC-7). The format allows a named resource inside an inline image's colour
+ * space only there, so nothing else inside an array counts. The caller leaves
+ * out a device space.
+ */
+function inlineSpaceName(space: Value | undefined): string | null {
+  if (space?.is === "name") return space.name;
+  if (space?.is !== "array") return null;
+  const [family, base] = space.items;
+  if (family?.is !== "name" || (family.name !== "I" && family.name !== "Indexed")) {
+    return null;
+  }
+  return base?.is === "name" ? base.name : null;
 }
 
 /**

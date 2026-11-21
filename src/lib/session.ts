@@ -15,19 +15,19 @@
  * (INV-3).
  */
 
-import type {
-  DocumentSummary,
-  EngineErrorKind,
-  EntitlementSnapshot,
-  MatchId,
-  ProgressPhase,
-  RedactionOutcome,
-  ReviewMatch,
-  TermId,
-  TermRemoval,
+import {
+  countRemoved,
+  type DocumentSummary,
+  type EngineErrorKind,
+  type EntitlementSnapshot,
+  type MatchId,
+  type ProgressPhase,
+  type RedactionOutcome,
+  type ReviewMatch,
+  type TermId,
+  type TermRemoval,
 } from "@/worker/protocol";
 
-import { countRemoved } from "@/lib/detectors";
 import { isPartly } from "@/lib/page-findings";
 
 /**

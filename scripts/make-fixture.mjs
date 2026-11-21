@@ -39,8 +39,10 @@ import {
   colourLoaded,
   keptAnnotations,
   keptCatalog,
+  keptCidStrings,
   keptEmbedded,
   keptFigure,
+  keptLang,
   keptPicture,
   keptProgramKeys,
   markedDescriptions,
@@ -76,13 +78,16 @@ import {
   readSlides,
   readStamped,
   readUnmapped,
+  trimCarry,
   trimEdge,
   trimKept,
   trimOcr,
   trimQuote,
   trimRefused,
+  trimRotated,
   trimScan,
   trimText,
+  trimUnplaced,
 } from "./lib/reading-fixtures.mjs";
 import {
   actualText,
@@ -602,9 +607,24 @@ const FIXTURES = [
   ],
   ["trim-quote.pdf", trimQuote(), "a trimmed page that shows a line with a quote"],
   [
+    "trim-carry.pdf",
+    trimCarry(),
+    "a trimmed page where a removed word's advance moves the next text object",
+  ],
+  [
     "trim-ocr.pdf",
     trimOcr(),
     "a scan with Tesseract's text layer, cropped through its lines",
+  ],
+  [
+    "trim-rotated.pdf",
+    trimRotated(),
+    "pages turned 90, 180 and 270 degrees, cropped, with text past every edge",
+  ],
+  [
+    "trim-unplaced.pdf",
+    trimUnplaced(),
+    "a line drawn past the float range, which MuPDF cannot place",
   ],
   // Spec 0019: what a kept object points at.
   ["kept-figure.pdf", keptFigure(), "a font's private key on the original figure"],
@@ -633,6 +653,13 @@ const FIXTURES = [
     "marked-descriptions.pdf",
     markedDescriptions(),
     "one page per case of descriptions written into a page, warned and quiet",
+  ],
+  // Spec 0021: a ticked value at a string place.
+  ["kept-lang.pdf", keptLang(), "a catalog /Lang repeating the name the page shows"],
+  [
+    "kept-cid-strings.pdf",
+    keptCidStrings(),
+    "a CID font's /Ordering repeating the name the page shows",
   ],
   // Spec 0019's fourth pass: colour spaces MuPDF cannot load, and small
   // objects a deduplicating write merges (AC-17).

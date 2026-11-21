@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   EngineFailure,
+  INLINE_END_RETRIES,
   LANG_TAG,
   openDocumentWith,
   readDrawing,
@@ -48,15 +49,42 @@ const describes = (text: string): boolean => read(text).describes;
 const namesOf = (text: string, category: Parameters<DrawingRead["names"]["get"]>[0]) =>
   [...(read(text).names.get(category) ?? [])].sort();
 
+/** Spec 0021, AC-2: the real tag shape, matched against the whole string. */
 describe("LANG_TAG", () => {
-  it.each(["en", "deu", "en-GB", "en_US", "zh-Hant-TW", "sr-Latn-RS-1994"])(
-    "reads %s as a language tag",
-    (tag) => expect(LANG_TAG.test(tag)).toBe(true),
-  );
+  it.each([
+    "en",
+    "deu",
+    "EN-gb",
+    "en-GB",
+    "en_US",
+    "es-419",
+    "zh-Hant-TW",
+    "sr-Latn-RS-1994",
+    "de-DE-1996",
+  ])("reads %s as a language tag", (tag) => expect(LANG_TAG.test(tag)).toBe(true));
 
-  it.each(["e", "english", "Jane Smith", "en-", "en--GB", "en-toolongsubtag", "12"])(
-    "does not read %s as one",
-    (text) => expect(LANG_TAG.test(text)).toBe(false),
+  it.each([
+    "Amy-Jones",
+    "Bob_Smith",
+    "Jane Smith",
+    "english",
+    "e",
+    "12",
+    "en-",
+    "en--GB",
+    "en-GB ",
+    "en-toolongsubtag",
+    "x-none",
+    "sl-rozaj",
+  ])("does not read %j as one", (text) => expect(LANG_TAG.test(text)).toBe(false));
+
+  /**
+   * The limit the pattern's comment names: a short name that fits the shape
+   * still reads as a tag. Pinned, so a change to it is deliberate.
+   */
+  it.each(["Doe", "Amy-Rose", "Ann-Li"])(
+    "still reads the short name %s as a tag",
+    (name) => expect(LANG_TAG.test(name)).toBe(true),
   );
 });
 
@@ -107,7 +135,15 @@ describe("which property lists count (AC-9)", () => {
   it("does not count a /Lang that reads as a language tag, and counts one that does not", () => {
     expect(describes("/Span << /Lang (en-GB) >> BDC BT (x) Tj ET EMC")).toBe(false);
     expect(describes("/Span << /Lang (en_US) >> BDC BT (x) Tj ET EMC")).toBe(false);
+    expect(describes("/Span << /Lang (sr-Latn-RS-1994) >> BDC BT (x) Tj ET EMC")).toBe(
+      false,
+    );
     expect(describes("/Span << /Lang (Jane Smith) >> BDC BT (x) Tj ET EMC")).toBe(true);
+  });
+
+  /** Spec 0021, AC-2: a hyphenated name is warned about, as any other name is. */
+  it("counts a /Lang holding a hyphenated name", () => {
+    expect(describes("/Span << /Lang (Amy-Jones) >> BDC BT (x) Tj ET EMC")).toBe(true);
   });
 
   it("does not count an artifact holding only names", () => {
@@ -165,6 +201,24 @@ describe("the resource names a drawing uses", () => {
     ).toEqual([]);
     expect(namesOf("BI /W 1 /H 1 /CS /G /BPC 8 ID x EI", "ColorSpace")).toEqual([]);
   });
+
+  /**
+   * Spec 0021, AC-7: the format allows a named resource inside an inline
+   * image's colour space only at an indexed space's base, so that name, and
+   * nothing else inside an array, is a use.
+   */
+  it.each([
+    ["[/I /Cs1 1 <FF000000FF00>]", ["Cs1"]],
+    ["[/Indexed /Cs1 1 <FF000000FF00>]", ["Cs1"]],
+    ["[/I /G 1 <00FF>]", []],
+    ["[/I /RGB 1 <FF000000FF00>]", []],
+    ["[/Indexed /DeviceRGB 1 <FF000000FF00>]", []],
+    ["[/CalRGB << /WhitePoint [0.95 1 1.09] >>]", []],
+  ])("reads an inline /CS %s as naming %j", (space, names) => {
+    expect(namesOf(`BI /W 1 /H 1 /CS ${space} /BPC 8 ID x EI`, "ColorSpace")).toEqual(
+      names,
+    );
+  });
 });
 
 describe("inline images", () => {
@@ -196,6 +250,40 @@ describe("inline images", () => {
   it("is unsure of an image whose dictionary never reaches ID", () => {
     expect(scanContent(bytes("BI /W 1 /H 1 Tj"), null)).toBe("unsure");
   });
+
+  /**
+   * Spec 0021, AC-6: at most `INLINE_END_RETRIES` new ends per stream. Each
+   * false end resumes on a stray `)` and fails; the real one resumes on `Q`
+   * and reads. Sixteen false ends take sixteen retries, seventeen one too many.
+   */
+  it.each([
+    [16, "reads to its end"],
+    [17, "unsure"],
+  ] as const)("with %i false ends, %s", (falseEnds, answer) => {
+    const text = `BI /W 1 /H 1 /BPC 8 /CS /G ID x${" EI )".repeat(falseEnds)} EI Q`;
+    const result = scanContent(bytes(text), null);
+
+    expect(result === "unsure" ? "unsure" : "reads to its end").toBe(answer);
+  });
+
+  it("allows 16 retries, an engine constant", () => {
+    expect(INLINE_END_RETRIES).toBe(16);
+  });
+
+  /** One count per call, shared by every inline image the stream holds. */
+  it.each([
+    [8, "reads to its end"],
+    [9, "unsure"],
+  ] as const)(
+    "with %i false ends in the first of two images and 8 in the second, %s",
+    (first, answer) => {
+      const image = (data: string, falseEnds: number) =>
+        `BI /W 1 /H 1 /BPC 8 /CS /G ID ${data}${" EI )".repeat(falseEnds)} EI Q `;
+      const result = scanContent(bytes(image("a", first) + image("b", 8)), null);
+
+      expect(result === "unsure" ? "unsure" : "reads to its end").toBe(answer);
+    },
+  );
 });
 
 /**

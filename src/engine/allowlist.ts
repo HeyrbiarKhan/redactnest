@@ -24,7 +24,10 @@ import type { PDFDocument, PDFObject } from "mupdf";
  * the file format rather than caps on the visitor, so no environment variable
  * can change them (INV-5). A key the output needs is a reviewed `ROLES` change
  * with a failing fixture as its proof, never a key removed from `CARRIER_KEYS`
- * (INV-6).
+ * (INV-6). Spec 0021 adds `LANG_TAG`, `CID_TOKEN` and `ADOBE_COLLECTIONS`
+ * beside them, on the same terms (its INV-6): each string place says what its
+ * string must read as, and one fold serves the rebuild and the check (its
+ * INV-1).
  *
  * The walk never calls `.resolve()` on what it reaches. In a document built by
  * grafting, MuPDF 1.28.1 writes a stream it was asked to resolve as a bare
@@ -81,8 +84,8 @@ export type Shape =
   | { readonly is: "numbers" }
   /** An array of names. */
   | { readonly is: "names" }
-  /** A string. Used only at `STRING_PLACES`. */
-  | { readonly is: "string" }
+  /** A string that reads as `text`. Used only at `STRING_PLACES`. */
+  | { readonly is: "string"; readonly text: StringText }
   /** A dictionary or stream that takes this role. */
   | { readonly is: "role"; readonly role: Role }
   /** The first option whose outer form fits the value. */
@@ -115,7 +118,11 @@ export interface RoleRule {
 const SCALAR: Shape = { is: "scalar" };
 const NUMBERS: Shape = { is: "numbers" };
 const NAMES: Shape = { is: "names" };
-const STRING: Shape = { is: "string" };
+// Spec 0021, AC-3: one string shape per thing a string place's text must read
+// as, each carrying it, so the walk tests a string where it meets one.
+const LANG_STRING: Shape = { is: "string", text: "language-tag" };
+const TOKEN_STRING: Shape = { is: "string", text: "token" };
+const ANY_STRING: Shape = { is: "string", text: "any" };
 const COLOUR: Shape = { is: "colour" };
 const FUNCTION: Shape = { is: "function" };
 const PALETTE: Shape = { is: "palette" };
@@ -163,7 +170,10 @@ const SIMPLE_FONT_KEYS: Readonly<Record<string, Shape>> = {
  */
 export const ROLES: Readonly<Record<Role, RoleRule>> = deepFreeze<Record<Role, RoleRule>>(
   {
-    catalog: { form: "dict", keys: { Type: SCALAR, Pages: role("pages"), Lang: STRING } },
+    catalog: {
+      form: "dict",
+      keys: { Type: SCALAR, Pages: role("pages"), Lang: LANG_STRING },
+    },
     pages: {
       form: "dict",
       keys: {
@@ -247,7 +257,7 @@ export const ROLES: Readonly<Record<Role, RoleRule>> = deepFreeze<Record<Role, R
     },
     "cid-system-info": {
       form: "dict",
-      keys: { Registry: STRING, Ordering: STRING, Supplement: SCALAR },
+      keys: { Registry: TOKEN_STRING, Ordering: TOKEN_STRING, Supplement: SCALAR },
     },
     "font-descriptor": {
       form: "dict",
@@ -460,7 +470,7 @@ export const ROLES: Readonly<Record<Role, RoleRule>> = deepFreeze<Record<Role, R
       },
     },
     "devicen-process": { form: "dict", keys: { ColorSpace: COLOUR, Components: NAMES } },
-    "property-list": { form: "dict", keys: { ActualText: STRING, MCID: SCALAR } },
+    "property-list": { form: "dict", keys: { ActualText: ANY_STRING, MCID: SCALAR } },
     "decode-parameters": {
       form: "dict",
       keys: {
@@ -484,10 +494,16 @@ export const ROLES: Readonly<Record<Role, RoleRule>> = deepFreeze<Record<Role, R
   },
 );
 
-/** One place outside a stream where the output may hold a string. */
+/**
+ * What a string place's text must read as (spec 0021, AC-3): a language tag
+ * (`LANG_TAG`), a short token (`CID_TOKEN`), or any string at all.
+ */
+export type StringText = "language-tag" | "token" | "any";
+
+/** One place outside a stream where the output may hold a string, and what it must read as. */
 export type StringPlace =
-  | { readonly role: Role; readonly key: string }
-  | { readonly colourSpace: "Indexed"; readonly item: number };
+  | { readonly role: Role; readonly key: string; readonly text: StringText }
+  | { readonly colourSpace: "Indexed"; readonly item: number; readonly text: "any" };
 
 /**
  * Where the output may hold a string, and nowhere else (spec 0019, AC-2): the
@@ -496,14 +512,186 @@ export type StringPlace =
  * content property list's `/ActualText`. `ROLES` gives the string shape only
  * at these keys, which `tests/unit/allowlist.test.ts` holds, so every other
  * string goes with its key.
+ *
+ * Spec 0021, AC-3: each place says what its string must read as, and `ROLES`
+ * gives each key the string shape carrying the same `text`, which the test
+ * holds too. The palette's `text` is read by no shape: the palette shape is
+ * binary and stays as it is.
  */
 export const STRING_PLACES: readonly StringPlace[] = deepFreeze<StringPlace[]>([
-  { role: "catalog", key: "Lang" },
-  { role: "cid-system-info", key: "Registry" },
-  { role: "cid-system-info", key: "Ordering" },
-  { colourSpace: "Indexed", item: 3 },
-  { role: "property-list", key: "ActualText" },
+  { role: "catalog", key: "Lang", text: "language-tag" },
+  { role: "cid-system-info", key: "Registry", text: "token" },
+  { role: "cid-system-info", key: "Ordering", text: "token" },
+  { colourSpace: "Indexed", item: 3, text: "any" },
+  { role: "property-list", key: "ActualText", text: "any" },
 ]);
+
+/**
+ * A string that reads as a language tag, matched against the whole decoded
+ * string, letters in either case (spec 0021, AC-2): a language of two or three
+ * ASCII letters; then, each after a hyphen or an underscore, each optional and
+ * in this order, a script of four letters, a region of two letters or three
+ * digits, and any number of variants of a digit followed by three letters or
+ * digits. So `en-GB`, `es-419` and `sr-Latn-RS-1994` read as tags, and
+ * `Amy-Jones`, `Bob_Smith` and `Jane Smith` do not.
+ *
+ * Its limit, on purpose: a short name that fits the shape (`Doe`, `Amy-Rose`,
+ * `Ann-Li`) still reads as a tag. Unticked it can stay, as spec 0019 says
+ * unticked text can; ticked, the rebuild leaves it out of the catalog, and an
+ * inline one keeps spec 0019's warning rules. `tests/unit/marked.test.ts`
+ * pins those three as tags, so a change here is deliberate. Real tags the
+ * shape leaves out (private use such as `x-none`, a variant of five to eight
+ * letters, an extended language) count as text.
+ *
+ * One pattern serves the scan's inline `/Lang` rule (`marked.ts`), the
+ * rebuild's catalog `/Lang` and the walk, so the inline and catalog rules never
+ * disagree (INV-1). A rule about the format, not a cap on the visitor (INV-6).
+ */
+export const LANG_TAG =
+  /^[A-Za-z]{2,3}(?:[-_][A-Za-z]{4})?(?:[-_](?:[A-Za-z]{2}|[0-9]{3}))?(?:[-_][0-9][A-Za-z0-9]{3})*$/;
+
+/**
+ * What a `CIDSystemInfo`'s `/Registry` and `/Ordering` must be, matched on the
+ * string's raw bytes (spec 0021, AC-3): empty, or an ASCII letter followed by
+ * up to 15 ASCII letters or digits. So a hyphen, an underscore, a space, a
+ * leading digit or any byte outside ASCII refuses, and `123-45-6789`,
+ * `Rowan-Ashby` and `Rowan Ashby` never pass, while every value Adobe defines
+ * (`Adobe`; `Identity`, `UCS`, `Japan1`, `GB1` and the rest) does.
+ *
+ * These strings name the character collection a CID font's codes come from,
+ * which can change how a reader draws and reads its text, so the walk refuses
+ * a value outside the token rather than deleting it (INV-2). What the token
+ * still lets through, a run together name or code such as `RowanAshby`, stays
+ * only when unticked: the self check fails a ticked one (AC-4). A rule about
+ * the format, not a cap on the visitor (INV-6).
+ */
+export const CID_TOKEN = /^(?:[A-Za-z][A-Za-z0-9]{0,15})?$/;
+
+/** Do these raw bytes read as `CID_TOKEN`? A byte outside ASCII never does. */
+function readsAsToken(bytes: Uint8Array): boolean {
+  if (bytes.length > 16) return false;
+  let text = "";
+  for (const byte of bytes) {
+    if (byte >= 0x80) return false;
+    text += String.fromCharCode(byte);
+  }
+  return CID_TOKEN.test(text);
+}
+
+/**
+ * Does this string read as a language tag? Decoded as `decodeTextString`
+ * decodes it; one that cannot be decoded is no tag. Spec 0021, AC-2.
+ */
+export function readsAsLanguageTag(bytes: Uint8Array): boolean {
+  const text = decodeTextString(bytes);
+  return text !== null && LANG_TAG.test(text);
+}
+
+/**
+ * The characters PDFDocEncoding gives bytes 0x18 to 0x1F and 0x80 to 0xA0,
+ * where it parts from Latin 1 (PDF 2.0, Annex D). Every other byte is its
+ * Latin 1 character; the few the encoding leaves undefined are no letter or
+ * digit, so the fold drops them either way.
+ */
+const PDF_DOC_LOW = "\u02d8\u02c7\u02c6\u02d9\u02dd\u02db\u02da\u02dc";
+const PDF_DOC_HIGH =
+  "\u2022\u2020\u2021\u2026\u2014\u2013\u0192\u2044\u2039\u203a\u2212\u2030\u201e\u201c" +
+  "\u201d\u2018\u2019\u201a\u2122\ufb01\ufb02\u0141\u0152\u0160\u0178\u017d\u0131\u0142" +
+  "\u0153\u0161\u017e\u009f\u20ac";
+
+/**
+ * A string's text, decoded as the scan decodes one: UTF-16BE after the `FE FF`
+ * mark, PDFDocEncoding otherwise, or `null` when it cannot be decoded (a
+ * UTF-16 string of an odd length). Spec 0021, AC-1.
+ */
+export function decodeTextString(bytes: Uint8Array): string | null {
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    if (bytes.length % 2 !== 0) return null;
+    let text = "";
+    for (let at = 2; at < bytes.length; at += 2) {
+      text += String.fromCharCode((bytes[at] << 8) | bytes[at + 1]);
+    }
+    return text;
+  }
+  let text = "";
+  for (const byte of bytes) {
+    if (byte >= 0x18 && byte <= 0x1f) text += PDF_DOC_LOW[byte - 0x18];
+    else if (byte >= 0x80 && byte <= 0xa0) text += PDF_DOC_HIGH[byte - 0x80];
+    else text += String.fromCharCode(byte);
+  }
+  return text;
+}
+
+/**
+ * A string place's text, or a ticked item's, folded for comparison (spec
+ * 0021, AC-4): lowercase, then NFKD, then only letters and digits, so case,
+ * accents and every space, hyphen or underscore drop out, and `Rowan Ashby`
+ * folds to `rowanashby`, as an `/Ordering (RowanAshby)` does.
+ */
+export function foldPlaceText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+/**
+ * Every ticked item's text, folded once per run, empty folds dropped (spec
+ * 0021, AC-4, *Value sourcing*). The rebuild and the check take this one list,
+ * so the two never disagree (INV-1). The folds are document text: they live
+ * only inside the worker for the length of the run, as the character record
+ * does, and are never logged or sent.
+ */
+export function foldTicked(texts: Iterable<string>): readonly string[] {
+  const folded = new Set<string>();
+  for (const text of texts) {
+    const fold = foldPlaceText(text);
+    if (fold.length > 0) folded.add(fold);
+  }
+  return Object.freeze([...folded]);
+}
+
+/**
+ * The format's own values at a `CIDSystemInfo`'s strings, never compared with
+ * a ticked text (spec 0021, AC-4): a `/Registry` that is exactly `Adobe`, an
+ * `/Ordering` that is exactly one of Adobe's collections. They are the same
+ * in every file and never taken from the document, so ticking `ID`, `Adobe` or
+ * `Japan` does not refuse every file with such a font. A ticked word that
+ * matches one whole stays, as a ticked word matching a font's name already
+ * does. A rule about the format, not a cap on the visitor (INV-6).
+ */
+export const ADOBE_COLLECTIONS: Readonly<
+  Record<"Registry" | "Ordering", readonly string[]>
+> = deepFreeze({
+  Registry: ["Adobe"],
+  Ordering: ["Identity", "UCS", "Japan1", "Japan2", "GB1", "CNS1", "Korea1", "KR"],
+});
+
+/**
+ * Does a string place's text hold a ticked item's? Plain containment of the
+ * folds, so any of `ticked` inside the folded `text` answers true (spec 0021,
+ * AC-4). An empty fold in `ticked` is skipped, so it never matches everything.
+ */
+export function holdsTicked(text: string, ticked: readonly string[]): boolean {
+  const folded = foldPlaceText(text);
+  return ticked.some((fold) => fold.length > 0 && folded.includes(fold));
+}
+
+/**
+ * Does a string's raw bytes read as its place's `text`? Spec 0021, AC-2 and
+ * AC-3. A language tag is tested on the decoded text, a token on the raw
+ * bytes, and `any` takes every string.
+ */
+function fitsText(text: StringText, bytes: Uint8Array): boolean {
+  switch (text) {
+    case "language-tag":
+      return readsAsLanguageTag(bytes);
+    case "token":
+      return readsAsToken(bytes);
+    case "any":
+      return true;
+  }
+}
 
 /** The keys the output's trailer may hold (spec 0019, AC-1). */
 export const TRAILER_KEYS: readonly string[] = Object.freeze(["Size", "Root"]);
@@ -1058,6 +1246,10 @@ export function walkRoles(
         return;
       case "string":
         if (outerOf(value) !== "string") return fail("shape");
+        // Spec 0021, AC-3: a string outside what its place reads as is a value
+        // in a shape the format never gives that key (spec 0019, INV-2). The
+        // bytes are read through the reference, never resolved.
+        if (!fitsText(shape.text, value.asByteString())) return fail("shape");
         reach(value, "string");
         return;
       case "numbers":

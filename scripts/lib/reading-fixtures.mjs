@@ -1632,3 +1632,154 @@ export function trimQuote() {
     },
   ]);
 }
+
+/**
+ * The words of `trim-carry.pdf`: the first text object ends with `ticked`,
+ * `next` is the text object after it, and `edge` is the line whose box
+ * reaches past the page's bottom.
+ */
+export const TRIM_CARRY = Object.freeze({
+  ticked: "12345678",
+  first: "Totals for account 12345678",
+  next: "Revenue",
+  edge: "Quarter",
+});
+
+/**
+ * A recorded MuPDF limit, found by `/debug` on a matplotlib chart (spec
+ * 0020's Follow-up). Each line is its own text object, placed by `cm` and
+ * then `0 0 Td`, as matplotlib places every label. The edge line sits 2 pt
+ * above the page's bottom, so its box reaches past the edge and the trim
+ * runs its pass, which removes nothing here but rewrites the page without
+ * any `0 0 Td`. Ticking the last word of the first text object then lets
+ * MuPDF's text pass carry the removed word's advance across `ET` and `BT`
+ * into the next text object, which moves `Revenue`, so the self check
+ * refuses the run with `redaction-incomplete`. Nothing ticked makes a file.
+ */
+export function trimCarry() {
+  const placed = (size, y, text) =>
+    `q 1 0 0 1 72 ${y} cm BT /F1 ${size} Tf 0 0 Td ${literal(text)} Tj ET Q\n`;
+  return document(() => [
+    {
+      content:
+        placed(12, 700, TRIM_CARRY.first) +
+        placed(10, 650, TRIM_CARRY.next) +
+        placed(10, 2, TRIM_CARRY.edge),
+    },
+  ]);
+}
+
+/**
+ * What `trim-rotated.pdf` holds, for the tests to name. Every page is cropped
+ * to `crop`, in PDF space, and turned by its rotation; `inside` holds each
+ * page's own address, in page order.
+ */
+export const TRIM_ROTATED = Object.freeze({
+  crop: Object.freeze([36, 300, 576, 760]),
+  rotations: Object.freeze([90, 180, 270]),
+  inside: Object.freeze([
+    "ninety.person@example.com",
+    "half.turn@example.com",
+    "three.quarter@example.com",
+  ]),
+  kept: "Everything on this line stays where it is.",
+  above: "Above the crop",
+  below: "below.the.crop@example.com",
+  left: "Left",
+  right: "Right",
+  straddling: "Offside inside words stay put",
+  keptPart: "inside words stay put",
+  /** The page that paints a shading with no bounds of its own. */
+  shaded: 2,
+});
+
+/**
+ * Spec 0006, AC-14 to AC-17, and its Follow-up on a `/Rotate` page: `planTrim`
+ * builds its strips in `page.getBounds()` space, reads the media box for a
+ * shading with no bounds, and places the strips through annotation quad
+ * points, so rotation and the crop's offset must agree across all three.
+ *
+ * Three pages turned 90, 180 and 270 degrees, each cropped away from the
+ * origin on every side. On each, an address and a line inside the crop; a
+ * line above it, one below it holding another address, a word left of it and
+ * a word right of it; a line straddling its left edge, whose `e` crosses the
+ * edge at 36 (Helvetica 12 from x 0: `Offsid` ends at 31.4, the `e` runs to
+ * 38.1); and a filled square wholly below it. The last page also paints an
+ * axial shading extended both ways under everything, which no clip bounds,
+ * so the trim reaches it through the media box. That shading also reads as a
+ * picture under every item on its page to the self check's pixel part, so a
+ * run that ticks anything there refuses; the tests tick only the first two
+ * pages.
+ */
+export function trimRotated() {
+  const [x0, y0, x1, y1] = TRIM_ROTATED.crop;
+  return document(({ add }) => {
+    const fade = add("<< /FunctionType 2 /Domain [0 1] /C0 [0.95] /C1 [1] /N 1 >>");
+    const shading = add(
+      `<< /ShadingType 2 /ColorSpace /DeviceGray /Coords [0 0 612 0] ` +
+        `/Function ${fade} 0 R /Extend [true true] >>`,
+    );
+    return TRIM_ROTATED.rotations.map((rotate, at) => {
+      const shaded = at === TRIM_ROTATED.shaded;
+      return {
+        keys: `/CropBox [${x0} ${y0} ${x1} ${y1}] /Rotate ${rotate}`,
+        resources: shaded ? `/Shading << /Sh0 ${shading} 0 R >>` : "",
+        content:
+          (shaded ? "q /Sh0 sh Q\n" : "") +
+          line("F1", 12, 72, 700, `Contact: ${TRIM_ROTATED.inside[at]}`) +
+          line("F1", 12, 72, 680, TRIM_ROTATED.kept) +
+          line("F1", 12, 72, 770, TRIM_ROTATED.above) +
+          line("F1", 12, 72, 200, `Hidden below: ${TRIM_ROTATED.below}`) +
+          line("F1", 12, 4, 500, TRIM_ROTATED.left) +
+          line("F1", 12, 580, 520, TRIM_ROTATED.right) +
+          line("F1", 12, 0, 640, TRIM_ROTATED.straddling) +
+          "q 0.2 0.4 0.6 rg 100 100 50 50 re f Q\n",
+      };
+    });
+  });
+}
+
+/**
+ * The words of `trim-unplaced.pdf`: `contact` and `kept` are ordinary lines,
+ * and `unplaced` is the line MuPDF cannot place.
+ */
+export const TRIM_UNPLACED = Object.freeze({
+  contact: "Contact: placed.person@example.com",
+  kept: "This line is placed where it should be.",
+  unplaced: "Nowhere",
+});
+
+/**
+ * A number past what MuPDF reads, written out in digits, since its lexer
+ * takes no exponent (`3e38` reads as 3). MuPDF caps it, so it takes three
+ * stacked transforms to carry a line past the float range.
+ */
+const PAST_FLOAT = `3${"0".repeat(38)}`;
+
+/**
+ * A line of `text` drawn under three stacked transforms of `PAST_FLOAT`, so
+ * every one of its characters' quads is `NaN` or infinite (measured, MuPDF.js
+ * 1.28.1) and its line's box is MuPDF's empty one.
+ */
+export function unplacedLine(text) {
+  const huge = `${PAST_FLOAT} 0 0 ${PAST_FLOAT} 0 0 cm `;
+  return `q ${huge}${huge}${huge}BT /F1 12 Tf 1 1 Td ${literal(text)} Tj ET Q\n`;
+}
+
+/**
+ * Spec 0006's Follow-up on a line box that is not finite. A page with two
+ * ordinary lines and an `unplacedLine`. No strip can reach it and the self
+ * check counts its characters' centres as outside, so main opened this file
+ * and failed every run on it `redaction-incomplete`; the open now refuses it
+ * with `unsupported`.
+ */
+export function trimUnplaced() {
+  return document(() => [
+    {
+      content:
+        line("F1", 12, 72, 700, TRIM_UNPLACED.contact) +
+        line("F1", 12, 72, 680, TRIM_UNPLACED.kept) +
+        unplacedLine(TRIM_UNPLACED.unplaced),
+    },
+  ]);
+}

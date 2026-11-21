@@ -12,7 +12,7 @@ import {
   strippedLine,
   type TermResult,
 } from "@/lib/flow-text";
-import type { NotSearchedReason } from "@/lib/session";
+import type { NotSearchedReason, OutputForm } from "@/lib/session";
 import {
   DOWNLOAD_WARNING_TITLE,
   isPartly,
@@ -40,8 +40,11 @@ interface ResultCardProps {
     readonly reason: NotSearchedReason;
   }[];
   readonly summary: DocumentSummary | null;
-  /** The name Download offers, settled at `redacted`. Read, never shown. */
-  readonly outputName: string;
+  /**
+   * What the file's name says it is, from the same `outputFormFor` over the
+   * same summary and outcome that named it at `redacted` (spec 0007, AC-12).
+   */
+  readonly outputForm: OutputForm;
   readonly downloaded: boolean;
   readonly onDownload: () => void;
   readonly onRedactAnother: () => void;
@@ -72,7 +75,7 @@ export function ResultCard({
   terms = [],
   setAside = [],
   summary,
-  outputName,
+  outputForm,
   downloaded,
   onDownload,
   onRedactAnother,
@@ -84,8 +87,9 @@ export function ResultCard({
   const offPage = summary === null ? null : removedOffPageLine(summary);
   // Spec 0007, AC-12: the reason line explains the name, so it shows only when
   // the name says partly. A cleaned copy of a partly readable file keeps the
-  // page lines and leaves this out.
-  const partlyNamed = outputName.endsWith("-partly-redacted.pdf");
+  // page lines and leaves this out. Read from the form that named the file,
+  // never from the name's ending, which is built from the visitor's own name.
+  const partlyNamed = outputForm === "partly-redacted";
 
   return (
     <Card title={resultTitle(counts)} headingRef={headingRef} data-testid="result">

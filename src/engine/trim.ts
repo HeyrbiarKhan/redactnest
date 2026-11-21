@@ -67,7 +67,8 @@ const STRIP_MARGIN = 1;
  * yields a macrotask and asks whether to stop (AC-29).
  *
  * Throws `EngineFailure("edge-text")` or `EngineFailure("unsupported")` when
- * the proof fails, by AC-16's rule, `EngineFailure("unsupported")` for any
+ * the proof fails, by AC-16's rule, `EngineFailure("unsupported")` when a
+ * page holds a character MuPDF cannot place (`holdsUnplaced`) or for any
  * other throw while a page is read or trimmed, and `RunCancelled`.
  */
 export async function trimToVisibleArea(
@@ -174,11 +175,23 @@ function planTrim(mupdf: MuPdf, page: PDFPage): Plan {
   // A character whose quad reaches outside sits on a line whose box does,
   // since a line's box is the union of its characters' quads.
   let characterOutside = false;
+  let unplacedLine = false;
   walkLines(page, CHECK_EXTRACTION_OPTIONS[0], (bounds) => {
-    if (!bounds.every(Number.isFinite)) return;
+    if (!isPlacedBox(bounds)) {
+      unplacedLine = true;
+      return;
+    }
     reach(bounds);
     if (reachesPast(bounds, visible, POSITION_TOLERANCE)) characterOutside = true;
   });
+
+  // Spec 0006's Follow-up on a line box that is not finite: no strip can
+  // reach a character MuPDF cannot place, and the self check counts its
+  // centre as outside (AC-17), so every run on the file would fail
+  // `redaction-incomplete` after the visitor had ticked. Refused here instead,
+  // at open and in every run alike, as a plain `unsupported`. Only a page
+  // with such a line pays for the read that decides it.
+  if (unplacedLine && holdsUnplaced(page)) throw new EngineFailure("unsupported");
 
   const removed = characterOutside || pathOutside;
   return {
@@ -332,6 +345,38 @@ function readable<T>(work: () => T): T {
 
 function isWhitespace(code: number): boolean {
   return /\s/u.test(String.fromCodePoint(code));
+}
+
+/**
+ * A line box MuPDF could place: finite, and not inverted. MuPDF.js 1.28.1
+ * reports `[0, 0, -1, -1]`, its empty box, for a line whose characters'
+ * quads it could not compute (measured: text drawn under stacked transforms
+ * past the float range gives quads of `NaN` and infinity), since its box
+ * union skips them. So an inverted box, like a box that is not finite, is
+ * only a sign: `holdsUnplaced` decides.
+ */
+function isPlacedBox([x0, y0, x1, y1]: readonly number[]): boolean {
+  return [x0, y0, x1, y1].every(Number.isFinite) && x0 <= x1 && y0 <= y1;
+}
+
+/**
+ * Does the page hold a character, not whitespace, whose centre is not a
+ * finite point, in either unclipped mode? Exactly what the self check's
+ * outside rule fails on a page (AC-17, `compareMode` in `characters.ts`),
+ * read the same way, so the open refuses no file a run would have made: a
+ * space MuPDF cannot place is skipped there, and here.
+ */
+function holdsUnplaced(page: PDFPage): boolean {
+  let found = false;
+  for (const options of CHECK_EXTRACTION_OPTIONS) {
+    walkCharacters(page, options, (character) => {
+      if (found || isWhitespace(character.code)) return;
+      const [x, y] = quadCentre(character.quad);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) found = true;
+    });
+    if (found) return true;
+  }
+  return false;
 }
 
 function toRect(rect: readonly number[]): Rect {

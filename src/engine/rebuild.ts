@@ -1,6 +1,11 @@
-import type { Buffer as MuBuffer, PDFDocument } from "mupdf";
+import type { Buffer as MuBuffer, PDFDocument, PDFObject } from "mupdf";
 
-import { walkRoles } from "./allowlist";
+import {
+  decodeTextString,
+  holdsTicked,
+  readsAsLanguageTag,
+  walkRoles,
+} from "./allowlist";
 import { EngineFailure } from "./failure";
 import type { MuPdf } from "./load";
 import { forEachDictionary, keepOnly } from "./objects";
@@ -45,7 +50,10 @@ export const PAGE_KEYS: readonly string[] = Object.freeze([
 
 /**
  * The keys the catalog, the file's root object, may keep. `/Lang` only when the
- * source had one, so a screen reader still picks the right voice.
+ * source had one, so a screen reader still picks the right voice, and since
+ * spec 0021 only when it reads as a language tag holding nothing ticked
+ * (`graftPages`, its AC-1): no page needs it to draw, so anything else is left
+ * out rather than refused.
  */
 export const CATALOG_KEYS: readonly string[] = Object.freeze(["Type", "Pages", "Lang"]);
 
@@ -139,8 +147,17 @@ export function rewriteOutput(mupdf: MuPdf, bytes: ArrayBuffer): ArrayBuffer {
  * The map holds a reference to the working copy, so it is dropped before this
  * returns. That is what lets the caller's destroy of the working copy actually
  * free it.
+ *
+ * Spec 0021, AC-1: the catalog's `/Lang` is copied only when it is a string
+ * that reads as a language tag and holds none of `ticked` (the run's folded
+ * texts, `foldTicked`), and then as written, direct or indirect. Anything else
+ * is left out, with no refusal and nothing reported.
  */
-export function graftPages(mupdf: MuPdf, work: PDFDocument): PDFDocument {
+export function graftPages(
+  mupdf: MuPdf,
+  work: PDFDocument,
+  ticked: readonly string[],
+): PDFDocument {
   const out = new mupdf.PDFDocument();
   const map = out.newGraftMap();
 
@@ -157,7 +174,7 @@ export function graftPages(mupdf: MuPdf, work: PDFDocument): PDFDocument {
     }
 
     const lang = work.getTrailer().get("Root", "Lang");
-    if (!lang.isNull()) {
+    if (keepsLang(lang, ticked)) {
       out.getTrailer().get("Root").put("Lang", map.graftObject(lang));
     }
 
@@ -168,6 +185,19 @@ export function graftPages(mupdf: MuPdf, work: PDFDocument): PDFDocument {
   } finally {
     map.destroy();
   }
+}
+
+/**
+ * Is this catalog `/Lang` a language tag holding nothing ticked? Its bytes are
+ * read through the reference with `asByteString()`, never resolved, and
+ * decoded as the scan decodes a string (spec 0021, AC-1). A name, a number, an
+ * empty string, free text or a string that cannot be decoded is no tag.
+ */
+function keepsLang(lang: PDFObject, ticked: readonly string[]): boolean {
+  if (!lang.isString()) return false;
+  const bytes = lang.asByteString();
+  if (!readsAsLanguageTag(bytes)) return false;
+  return !holdsTicked(decodeTextString(bytes) ?? "", ticked);
 }
 
 /**

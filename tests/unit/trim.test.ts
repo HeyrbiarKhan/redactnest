@@ -7,8 +7,10 @@ import {
   PIPELINE,
   prepareDocument,
   redactDocumentWith,
+  removalBand,
   RunCancelled,
   silenceEngineLog,
+  textPass,
   trimToVisibleArea,
   type Pipeline,
   type TrimOutcome,
@@ -16,10 +18,25 @@ import {
 
 import { isPartly } from "@/lib/page-findings";
 
-import { TRIM_EDGE, TRIM_TEXT } from "../../scripts/lib/reading-fixtures.mjs";
+import {
+  TRIM_CARRY,
+  TRIM_EDGE,
+  TRIM_ROTATED,
+  TRIM_TEXT,
+  TRIM_UNPLACED,
+  unplacedLine,
+} from "../../scripts/lib/reading-fixtures.mjs";
 import { document, line } from "../../scripts/lib/redaction-fixtures.mjs";
 import { fixture } from "../support/bytes";
-import { documentImages, inspect, LIMITS, mupdf, pageText } from "../support/mupdf";
+import {
+  documentImages,
+  filledPaths,
+  inspect,
+  LIMITS,
+  mupdf,
+  pageText,
+  type FilledPath,
+} from "../support/mupdf";
 import { findTargets } from "../support/targets";
 
 /**
@@ -441,6 +458,136 @@ describe("trimming text", () => {
 });
 
 /**
+ * Spec 0006's Follow-up on a `/Rotate` page: `planTrim` builds its strips in
+ * `page.getBounds()` space, reads the media box for a shading with no bounds,
+ * and places the strips through annotation quad points. On pages turned 90,
+ * 180 and 270 degrees and cropped away from the origin on every side, all
+ * three agree, through the open, a run and its self check.
+ */
+describe("a turned and cropped page", () => {
+  const PAGES = TRIM_ROTATED.rotations.map((_, page) => page);
+
+  /** The filled square each page draws wholly below its crop. */
+  const square = (paths: readonly FilledPath[]) =>
+    paths.filter(
+      ({ color }) =>
+        color.length === 3 &&
+        Math.abs(color[0] - 0.2) < 0.01 &&
+        Math.abs(color[1] - 0.4) < 0.01 &&
+        Math.abs(color[2] - 0.6) < 0.01,
+    );
+
+  /** A page's visible area, as MuPDF gives it. */
+  const boundsOf = (bytes: ArrayBuffer, index: number) =>
+    inspect(bytes, (doc) => {
+      const page = doc.loadPage(index);
+      try {
+        return page.getBounds();
+      } finally {
+        page.destroy();
+      }
+    });
+
+  it("reads the visible area and the media box in the same turned page space (pin)", () => {
+    // Page space starts at the crop's corner as the page is shown, and the
+    // media box reaches past it by the crop's margins, turned with the page.
+    const boxes = inspect(fixture("trim-rotated.pdf"), (doc) =>
+      PAGES.map((index) => {
+        const page = doc.loadPage(index);
+        try {
+          return { visible: page.getBounds(), media: page.getBounds("MediaBox") };
+        } finally {
+          page.destroy();
+        }
+      }),
+    );
+    expect(boxes).toEqual([
+      { visible: [0, 0, 460, 540], media: [-300, -36, 492, 576] },
+      { visible: [0, 0, 540, 460], media: [-36, -300, 576, 492] },
+      { visible: [0, 0, 460, 540], media: [-32, -36, 760, 576] },
+    ]);
+  });
+
+  it("opens every page with the off page note, and lists only the address inside each", async () => {
+    const doc = await openDocumentWith(mupdf, fixture("trim-rotated.pdf"), LIMITS);
+    try {
+      expect(doc.summary.pages).toEqual(
+        PAGES.map(() => ({ findings: ["off-page-content"] })),
+      );
+      const found = await doc.findMatches({ contextChars: 40 });
+      expect(found.map(({ page, text }) => [page, text])).toEqual(
+        PAGES.map((page) => [page, TRIM_ROTATED.inside[page]]),
+      );
+    } finally {
+      doc.close();
+    }
+  });
+
+  it("removes everything outside with nothing ticked, keeps every glyph inside at its place, and passes its self check", async () => {
+    const source = fixture("trim-rotated.pdf");
+    const { output, trim } = await redactDocumentWith(mupdf, source, []);
+    expect(trim).toEqual(PAGES.map(() => ({ removed: true, pictureOutside: false })));
+
+    for (const page of PAGES) {
+      const text = unclipped(output, page);
+      for (const gone of [
+        TRIM_ROTATED.above,
+        TRIM_ROTATED.below,
+        TRIM_ROTATED.left,
+        TRIM_ROTATED.right,
+        "Offside",
+      ]) {
+        expect(text).not.toContain(gone);
+      }
+      for (const kept of [
+        TRIM_ROTATED.inside[page],
+        TRIM_ROTATED.kept,
+        TRIM_ROTATED.keptPart,
+      ]) {
+        expect(text).toContain(kept);
+      }
+
+      // Every character at least 20 pt inside each edge, at its place.
+      const [, , width, height] = boundsOf(source, page);
+      const inside = characters(source, page).filter(
+        ({ origin: [x, y] }) => x >= 20 && y >= 20 && x <= width - 20 && y <= height - 20,
+      );
+      const kept = characters(output, page);
+      expect(inside.length).toBeGreaterThan(60);
+      for (const { code, origin } of inside) {
+        expect(
+          kept.some(
+            (other) =>
+              other.code === code &&
+              Math.abs(other.origin[0] - origin[0]) <= 0.01 &&
+              Math.abs(other.origin[1] - origin[1]) <= 0.01,
+          ),
+        ).toBe(true);
+      }
+
+      // The square below the crop lies inside one strip, so it goes too.
+      expect(square(filledPaths(source, page))).toHaveLength(1);
+      expect(square(filledPaths(output, page))).toEqual([]);
+    }
+  });
+
+  it("removes a ticked address inside a turned page, with everything outside", async () => {
+    const source = fixture("trim-rotated.pdf");
+    // Not the shaded page: its shading reads as a picture under every item
+    // there to the self check's pixel part, which refuses a run that ticks one.
+    for (const page of PAGES.filter((at) => at !== TRIM_ROTATED.shaded)) {
+      const targets = findTargets(source, page, TRIM_ROTATED.inside[page]);
+      const { output } = await redactDocumentWith(mupdf, source, targets);
+
+      const text = unclipped(output, page);
+      expect(text).not.toContain(TRIM_ROTATED.inside[page]);
+      expect(text).not.toContain(TRIM_ROTATED.below);
+      expect(text).toContain(TRIM_ROTATED.kept);
+    }
+  });
+});
+
+/**
  * Open a fixture, run it with nothing ticked, and hand back each page's
  * findings, the run's trim, and the output.
  */
@@ -550,6 +697,82 @@ describe("the trim's proof", () => {
   });
 });
 
+/**
+ * Spec 0006's Follow-up on a line box that is not finite: a character MuPDF
+ * cannot place lies past every strip, and the self check counts its centre as
+ * outside (AC-17), so the open refuses the file rather than every run failing
+ * after the visitor has ticked.
+ */
+describe("a character MuPDF cannot place", () => {
+  it("comes back with a quad that is not finite, on a line with MuPDF's empty box (pin)", () => {
+    const read = inspect(fixture("trim-unplaced.pdf"), (doc) => {
+      const page = doc.loadPage(0);
+      const stext = page.toStructuredText("clip=no");
+      try {
+        const lines: { box: readonly number[]; quads: (readonly number[])[] }[] = [];
+        stext.walk({
+          beginLine(bbox) {
+            lines.push({ box: [...bbox], quads: [] });
+          },
+          onChar(_code, _origin, _font, _size, quad) {
+            lines[lines.length - 1].quads.push([...quad]);
+          },
+        });
+        return lines;
+      } finally {
+        stext.destroy();
+        page.destroy();
+      }
+    });
+
+    const unplaced = read.filter(({ quads }) =>
+      quads.some((quad) => !quad.every(Number.isFinite)),
+    );
+    expect(unplaced.length).toBeGreaterThan(0);
+    for (const { box, quads } of unplaced) {
+      expect(box).toEqual([0, 0, -1, -1]);
+      expect(quads.every((quad) => !quad.every(Number.isFinite))).toBe(true);
+    }
+  });
+
+  it("refuses the open with unsupported, and a run the same way, before anything is removed", async () => {
+    await expect(
+      openDocumentWith(mupdf, fixture("trim-unplaced.pdf"), LIMITS),
+    ).rejects.toEqual(new EngineFailure("unsupported"));
+    await expect(
+      redactDocumentWith(mupdf, fixture("trim-unplaced.pdf"), []),
+    ).rejects.toEqual(new EngineFailure("unsupported"));
+  });
+
+  it("is what the self check fails a run on when the trim is skipped", async () => {
+    const skipped: Pipeline = Object.freeze({
+      ...PIPELINE,
+      trim: async (_mupdf: unknown, pdf: PDFDocument) =>
+        Array.from({ length: pdf.countPages() }, () => UNTOUCHED),
+    });
+    await expect(
+      redactDocumentWith(mupdf, fixture("trim-unplaced.pdf"), [], {}, skipped),
+    ).rejects.toEqual(new EngineFailure("redaction-incomplete"));
+  });
+
+  it("opens a page whose only unplaced character is a space, as the self check skips one", async () => {
+    const source = toBuffer(
+      document(() => [
+        { content: line("F1", 12, 72, 700, TRIM_UNPLACED.contact) + unplacedLine(" ") },
+      ]),
+    );
+
+    const doc = await openDocumentWith(mupdf, source, LIMITS);
+    try {
+      expect(doc.summary.pages).toEqual([{ findings: [] }]);
+    } finally {
+      doc.close();
+    }
+    const { trim } = await redactDocumentWith(mupdf, source, []);
+    expect(trim).toEqual([UNTOUCHED]);
+  });
+});
+
 /** AC-17: the self check sees a trim that did nothing, whatever is ticked. */
 describe("the self check's outside rule", () => {
   const skipped: Pipeline = Object.freeze({
@@ -571,6 +794,72 @@ describe("the self check's outside rule", () => {
       ).rejects.toEqual(new EngineFailure("redaction-incomplete"));
     },
   );
+});
+
+/**
+ * A recorded MuPDF limit, pinned on MuPDF.js 1.28.1 (spec 0020's Follow-up,
+ * found by `/debug` on a matplotlib chart). The trim's pass rewrites the page
+ * it touches and drops every `0 0 Td`, so text objects placed by `cm` keep no
+ * text positioning operator. MuPDF's text pass then carries the advance of
+ * the glyphs it removed at the end of one text object across `ET` and `BT`
+ * into the next, which moves that text, and the self check refuses the run
+ * with `redaction-incomplete`. It fails closed: nothing leaks. An upgrade
+ * that fixes the carry fails these pins; take the chart back to spec 0020's
+ * Follow-up and feature 30 then, never loosen a pin.
+ */
+describe("MuPDF's carry into the next text object after the trim (pin)", () => {
+  const NAME = "trim-carry.pdf";
+
+  /** Where the next text object's first glyph starts once the text pass ran. */
+  async function nextStart(trim: boolean): Promise<number | undefined> {
+    const source = fixture(NAME);
+    const [target] = findTargets(source, 0, TRIM_CARRY.ticked);
+    const doc = mupdf.Document.openDocument(source, "application/pdf");
+    try {
+      const pdf = doc.asPDF() as PDFDocument;
+      prepareDocument(mupdf, pdf);
+      if (trim) await trimToVisibleArea(mupdf, pdf);
+      const page = pdf.loadPage(0);
+      try {
+        textPass(mupdf, page, [target.quads.map(removalBand)]);
+      } finally {
+        page.destroy();
+      }
+      const buffer = pdf.saveToBuffer("");
+      try {
+        const after = buffer.asUint8Array().slice().buffer as ArrayBuffer;
+        return characters(after, 0).find(({ code }) => code === TRIM_CARRY.next[0])
+          ?.origin[0];
+      } finally {
+        buffer.destroy();
+      }
+    } finally {
+      doc.destroy();
+    }
+  }
+
+  it("makes a file with nothing ticked, the trim's pass removing nothing", async () => {
+    const { output, trim } = await openAndRun(NAME);
+    expect(trim).toEqual([{ removed: true, pictureOutside: false }]);
+    for (const text of [TRIM_CARRY.first, TRIM_CARRY.next, TRIM_CARRY.edge]) {
+      expect(unclipped(output)).toContain(text);
+    }
+  });
+
+  it("refuses with redaction-incomplete when the last word of the first text object is ticked", async () => {
+    const source = fixture(NAME);
+    await expect(
+      redactDocumentWith(mupdf, source, findTargets(source, 0, TRIM_CARRY.ticked)),
+    ).rejects.toEqual(new EngineFailure("redaction-incomplete"));
+  });
+
+  it("moves the next text object by the removed word's advance, only after the trim's rewrite", async () => {
+    // Every line starts at x 72. `12345678` is eight Helvetica digits of 556
+    // thousandths each, carried into `Revenue` at its 10 pt.
+    const carried = (8 * 556 * 10) / 1000;
+    expect(await nextStart(true)).toBeCloseTo(72 + carried, 2);
+    expect(await nextStart(false)).toBeCloseTo(72, 2);
+  });
 });
 
 /** AC-29: a cancel is noticed within one page of the trim. */

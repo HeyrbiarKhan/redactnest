@@ -1,0 +1,91 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [8 0 R 10 0 R 12 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /FunctionType 2 /Domain [0 1] /C0 [0.95] /C1 [1] /N 1 >>
+endobj
+6 0 obj
+<< /ShadingType 2 /ColorSpace /DeviceGray /Coords [0 0 612 0] /Function 5 0 R /Extend [true true] >>
+endobj
+7 0 obj
+<<  /Length 429 >>
+stream
+BT /F1 12 Tf 72 700 Td (Contact: ninety.person@example.com) Tj ET
+BT /F1 12 Tf 72 680 Td (Everything on this line stays where it is.) Tj ET
+BT /F1 12 Tf 72 770 Td (Above the crop) Tj ET
+BT /F1 12 Tf 72 200 Td (Hidden below: below.the.crop@example.com) Tj ET
+BT /F1 12 Tf 4 500 Td (Left) Tj ET
+BT /F1 12 Tf 580 520 Td (Right) Tj ET
+BT /F1 12 Tf 0 640 Td (Offside inside words stay put) Tj ET
+q 0.2 0.4 0.6 rg 100 100 50 50 re f Q
+
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /CropBox [36 300 576 760] /Rotate 90 /Resources << /Font << /F1 3 0 R /F2 4 0 R >>  >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<<  /Length 425 >>
+stream
+BT /F1 12 Tf 72 700 Td (Contact: half.turn@example.com) Tj ET
+BT /F1 12 Tf 72 680 Td (Everything on this line stays where it is.) Tj ET
+BT /F1 12 Tf 72 770 Td (Above the crop) Tj ET
+BT /F1 12 Tf 72 200 Td (Hidden below: below.the.crop@example.com) Tj ET
+BT /F1 12 Tf 4 500 Td (Left) Tj ET
+BT /F1 12 Tf 580 520 Td (Right) Tj ET
+BT /F1 12 Tf 0 640 Td (Offside inside words stay put) Tj ET
+q 0.2 0.4 0.6 rg 100 100 50 50 re f Q
+
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /CropBox [36 300 576 760] /Rotate 180 /Resources << /Font << /F1 3 0 R /F2 4 0 R >>  >> /Contents 9 0 R >>
+endobj
+11 0 obj
+<<  /Length 441 >>
+stream
+q /Sh0 sh Q
+BT /F1 12 Tf 72 700 Td (Contact: three.quarter@example.com) Tj ET
+BT /F1 12 Tf 72 680 Td (Everything on this line stays where it is.) Tj ET
+BT /F1 12 Tf 72 770 Td (Above the crop) Tj ET
+BT /F1 12 Tf 72 200 Td (Hidden below: below.the.crop@example.com) Tj ET
+BT /F1 12 Tf 4 500 Td (Left) Tj ET
+BT /F1 12 Tf 580 520 Td (Right) Tj ET
+BT /F1 12 Tf 0 640 Td (Offside inside words stay put) Tj ET
+q 0.2 0.4 0.6 rg 100 100 50 50 re f Q
+
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /CropBox [36 300 576 760] /Rotate 270 /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /Shading << /Sh0 6 0 R >> >> /Contents 11 0 R >>
+endobj
+xref
+0 13
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000129 00000 n 
+0000000226 00000 n 
+0000000321 00000 n 
+0000000396 00000 n 
+0000000512 00000 n 
+0000000993 00000 n 
+0000001167 00000 n 
+0000001644 00000 n 
+0000001820 00000 n 
+0000002314 00000 n 
+trailer
+<< /Size 13 /Root 1 0 R >>
+startxref
+2516
+%%EOF

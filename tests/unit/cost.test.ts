@@ -10,6 +10,7 @@ import {
   readDrawing,
   redactDocumentWith,
   RunCancelled,
+  scanContent,
   silenceEngineLog,
   stripToAllowlist,
   structureIsClean,
@@ -56,6 +57,13 @@ import { documentImages, LIMITS, mupdf } from "../support/mupdf";
  * The second write (AC-15) runs on neither document, and a test of its own
  * says so, so both budgets stand as written: the path that writes twice has
  * no budget, since those files were refused before it.
+ *
+ * Spec 0021, AC-6 adds the scan's worst stream: about 1 MB of false inline
+ * image ends, each resuming on bytes that read on to the stream's end and
+ * fail there. Before the cap each retry read the rest again, so the work grew
+ * with the square of the length (10 KB took 393 ms, so 1 MB about an hour);
+ * with at most `INLINE_END_RETRIES` retries it answers `"unsure"` in at most
+ * 2 seconds.
  */
 
 const PAGES = 50;
@@ -578,6 +586,27 @@ describe("the cost of reading every page", () => {
       expect(output.byteLength).toBeGreaterThan(0);
     }
   }, 300_000);
+
+  /**
+   * Spec 0021, AC-6. `BI ... ID `, then ` EI 1` 200,000 times, then ` (`:
+   * every end resumes on numbers and `EI` operators that read on to the
+   * unclosed string at the end and fail there. Timed in wall time, the least
+   * of three passes after a warm up, as the other budgets take theirs.
+   */
+  it("answers unsure within 2 seconds on 1 MB of false inline image ends", async () => {
+    const text = `BI /W 1 /H 1 /BPC 8 /CS /G ID ${" EI 1".repeat(200_000)} (`;
+    const bytes = Uint8Array.from(text, (character) => character.charCodeAt(0));
+    expect(bytes.length).toBeGreaterThan(1_000_000);
+
+    const { least, passes } = await leastOf(async () => {
+      const start = performance.now();
+      expect(scanContent(bytes, null)).toBe("unsure");
+      return performance.now() - start;
+    });
+    expect(least, `per pass: ${passes.map(Math.round).join(", ")} ms`).toBeLessThan(
+      2_000,
+    );
+  }, 120_000);
 
   it("notices a cancel within one page of the 50", async () => {
     await withPrepared(densePdf(), async (pdf) => {

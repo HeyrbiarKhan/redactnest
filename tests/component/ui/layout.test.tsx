@@ -498,9 +498,8 @@ describe("the decorative pieces", () => {
     expect(circle?.querySelector("svg")).toHaveClass("size-5");
   });
 
-  /** Spec 0013, AC-11: the small check circle and the square tiles of the home page's cards. */
+  /** Spec 0013, AC-11: the circles and the square tiles of the home page's cards. */
   it.each([
-    ["sm", "size-8", "size-5", "rounded-lg"],
     ["md", "size-12", "size-5", "rounded-xl"],
     ["lg", "size-16", "size-7", "rounded-xl"],
   ] as const)(

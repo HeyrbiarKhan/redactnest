@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   CATALOG_KEYS,
+  CID_TOKEN,
   EngineFailure,
   openDocumentWith,
   PAGE_KEYS,
@@ -14,6 +15,14 @@ import {
   walkRoles,
   type Shape,
 } from "@/engine";
+import {
+  ADOBE_COLLECTIONS,
+  decodeTextString,
+  foldPlaceText,
+  foldTicked,
+  holdsTicked,
+  readsAsLanguageTag,
+} from "@/engine/allowlist";
 
 import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
 import { inspect, keysOf, LIMITS, mupdf } from "../support/mupdf";
@@ -93,7 +102,32 @@ describe("the role table", () => {
       "role" in place ? [`${place.role} ${place.key}`] : [],
     ).sort();
     expect(stringKeys()).toEqual(places);
-    expect(STRING_PLACES).toContainEqual({ colourSpace: "Indexed", item: 3 });
+    expect(STRING_PLACES).toContainEqual({
+      colourSpace: "Indexed",
+      item: 3,
+      text: "any",
+    });
+  });
+
+  /** Spec 0021, AC-3: each place says what its string reads as, and `ROLES` agrees. */
+  it("gives each role keyed place the string shape carrying the same text", () => {
+    for (const place of STRING_PLACES) {
+      if (!("role" in place)) continue;
+      expect(ROLES[place.role].keys[place.key], `${place.role} ${place.key}`).toEqual({
+        is: "string",
+        text: place.text,
+      });
+    }
+    expect(
+      STRING_PLACES.map((place) => ("role" in place ? place.key : "palette")),
+    ).toEqual(["Lang", "Registry", "Ordering", "palette", "ActualText"]);
+    expect(STRING_PLACES.map((place) => place.text)).toEqual([
+      "language-tag",
+      "token",
+      "token",
+      "any",
+      "any",
+    ]);
   });
 
   it("keeps only /Size and /Root on the trailer", () => {
@@ -363,6 +397,154 @@ describe("strings by place (AC-2)", () => {
       expect(doc.getTrailer().get("Root", "Lang").asString()).toBe("en-GB");
       expect(doc.newIndirect(6).get("CIDSystemInfo", "Ordering").asString()).toBe("GB1");
     });
+  });
+});
+
+/**
+ * A page drawing a Type 0 font whose `CIDSystemInfo` holds `registry` and
+ * `ordering`, each written as PDF source (`(Adobe)`, `<FEFF...>`, `8 0 R`):
+ * on the CID font, or on a character map the font's `/Encoding` names (the
+ * CID font's own then Adobe's). `rest` are objects from 8.
+ */
+function cidStrings(
+  registry: string,
+  ordering: string,
+  where: "font" | "map" = "font",
+  rest: Body[] = [],
+): Body[] {
+  const info = `/CIDSystemInfo << /Registry ${registry} /Ordering ${ordering} /Supplement 0 >>`;
+  const adobe =
+    "/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >>";
+  return onePage("<< /Font << /F1 5 0 R >> >>", [
+    "<< /Type /Font /Subtype /Type0 /BaseFont /Song " +
+      `/Encoding ${where === "map" ? "7 0 R" : "/Identity-H"} /DescendantFonts [6 0 R] >>`,
+    `<< /Type /Font /Subtype /CIDFontType0 /BaseFont /Song ${where === "font" ? info : adobe} >>`,
+    stream(`/Type /CMap /CMapName /Custom ${where === "map" ? info : adobe}`, ""),
+    ...rest,
+  ]);
+}
+
+/** Spec 0021, AC-3: a `CIDSystemInfo`'s strings held to `CID_TOKEN`, refused otherwise. */
+describe("a CID font's identifying strings (spec 0021)", () => {
+  const ADOBE_ORDERINGS = [
+    "Identity",
+    "UCS",
+    "Japan1",
+    "Japan2",
+    "GB1",
+    "CNS1",
+    "Korea1",
+    "KR",
+  ];
+
+  it.each([
+    ["sixteen characters", "(A123456789012345)"],
+    ["an empty string", "()"],
+    ["a run together name", "(RowanAshby)"],
+  ])("passes %s", (_label, text) => {
+    for (const from of ["catalog", "pages"] as const) {
+      expect(problemOf(cidStrings("(Adobe)", text), from)).toBeNull();
+      expect(problemOf(cidStrings(text, "(Identity)"), from)).toBeNull();
+    }
+  });
+
+  it.each([
+    ["seventeen characters", "(A1234567890123456)"],
+    ["a leading digit", "(1Adobe)"],
+    ["a number written with hyphens", "(123-45-6789)"],
+    ["a hyphen", "(Rowan-Ashby)"],
+    ["an underscore", "(Rowan_Ashby)"],
+    ["a space", "(Rowan Ashby)"],
+    ["a UTF-16 string", "<FEFF00410064006F00620065>"],
+    ["a byte outside ASCII", "<41E9>"],
+  ])("refuses %s, at /Registry and at /Ordering", (_label, text) => {
+    for (const from of ["catalog", "pages"] as const) {
+      expect(problemOf(cidStrings("(Adobe)", text), from)).toBe("shape");
+      expect(problemOf(cidStrings(text, "(Identity)"), from)).toBe("shape");
+    }
+  });
+
+  it("passes every value Adobe defines", () => {
+    for (const ordering of ADOBE_ORDERINGS) {
+      expect(problemOf(cidStrings("(Adobe)", `(${ordering})`)), ordering).toBeNull();
+    }
+  });
+
+  it("holds a character map's CIDSystemInfo to the same token", () => {
+    expect(problemOf(cidStrings("(Adobe)", "(UCS)", "map"))).toBeNull();
+    expect(problemOf(cidStrings("(Adobe)", "(Rowan Ashby)", "map"))).toBe("shape");
+    expect(problemOf(cidStrings("(Rowan-Ashby)", "(UCS)", "map"))).toBe("shape");
+  });
+
+  it("reads an indirect string through its reference", () => {
+    expect(problemOf(cidStrings("(Adobe)", "8 0 R", "font", ["(Identity)"]))).toBeNull();
+    expect(problemOf(cidStrings("(Adobe)", "8 0 R", "font", ["(Rowan Ashby)"]))).toBe(
+      "shape",
+    );
+  });
+
+  it("refuses a value that is not a string, as before", () => {
+    expect(problemOf(cidStrings("(Adobe)", "/Identity"))).toBe("shape");
+  });
+
+  it("matches CID_TOKEN to the place's rule", () => {
+    expect(CID_TOKEN.test("Adobe")).toBe(true);
+    expect(CID_TOKEN.test("")).toBe(true);
+    expect(CID_TOKEN.test("Rowan Ashby")).toBe(false);
+  });
+
+  it("lists Adobe's own values as the check skips them", () => {
+    expect(ADOBE_COLLECTIONS).toEqual({ Registry: ["Adobe"], Ordering: ADOBE_ORDERINGS });
+  });
+});
+
+/** Spec 0021, AC-1 and AC-4: one decoder, one fold, plain containment. */
+describe("the fold the rebuild and the check share (spec 0021)", () => {
+  const latin = (text: string): Uint8Array =>
+    Uint8Array.from(Buffer.from(text, "latin1"));
+
+  it("folds case, accents, spaces, hyphens and underscores away", () => {
+    expect(foldPlaceText("Rowan Ashby")).toBe("rowanashby");
+    expect(foldPlaceText("RowanAshby")).toBe("rowanashby");
+    expect(foldPlaceText("Zoë Ånström-Lee_2")).toBe("zoeanstromlee2");
+    expect(foldPlaceText(" - _ ")).toBe("");
+  });
+
+  it("folds every ticked text once, dropping empty and repeated folds", () => {
+    expect(foldTicked(["Rowan Ashby", "rowan-ashby", "--", "GB"])).toEqual([
+      "rowanashby",
+      "gb",
+    ]);
+  });
+
+  it("answers by containment of the folds, skipping an empty fold", () => {
+    expect(holdsTicked("RowanAshby", ["rowanashby"])).toBe(true);
+    expect(holdsTicked("Rowanx1", ["rowan"])).toBe(true);
+    expect(holdsTicked("en-GB", ["gb"])).toBe(true);
+    expect(holdsTicked("en-US", ["gb"])).toBe(false);
+    expect(holdsTicked("anything", [""])).toBe(false);
+    expect(holdsTicked("anything", [])).toBe(false);
+  });
+
+  it("decodes UTF-16BE after the mark, and PDFDocEncoding otherwise", () => {
+    expect(decodeTextString(Uint8Array.from([0xfe, 0xff, 0, 0x65, 0, 0x6e]))).toBe("en");
+    expect(decodeTextString(Uint8Array.from([0xfe, 0xff, 0, 0x65, 0]))).toBeNull();
+    expect(decodeTextString(latin("en-GB"))).toBe("en-GB");
+    // 0x95 is Ł and 0x93 the fi ligature in PDFDocEncoding, never Latin 1's controls.
+    expect(decodeTextString(Uint8Array.from([0x95, 0x75, 0x93]))).toBe("\u0141u\ufb01");
+    expect(
+      foldPlaceText(decodeTextString(Uint8Array.from([0x93, 0x6e, 0x65])) ?? ""),
+    ).toBe("fine");
+    expect(decodeTextString(Uint8Array.from([0x18, 0xa0]))).toBe("\u02d8\u20ac");
+  });
+
+  it("reads a language tag from either encoding, and never from undecodable bytes", () => {
+    expect(readsAsLanguageTag(latin("en-GB"))).toBe(true);
+    expect(readsAsLanguageTag(Uint8Array.from([0xfe, 0xff, 0, 0x65, 0, 0x6e]))).toBe(
+      true,
+    );
+    expect(readsAsLanguageTag(Uint8Array.from([0xfe, 0xff, 0, 0x65, 0]))).toBe(false);
+    expect(readsAsLanguageTag(latin("Jane Smith"))).toBe(false);
   });
 });
 

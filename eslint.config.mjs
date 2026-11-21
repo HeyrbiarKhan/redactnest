@@ -171,7 +171,13 @@ const noSearch = [
   { selector: 'CallExpression[callee.property.name="search"]', message: SEARCH_MESSAGE },
 ];
 
-/** Any call to a member named `resolve`, written `.resolve()` or `["resolve"]()`. */
+/**
+ * Any call to a member named `resolve`, written `.resolve()` or `["resolve"]()`.
+ * Those two forms are all it holds, and `tests/unit/engine-wall.test.ts` holds
+ * both. A key written as a template literal (`` x[`resolve`]() ``), a computed
+ * key (`x[name]()`), and a destructured `const { resolve } = obj` called as
+ * `resolve()` all pass it, so review catches those (spec 0019, AC-16).
+ */
 const noResolve = [
   {
     selector: 'CallExpression[callee.property.name="resolve"]',

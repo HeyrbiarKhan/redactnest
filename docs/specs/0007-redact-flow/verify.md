@@ -103,3 +103,11 @@ _From [the review](../../reviews/2026-09-30-feat-redact-flow.md): Start over now
 
 - AC-1 · one pass step, `pnpm test:e2e` · AC-2 · idle step · AC-3 · file bar steps · AC-4 · phase steps · AC-5 · order step · AC-6 · count line steps · AC-7 · select all steps · AC-8 · dense fixture step and speed spec · AC-9 · ellipsis step · AC-10 · Cancel steps · AC-11 · result card steps · AC-12 · cleaned and partly steps · AC-13 · after download steps · AC-14 · refusal steps · AC-15 · open failure step · AC-16 to AC-18 · failure words steps · AC-19 · edge line step · AC-20 · focus walk · AC-21 · 320px step · AC-22 · design system spec · AC-23 · leave warning step · AC-24 · worker client test · AC-25 · detectors test and typecheck · AC-26 · worker test and typecheck
 - After the review fixes · AC-3 · the three Start over steps · AC-8 · the speed project step · AC-13 · Redact another PDF with no confirm · AC-15, AC-16 · the two trim fixtures step
+
+## Feature 30's follow ups (added 2026-11-18)
+
+_From this spec's Follow-up nits 2 and 3 (the redact flow review): the result card reads the partly reason from the `OutputForm` that named the file, and `countRemoved` lives beside `RedactionOutcome` in `src/worker/protocol.ts`. Nothing the visitor sees should change._
+
+- [x] Run the three AC-12 steps under UI / manual again on `read-mixed.pdf` (untick everything; then tick the email): "Nothing was removed" and `read-mixed-cleaned.pdf` with no "partly redacted" line, then `read-mixed-partly-redacted.pdf` with the line → AC-12, nit 2
+- [x] Rename a copy of `text-page.pdf` (every page readable) to `notes-partly.pdf`, open it and redact with `jane.doe@example.com` ticked → the file is `notes-partly-redacted.pdf`, a name the old ending test would have read as partly, and the card shows no download warning and no "partly redacted" line, since the form decides (`redacted`) → AC-12, nit 2
+- [x] `src/lib/session.ts` imports nothing from `@/lib/detectors`, and `pnpm test` passes `detectors`, `session` and `tool-client` → nit 3

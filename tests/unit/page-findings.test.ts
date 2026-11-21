@@ -135,8 +135,8 @@ describe("the line for each finding", () => {
     ],
     [
       "off-page-picture",
-      "Page 1 has a picture that reaches outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.",
-      "Pages 1 and 2 have pictures that reach outside the visible page. RedactNest doesn't clear pictures, so the part outside is still in the file.",
+      "Page 1 has a picture that reaches outside the visible page. RedactNest doesn't clear the part outside, so it is still in the file.",
+      "Pages 1 and 2 have pictures that reach outside the visible page. RedactNest doesn't clear the parts outside, so they are still in the file.",
     ],
     // Spec 0019, AC-9: one sentence for one page and for several.
     [
@@ -152,8 +152,8 @@ describe("the line for each finding", () => {
     ],
     [
       "off-page-content",
-      "Page 1 has text or drawings outside its visible area. RedactNest removes them when you redact, since nobody can see them. A found item crossing a page's edge is listed by the part inside the page; the part outside is removed with the rest.",
-      "Pages 1 and 2 have text or drawings outside their visible area. RedactNest removes them when you redact, since nobody can see them. A found item crossing a page's edge is listed by the part inside the page; the part outside is removed with the rest.",
+      "Page 1 has text or drawings outside its visible area, where nobody can see them. RedactNest removes the text when you redact, and most of the drawings. A found item crossing a page's edge is listed by the part inside the page; the part outside is removed with the rest.",
+      "Pages 1 and 2 have text or drawings outside their visible area, where nobody can see them. RedactNest removes the text when you redact, and most of the drawings. A found item crossing a page's edge is listed by the part inside the page; the part outside is removed with the rest.",
     ],
   ] as const)("words %s for one page and for several", (finding, one, many) => {
     expect(findingLine(summaryOf([finding], []), finding)).toBe(one);
@@ -291,9 +291,11 @@ describe("the removed off page line", () => {
   it("names the pages the trim removed text or drawings from", () => {
     expect(
       removedOffPageLine(summaryOf(["off-page-content"], [], ["off-page-content"])),
-    ).toBe("Text and drawings outside the visible area of pages 1 and 3 were removed.");
+    ).toBe(
+      "Text outside the visible area of pages 1 and 3 was removed, and most drawings there. A drawing that crosses the edge of the visible area, or wraps round a corner, can stay.",
+    );
     expect(removedOffPageLine(summaryOf([], ["off-page-content"]))).toBe(
-      "Text and drawings outside the visible area of page 2 were removed.",
+      "Text outside the visible area of page 2 was removed, and most drawings there. A drawing that crosses the edge of the visible area, or wraps round a corner, can stay.",
     );
   });
 

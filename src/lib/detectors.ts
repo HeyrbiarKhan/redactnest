@@ -20,8 +20,8 @@ import {
 
 import { countText } from "@/lib/count-text";
 import {
+  countRemoved,
   DETECTOR_KINDS,
-  MATCH_KINDS,
   type BlockedReason,
   type DetectionCounts,
   type DetectorKind,
@@ -197,19 +197,6 @@ export function countedKinds(
     const { noun } = DETECTOR_LABELS[kind];
     return [`${countText(count)} ${count === 1 ? noun.one : noun.other}`];
   });
-}
-
-/**
- * How many items a run removed, over every kind, `term` included, so a run
- * that removed only term rows is never named cleaned. The one sum behind the
- * result card's title and the file's name (spec 0007, AC-12 and INV-2; spec
- * 0017, AC-21).
- */
-export function countRemoved(outcome: RedactionOutcome): number {
-  return MATCH_KINDS.reduce(
-    (total, kind) => total + (outcome.removedByType[kind] ?? 0),
-    0,
-  );
 }
 
 /**
