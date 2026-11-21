@@ -6,9 +6,12 @@ import {
   ADOBE_COLLECTIONS,
   decodeTextString,
   holdsTicked,
+  ROLE_NAMES,
+  ROLES,
   TRAILER_KEYS,
   walkRoles,
   type ResourceOwner,
+  type Role,
 } from "./allowlist";
 import { comparePage, type PageRecord } from "./characters";
 import { EngineFailure } from "./failure";
@@ -434,19 +437,35 @@ function holdsOnly(dict: PDFObject, allowed: readonly string[]): boolean {
 
 /**
  * What a file draws, as far as a second write could change it unseen. Spec
- * 0019, AC-15 and INV-8.
+ * 0019, AC-15 and INV-8, as spec 0021's AC-8 widens it.
  *
  * The full check on the second write's bytes holds text, structure and the
  * pixels under ticked items, but reads no picture nobody ticked and counts no
- * figure, so a second write that dropped a picture's data or a form would
- * pass it. The shape is how many objects the role walk reaches as a form, and
- * the stored length of every object it reaches as an image, read through the
- * reference and sorted. A reached image that is not a stream counts as -1.
+ * figure, font file, pattern or shading, so a second write that dropped or
+ * changed one would pass it. The shape is, for every role whose form in
+ * `ROLES` is `stream` or `either` (`STREAM_ROLES`), the stored length of every
+ * object the role walk reaches in that role, read raw through its reference,
+ * or -1 when it is not a stream, each list sorted. An object reached in two
+ * such roles is listed under both.
  */
-export interface DrawnShape {
-  readonly forms: number;
-  readonly images: readonly number[];
-}
+export type DrawnShape = Readonly<Partial<Record<Role, readonly number[]>>>;
+
+/**
+ * The roles that can be a stream, derived from `ROLES`, never written by
+ * hand (spec 0021, AC-8): today content, form, image, font file, character
+ * map, tiling pattern, shading, function, colour profile and plain stream.
+ */
+const STREAM_ROLES: readonly Role[] = Object.freeze(
+  ROLE_NAMES.filter((name) => ROLES[name].form !== "dict"),
+);
+
+/**
+ * The roles a second write may lose a whole object from, never change one
+ * (spec 0021, AC-8, INV-5): a colour profile MuPDF cannot load is the entry
+ * the second write exists to drop (spec 0019, AC-15). A rule about the
+ * format, not a cap on the visitor (INV-6).
+ */
+export const BELOW_COLOUR_ROLES: ReadonlySet<Role> = new Set<Role>(["colour-profile"]);
 
 /**
  * The drawn shape of written bytes, opened on their own and destroyed before
@@ -460,28 +479,54 @@ export function drawnShape(mupdf: MuPdf, bytes: ArrayBuffer): DrawnShape {
     const pdf = doc.asPDF();
     if (!pdf) throw new EngineFailure("redaction-incomplete");
 
-    let forms = 0;
-    const images: number[] = [];
+    const lengths = new Map<Role, number[]>();
     for (const [num, labels] of walkRoles(pdf, "read").reached) {
-      if (labels.has("form")) forms += 1;
-      if (labels.has("image")) images.push(storedLength(pdf.newIndirect(num)));
+      let length: number | null = null;
+      for (const role of STREAM_ROLES) {
+        if (!labels.has(role)) continue;
+        length ??= storedLength(pdf.newIndirect(num));
+        const list = lengths.get(role) ?? [];
+        list.push(length);
+        lengths.set(role, list);
+      }
     }
-    return Object.freeze({
-      forms,
-      images: Object.freeze(images.sort((a, b) => a - b)),
-    });
+    const shape: Partial<Record<Role, readonly number[]>> = {};
+    for (const [role, list] of lengths) {
+      shape[role] = Object.freeze(list.sort((a, b) => a - b));
+    }
+    return Object.freeze(shape);
   } finally {
     doc.destroy();
   }
 }
 
-/** Do two files draw the same number of forms, and pictures of the same stored lengths? */
+/**
+ * Did the second write keep what the first drew? Every stream role's two
+ * lists must be equal, except a role in `BELOW_COLOUR_ROLES`, where every
+ * length in the second's list must be matched by an equal length in the
+ * first's, one for one: the second write may lose a whole profile, never
+ * change one. A -1 matches only a -1. Spec 0021, AC-8.
+ */
 export function sameDrawnShape(first: DrawnShape, second: DrawnShape): boolean {
-  return (
-    first.forms === second.forms &&
-    first.images.length === second.images.length &&
-    first.images.every((length, index) => length === second.images[index])
-  );
+  return STREAM_ROLES.every((role) => {
+    const before = first[role] ?? [];
+    const after = second[role] ?? [];
+    return BELOW_COLOUR_ROLES.has(role)
+      ? matchedOneForOne(after, before)
+      : before.length === after.length &&
+          before.every((length, index) => length === after[index]);
+  });
+}
+
+/** Is every length in `within` matched by an equal one in `from`, each used once? Both sorted. */
+function matchedOneForOne(within: readonly number[], from: readonly number[]): boolean {
+  let at = 0;
+  for (const length of within) {
+    while (at < from.length && from[at] < length) at += 1;
+    if (at >= from.length || from[at] !== length) return false;
+    at += 1;
+  }
+  return true;
 }
 
 /** A stream's stored length, read raw through its reference, or -1 if it is not one. */

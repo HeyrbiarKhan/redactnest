@@ -1,6 +1,6 @@
 import { readdirSync } from "node:fs";
 
-import type { PDFDocument } from "mupdf";
+import type { PDFDocument, PDFObject } from "mupdf";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -14,6 +14,7 @@ import {
   structureIsClean,
   walkRoles,
   WRITE_OPTIONS,
+  type DrawnShape,
   type Pipeline,
   type RedactionTarget,
   type StructureVerdict,
@@ -29,7 +30,10 @@ import {
   UNREADABLE_PROFILE,
 } from "../../scripts/lib/kept-fixtures.mjs";
 import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
-import { IDENTITY_UNICODE } from "../../scripts/lib/redaction-fixtures.mjs";
+import {
+  IDENTITY_UNICODE,
+  document as letterDocument,
+} from "../../scripts/lib/redaction-fixtures.mjs";
 import { fixture } from "../support/bytes";
 import {
   containsInAnyEncoding,
@@ -1087,12 +1091,14 @@ describe("the second write", () => {
 
 /**
  * AC-15, INV-8: what the second write's bytes are held to besides the full
- * check, which reads no picture nobody ticked and counts no figure. The run
- * level guard is "fails with unsupported when the second write changes what a
- * page draws", above; these hold what the shape counts.
+ * check, which reads no picture nobody ticked and counts no figure. Spec
+ * 0021's AC-8 widens it to every stream the walk reaches, by role, with only
+ * a whole colour profile allowed to go. The run level guards are "fails with
+ * unsupported when the second write changes what a page draws", above, and
+ * the positive document below; these hold what the shape records.
  */
 describe("the drawn shape a second write is held to", () => {
-  it("counts each form once and lists every picture's stored length, smallest first", () => {
+  it("lists every reached stream's stored length under each stream role, smallest first", () => {
     const { bytes } = writePdf({
       objects: [
         "<< /Type /Catalog /Pages 2 0 R >>",
@@ -1117,21 +1123,253 @@ describe("the drawn shape a second write is held to", () => {
       trailer: "/Root 1 0 R",
     });
 
-    expect(drawnShape(mupdf, bytes.slice().buffer)).toEqual({ forms: 2, images: [1, 3] });
+    // A form drawn by both pages is one object, so it is listed once.
+    expect(drawnShape(mupdf, bytes.slice().buffer)).toEqual({
+      content: ["/Fm1 Do /Im1 Do".length, "/Fm1 Do /Fm2 Do /Im2 Do".length],
+      form: [0, 0],
+      image: [1, 3],
+    });
   });
 
-  it("tells two shapes apart by their forms and by any picture's stored length", () => {
-    const shape = { forms: 2, images: [1, 3] };
+  const SHAPE: DrawnShape = {
+    content: [40, 120],
+    form: [0, 30],
+    image: [1, 3],
+    "font-file": [5000],
+    "character-map": [200],
+    "tiling-pattern": [26],
+    shading: [32],
+    function: [-1, 18],
+    "colour-profile": [45, 45, 3144],
+    "plain-stream": [12],
+  };
 
-    expect(sameDrawnShape(shape, { forms: 2, images: [1, 3] })).toBe(true);
-    expect(sameDrawnShape(shape, { forms: 1, images: [1, 3] })).toBe(false);
-    expect(sameDrawnShape(shape, { forms: 2, images: [0, 3] })).toBe(false);
-    expect(sameDrawnShape(shape, { forms: 2, images: [1] })).toBe(false);
-    expect(sameDrawnShape(shape, { forms: 2, images: [1, 3, 3] })).toBe(false);
+  /** `SHAPE` with one role's list replaced. */
+  const replaced = (role: keyof DrawnShape, list: readonly number[]): DrawnShape => ({
+    ...SHAPE,
+    [role]: list,
+  });
+
+  it("holds an equal record", () => {
+    expect(sameDrawnShape(SHAPE, { ...SHAPE })).toBe(true);
+  });
+
+  it("holds a second write that lost whole colour profiles, and fails one that changed one", () => {
+    expect(sameDrawnShape(SHAPE, replaced("colour-profile", [3144]))).toBe(true);
+    expect(sameDrawnShape(SHAPE, replaced("colour-profile", [45]))).toBe(true);
+    expect(sameDrawnShape(SHAPE, replaced("colour-profile", []))).toBe(true);
+    expect(sameDrawnShape(SHAPE, replaced("colour-profile", [44, 45, 3144]))).toBe(false);
+    expect(sameDrawnShape(SHAPE, replaced("colour-profile", [45, 45, 45]))).toBe(false);
+    expect(sameDrawnShape(SHAPE, replaced("colour-profile", [45, 45, 3144, 3144]))).toBe(
+      false,
+    );
+  });
+
+  it.each([
+    "content",
+    "form",
+    "image",
+    "font-file",
+    "character-map",
+    "tiling-pattern",
+    "shading",
+    "function",
+    "plain-stream",
+  ] as const)("fails a %s changed, dropped or added", (role) => {
+    const list = SHAPE[role] ?? [];
+    expect(sameDrawnShape(SHAPE, replaced(role, [list[0] - 1, ...list.slice(1)]))).toBe(
+      false,
+    );
+    expect(sameDrawnShape(SHAPE, replaced(role, list.slice(1)))).toBe(false);
+    expect(sameDrawnShape(SHAPE, replaced(role, [...list, 7]))).toBe(false);
+  });
+
+  it("fails a reached stream turned into a bare dictionary, unless the first had one there", () => {
+    expect(sameDrawnShape(SHAPE, replaced("shading", [-1]))).toBe(false);
+    expect(sameDrawnShape(SHAPE, replaced("function", [-1, -1]))).toBe(false);
+    expect(sameDrawnShape(SHAPE, replaced("function", [-1, 18]))).toBe(true);
+    expect(sameDrawnShape(replaced("shading", [-1]), replaced("shading", [-1]))).toBe(
+      true,
+    );
+  });
+
+  it("treats a role missing from a record as an empty list", () => {
+    const rest: DrawnShape = Object.fromEntries(
+      Object.entries(SHAPE).filter(([role]) => role !== "plain-stream"),
+    );
+    expect(sameDrawnShape(SHAPE, rest)).toBe(false);
+    expect(sameDrawnShape(rest, { ...rest, "plain-stream": [] })).toBe(true);
   });
 });
 
+/**
+ * One page drawing in Carlito (an embedded font file), filling a square with
+ * a tiling pattern, painting a type 4 shading, and painting a square through
+ * the unreadable profile first, so its first write keeps a colour space entry
+ * nothing names and the run writes twice (spec 0021, AC-8's positive case).
+ */
+function drawnEverything(): ArrayBuffer {
+  const vertex = (x: number, y: number, rgb: readonly number[]): number[] => {
+    const ex = Math.round((x / 612) * 65535);
+    const ey = Math.round((y / 792) * 65535);
+    return [0, ex >> 8, ex & 0xff, ey >> 8, ey & 0xff, ...rgb];
+  };
+  const bytes = letterDocument(
+    ({ add }: { add: (body: unknown) => number }) => {
+      const profile = add(stream("/N 3", UNREADABLE_PROFILE));
+      const tile = add(
+        stream(
+          "/Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10] " +
+            "/XStep 10 /YStep 10 /Resources << >>",
+          "1 0 0 rg 0 0 5 5 re f\n",
+        ),
+      );
+      const shading = add(
+        stream(
+          "/ShadingType 4 /ColorSpace /DeviceRGB /BitsPerCoordinate 16 /BitsPerComponent 8 " +
+            "/BitsPerFlag 8 /Decode [0 612 0 792 0 1 0 1 0 1]",
+          Uint8Array.from([
+            ...vertex(350, 500, [255, 0, 0]),
+            ...vertex(450, 500, [0, 255, 0]),
+            ...vertex(400, 600, [0, 0, 255]),
+          ]),
+        ),
+      );
+      return [
+        {
+          resources:
+            `/ColorSpace << /CS0 [/ICCBased ${profile} 0 R] >> /Pattern << /P0 ${tile} 0 R >> ` +
+            `/Shading << /Sh0 ${shading} 0 R >>`,
+          content:
+            "q /CS0 cs 0.2 0.4 0.6 sc 72 500 100 100 re f Q " +
+            "q /Pattern cs /P0 scn 200 500 100 100 re f Q " +
+            "q 350 500 100 100 re W n /Sh0 sh Q " +
+            "BT /F3 18 Tf 72 700 Td (A line in Carlito) Tj ET\n",
+        },
+      ];
+    },
+    { carlito: true },
+  );
+  return bytes.slice().buffer;
+}
+
+/**
+ * The real second write, then the first stream `pick` chooses written again
+ * as `change` makes it, and the file saved as the engine saves one.
+ */
+function rewriteThen(
+  pick: (ref: PDFObject) => boolean,
+  change: (data: Uint8Array) => Uint8Array,
+): Pipeline["rewrite"] {
+  return (engine, bytes) => {
+    const doc = mupdf.Document.openDocument(
+      PIPELINE.rewrite(engine, bytes),
+      "application/pdf",
+    );
+    try {
+      const pdf = doc.asPDF() as PDFDocument;
+      for (let num = 1; num < pdf.countObjects(); num += 1) {
+        const ref = pdf.newIndirect(num);
+        if (!ref.isStream() || !pick(ref)) continue;
+        const data = ref.readStream();
+        try {
+          ref.writeStream(change(data.asUint8Array().slice()));
+        } finally {
+          data.destroy();
+        }
+        break;
+      }
+      const buffer = pdf.saveToBuffer(WRITE_OPTIONS);
+      try {
+        return buffer.asUint8Array().slice().buffer;
+      } finally {
+        buffer.destroy();
+      }
+    } finally {
+      doc.destroy();
+    }
+  };
+}
+
+/** Spec 0021, AC-8: the drawn shape through the real second write. */
+describe("the drawn shape on a font file, a pattern and a shading", () => {
+  it("makes a file through the real second write, writing twice", async () => {
+    const { rewrite, calls } = countedRewrite();
+
+    await expect(
+      kindOf(drawnEverything(), [], { ...PIPELINE, rewrite }),
+    ).resolves.toBeNull();
+    expect(calls.count).toBe(1);
+  });
+
+  it.each([
+    ["the font file's", (ref: PDFObject) => ref.get("Length1").isNumber()],
+    ["the tiling pattern's", (ref: PDFObject) => ref.get("PatternType").isNumber()],
+  ])(
+    "fails with unsupported when the second write writes %s data shorter",
+    async (_label, pick) => {
+      const rewrite = rewriteThen(pick, (data) =>
+        data.slice(0, Math.floor(data.length / 2)),
+      );
+
+      await expect(kindOf(drawnEverything(), [], { ...PIPELINE, rewrite })).resolves.toBe(
+        "unsupported",
+      );
+    },
+  );
+});
+
 /** AC-16, AC-17: what a picture or a figure points at, merged by the write. */
+/**
+ * A page with a line of Helvetica and, when `space` is given, an inline
+ * picture drawn 100 points square whose `/CS` is `space`, one index byte,
+ * with `/Cs1` a calibrated RGB space in the page's resources.
+ */
+function inlineIndexed(space?: string): ArrayBuffer {
+  const picture =
+    space === undefined
+      ? ""
+      : `q 100 0 0 100 72 500 cm BI /W 1 /H 1 /CS ${space} /BPC 8 ID ${String.fromCharCode(1)} EI Q `;
+  const { bytes } = writePdf({
+    objects: [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << " +
+        "/Font << /F1 5 0 R >> /ColorSpace << /Cs1 [/CalRGB << /WhitePoint [0.9505 1 1.089] >>] >> >> " +
+        "/Contents 4 0 R >>",
+      stream("", `${picture}BT /F1 18 Tf 72 700 Td (A palette picture) Tj ET`),
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ],
+    trailer: "/Root 1 0 R",
+  });
+  return bytes.slice().buffer;
+}
+
+/**
+ * Spec 0021, AC-7, the pin. The scan now counts an inline picture's indexed
+ * base name as a use, but no output reaches the case today: MuPDF 1.28.1 does
+ * not draw an inline picture whose indexed `/CS` names a resource as its base,
+ * and a run's write keeps neither the picture nor the entry. A release that
+ * starts drawing it fails here, and shows the rule now matters.
+ */
+describe("MuPDF and an inline picture over a named indexed base", () => {
+  const NAMED = "[/I /Cs1 1 <FF000000FF00>]";
+
+  it("is not drawn in the source, where the same picture over a device base is", () => {
+    const without = pageRenders(inlineIndexed());
+
+    expect(pageRenders(inlineIndexed(NAMED))).toEqual(without);
+    expect(pageRenders(inlineIndexed("[/I /RGB 1 <FF000000FF00>]"))).not.toEqual(without);
+  });
+
+  it("leaves a run's output with no inline picture and no colour space entry", async () => {
+    const { output } = await redactDocumentWith(mupdf, inlineIndexed(NAMED), []);
+
+    expect(pageContent(output, 0)).not.toMatch(/\bBI\b/);
+    expect(colourSpaceEntries(output)).toBe(0);
+  });
+});
+
 describe("pictures and figures pointing at identical small objects", () => {
   it.each([
     ["nothing ticked", false],

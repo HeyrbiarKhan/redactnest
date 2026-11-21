@@ -94,6 +94,7 @@ export {
   type StringText,
 } from "./allowlist";
 export {
+  INLINE_END_RETRIES,
   readDrawing,
   scanContent,
   type DrawingRead,

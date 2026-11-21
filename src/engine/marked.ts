@@ -177,6 +177,18 @@ const INLINE_DEVICE_SPACES = new Set([
 const TEXT_SHOWING = new Set(["Tj", "TJ", "'", '"']);
 
 /**
+ * How many times one scan may give an inline image a new end before the
+ * stream counts as unsure (spec 0021, AC-6). Each retry reads the rest of the
+ * stream again, so with no cap a crafted stream of false ends grows with the
+ * square of its length (1 MB would take about an hour); with it the scan
+ * reads one stream at most 17 times (INV-4). Random data holds a false end
+ * about once in 45 MB, and no committed fixture's stream takes one. Running
+ * out is doubt, which warns or refuses, never passes a file. A rule about the
+ * scan, not a cap on the visitor (spec 0019, INV-5).
+ */
+export const INLINE_END_RETRIES = 16;
+
+/**
  * Scan decoded drawing instructions (spec 0019, *Scan rules*), or `"unsure"`
  * when they cannot be read to their end: an unbalanced string, array or
  * dictionary, a stray closing delimiter, or an inline image with no workable
@@ -196,6 +208,8 @@ export function scanContent(
   // Whether the rest of a stream reads to its end depends only on where the
   // scan resumes after an `EI`, so a resume point that failed once fails again.
   const failed = new Set<number>();
+  // Spec 0021, AC-6: one count per call, of new ends given.
+  let retries = 0;
   let pos = 0;
   let operands: Value[] = [];
   let open: Open[] = [];
@@ -215,13 +229,19 @@ export function scanContent(
     else operands.push(value);
   };
 
-  /** Back to the latest inline image with an `EI` still to try, or false if none. */
+  /**
+   * Back to the latest inline image with an `EI` still to try, or false if
+   * none, or once `INLINE_END_RETRIES` new ends have been given. A choice with
+   * no end left takes none and counts for nothing.
+   */
   const retry = (): boolean => {
     while (choices.length > 0) {
       const choice = choices.pop() as Choice;
       failed.add(choice.end + 2);
       const next = nextEnd(bytes, choice.dataStart, choice.end + 1, failed);
       if (next === null) continue;
+      if (retries >= INLINE_END_RETRIES) return false;
+      retries += 1;
       choices.push({ ...choice, end: next });
       state = copy(choice.saved);
       pos = next + 2;
@@ -697,7 +717,24 @@ function inlineImage(
   const dictionary = dictionaryOf(items) as Extract<Value, { is: "dict" }>;
   const space = dictionary.entries.get("CS") ?? dictionary.entries.get("ColorSpace");
   const dataStart = pos < bytes.length && isWhite(bytes[pos]) ? pos + 1 : pos;
-  return { colourSpace: space?.is === "name" ? space.name : null, dataStart };
+  return { colourSpace: inlineSpaceName(space), dataStart };
+}
+
+/**
+ * The colour space name an inline image's `/CS` uses: the name itself, or the
+ * base of an `/I` or `/Indexed` array when the base is a name (spec 0021,
+ * AC-7). The format allows a named resource inside an inline image's colour
+ * space only there, so nothing else inside an array counts. The caller leaves
+ * out a device space.
+ */
+function inlineSpaceName(space: Value | undefined): string | null {
+  if (space?.is === "name") return space.name;
+  if (space?.is !== "array") return null;
+  const [family, base] = space.items;
+  if (family?.is !== "name" || (family.name !== "I" && family.name !== "Indexed")) {
+    return null;
+  }
+  return base?.is === "name" ? base.name : null;
 }
 
 /**

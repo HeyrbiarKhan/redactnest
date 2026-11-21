@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   EngineFailure,
+  INLINE_END_RETRIES,
   LANG_TAG,
   openDocumentWith,
   readDrawing,
@@ -200,6 +201,24 @@ describe("the resource names a drawing uses", () => {
     ).toEqual([]);
     expect(namesOf("BI /W 1 /H 1 /CS /G /BPC 8 ID x EI", "ColorSpace")).toEqual([]);
   });
+
+  /**
+   * Spec 0021, AC-7: the format allows a named resource inside an inline
+   * image's colour space only at an indexed space's base, so that name, and
+   * nothing else inside an array, is a use.
+   */
+  it.each([
+    ["[/I /Cs1 1 <FF000000FF00>]", ["Cs1"]],
+    ["[/Indexed /Cs1 1 <FF000000FF00>]", ["Cs1"]],
+    ["[/I /G 1 <00FF>]", []],
+    ["[/I /RGB 1 <FF000000FF00>]", []],
+    ["[/Indexed /DeviceRGB 1 <FF000000FF00>]", []],
+    ["[/CalRGB << /WhitePoint [0.95 1 1.09] >>]", []],
+  ])("reads an inline /CS %s as naming %j", (space, names) => {
+    expect(namesOf(`BI /W 1 /H 1 /CS ${space} /BPC 8 ID x EI`, "ColorSpace")).toEqual(
+      names,
+    );
+  });
 });
 
 describe("inline images", () => {
@@ -231,6 +250,40 @@ describe("inline images", () => {
   it("is unsure of an image whose dictionary never reaches ID", () => {
     expect(scanContent(bytes("BI /W 1 /H 1 Tj"), null)).toBe("unsure");
   });
+
+  /**
+   * Spec 0021, AC-6: at most `INLINE_END_RETRIES` new ends per stream. Each
+   * false end resumes on a stray `)` and fails; the real one resumes on `Q`
+   * and reads. Sixteen false ends take sixteen retries, seventeen one too many.
+   */
+  it.each([
+    [16, "reads to its end"],
+    [17, "unsure"],
+  ] as const)("with %i false ends, %s", (falseEnds, answer) => {
+    const text = `BI /W 1 /H 1 /BPC 8 /CS /G ID x${" EI )".repeat(falseEnds)} EI Q`;
+    const result = scanContent(bytes(text), null);
+
+    expect(result === "unsure" ? "unsure" : "reads to its end").toBe(answer);
+  });
+
+  it("allows 16 retries, an engine constant", () => {
+    expect(INLINE_END_RETRIES).toBe(16);
+  });
+
+  /** One count per call, shared by every inline image the stream holds. */
+  it.each([
+    [8, "reads to its end"],
+    [9, "unsure"],
+  ] as const)(
+    "with %i false ends in the first of two images and 8 in the second, %s",
+    (first, answer) => {
+      const image = (data: string, falseEnds: number) =>
+        `BI /W 1 /H 1 /BPC 8 /CS /G ID ${data}${" EI )".repeat(falseEnds)} EI Q `;
+      const result = scanContent(bytes(image("a", first) + image("b", 8)), null);
+
+      expect(result === "unsure" ? "unsure" : "reads to its end").toBe(answer);
+    },
+  );
 });
 
 /**

@@ -112,6 +112,8 @@ So `kept-cid-strings.pdf`'s recipe opens, runs, and fails its test on today's co
 
 Each doubling costs about four times as much, so 1 MB would take about 393 ms × 100² ≈ 65 minutes. With 16 retries the scan reads at most 17 times the stream, about 0.6 s for 1 MB at the plain stream's rate, hence AC-6's 2,000 ms budget. A false end needs white space, `E`, `I`, then white space or a delimiter: in random bytes about 6 × 16 in 256⁴, one in about 45 MB, so a real stream almost never holds two. The build records, in this file, the most retries any committed fixture's stream takes.
 
+Recorded at the build (2026-11-21): no committed fixture's stream takes a single retry. Measured with an uncapped copy of the scan that counts each new end it gives, over every drawing the open's walk names on each of the 111 fixtures, prepared as the review copy is (815 drawings; `user-password.pdf` cannot be read without its password), and every drawing in the output of a run with nothing ticked. The copy counted one and five retries on two known streams, so a zero is a zero. `glyph-bitmap.pdf`'s inline masks hold the bytes `EI`, but never with the white space around them that makes a candidate end. With the cap, AC-6's 1 MB stream answers `"unsure"` in about 635 ms a pass.
+
 ### An indexed inline colour space over a named resource
 
 A page drawing a 1 by 1 inline picture, nothing ticked:
