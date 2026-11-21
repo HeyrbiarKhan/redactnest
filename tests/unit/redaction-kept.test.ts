@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   drawnShape,
   EngineFailure,
+  openDocumentWith,
   PIPELINE,
   redactDocumentWith,
   RunCancelled,
@@ -17,15 +18,18 @@ import {
   type RedactionTarget,
   type StructureVerdict,
 } from "@/engine";
+import { foldTicked, holdsTicked } from "@/engine/allowlist";
 import { forEachDictionary } from "@/engine/objects";
-import { sameDrawnShape } from "@/engine/self-check";
+import { checkOutput, sameDrawnShape } from "@/engine/self-check";
 
 import {
+  cidDocument,
   COLOUR_TEXT,
   KEPT_TEXT,
   UNREADABLE_PROFILE,
 } from "../../scripts/lib/kept-fixtures.mjs";
 import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
+import { IDENTITY_UNICODE } from "../../scripts/lib/redaction-fixtures.mjs";
 import { fixture } from "../support/bytes";
 import {
   containsInAnyEncoding,
@@ -38,6 +42,7 @@ import {
   everyTypeName,
   inspect,
   keysOf,
+  LIMITS,
   mupdf,
   pageContent,
   pageRenders,
@@ -148,6 +153,300 @@ describe("what a kept object points at, gone from the output", () => {
     const { sanitized } = await run("kept-embedded.pdf");
 
     expect(sanitized).toContain("attachments");
+  });
+});
+
+/** The output's catalog keys, read with the test's own helpers. */
+function catalogKeys(output: ArrayBuffer): string[] {
+  return inspect(output, (doc) => keysOf(doc.getTrailer().get("Root")));
+}
+
+/**
+ * Spec 0021, AC-1 and AC-5. The catalog's `/Lang` is kept only when it reads
+ * as a language tag holding nothing ticked; a name is neither, so it goes
+ * whether or not it was ticked, and the run neither refuses nor reports it.
+ */
+describe("a catalog /Lang repeating the page's name (spec 0021)", () => {
+  it("keeps the ticked name nowhere, the catalog's /Lang included", async () => {
+    const bytes = fixture("kept-lang.pdf");
+    const { output } = await redactDocumentWith(mupdf, bytes, [
+      findTarget(bytes, 0, KEPT_TEXT.lang),
+    ]);
+
+    expect(holds(output, KEPT_TEXT.lang)).toBe(false);
+    expect(catalogKeys(output)).not.toContain("Lang");
+  });
+
+  it("leaves the /Lang out with nothing ticked, and reports nothing for it", async () => {
+    const { output, sanitized } = await run("kept-lang.pdf");
+
+    expect(catalogKeys(output)).not.toContain("Lang");
+    expect(sanitized).toEqual([]);
+  });
+});
+
+/** The kind an open refuses with, or `null` if it opened. */
+async function openKind(bytes: ArrayBuffer): Promise<string | null> {
+  try {
+    const doc = await openDocumentWith(mupdf, bytes, LIMITS);
+    doc.close();
+    return null;
+  } catch (failure) {
+    if (failure instanceof EngineFailure) return failure.errorKind;
+    throw failure;
+  }
+}
+
+/**
+ * Spec 0021, AC-3 and AC-5. A CID font's `/Registry` and `/Ordering` may be
+ * needed to draw its text, so a value outside the short token is refused,
+ * never deleted: at open, before a review, and in a run handed the bytes.
+ */
+describe("a CID font's /Ordering repeating the page's name (spec 0021)", () => {
+  it("is refused at open with unreadable-structure", async () => {
+    await expect(openKind(fixture("kept-cid-strings.pdf"))).resolves.toBe(
+      "unreadable-structure",
+    );
+  });
+
+  it("refuses a run handed its bytes with the name ticked, the same way", async () => {
+    const bytes = fixture("kept-cid-strings.pdf");
+
+    await expect(kindOf(bytes, [findTarget(bytes, 0, KEPT_TEXT.ordering)])).resolves.toBe(
+      "unreadable-structure",
+    );
+  });
+});
+
+/** A code the token lets through, on the page line and as a CID font's `/Ordering`. */
+const CODE = "ACME12345";
+
+/**
+ * Two pages: the first `cidDocument`'s page, `CODE` on its line and at
+ * `/Ordering`; the second a Helvetica line and a square painted through the
+ * unreadable profile, so its first write keeps a colour space entry nothing
+ * names (spec 0019, AC-15). A ticked page's contents go through MuPDF's filter
+ * in the pass, which drops such an entry, so the square sits on a page nobody
+ * ticks.
+ */
+function codeBesideUnusedSpace(): ArrayBuffer {
+  const codes = [...`Reference ${CODE}`]
+    .map((character) => character.codePointAt(0)?.toString(16).padStart(4, "0"))
+    .join("");
+  const { bytes } = writePdf({
+    objects: [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R 10 0 R] /Count 2 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+        "/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+      stream("", `BT /F1 18 Tf 72 700 Td <${codes}> Tj ET`),
+      "<< /Type /Font /Subtype /Type0 /BaseFont /Cid /Encoding /Identity-H " +
+        "/DescendantFonts [6 0 R] /ToUnicode 8 0 R >>",
+      "<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Cid /CIDToGIDMap /Identity " +
+        `/CIDSystemInfo << /Registry (Adobe) /Ordering (${CODE}) /Supplement 0 >> ` +
+        "/FontDescriptor 7 0 R /DW 600 >>",
+      "<< /Type /FontDescriptor /FontName /Cid /Flags 32 /FontBBox [0 -200 1000 900] " +
+        "/ItalicAngle 0 /Ascent 900 /Descent -200 /CapHeight 700 /StemV 80 >>",
+      stream("", IDENTITY_UNICODE),
+      stream("/N 3", UNREADABLE_PROFILE),
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << " +
+        "/Font << /F1 12 0 R >> /ColorSpace << /CS0 [/ICCBased 9 0 R] >> >> /Contents 11 0 R >>",
+      stream(
+        "",
+        "q /CS0 cs 0.2 0.4 0.6 sc 72 500 100 100 re f Q BT /F1 18 Tf 72 700 Td (A square) Tj ET",
+      ),
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ],
+    trailer: "/Root 1 0 R",
+  });
+  return bytes.slice().buffer;
+}
+
+/**
+ * Spec 0021, AC-4 and AC-5. A ticked text at a string place fails the check
+ * with `redaction-incomplete`, run in `checkOutput` itself, so it holds
+ * whatever the rebuild did and outranks an unused colour space.
+ */
+describe("a ticked text at a string place (spec 0021)", () => {
+  const codePage = (): ArrayBuffer =>
+    cidDocument(`Reference ${CODE}`, CODE).slice().buffer;
+
+  it("fails a run whose CID font's /Ordering holds the ticked code, and makes no file", async () => {
+    const bytes = codePage();
+
+    await expect(kindOf(bytes, [findTarget(bytes, 0, CODE)])).resolves.toBe(
+      "redaction-incomplete",
+    );
+  });
+
+  it("makes a file from the same document with nothing ticked", async () => {
+    await expect(kindOf(codePage(), [])).resolves.toBeNull();
+  });
+
+  /**
+   * `checkOutput` on bytes built here, the ticked texts handed in, with a
+   * structure check that answers clean and no page to compare, so the string
+   * place check is all that can answer. The `CIDSystemInfo` hangs on its own:
+   * the check reads every dictionary, reached or not.
+   */
+  function placeCheck(
+    at: "Lang" | "Registry" | "Ordering",
+    text: string,
+    ticked: string,
+  ) {
+    const objects = document({
+      extra:
+        at === "Lang"
+          ? []
+          : [
+              `<< /Registry ${at === "Registry" ? `(${text})` : "(Adobe)"} ` +
+                `/Ordering ${at === "Ordering" ? `(${text})` : "(Identity)"} /Supplement 0 >>`,
+            ],
+    });
+    if (at === "Lang") objects[0] = `<< /Type /Catalog /Pages 2 0 R /Lang (${text}) >>`;
+    const { bytes } = writePdf({ objects, trailer: "/Root 1 0 R" });
+    return checkOutput(
+      mupdf,
+      bytes.slice().buffer,
+      [],
+      new Map(),
+      foldTicked([ticked]),
+      () => "clean",
+    );
+  }
+
+  it.each([
+    ["Lang", "Amy-Rose", "Amy-Rose"],
+    ["Ordering", "RowanAshby", "Rowan Ashby"],
+    ["Ordering", "Rowanx1", "rowan"],
+  ] as const)("fails /%s (%s) with %j ticked", (at, text, ticked) => {
+    expect(placeCheck(at, text, ticked)).toBe("redaction-incomplete");
+  });
+
+  it.each([
+    ["Ordering", "Identity", "ID"],
+    ["Registry", "Adobe", "Adobe"],
+  ] as const)("passes Adobe's own /%s (%s) with %j ticked", (at, text, ticked) => {
+    expect(placeCheck(at, text, ticked)).toBeNull();
+    // ADOBE_COLLECTIONS skips them; containment alone would not.
+    expect(holdsTicked(text, foldTicked([ticked]))).toBe(true);
+  });
+
+  it("passes every string place with nothing ticked", () => {
+    expect(placeCheck("Ordering", "RowanAshby", "")).toBeNull();
+  });
+
+  it("fails beside an unused colour space entry and never writes twice", async () => {
+    const bytes = codeBesideUnusedSpace();
+    const { rewrite, calls } = countedRewrite();
+    const { checkStructure, verdicts } = countedCheck();
+
+    await expect(
+      kindOf(bytes, [findTarget(bytes, 0, CODE)], {
+        ...PIPELINE,
+        checkStructure,
+        rewrite,
+      }),
+    ).resolves.toBe("redaction-incomplete");
+    expect(verdicts).toEqual(["unused-colour-space"]);
+    expect(calls.count).toBe(0);
+  });
+});
+
+/**
+ * A one page document whose catalog holds `/Lang lang`, its page reading
+ * "Prepared in GB", with `extra` objects from 6.
+ */
+function langDocument(lang: string, extra: Body[] = []): ArrayBuffer {
+  const { bytes } = writePdf({
+    objects: [
+      `<< /Type /Catalog /Pages 2 0 R /Lang ${lang} >>`,
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+        "/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+      stream("", "BT /F1 18 Tf 72 700 Td (Prepared in GB) Tj ET"),
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+      ...extra,
+    ],
+    trailer: "/Root 1 0 R",
+  });
+  return bytes.slice().buffer;
+}
+
+/** The output catalog's `/Lang` bytes, read through any reference, or `null` for none. */
+function outputLang(output: ArrayBuffer): number[] | null {
+  return inspect(output, (doc) => {
+    const lang = doc.getTrailer().get("Root", "Lang");
+    return lang.isString() ? [...lang.asByteString()] : null;
+  });
+}
+
+function latin1Bytes(text: string): number[] {
+  return [...Buffer.from(text, "latin1")];
+}
+
+/** Spec 0021, AC-1: what the catalog keeps of `/Lang`, on documents built here. */
+describe("the catalog's /Lang (spec 0021)", () => {
+  it.each([
+    ["a name", "/en-US"],
+    ["a number", "12"],
+    ["an empty string", "()"],
+    ["free text", "(Jane Smith 123-45-6789)"],
+    ["a UTF-16 string of an odd length", "<FEFF00650E>"],
+  ])("leaves out %s, making a file all the same", async (_label, lang) => {
+    const { output, sanitized } = await redactDocumentWith(mupdf, langDocument(lang), []);
+
+    expect(outputLang(output)).toBeNull();
+    expect(catalogKeys(output)).not.toContain("Lang");
+    expect(sanitized).toEqual([]);
+  });
+
+  it("keeps a tag written as a literal string", async () => {
+    const { output } = await redactDocumentWith(mupdf, langDocument("(en-GB)"), []);
+
+    expect(outputLang(output)).toEqual(latin1Bytes("en-GB"));
+  });
+
+  it("keeps a UTF-16 tag as written", async () => {
+    const { output } = await redactDocumentWith(
+      mupdf,
+      langDocument("<FEFF0065006E002D00470042>"),
+      [],
+    );
+
+    expect(outputLang(output)).toEqual([
+      0xfe, 0xff, 0, 0x65, 0, 0x6e, 0, 0x2d, 0, 0x47, 0, 0x42,
+    ]);
+  });
+
+  it("keeps a tag written as an indirect string", async () => {
+    const { output } = await redactDocumentWith(
+      mupdf,
+      langDocument("6 0 R", ["(en-GB)"]),
+      [],
+    );
+
+    expect(outputLang(output)).toEqual(latin1Bytes("en-GB"));
+  });
+
+  it("leaves out a tag holding a ticked text, and the run makes a file", async () => {
+    const bytes = langDocument("(en-GB)");
+    const { output } = await redactDocumentWith(mupdf, bytes, [
+      findTarget(bytes, 0, "GB"),
+    ]);
+
+    expect(outputLang(output)).toBeNull();
+  });
+
+  it("fails the structure check on a free text /Lang, and passes the same with a tag", () => {
+    const objects = (lang: string): Body[] => {
+      const built = document();
+      built[0] = `<< /Type /Catalog /Pages 2 0 R /Lang ${lang} >>`;
+      return built;
+    };
+
+    expect(verdictOf(objects("(Jane Smith)"))).toBe("leak");
+    expect(verdictOf(objects("(en-GB)"))).toBe("clean");
   });
 });
 
@@ -879,7 +1178,7 @@ describe("every dictionary, read through its reference", () => {
   ];
 
   it("reads every kept object fixture", () => {
-    expect(names).toHaveLength(7);
+    expect(names).toHaveLength(9);
   });
 
   it.each(names)(

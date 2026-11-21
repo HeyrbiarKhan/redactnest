@@ -76,6 +76,8 @@
  */
 
 export {
+  CID_TOKEN,
+  LANG_TAG,
   ROLE_NAMES,
   ROLES,
   STRING_PLACES,
@@ -89,9 +91,9 @@ export {
   type RoleWalk,
   type Shape,
   type StringPlace,
+  type StringText,
 } from "./allowlist";
 export {
-  LANG_TAG,
   readDrawing,
   scanContent,
   type DrawingRead,

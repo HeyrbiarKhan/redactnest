@@ -27,7 +27,7 @@
 import { deflateSync } from "node:zlib";
 
 import { stream, writePdf } from "./pdf-writer.mjs";
-import { line, literal } from "./redaction-fixtures.mjs";
+import { IDENTITY_UNICODE, line, literal } from "./redaction-fixtures.mjs";
 
 /**
  * Every string a test looks for in an output. Each is written in this file and
@@ -52,6 +52,10 @@ export const KEPT_TEXT = Object.freeze({
   ref: "reference xobject embedded secret",
   formOpi: "form opi embedded secret",
   imageOpi: "image opi embedded secret",
+  /** `kept-lang.pdf`: the name the page shows, repeated as the catalog's `/Lang` (spec 0021). */
+  lang: "Quinn Harlow",
+  /** `kept-cid-strings.pdf`: the name the page shows, repeated as a CID font's `/Ordering` (spec 0021). */
+  ordering: "Rowan Ashby",
 });
 
 const HELVETICA =
@@ -345,6 +349,94 @@ export function keptEmbedded() {
       ],
     };
   });
+}
+
+/**
+ * Spec 0021, AC-5. A one page document for the string place cases: 612 by
+ * 792 points, one line at 72, 700, size 18. `build` receives `add` (append an
+ * object, get its number) and returns `font` (the number of the page's `/F1`),
+ * `content` (the page's drawing instructions) and `catalog` (more catalog
+ * entries).
+ */
+function stringDocument(build) {
+  const objects = [];
+  const add = (body) => objects.push(body);
+
+  const catalog = add(null);
+  const pages = add(null);
+  const built = build(add);
+  const content = add(stream("", built.content));
+  const page = add(
+    `<< /Type /Page /Parent ${pages} 0 R /MediaBox [0 0 612 792] ` +
+      `/Resources << /Font << /F1 ${built.font} 0 R >> >> /Contents ${content} 0 R >>`,
+  );
+
+  objects[catalog - 1] = `<< /Type /Catalog /Pages ${pages} 0 R ${built.catalog ?? ""}>>`;
+  objects[pages - 1] = `<< /Type /Pages /Kids [${page} 0 R] /Count 1 >>`;
+
+  return writePdf({ objects, trailer: `/Root ${catalog} 0 R` }).bytes;
+}
+
+/**
+ * Spec 0021, AC-1 and AC-5. A page naming a person, and a catalog whose
+ * `/Lang` repeats the name. The rebuild copied `/Lang` across whatever it
+ * held, so a run with the name ticked passed the check and kept it there.
+ */
+export function keptLang() {
+  return stringDocument((add) => ({
+    font: add(`<< ${HELVETICA} >>`),
+    content: line("F1", 18, 72, 700, `Prepared by ${KEPT_TEXT.lang}`),
+    catalog: `/Lang ${literal(KEPT_TEXT.lang)} `,
+  }));
+}
+
+/**
+ * Spec 0021, AC-5. A Type 0 font with no font program, built here rather than
+ * borrowed from the detection set: two byte codes that are Unicode code
+ * points (`/Identity-H`, with `IDENTITY_UNICODE` as its ToUnicode map), a font
+ * descriptor and `/DW 600`, its `CIDSystemInfo` naming `registry` and
+ * `ordering`. Returns the font's number.
+ */
+function cidFont(add, registry, ordering) {
+  const unicode = add(stream("", IDENTITY_UNICODE));
+  const descriptor = add(
+    "<< /Type /FontDescriptor /FontName /RedactNestCid /Flags 32 /FontBBox [0 -200 1000 900] " +
+      "/ItalicAngle 0 /Ascent 900 /Descent -200 /CapHeight 700 /StemV 80 >>",
+  );
+  const descendant = add(
+    "<< /Type /Font /Subtype /CIDFontType2 /BaseFont /RedactNestCid /CIDToGIDMap /Identity " +
+      `/CIDSystemInfo << /Registry ${literal(registry)} /Ordering ${literal(ordering)} /Supplement 0 >> ` +
+      `/FontDescriptor ${descriptor} 0 R /DW 600 >>`,
+  );
+  return add(
+    "<< /Type /Font /Subtype /Type0 /BaseFont /RedactNestCid /Encoding /Identity-H " +
+      `/DescendantFonts [${descendant} 0 R] /ToUnicode ${unicode} 0 R >>`,
+  );
+}
+
+/**
+ * Spec 0021, AC-5. A one page document whose line, `text`, is drawn in
+ * `cidFont`'s font, its `CIDSystemInfo` naming `registry` and `ordering`. The
+ * fixture below uses it, and tests build their own cases with it.
+ */
+export function cidDocument(text, ordering, registry = "Adobe") {
+  const codes = [...text]
+    .map((character) => character.codePointAt(0).toString(16).padStart(4, "0"))
+    .join("");
+  return stringDocument((add) => ({
+    font: cidFont(add, registry, ordering),
+    content: `BT /F1 18 Tf 72 700 Td <${codes}> Tj ET\n`,
+  }));
+}
+
+/**
+ * Spec 0021, AC-3 and AC-5. A page naming a person in a CID font whose
+ * `/Ordering` repeats the name. The walk kept a `CIDSystemInfo`'s strings
+ * whatever they held, so a run with the name ticked passed the check and kept
+ * it there; now the open refuses the file.
+ */
+export function keptCidStrings() {
+  return cidDocument(`Prepared by ${KEPT_TEXT.ordering}`, KEPT_TEXT.ordering);
 }
 
 /**

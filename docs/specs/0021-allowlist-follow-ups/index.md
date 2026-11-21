@@ -1,7 +1,7 @@
 # 0021. Allowlist follow ups: string shapes, a bounded scan and a wider drawn shape
 
 **Date**: 2026-11-18
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 
@@ -143,13 +143,13 @@ Reasoning, options, the per minor runners up, every measurement and what the cro
 
 Skateboard, as the scope asks: the catalog's `/Lang` goes first as a thin whole (its fixture failing, the rule, the check, the gate row), then the shared tag rule tightens under it, then the token and the ticked text check, then the scan's two rules and the drawn shape grow around them.
 
-1. Add `KEPT_TEXT.lang` and `kept-lang.pdf` to `scripts/lib/kept-fixtures.mjs` and `scripts/make-fixture.mjs`, and its tests in `redaction-kept.test.ts`; run the script and watch both tests fail on today's code, satisfies **AC-5**
-2. Move `isLanguageTag` to `allowlist.ts` as `readsAsLanguageTag`, with `LANG_TAG` (pattern unchanged for now), and import both in `marked.ts`; give `StringPlace` its `text` and split `STRING` into its three shapes, testing strings against them in the walk; add `foldPlaceText` and `holdsTicked`, fold the targets once in `redactDocument`, and make `graftPages` copy only an unticked tag; add the built documents' `/Lang` cases and the `structureIsClean` case. `kept-lang.pdf`'s tests pass, satisfies **AC-1**
-3. Add `kept-lang.pdf` to the gate: `MAIN_FIXTURES`, its rows read from 5c4e0d7's code, its `NEEDLES`, satisfies **AC-5**, **AC-9**
-4. Tighten `LANG_TAG` to AC-2's pattern, with its comment naming the limit; extend the `LANG_TAG` table and the inline cases in `marked.test.ts`, satisfies **AC-2**
-5. Add `KEPT_TEXT.ordering`, the Type 0 font builder and `kept-cid-strings.pdf`, its tests failing first; then `CID_TOKEN` on `/Registry` and `/Ordering`, the cases in `allowlist.test.ts`, and the gate row with `OPEN_NOW`, satisfies **AC-3**, **AC-5**
-6. Write AC-5's ticked text cases, failing first; then add `ADOBE_COLLECTIONS` and the string place check to `checkOutput`, after the structure part and before `"rewrite"`, passing the folded list from the run, satisfies **AC-4**, **AC-5**
-7. Run the gate, both budgets and `pnpm lint` and `pnpm typecheck` once the string work is whole, satisfies **AC-9**
+1. [x] Add `KEPT_TEXT.lang` and `kept-lang.pdf` to `scripts/lib/kept-fixtures.mjs` and `scripts/make-fixture.mjs`, and its tests in `redaction-kept.test.ts`; run the script and watch both tests fail on today's code, satisfies **AC-5**
+2. [x] Move `isLanguageTag` to `allowlist.ts` as `readsAsLanguageTag`, with `LANG_TAG` (pattern unchanged for now), and import both in `marked.ts`; give `StringPlace` its `text` and split `STRING` into its three shapes, testing strings against them in the walk; add `foldPlaceText` and `holdsTicked`, fold the targets once in `redactDocument`, and make `graftPages` copy only an unticked tag; add the built documents' `/Lang` cases and the `structureIsClean` case. `kept-lang.pdf`'s tests pass, satisfies **AC-1**
+3. [x] Add `kept-lang.pdf` to the gate: `MAIN_FIXTURES`, its rows read from 5c4e0d7's code, its `NEEDLES`, satisfies **AC-5**, **AC-9**
+4. [x] Tighten `LANG_TAG` to AC-2's pattern, with its comment naming the limit; extend the `LANG_TAG` table and the inline cases in `marked.test.ts`, satisfies **AC-2**
+5. [x] Add `KEPT_TEXT.ordering`, the Type 0 font builder and `kept-cid-strings.pdf`, its tests failing first; then `CID_TOKEN` on `/Registry` and `/Ordering`, the cases in `allowlist.test.ts`, and the gate row with `OPEN_NOW`, satisfies **AC-3**, **AC-5**
+6. [x] Write AC-5's ticked text cases, failing first; then add `ADOBE_COLLECTIONS` and the string place check to `checkOutput`, after the structure part and before `"rewrite"`, passing the folded list from the run, satisfies **AC-4**, **AC-5**
+7. [x] Run the gate, both budgets and `pnpm lint` and `pnpm typecheck` once the string work is whole, satisfies **AC-9**
 8. Add `INLINE_END_RETRIES` and the count in `retry`; AC-6's count test (N = 17 failing first) and cost test; run `cost.test.ts` alone, and record in `rationale.md` the most retries any committed fixture's stream takes, satisfies **AC-6**
 9. Read the indexed base in `inlineImage`; the scan cases (failing first) and the MuPDF pin in `redaction-kept.test.ts`, satisfies **AC-7**
 10. Write AC-8's positive document and run it through the real `rewrite` under today's `drawnShape` and a scratch copy of the new rule; stop here if it fails. Then change `DrawnShape`, `drawnShape` and `sameDrawnShape` to AC-8, with `BELOW_COLOUR_ROLES`; rewrite the two existing `drawnShape` tests in `redaction-kept.test.ts` to the new record; add the `sameDrawnShape` cases and the run level `rewrite` cases; the five colour fixtures still make a file, satisfies **AC-8**

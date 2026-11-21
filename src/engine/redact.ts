@@ -2,6 +2,7 @@ import type { Document, PDFDocument, PDFPage } from "mupdf";
 
 import type { MatchKind, TermId, TermRemoval } from "@/worker/protocol";
 
+import { foldTicked } from "./allowlist";
 import { recordPage, targetArea, type PageRecord } from "./characters";
 import { checkpoint as yieldThenCheck, EngineFailure } from "./failure";
 import { lineBox, paddedArea, removalBand } from "./geometry";
@@ -150,6 +151,10 @@ export async function redactDocumentWith(
 ): Promise<RedactionResult> {
   const { onPhase, isCancelled } = hooks;
   const pages = targetsByPage(targets);
+  // Spec 0021, AC-4: every ticked item's text folded once, for the rebuild's
+  // catalog `/Lang` and the check's string places, so the two never disagree
+  // (INV-1). Document text, held only for this run, as the record is.
+  const ticked = foldTicked(targets.map((target) => target.text));
 
   /** A yield, then a look at whether the run should stop. Spec 0004, AC-17. */
   const checkpoint = (): Promise<void> => yieldThenCheck(isCancelled);
@@ -202,7 +207,7 @@ export async function redactDocumentWith(
       await checkpoint();
     }
 
-    out = graftPages(mupdf, work);
+    out = graftPages(mupdf, work, ticked);
 
     // The destroy order holds a run's peak at about four copies of the
     // document (spec 0004): the working copy goes the moment its last page is
@@ -234,6 +239,7 @@ export async function redactDocumentWith(
       output,
       record,
       pages,
+      ticked,
       pipeline.checkStructure,
       true,
     );
@@ -241,7 +247,15 @@ export async function redactDocumentWith(
       // Spec 0019, AC-15: the second write's bytes replace the first as the
       // bytes that cross, so the run holds the first only until it is written
       // again.
-      output = await writeAgain(mupdf, output, record, pages, pipeline, checkpoint);
+      output = await writeAgain(
+        mupdf,
+        output,
+        record,
+        pages,
+        ticked,
+        pipeline,
+        checkpoint,
+      );
     } else if (verdict !== null) {
       throw new EngineFailure(verdict);
     }
@@ -364,6 +378,7 @@ async function writeAgain(
   first: ArrayBuffer,
   record: readonly PageRecord[],
   pages: ReadonlyMap<number, readonly RedactionTarget[]>,
+  ticked: readonly string[],
   pipeline: Pipeline,
   checkpoint: () => Promise<void>,
 ): Promise<ArrayBuffer> {
@@ -379,7 +394,14 @@ async function writeAgain(
     throw new EngineFailure("redaction-incomplete");
   }
 
-  const failure = checkOutput(mupdf, second, record, pages, pipeline.checkStructure);
+  const failure = checkOutput(
+    mupdf,
+    second,
+    record,
+    pages,
+    ticked,
+    pipeline.checkStructure,
+  );
   if (failure !== null) throw new EngineFailure(failure);
 
   if (!sameDrawnShape(before, shapeOf(mupdf, second))) {

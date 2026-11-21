@@ -48,15 +48,42 @@ const describes = (text: string): boolean => read(text).describes;
 const namesOf = (text: string, category: Parameters<DrawingRead["names"]["get"]>[0]) =>
   [...(read(text).names.get(category) ?? [])].sort();
 
+/** Spec 0021, AC-2: the real tag shape, matched against the whole string. */
 describe("LANG_TAG", () => {
-  it.each(["en", "deu", "en-GB", "en_US", "zh-Hant-TW", "sr-Latn-RS-1994"])(
-    "reads %s as a language tag",
-    (tag) => expect(LANG_TAG.test(tag)).toBe(true),
-  );
+  it.each([
+    "en",
+    "deu",
+    "EN-gb",
+    "en-GB",
+    "en_US",
+    "es-419",
+    "zh-Hant-TW",
+    "sr-Latn-RS-1994",
+    "de-DE-1996",
+  ])("reads %s as a language tag", (tag) => expect(LANG_TAG.test(tag)).toBe(true));
 
-  it.each(["e", "english", "Jane Smith", "en-", "en--GB", "en-toolongsubtag", "12"])(
-    "does not read %s as one",
-    (text) => expect(LANG_TAG.test(text)).toBe(false),
+  it.each([
+    "Amy-Jones",
+    "Bob_Smith",
+    "Jane Smith",
+    "english",
+    "e",
+    "12",
+    "en-",
+    "en--GB",
+    "en-GB ",
+    "en-toolongsubtag",
+    "x-none",
+    "sl-rozaj",
+  ])("does not read %j as one", (text) => expect(LANG_TAG.test(text)).toBe(false));
+
+  /**
+   * The limit the pattern's comment names: a short name that fits the shape
+   * still reads as a tag. Pinned, so a change to it is deliberate.
+   */
+  it.each(["Doe", "Amy-Rose", "Ann-Li"])(
+    "still reads the short name %s as a tag",
+    (name) => expect(LANG_TAG.test(name)).toBe(true),
   );
 });
 
@@ -107,7 +134,15 @@ describe("which property lists count (AC-9)", () => {
   it("does not count a /Lang that reads as a language tag, and counts one that does not", () => {
     expect(describes("/Span << /Lang (en-GB) >> BDC BT (x) Tj ET EMC")).toBe(false);
     expect(describes("/Span << /Lang (en_US) >> BDC BT (x) Tj ET EMC")).toBe(false);
+    expect(describes("/Span << /Lang (sr-Latn-RS-1994) >> BDC BT (x) Tj ET EMC")).toBe(
+      false,
+    );
     expect(describes("/Span << /Lang (Jane Smith) >> BDC BT (x) Tj ET EMC")).toBe(true);
+  });
+
+  /** Spec 0021, AC-2: a hyphenated name is warned about, as any other name is. */
+  it("counts a /Lang holding a hyphenated name", () => {
+    expect(describes("/Span << /Lang (Amy-Jones) >> BDC BT (x) Tj ET EMC")).toBe(true);
   });
 
   it("does not count an artifact holding only names", () => {

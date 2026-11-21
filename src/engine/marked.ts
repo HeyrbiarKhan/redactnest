@@ -1,5 +1,7 @@
 import type { PDFObject } from "mupdf";
 
+import { readsAsLanguageTag } from "./allowlist";
+
 /**
  * The read only scan of a page's drawing instructions. Spec 0019, AC-9, *Scan
  * rules* and INV-4.
@@ -21,14 +23,6 @@ import type { PDFObject } from "mupdf";
  * check, so a fault in here can add a warning or a refusal, never pass a file
  * the rest of the check would fail.
  */
-
-/**
- * A `/Lang` value that reads as a language tag: two or three ASCII letters,
- * then any number of groups of a hyphen or an underscore and one to eight ASCII
- * letters or digits, so `en-GB` and `en_US` pass and a name does not (AC-9). A
- * rule about the format, not a cap on the visitor (INV-5).
- */
-export const LANG_TAG = /^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{1,8})*$/;
 
 /** The resource dictionaries a drawing names entries of. */
 export type ResourceCategory =
@@ -410,7 +404,8 @@ interface ListReading {
 /**
  * A property list written inline. Every string anywhere inside it counts,
  * except an `/ActualText`, which waits for its sequence's end, and a `/Lang`
- * that reads as a language tag (AC-9).
+ * that reads as a language tag (AC-9), by the one rule the catalog's `/Lang`
+ * is held to too (`readsAsLanguageTag`, spec 0021, AC-2).
  */
 function readInlineList(list: Extract<Value, { is: "dict" }>): ListReading {
   let counts = false;
@@ -419,7 +414,7 @@ function readInlineList(list: Extract<Value, { is: "dict" }>): ListReading {
     if (key === "ActualText" && value.is === "string") {
       actualText = true;
     } else if (key === "Lang" && value.is === "string") {
-      if (!isLanguageTag(value.bytes)) counts = true;
+      if (!readsAsLanguageTag(value.bytes)) counts = true;
     } else if (holdsString(value)) {
       counts = true;
     }
@@ -449,24 +444,6 @@ function holdsString(value: Value): boolean {
     if (next.is === "dict") pending.push(...next.entries.values());
   }
   return false;
-}
-
-/**
- * Does this string read as a language tag? Bytes starting with the UTF-16BE
- * mark are read as UTF-16, others as PDFDocEncoding, which agrees with ASCII
- * over every character the tag allows. One that cannot be decoded is no tag.
- */
-function isLanguageTag(bytes: Uint8Array): boolean {
-  let text = "";
-  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
-    if (bytes.length % 2 !== 0) return false;
-    for (let at = 2; at < bytes.length; at += 2) {
-      text += String.fromCharCode((bytes[at] << 8) | bytes[at + 1]);
-    }
-  } else {
-    for (const byte of bytes) text += String.fromCharCode(byte);
-  }
-  return LANG_TAG.test(text);
 }
 
 /** A dictionary from its items read in order: each name key and the value after it. */

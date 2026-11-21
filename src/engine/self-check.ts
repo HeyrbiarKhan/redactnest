@@ -2,7 +2,14 @@ import type { Document, PDFDocument, PDFObject } from "mupdf";
 
 import type { EngineErrorKind } from "@/worker/protocol";
 
-import { TRAILER_KEYS, walkRoles, type ResourceOwner } from "./allowlist";
+import {
+  ADOBE_COLLECTIONS,
+  decodeTextString,
+  holdsTicked,
+  TRAILER_KEYS,
+  walkRoles,
+  type ResourceOwner,
+} from "./allowlist";
 import { comparePage, type PageRecord } from "./characters";
 import { EngineFailure } from "./failure";
 import { lineBox } from "./geometry";
@@ -58,12 +65,22 @@ import type { RedactionTarget } from "./types";
  * the bytes, so the usual path still opens and walks the output once. The run
  * then writes once more and checks the new bytes with `mayRewrite` clear, where
  * the same verdict is `redaction-incomplete`, a leak like any unused entry.
+ *
+ * Spec 0021, AC-4: right after the structure part, before `"rewrite"` is
+ * answered or any page is compared, the catalog's `/Lang` and every
+ * `/Registry` and `/Ordering` string are held against `tickedTexts`, the
+ * run's folded texts (`foldTicked`). A hit is a leak, `redaction-incomplete`,
+ * so it outranks an unreadable stream and an unused colour space and never
+ * leads to a second write, and it runs again on the second write's bytes. It
+ * runs here, never through the `checkStructure` seam, so a swapped structure
+ * check still faces it.
  */
 export function checkOutput(
   mupdf: MuPdf,
   output: ArrayBuffer,
   record: readonly PageRecord[],
   targets: ReadonlyMap<number, readonly RedactionTarget[]>,
+  tickedTexts: readonly string[],
   checkStructure: StructureCheck,
   mayRewrite: true,
 ): EngineErrorKind | "rewrite" | null;
@@ -72,6 +89,7 @@ export function checkOutput(
   output: ArrayBuffer,
   record: readonly PageRecord[],
   targets: ReadonlyMap<number, readonly RedactionTarget[]>,
+  tickedTexts: readonly string[],
   checkStructure?: StructureCheck,
   mayRewrite?: false,
 ): EngineErrorKind | null;
@@ -80,6 +98,7 @@ export function checkOutput(
   output: ArrayBuffer,
   record: readonly PageRecord[],
   targets: ReadonlyMap<number, readonly RedactionTarget[]>,
+  tickedTexts: readonly string[],
   checkStructure: StructureCheck = structureIsClean,
   mayRewrite = false,
 ): EngineErrorKind | "rewrite" | null {
@@ -97,6 +116,9 @@ export function checkOutput(
     if (!pdf) return "redaction-incomplete";
     const structure = checkStructure(pdf, record.length);
     if (structure === "leak") return "redaction-incomplete";
+    // Spec 0021, AC-4: a ticked text at a string place is a leak, whatever the
+    // rebuild did (INV-3), so it comes before the second write is offered.
+    if (tickedAtStringPlace(pdf, tickedTexts)) return "redaction-incomplete";
     // Spec 0019, AC-15: a colour space MuPDF could not load leaves an entry
     // its own filter drops on a second pass, so the run may write once more.
     // On the bytes that cross it is a leak like any unused entry.
@@ -150,6 +172,49 @@ export function checkOutput(
   if (replaced) return "replacement-text";
   if (overreached) return "redaction-overreach";
   return null;
+}
+
+/**
+ * Does the catalog's `/Lang`, or a string at `/Registry` or `/Ordering` in any
+ * dictionary, hold a ticked item's text? Spec 0021, AC-4 and INV-3.
+ *
+ * Every dictionary is read through its reference (`forEachDictionary`), so a
+ * `CIDSystemInfo` inside a CID font or a character map is found wherever it
+ * hangs, reached or not. One of Adobe's own values, whole, is never compared
+ * (`ADOBE_COLLECTIONS`). With nothing ticked there is nothing to find.
+ */
+function tickedAtStringPlace(pdf: PDFDocument, tickedTexts: readonly string[]): boolean {
+  if (tickedTexts.length === 0) return false;
+  if (placeHoldsTicked(pdf.getTrailer().get("Root", "Lang"), tickedTexts, []))
+    return true;
+
+  let hit = false;
+  forEachDictionary(pdf, (dict) => {
+    if (hit) return;
+    hit =
+      placeHoldsTicked(dict.get("Registry"), tickedTexts, ADOBE_COLLECTIONS.Registry) ||
+      placeHoldsTicked(dict.get("Ordering"), tickedTexts, ADOBE_COLLECTIONS.Ordering);
+  });
+  return hit;
+}
+
+/**
+ * Does this value, if it is a string, hold a ticked text? Decoded as the scan
+ * decodes a string, and passed over when it is exactly one of `skip`. A string
+ * that cannot be decoded may hold anything, so it counts as a hit: the check
+ * fails closed (INV-3). The walk refuses such a string at every one of these
+ * places already, so only a swapped structure check meets one here.
+ */
+function placeHoldsTicked(
+  value: PDFObject,
+  tickedTexts: readonly string[],
+  skip: readonly string[],
+): boolean {
+  if (!value.isString()) return false;
+  const text = decodeTextString(value.asByteString());
+  if (text === null) return true;
+  if (skip.includes(text)) return false;
+  return holdsTicked(text, tickedTexts);
 }
 
 /**

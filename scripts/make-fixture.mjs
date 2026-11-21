@@ -39,8 +39,10 @@ import {
   colourLoaded,
   keptAnnotations,
   keptCatalog,
+  keptCidStrings,
   keptEmbedded,
   keptFigure,
+  keptLang,
   keptPicture,
   keptProgramKeys,
   markedDescriptions,
@@ -651,6 +653,13 @@ const FIXTURES = [
     "marked-descriptions.pdf",
     markedDescriptions(),
     "one page per case of descriptions written into a page, warned and quiet",
+  ],
+  // Spec 0021: a ticked value at a string place.
+  ["kept-lang.pdf", keptLang(), "a catalog /Lang repeating the name the page shows"],
+  [
+    "kept-cid-strings.pdf",
+    keptCidStrings(),
+    "a CID font's /Ordering repeating the name the page shows",
   ],
   // Spec 0019's fourth pass: colour spaces MuPDF cannot load, and small
   // objects a deduplicating write merges (AC-17).
