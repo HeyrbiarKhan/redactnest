@@ -228,10 +228,10 @@ Skateboard, as the scope asks. The page contents case goes first as a thin whole
 4. [x] Replace `describesAnything` with `readPageDrawings`, attach `PageInspection.losesPicture` in `inspectOne`, and add the refusal in `open.ts` after the glyph rule's. `inline-indexed.pdf`'s open test passes, and `marked-descriptions.pdf` warns as before. Satisfies **AC-2**.
 5. [x] Add `src/engine/inline.ts`, `Pipeline.judgeInlinePictures` with its default, and the step after `refuseBrokenGlyphs` with its checkpoint, with the run cases in `redaction-inline.test.ts`. Swap the seam in the named indexed base pin and any other run on a counted picture. Satisfies **AC-3**, **AC-7**.
 6. [x] Add `"lost-picture"` to `StructureVerdict`, its arm in `resourceUse`, the read of resourceless units in `structureIsClean`, and its handling in `checkOutput`. Add the backstop cases (the nothing ticked run failing first, the ticked limit pinned), the `structureIsClean` cases (a page with no `/Resources` among them) and the `rewrite` case. Satisfies **AC-4**.
-7. [ ] Add `inline-indexed-form.pdf`, `inline-indexed-pattern.pdf` and `inline-indexed-glyph.pdf`. Measure each place on today's code and record it in `rationale.md`. Write their open tests, failing first, then passing. Satisfies **AC-2**, **AC-6**.
+7. [x] Add `inline-indexed-form.pdf`, `inline-indexed-pattern.pdf` and `inline-indexed-glyph.pdf`. Measure each place on today's code and record it in `rationale.md`. Write their open tests, failing first, then passing. Satisfies **AC-2**, **AC-6**.
 8. [ ] Write the MuPDF pin on documents built in the test, after measuring the two both keys cases, the case with no colour space and the inline JPX case. Satisfies **AC-1**, **AC-6**.
 9. [ ] Add the four fixtures to the gate (`MAIN_FIXTURES` and `OPEN_NOW`, no main rows needed). Run the gate, `cost.test.ts` on its own (if a budget fails, share the walk as AC-3 says), `pnpm lint`, `pnpm typecheck`, and the page tests. Satisfies **AC-7**.
-10. [ ] Write spec 0021's owed test in `redaction-kept.test.ts`. Satisfies **AC-8**.
+10. [x] Write spec 0021's owed test in `redaction-kept.test.ts`. Satisfies **AC-8**.
 11. [ ] Amend specs 0001, 0004, 0006, 0007, 0019 and 0021 per *Amends*. Tick feature 30's design step for this item. `/sync` writes the `AGENTS.md` lines (Follow-up). Satisfies **AC-1** to **AC-8**.
 
 ## Consequences

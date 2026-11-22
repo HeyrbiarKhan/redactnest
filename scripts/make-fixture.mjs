@@ -57,7 +57,12 @@ import {
   glyphText,
   glyphUndrawnForm,
 } from "./lib/glyph-fixtures.mjs";
-import { inlineIndexed } from "./lib/inline-fixtures.mjs";
+import {
+  inlineIndexed,
+  inlineIndexedForm,
+  inlineIndexedGlyph,
+  inlineIndexedPattern,
+} from "./lib/inline-fixtures.mjs";
 import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { termsDense, termsPdf } from "./lib/terms-fixtures.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
@@ -726,6 +731,21 @@ const FIXTURES = [
     "inline-indexed.pdf",
     inlineIndexed(),
     "an inline picture with its palette written inline, in the page's contents",
+  ],
+  [
+    "inline-indexed-form.pdf",
+    inlineIndexedForm(),
+    "the same picture in a form the page draws once",
+  ],
+  [
+    "inline-indexed-pattern.pdf",
+    inlineIndexedPattern(),
+    "the same picture as a tiling pattern's one cell",
+  ],
+  [
+    "inline-indexed-glyph.pdf",
+    inlineIndexedGlyph(),
+    "the same picture as a coloured Type 3 glyph, shown once",
   ],
 ];
 

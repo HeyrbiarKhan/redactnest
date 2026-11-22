@@ -67,6 +67,72 @@ function page(resources) {
   );
 }
 
+/**
+ * `inline-indexed-form.pdf`: the picture in a form XObject with no resources
+ * of its own, which the page draws once, 100 points square at 72, 500.
+ */
+export function inlineIndexedForm() {
+  return writePdf({
+    objects: [
+      CATALOG,
+      PAGES,
+      page("/Font << /F1 5 0 R >> /XObject << /Fm0 6 0 R >>"),
+      stream("", `${LINE}\nq 1 0 0 1 72 500 cm /Fm0 Do Q`),
+      HELVETICA,
+      stream("/Type /XObject /Subtype /Form /BBox [0 0 100 100]", picture(100)),
+    ],
+    trailer: "/Root 1 0 R",
+  }).bytes;
+}
+
+/**
+ * `inline-indexed-pattern.pdf`: a coloured tiling pattern whose one cell is
+ * the picture, placed at 72, 500 by its matrix, painting a 100 point square
+ * there, so the square shows exactly one cell.
+ */
+export function inlineIndexedPattern() {
+  return writePdf({
+    objects: [
+      CATALOG,
+      PAGES,
+      page("/Font << /F1 5 0 R >> /Pattern << /P1 6 0 R >>"),
+      stream("", `${LINE}\n/Pattern cs /P1 scn 72 500 100 100 re f`),
+      HELVETICA,
+      stream(
+        "/Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 100 100] " +
+          "/XStep 100 /YStep 100 /Matrix [1 0 0 1 72 500] /Resources << >>",
+        picture(100),
+      ),
+    ],
+    trailer: "/Root 1 0 R",
+  }).bytes;
+}
+
+/**
+ * `inline-indexed-glyph.pdf`: the picture as a coloured (`d0`) Type 3 glyph,
+ * `/pic` at code 65, shown once in a text object of its own at 72, 500, size
+ * 100, so the glyph is the 100 point picture, alone on its line. The font has
+ * no resources and no `/ToUnicode`; its glyph shows no text and shares
+ * nothing, so spec 0020's glyph rule judges it clean (spec 0022, AC-6).
+ */
+export function inlineIndexedGlyph() {
+  return writePdf({
+    objects: [
+      CATALOG,
+      PAGES,
+      page("/Font << /F1 5 0 R /T3 6 0 R >>"),
+      stream("", `${LINE}\nBT /T3 100 Tf 72 500 Td (A) Tj ET`),
+      HELVETICA,
+      "<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1000 1000] " +
+        "/FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << /pic 7 0 R >> " +
+        "/Encoding << /Type /Encoding /Differences [65 /pic] >> " +
+        "/FirstChar 65 /LastChar 65 /Widths [1000] >>",
+      stream("", joined("1000 0 d0 ", picture(1000))),
+    ],
+    trailer: "/Root 1 0 R",
+  }).bytes;
+}
+
 /** `inline-indexed.pdf`: the picture in the page's contents, 100 points square at 72, 500. */
 export function inlineIndexed() {
   return writePdf({

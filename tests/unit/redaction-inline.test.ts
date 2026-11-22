@@ -37,7 +37,12 @@ beforeAll(() => {
 });
 
 /** One fixture per place the open's role walk reads (AC-6). */
-const PLACES = ["inline-indexed.pdf"] as const;
+const PLACES = [
+  "inline-indexed.pdf",
+  "inline-indexed-form.pdf",
+  "inline-indexed-pattern.pdf",
+  "inline-indexed-glyph.pdf",
+] as const;
 
 /** The kind an open refuses with, or `null` if it opened. */
 async function openKind(bytes: ArrayBuffer): Promise<string | null> {
@@ -147,10 +152,8 @@ describe("the open refuses (AC-2, AC-6)", () => {
  * picture. The worker only ever runs the default.
  */
 describe("a run refuses before anything is removed (AC-3)", () => {
-  it("refuses inline-indexed.pdf with nothing ticked", async () => {
-    await expect(runKind(fixture("inline-indexed.pdf"), [])).resolves.toBe(
-      "inline-picture",
-    );
+  it.each(PLACES)("refuses %s with nothing ticked", async (name) => {
+    await expect(runKind(fixture(name), [])).resolves.toBe("inline-picture");
   });
 
   it("refuses it with its line ticked before the trim or any pass runs", async () => {

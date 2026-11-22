@@ -340,6 +340,44 @@ describe("a ticked text at a string place (spec 0021)", () => {
     expect(placeCheck("Ordering", "RowanAshby", "")).toBeNull();
   });
 
+  /**
+   * Spec 0021's AC-4 as built, owed by its build and written by spec 0022's
+   * (its AC-8): a string place the check cannot decode fails it whenever
+   * anything is ticked, since it may hold anything. The walk refuses such a
+   * string at every one of these places first, so only bytes built here, with
+   * a structure check that answers clean, reach it. `<FEFF00650E>` opens as
+   * UTF-16 and ends on half a unit, so it cannot be decoded.
+   */
+  describe("an /Ordering the check cannot decode (spec 0021's owed test)", () => {
+    const undecodable = (ticked: readonly string[]) => {
+      const { bytes } = writePdf({
+        objects: document({
+          extra: ["<< /Registry (Adobe) /Ordering <FEFF00650E> /Supplement 0 >>"],
+        }),
+        trailer: "/Root 1 0 R",
+      });
+      return checkOutput(
+        mupdf,
+        bytes.slice().buffer,
+        [],
+        new Map(),
+        foldTicked(ticked),
+        () => "clean",
+      );
+    };
+
+    it.each([["Clean"], ["e"], ["Rowan Ashby"]])(
+      "fails with redaction-incomplete with %j ticked",
+      (ticked) => {
+        expect(undecodable([ticked])).toBe("redaction-incomplete");
+      },
+    );
+
+    it("passes with nothing ticked", () => {
+      expect(undecodable([])).toBeNull();
+    });
+  });
+
   it("fails beside an unused colour space entry and never writes twice", async () => {
     const bytes = codeBesideUnusedSpace();
     const { rewrite, calls } = countedRewrite();

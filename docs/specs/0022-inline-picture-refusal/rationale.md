@@ -179,6 +179,47 @@ Measured on today's code (the branch before task 2, MuPDF 1.28.1), with a scratc
 | Fixture (task) | Open today | Source | Run's output | MuPDF alone | Output's inline dictionary |
 |---|---|---|---|---|---|
 | `inline-indexed.pdf`, the page's contents (task 1) | opens, no finding | drawn, all four cells | made a file, blank, `sanitized` empty | blank | `/W 2/H 2/BPC 8/CS//D[0 255]` |
+| `inline-indexed-form.pdf`, a form drawn once (task 7) | opens, no finding | drawn, all four cells | made a file, blank, `sanitized` empty | blank | the same, in the form |
+| `inline-indexed-pattern.pdf`, a tiling pattern's one cell (task 7) | opens, no finding | drawn, all four cells | made a file, blank, `sanitized` empty | blank | the same, in the pattern |
+| `inline-indexed-glyph.pdf`, a coloured Type 3 glyph (task 7) | opens, no finding | drawn, all four cells | made a file, blank, `sanitized` empty | blank | the same, in the glyph procedure |
+
+Task 7 measured the three new places on main's code (0ee7571, a `git archive` of `src`), and measured `inline-indexed.pdf` again there, with the same answers. No earlier refusal takes any of the four: each opens with no page finding, so the spec's recipes stand unchanged. The glyph fixture's page reads as `Palette logo sample` and `A` (the glyph's code, since the font has no `/ToUnicode`), each on a line of its own. MuPDF's write keeps the picture in none of the four places, so the Follow-up item for a place where the write keeps it has nothing to bring to `/architect`.
+
+#### Task 8's measurements, before the pin (2026-11-22)
+
+MuPDF 1.28.1 alone, on documents built in a scratch test: a page with a Helvetica line before and after one 2 by 2 picture, its resources holding `/Cs1` (an indexed space over RGB, red, green, blue, yellow), `/Cs2` (the same over cyan, magenta, yellow, black) and `/Cs3` (a calibrated RGB space). Each was opened and saved with `WRITE_OPTIONS`; "drawn" means the four cells sampled as the data says.
+
+| Picture's dictionary | Source | Written as | Output |
+|---|---|---|---|
+| `/CS /RGB`, `/CS /G`, `/CS /DeviceCMYK` | drawn | `/CS/RGB`, `/CS/G`, `/CS/CMYK` | drawn, same |
+| `/CS [/DeviceRGB]`, `[/RGB]`, `[/DeviceRGB 7]`; `/ColorSpace /DeviceRGB`, `[/RGB]` | drawn | `/CS/RGB` | drawn, same |
+| `/CS [/CalCMYK << >>]` | drawn | `/CS/CMYK` | drawn, same |
+| `/CS /Cs1`, and `/CS /Cs1 /ColorSpace /Cs1` | drawn | `/CS/Cs1`, entry kept | drawn, same |
+| `/IM true`, alone or beside an indexed `/CS` | drawn | `/IM true` | drawn, same |
+| `/ColorSpace /Pattern` | drawn as gray | `/CS/G` | drawn, same |
+| `/CS [/I /RGB 3 <...>]`, `[/Indexed /DeviceRGB 3 <...>]` | drawn | `/CS/` | blank |
+| inline `/CalRGB`, `/Lab`, `/Separation`, `/DeviceN` arrays | drawn | `/CS/` | blank |
+| `/ColorSpace /Cs1` | drawn | `/CS/`, entry dropped | blank |
+| `/CS [/I /Cs3 1 <...>]` | not drawn | no `BI` | blank |
+| `/CS/`, `/ColorSpace 3` | not drawn | no `BI` | blank |
+| no colour space, not a mask | drawn faintly | the write throws: "BI operator can only show ImageMask, Gray, RGB, or CMYK images" | none |
+| `/Filter /JPXDecode` or `[/JPXDecode]`, a mask too | not drawn, the rest of the stream drawn | no `BI`, the rest kept | blank |
+| `/F /JPXDecode` | drawing the page throws ("Failed to read JPX header") | the write throws ("unknown compressed buffer type") | none |
+| `/F [/AHx /JPXDecode]` | not drawn, the rest drawn | the write throws | none |
+
+The two keys, each in both orders:
+
+| Picture's dictionary | Source | Written as | Output |
+|---|---|---|---|
+| `/ColorSpace /DeviceRGB` beside `/CS [/I /RGB 3 <...>]`, index data | drawn from the indexed `/CS` | `/CS/` | blank |
+| `/CS /RGB` beside `/ColorSpace [/I /RGB 3 <...>]`, RGB data | drawn as RGB | `/CS/RGB` | drawn, same |
+| `/CS /Cs1` beside `/ColorSpace /Cs2` | drawn in Cs1's colours | `/CS/Cs1`, entry kept | drawn, same |
+| `/CS /Cs2` beside `/ColorSpace [/I /RGB 3 <...>]` | drawn in Cs2's colours | `/CS/Cs2`, entry kept | drawn, same |
+| `/CS /G` beside `/ColorSpace /Cs1` | drawn as gray | `/CS/G` | drawn, same |
+| `/ImageMask false` beside `/IM true`, no colour space | drawn as a mask | `/IM true` | drawn, same |
+| `/ImageMask true` beside `/IM false`, no colour space | not drawn, and neither is the rest of the stream | no `BI`, the rest dropped | blank |
+
+So MuPDF 1.28.1 reads the short key first: `/CS` before `/ColorSpace` and `/IM` before `/ImageMask`, whichever comes first in the dictionary. That is the opposite of the order AC-1 and *MuPDF 1.28.1's source* above give (`pdf_dict_geta` takes the short name first, as PDF 2.0 asks for inline pictures). By what was measured, the space MuPDF loads is `/CS` when present, else `/ColorSpace`, and the writer's name always names it when `/CS` is a name that is not empty. Against AC-1 as written, the measured writes differ in four places: `/CS /Cs1` beside `/ColorSpace /Cs2`, `/CS /RGB` beside an indexed `/ColorSpace`, and `/ImageMask false` beside `/IM true` all come through, though AC-1 counts them lost; and a device `/ColorSpace` beside a `/CS` that is not a device space is lost, though AC-1 says such a picture never counts. Taken to `/architect` before the pin is written (the build stopped at task 8).
 
 ### What the cross check changed
 
