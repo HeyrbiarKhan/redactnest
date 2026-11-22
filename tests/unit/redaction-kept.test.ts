@@ -1362,8 +1362,21 @@ describe("MuPDF and an inline picture over a named indexed base", () => {
     expect(pageRenders(inlineIndexed("[/I /RGB 1 <FF000000FF00>]"))).not.toEqual(without);
   });
 
+  /**
+   * Spec 0022 refuses this picture (AC-1, AC-3), so the run swaps its inline
+   * picture rule out: this pins MuPDF's behaviour, not the rule (AC-7).
+   */
   it("leaves a run's output with no inline picture and no colour space entry", async () => {
-    const { output } = await redactDocumentWith(mupdf, inlineIndexed(NAMED), []);
+    const { output } = await redactDocumentWith(
+      mupdf,
+      inlineIndexed(NAMED),
+      [],
+      {},
+      {
+        ...PIPELINE,
+        judgeInlinePictures: () => "kept",
+      },
+    );
 
     expect(pageContent(output, 0)).not.toMatch(/\bBI\b/);
     expect(colourSpaceEntries(output)).toBe(0);

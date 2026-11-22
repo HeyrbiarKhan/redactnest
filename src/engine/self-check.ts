@@ -10,6 +10,7 @@ import {
   ROLES,
   TRAILER_KEYS,
   walkRoles,
+  type DrawingUnit,
   type ResourceOwner,
   type Role,
 } from "./allowlist";
@@ -68,6 +69,12 @@ import type { RedactionTarget } from "./types";
  * the bytes, so the usual path still opens and walks the output once. The run
  * then writes once more and checks the new bytes with `mayRewrite` clear, where
  * the same verdict is `redaction-incomplete`, a leak like any unused entry.
+ *
+ * Spec 0022, AC-4: a `"lost-picture"` verdict is handled as `"unreadable"`
+ * is: every page is still compared, a leak a page finds outranks it, and
+ * otherwise the run fails with `unsupported`, never `inline-picture`, since
+ * the check meets it only when the scan of the source missed and cannot say
+ * why. It never leads to a second write, which would drop the picture whole.
  *
  * Spec 0021, AC-4: right after the structure part, before `"rewrite"` is
  * answered or any page is compared, the catalog's `/Lang` and every
@@ -130,8 +137,9 @@ export function checkOutput(
     }
     // Spec 0019, AC-5: a drawing stream the scan cannot read is `unsupported`,
     // since nothing was found to leak, unless a page below finds a leak, which
-    // outranks it; every page is still compared.
-    unreadable = structure === "unreadable";
+    // outranks it; every page is still compared. Spec 0022, AC-4: a lost
+    // inline picture is handled the same way.
+    unreadable = structure === "unreadable" || structure === "lost-picture";
 
     for (let index = 0; index < record.length; index += 1) {
       const quads = (targets.get(index) ?? []).flatMap((target) => target.quads);
@@ -222,13 +230,17 @@ function placeHoldsTicked(
 
 /**
  * What the structure part found: nothing, something the rebuild should not
- * have carried (a leak), a drawing stream it could not read to its end, or,
- * as its only finding, a colour space entry no drawing names (spec 0019,
- * AC-5). They rank in that order from the leak down: a leak outranks an
- * unreadable stream, and both outrank an unused colour space, so a file
- * holding either is never written twice (AC-15).
+ * have carried (a leak), a drawing stream it could not read to its end, an
+ * inline picture the write lost (spec 0022, AC-4), or, as its only finding, a
+ * colour space entry no drawing names (spec 0019, AC-5). They rank in that
+ * order from the leak down: a leak outranks an unreadable stream, which
+ * outranks a lost picture, and all three outrank an unused colour space, so a
+ * file holding any of them is never written twice (AC-15). A second write is
+ * a second filter pass, which drops a `/CS/` picture whole, and the check
+ * could then no longer see the loss.
  */
-export type StructureVerdict = "clean" | "leak" | "unreadable" | "unused-colour-space";
+export type StructureVerdict =
+  "clean" | "leak" | "unreadable" | "lost-picture" | "unused-colour-space";
 
 /** The structure part of the self check, as the `Pipeline` seam holds it. */
 export type StructureCheck = (
@@ -269,6 +281,12 @@ export type StructureCheck = (
  * write that merged two identical pictures would make a clean file look
  * shared. The refusals at open and before the passes hold that part, on the
  * bytes a run redacts.
+ *
+ * Spec 0022's, AC-4: no drawing loses an inline picture. Resource use reads
+ * every drawing that has a resource dictionary; a page or drawer with none
+ * makes no owner, so the units of `walk.pages` whose `resources` is null are
+ * read here too, and only those, so nothing is read twice
+ * (`resourcelessUse`).
  */
 export function structureIsClean(
   check: PDFDocument,
@@ -308,7 +326,43 @@ export function structureIsClean(
   // Text below a glyph is a leak that outranks `"unreadable"` and
   // `"unused-colour-space"`, so it never leads to a second write.
   if (judgeGlyphs(walk) === "text") return "leak";
-  return use;
+  return worseOf(use, resourcelessUse(walk.pages));
+}
+
+/** The structure part's verdicts from the least to the worst (spec 0022, AC-4). */
+const VERDICT_RANK: readonly StructureVerdict[] = Object.freeze([
+  "clean",
+  "unused-colour-space",
+  "lost-picture",
+  "unreadable",
+  "leak",
+]);
+
+/** The worse of two verdicts, by `VERDICT_RANK`. */
+function worseOf(first: StructureVerdict, second: StructureVerdict): StructureVerdict {
+  return VERDICT_RANK.indexOf(second) > VERDICT_RANK.indexOf(first) ? second : first;
+}
+
+/**
+ * Spec 0022, AC-4: every drawing a page draws with no resource dictionary,
+ * which resource use never reads. One loses a picture when its read has
+ * `losesPicture`, or any name in `inlineSpaces`, since it has no entry to
+ * name; one the scan cannot read makes the answer `"unreadable"`, as it does
+ * in an owner.
+ */
+function resourcelessUse(
+  pages: readonly (readonly DrawingUnit[])[],
+): "clean" | "unreadable" | "lost-picture" {
+  let lostPicture = false;
+  for (const units of pages) {
+    for (const unit of units) {
+      if (unit.resources !== null) continue;
+      const read = readDrawing(unit.streams, null, unit.joined);
+      if (read === "unsure") return "unreadable";
+      if (read.losesPicture || read.inlineSpaces.size > 0) lostPicture = true;
+    }
+  }
+  return lostPicture ? "lost-picture" : "clean";
 }
 
 /** The dictionaries a resource dictionary keeps its entries in, as `marked.ts` names them. */
@@ -346,14 +400,22 @@ const DEFAULT_SPACES: ReadonlySet<string> = new Set([
  * category is still a leak at once. After every owner the answer ranks
  * `"unreadable"` over `"unused-colour-space"` over `"clean"`, so a drawing
  * the scan cannot read, anywhere in the file, means no second write.
+ *
+ * Spec 0022, AC-4: an owner also loses a picture when a read of any of its
+ * drawings has `losesPicture`, or holds a name in `inlineSpaces` that is not a
+ * key of the owner's `/ColorSpace` dictionary. That answers `"lost-picture"`,
+ * ranked after `"unreadable"` and before `"unused-colour-space"`, so it never
+ * leads to a second write.
  */
 function resourceUse(owners: readonly ResourceOwner[]): StructureVerdict {
   let unreadable = false;
+  let lostPicture = false;
   let unusedColourSpace = false;
 
   for (const { resources, units } of owners) {
     const properties = resources.get("Properties");
     const used = new Map<ResourceCategory, Set<string>>();
+    const printed = new Set<string>();
     let unsure = false;
     for (const unit of units) {
       const read = readDrawing(
@@ -365,6 +427,8 @@ function resourceUse(owners: readonly ResourceOwner[]): StructureVerdict {
         unsure = true;
         continue;
       }
+      if (read.losesPicture) lostPicture = true;
+      for (const name of read.inlineSpaces) printed.add(name);
       for (const [category, names] of read.names) {
         const into = used.get(category) ?? new Set<string>();
         for (const name of names) into.add(name);
@@ -379,6 +443,13 @@ function resourceUse(owners: readonly ResourceOwner[]): StructureVerdict {
       continue;
     }
 
+    // A name the writer printed as `/CS/Name` with no entry for it to name:
+    // that picture draws nothing (spec 0022, AC-4).
+    const spaces = resources.get("ColorSpace");
+    for (const name of printed) {
+      if (!spaces.isDictionary() || !hasKey(spaces, name)) lostPicture = true;
+    }
+
     for (const category of RESOURCE_CATEGORIES) {
       const entries = resources.get(category);
       if (!entries.isDictionary()) continue;
@@ -390,6 +461,7 @@ function resourceUse(owners: readonly ResourceOwner[]): StructureVerdict {
     }
   }
   if (unreadable) return "unreadable";
+  if (lostPicture) return "lost-picture";
   return unusedColourSpace ? "unused-colour-space" : "clean";
 }
 
