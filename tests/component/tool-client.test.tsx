@@ -2008,7 +2008,7 @@ describe("the page readings (spec 0006)", () => {
     [
       "inline-picture",
       "A picture in this PDF can't come through cleanly",
-      "One of its pictures stores its colours in a way RedactNest's cleaning can't write back, so it stopped rather than hand back a copy with that picture missing or changed, and made no file.",
+      "One of its pictures stores its colours in a way RedactNest's cleaning can't write back, so it stopped rather than hand back a copy with that picture missing, and made no file.",
     ],
   ] as const)(
     "says plainly why no file was made for %s, above the full drop zone (AC-26)",

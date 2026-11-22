@@ -44,9 +44,9 @@ export interface DrawingRead {
    */
   readonly showsText: boolean;
   /**
-   * An inline picture here is one MuPDF 1.28.1's write would lose or change
-   * (spec 0022, AC-1): the inline picture rule refuses the file, and the check
-   * fails an output that still holds one.
+   * An inline picture here is one MuPDF 1.28.1's write would lose (spec 0022,
+   * AC-1): the inline picture rule refuses the file, and the check fails an
+   * output that still holds one.
    */
   readonly losesPicture: boolean;
   /**
@@ -714,7 +714,7 @@ interface InlinePicture {
   readonly colourSpace: string | null;
   /** Where its data starts: one white space byte after `ID`. */
   readonly dataStart: number;
-  /** MuPDF 1.28.1's write would lose or change it (spec 0022, AC-1). */
+  /** MuPDF 1.28.1's write would lose it (spec 0022, AC-1). */
   readonly lost: boolean;
   /** The name its `/CS` holds directly, when neither empty nor a device name (AC-1). */
   readonly printed: string | null;
@@ -779,42 +779,41 @@ function inlineImage(bytes: Uint8Array, start: number): InlinePicture | null {
 }
 
 /**
- * Would MuPDF 1.28.1's write lose or change this inline picture? Spec 0022,
- * AC-1, by the rule its loader and writer follow (`pdf_load_image_imp`,
+ * Would MuPDF 1.28.1's write lose this inline picture? Spec 0022, AC-1, by the
+ * rule its loader and writer follow (`pdf_load_image_imp`,
  * `parse_inline_image`, `pdf_out_BI`; `rationale.md`, *MuPDF 1.28.1's
- * source*):
+ * source*). MuPDF reads both pairs of keys short key first (`pdf_dict_geta`:
+ * `/IM` before `/ImageMask`, `/CS` before `/ColorSpace`), whichever comes first
+ * in the bytes, as task 8 measured, so the long key counts only when the short
+ * one is absent. A key is present whatever its value, `null` included, which
+ * can only refuse more (INV-4). The lost cases:
  *
  *  - a `/JPXDecode` filter under `/Filter` or `/F`, a mask included: MuPDF
  *    throws on an inline JPX picture, so it is never written;
- *  - not a mask, and no colour space for MuPDF to load (`/ColorSpace` when
- *    present, else `/CS`): every write throws;
- *  - not a mask, the loaded space not a device space, and the name the writer
- *    prints not naming it. The writer prints `/CS` whenever it is a direct
- *    name, whatever `/ColorSpace` says, and the empty name otherwise, so it
- *    names the loaded space only when `/CS` is a name that is not empty and
- *    `/ColorSpace` is absent or holds that same name.
+ *  - not a mask, and no colour space for MuPDF to load: every write throws;
+ *  - not a mask, the loaded space not a device space, and `/CS` not a name
+ *    that is not empty. The writer prints `/CS` whenever it is a direct name
+ *    and the empty name otherwise, and since `/CS` is the space MuPDF loads, a
+ *    name that is not empty there is always written under its own name.
  *
  * It looks no resource up and follows no drawing state, so a `/ColorSpace`
  * name whose resource is a device space, `/ColorSpace /Pattern` and a picture
  * under a clip with no area count as lost although the write keeps them. It
- * leans to refusing (INV-4).
+ * leans to refusing (INV-4), with one exception: a `/CS` name with no resource
+ * entry is kept, though the write drops it, because the file never defines its
+ * colours and MuPDF draws nothing for it in the source either.
  */
 function losesPicture(entries: ReadonlyMap<string, Value>): boolean {
   if (namesJpx(entries.get("Filter")) || namesJpx(entries.get("F"))) return true;
 
-  const mask = entries.has("ImageMask") ? entries.get("ImageMask") : entries.get("IM");
+  const mask = entries.has("IM") ? entries.get("IM") : entries.get("ImageMask");
   if (mask?.is === "true") return false;
 
-  const loaded = entries.has("ColorSpace")
-    ? entries.get("ColorSpace")
-    : entries.get("CS");
+  const short = entries.get("CS");
+  const loaded = entries.has("CS") ? short : entries.get("ColorSpace");
   if (loaded === undefined) return true;
   if (isDeviceSpace(loaded)) return false;
-
-  const short = entries.get("CS");
-  if (short?.is !== "name" || short.name === "") return true;
-  const long = entries.get("ColorSpace");
-  return !(long === undefined || (long.is === "name" && long.name === short.name));
+  return !(short?.is === "name" && short.name !== "");
 }
 
 /** A filter value naming `/JPXDecode`, alone or in an array. */

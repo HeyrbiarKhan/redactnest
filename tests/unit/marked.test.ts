@@ -345,28 +345,59 @@ describe("whether a drawing shows text (spec 0020)", () => {
 });
 
 /**
- * Spec 0022, AC-1: an inline picture MuPDF 1.28.1's write would lose or
- * change, judged by the rule its loader and writer follow. Each case is one
- * picture whose dictionary holds `dict` beside its size and depth.
+ * Spec 0022, AC-1: an inline picture MuPDF 1.28.1's write would lose, judged
+ * by the rule its loader and writer follow, the short key first (`/CS` before
+ * `/ColorSpace`, `/IM` before `/ImageMask`, measured in task 8). Each case is
+ * one picture whose dictionary holds `dict` beside its size and depth.
  */
 describe("an inline picture MuPDF's write would lose (spec 0022)", () => {
   const PALETTE = "<FF0000 00FF00 0000FF FFFF00>";
   const TINT = "<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [1 0 0 0] /N 1 >>";
+  const WHITE = "<< /WhitePoint [0.9505 1 1.089] >>";
   const picture = (dict: string) => `BI /W 1 /H 1 /BPC 8 ${dict} ID x EI`;
   const loses = (dict: string) => read(picture(dict)).losesPicture;
   const spacesOf = (dict: string) => [...read(picture(dict)).inlineSpaces].sort();
 
-  it.each([
-    ["an indexed space over a short device base", `/CS [/I /RGB 3 ${PALETTE}]`],
+  /**
+   * A case with two keys, written in both orders, so the scan cannot lean on
+   * which key comes first in the bytes (AC-6). Each title names the key
+   * written first.
+   */
+  const bothOrders = (label: string, one: string, other: string): string[][] =>
     [
-      "an indexed space over a full device base",
-      `/CS [/Indexed /DeviceRGB 3 ${PALETTE}]`,
-    ],
-    ["an indexed space over a named resource", "/CS [/I /Cs1 1 <FF000000FF00>]"],
-    ["an inline CalRGB space", "/CS [/CalRGB << /WhitePoint [0.9505 1 1.089] >>]"],
-    ["an inline Lab space", "/CS [/Lab << /WhitePoint [0.9505 1 1.089] >>]"],
-    ["an inline Separation space", `/CS [/Separation /Spot /DeviceCMYK ${TINT}]`],
-    ["an inline DeviceN space", `/CS [/DeviceN [/Cyan] /DeviceCMYK ${TINT}]`],
+      [one, other],
+      [other, one],
+    ].map(([first, second]) => [
+      `${label}, ${first.split(" ")[0]} first`,
+      `${first} ${second}`,
+    ]);
+
+  /** Every colour space that is neither a device space nor a name (AC-1). */
+  const LOST_SPACES = [
+    ["an indexed space over a short device base", `[/I /RGB 3 ${PALETTE}]`],
+    ["an indexed space over a full device base", `[/Indexed /DeviceRGB 3 ${PALETTE}]`],
+    ["an indexed space over a named resource", "[/I /Cs1 1 <FF000000FF00>]"],
+    ["an inline CalRGB space", `[/CalRGB ${WHITE}]`],
+    ["an inline Lab space", `[/Lab ${WHITE}]`],
+    ["an inline Separation space", `[/Separation /Spot /DeviceCMYK ${TINT}]`],
+    ["an inline DeviceN space", `[/DeviceN [/Cyan] /DeviceCMYK ${TINT}]`],
+  ] as const;
+
+  /** Every device space, which MuPDF writes back as `/CS/G`, `/CS/RGB` or `/CS/CMYK`. */
+  const DEVICE_SPACES = [
+    ["[/DeviceRGB]", "[/DeviceRGB]"],
+    ["[/RGB]", "[/RGB]"],
+    ["[/DeviceRGB 7]", "[/DeviceRGB 7]"],
+    ["[/CalCMYK << >>]", "[/CalCMYK << >>]"],
+    ["a device name", "/DeviceRGB"],
+  ] as const;
+
+  it.each([
+    ...LOST_SPACES.map(([label, space]) => [`${label} under /CS`, `/CS ${space}`]),
+    ...LOST_SPACES.map(([label, space]) => [
+      `${label} under /ColorSpace, with no /CS`,
+      `/ColorSpace ${space}`,
+    ]),
     ["a resource name under /ColorSpace", "/ColorSpace /Cs1"],
     ["a number under /ColorSpace", "/ColorSpace 3"],
     ["a string under /ColorSpace", "/ColorSpace (DeviceRGB)"],
@@ -375,19 +406,48 @@ describe("an inline picture MuPDF's write would lose (spec 0022)", () => {
       "/Pattern under /ColorSpace, which the scan does not look up",
       "/ColorSpace /Pattern",
     ],
-    [
-      "a device /CS beside an indexed /ColorSpace",
-      `/CS /RGB /ColorSpace [/I /RGB 3 ${PALETTE}]`,
-    ],
-    ["/CS and /ColorSpace naming different resources", "/CS /Cs1 /ColorSpace /Cs2"],
+    ["an empty array under /CS", "/CS []"],
+    ["a pattern array under /CS", "/CS [/Pattern]"],
+    ...bothOrders(
+      "an indexed /CS beside a device /ColorSpace",
+      `/CS [/I /RGB 3 ${PALETTE}]`,
+      "/ColorSpace /DeviceRGB",
+    ),
     ["no colour space, not a mask", ""],
+    ...bothOrders(
+      "/ImageMask true beside /IM false, with no colour space",
+      "/ImageMask true",
+      "/IM false",
+    ),
+    ...bothOrders(
+      "/ImageMask true beside /IM 0, with no colour space",
+      "/ImageMask true",
+      "/IM 0",
+    ),
+    ...bothOrders(
+      "/ImageMask true beside /IM null, with no colour space",
+      "/ImageMask true",
+      "/IM null",
+    ),
     ["an inline JPX picture", "/CS /RGB /Filter /JPXDecode"],
+    ["a JPX filter in a /Filter array", "/CS /RGB /Filter [/JPXDecode]"],
+    ["a JPX filter under /F", "/CS /RGB /F /JPXDecode"],
     ["a JPX filter in an /F array", "/CS /RGB /F [/AHx /JPXDecode]"],
     ["a mask with a JPX filter", "/IM true /Filter /JPXDecode"],
     ["the empty name MuPDF writes for a lost one", "/CS/"],
+    ...bothOrders(
+      "the empty name beside a device /ColorSpace",
+      "/CS/",
+      "/ColorSpace /DeviceRGB",
+    ),
+    ...bothOrders(
+      "/CS null beside a device /ColorSpace",
+      "/CS null",
+      "/ColorSpace /DeviceRGB",
+    ),
     [
-      "/ImageMask false beside /IM true, with no colour space",
-      "/ImageMask false /IM true",
+      "a repeated /CS whose last is an indexed space",
+      `/CS /RGB /CS [/I /RGB 3 ${PALETTE}]`,
     ],
   ])("counts %s as lost", (_label, dict) => {
     expect(loses(dict)).toBe(true);
@@ -396,23 +456,61 @@ describe("an inline picture MuPDF's write would lose (spec 0022)", () => {
   it.each([
     ["a mask", "/IM true"],
     ["a mask under the long key", "/ImageMask true"],
-    ["/IM true beside an indexed array", `/IM true /CS [/I /RGB 3 ${PALETTE}]`],
+    ...bothOrders(
+      "/IM true beside an indexed /CS",
+      "/IM true",
+      `/CS [/I /RGB 3 ${PALETTE}]`,
+    ),
+    ...bothOrders(
+      "/IM true beside /ImageMask false, with no colour space",
+      "/IM true",
+      "/ImageMask false",
+    ),
     ["a short device name", "/CS /G"],
     ["a full device name", "/CS /DeviceCMYK"],
     ["a resource name under /CS alone", "/CS /Cs1"],
-    ["/CS and /ColorSpace naming the same resource", "/CS /Cs1 /ColorSpace /Cs1"],
-    ["[/DeviceRGB] under /CS", "/CS [/DeviceRGB]"],
-    ["[/RGB] under /CS", "/CS [/RGB]"],
-    ["[/DeviceRGB 7] under /CS", "/CS [/DeviceRGB 7]"],
-    ["[/CalCMYK << >>] under /CS", "/CS [/CalCMYK << >>]"],
-    ["[/RGB] under /ColorSpace", "/ColorSpace [/RGB]"],
-    ["[/CalCMYK << >>] under /ColorSpace", "/ColorSpace [/CalCMYK << >>]"],
-    ["a device name under /ColorSpace", "/ColorSpace /DeviceRGB"],
-    [
-      "a device /ColorSpace beside an indexed /CS",
-      `/ColorSpace /DeviceRGB /CS [/I /RGB 3 ${PALETTE}]`,
-    ],
-    ["a device /ColorSpace beside a resource /CS", "/ColorSpace /G /CS /Cs1"],
+    ["a resource name under /CS with no entry, since the scan looks none up", "/CS /Cs9"],
+    ...bothOrders(
+      "/CS and /ColorSpace naming the same resource",
+      "/CS /Cs1",
+      "/ColorSpace /Cs1",
+    ),
+    ...bothOrders(
+      "/CS and /ColorSpace naming different resources",
+      "/CS /Cs1",
+      "/ColorSpace /Cs2",
+    ),
+    ...bothOrders(
+      "a device /CS beside an indexed /ColorSpace",
+      "/CS /RGB",
+      `/ColorSpace [/I /RGB 3 ${PALETTE}]`,
+    ),
+    ...bothOrders(
+      "a device array /CS beside an indexed /ColorSpace",
+      "/CS [/RGB]",
+      `/ColorSpace [/I /RGB 3 ${PALETTE}]`,
+    ),
+    ...bothOrders(
+      "a device /CS beside a resource /ColorSpace",
+      "/CS /G",
+      "/ColorSpace /Cs1",
+    ),
+    ...bothOrders(
+      "a resource /CS beside a device /ColorSpace",
+      "/CS /Cs1",
+      "/ColorSpace /G",
+    ),
+    ...DEVICE_SPACES.map(([label, space]) => [`${label} under /CS`, `/CS ${space}`]),
+    ...DEVICE_SPACES.map(([label, space]) => [
+      `${label} under /ColorSpace, with no /CS`,
+      `/ColorSpace ${space}`,
+    ]),
+    ...bothOrders(
+      "a device /CS beside /ImageMask true and /IM 0, as a device picture",
+      "/CS /RGB /IM 0",
+      "/ImageMask true",
+    ),
+    ["a repeated /CS whose last is a device name", `/CS [/I /RGB 3 ${PALETTE}] /CS /RGB`],
   ])("keeps %s", (_label, dict) => {
     expect(loses(dict)).toBe(false);
   });
@@ -420,6 +518,8 @@ describe("an inline picture MuPDF's write would lose (spec 0022)", () => {
   it("holds the name /CS writes directly, whatever /ColorSpace says", () => {
     expect(spacesOf("/CS /Cs1")).toEqual(["Cs1"]);
     expect(spacesOf("/CS /Cs1 /ColorSpace /Cs2")).toEqual(["Cs1"]);
+    expect(spacesOf("/ColorSpace /Cs2 /CS /Cs1")).toEqual(["Cs1"]);
+    expect(spacesOf(`/ColorSpace [/I /RGB 3 ${PALETTE}] /CS /Cs1`)).toEqual(["Cs1"]);
   });
 
   it("holds no device name, no empty name and nothing written inside an array", () => {

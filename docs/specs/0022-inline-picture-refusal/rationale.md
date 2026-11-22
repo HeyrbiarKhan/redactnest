@@ -223,6 +223,25 @@ The two keys, each in both orders:
 
 So MuPDF 1.28.1 reads the short key first: `/CS` before `/ColorSpace` and `/IM` before `/ImageMask`, whichever comes first in the dictionary. That is the opposite of the order AC-1 and *MuPDF 1.28.1's source* first gave (`pdf_dict_geta` takes the short name first, as PDF 2.0 asks for inline pictures). By what was measured, the space MuPDF loads is `/CS` when present, else `/ColorSpace`, and the writer's name always names it when `/CS` is a name that is not empty. Against AC-1 as written, the measured writes differ in four places: `/CS /Cs1` beside `/ColorSpace /Cs2`, `/CS /RGB` beside an indexed `/ColorSpace`, and `/ImageMask false` beside `/IM true` all come through, though AC-1 counts them lost; and a device `/ColorSpace` beside a `/CS` that is not a device space is lost, though AC-1 says such a picture never counts. Taken to `/architect` before the pin is written (the build stopped at task 8), which corrected the spec the same day (*What task 8's measurements changed*, below).
 
+#### Task 8's measurements, on the corrected rule (2026-11-22)
+
+Measured before the pin was written, on documents built as above: the same lines and resources, a 2 by 2 picture 1 bit deep when it is a mask and 8 otherwise, with data that fills it for the space MuPDF loads. MuPDF 1.28.1 alone, saved with `WRITE_OPTIONS`.
+
+The three rows AC-6 marks *Measured in the build*, each as expected:
+
+| Picture's dictionary | Expected | Source | Written as | Output |
+|---|---|---|---|---|
+| `/CS /Cs9`, no `/Cs9` entry | no `BI`, the text after it kept | not drawn | no `BI`, the text after it kept | blank |
+| `/CS/` beside `/ColorSpace /DeviceRGB`, each order, RGB data | no `BI`, as `/CS/` alone | not drawn | no `BI`, the text after it kept | blank |
+| `/CS /RGB` then `/CS [/I /RGB 3 <...>]`, index data | `/CS/` (the last counts) | drawn from the indexed space | `/CS/` | blank |
+| `/CS [/I /RGB 3 <...>]` then `/CS /RGB`, RGB data | `/CS/RGB` | drawn as RGB | `/CS/RGB` | drawn, same |
+
+The three spellings the correction keeps, each in both orders, run with the line above the picture ticked (the redaction pass and the write: two filter passes), first with `judgeInlinePictures` skipped so only MuPDF decided, then through the default pipeline: `/CS /Cs1` beside `/ColorSpace /Cs2` (written `/CS/Cs1`, its entry kept), `/CS /RGB` beside `/ColorSpace [/I /RGB 3 <...>]` (written `/CS/RGB`) and `/ImageMask false` beside `/IM true` (written `/IM true`). Each made a file that passed the check, with the ticked line gone, the line after kept and the four cells drawn as the source draws them. So two passes carry them as one does, as reasoned. A run reads the page through the role walk, which refuses an indexed resource written with the inline abbreviations (`[/I /RGB ...]`) that MuPDF alone accepted in task 8's documents, so the run's documents, and the pin's, write `/Cs1` and `/Cs2` as `[/Indexed /DeviceRGB ...]`, the same spaces.
+
+Every other row matched task 8's tables but one. `/ImageMask true` beside `/IM false`, with no colour space: task 8 wrote it with two data bytes at 8 bits, half what a 2 by 2 picture holds, so MuPDF read past `EI` and lost the rest of the stream (not drawn, no `BI`, the rest dropped). With data that fills it (four bytes at 8 bits, or two at 1 bit), the source draws it as gray, as it draws a picture with no colour space and no mask, and the write throws the same way ("BI operator can only show ImageMask, Gray, RGB, or CMYK images"), in both orders. Lost either way, so the rule does not change. The pin keeps task 8's row with its two bytes, named as such, under *No `BI` left and the text after it dropped*, and holds the filled picture under *The write throws*. AC-1's sentence that MuPDF draws neither the picture nor the rest of the stream holds only for that short data.
+
+In passing, not pinned: `/IM null` beside `/ImageMask true`, with no colour space, is drawn as a mask and written `/IM true`, so MuPDF reads `null` as absent there, and the rule's refusal of it is one of the over refusals AC-1 allows for. `/IM 0` beside `/ImageMask true`, with no colour space, makes the write throw, as the rule counts it.
+
 ### What the cross check changed
 
 A read only pass on another model (Sonnet 5.5, 2026-11-22) read the draft, the engine code it touches and the saved MuPDF source. It found the design sound. These changes followed, applied as recommended (your call):

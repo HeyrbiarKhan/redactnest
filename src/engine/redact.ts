@@ -193,10 +193,10 @@ export async function redactDocumentWith(
     refuseBrokenGlyphs(pipeline, work);
     await checkpoint();
 
-    // Spec 0022, AC-3: an inline picture MuPDF's write would lose or change,
-    // judged on the same prepared copy before anything is removed, so a run
-    // handed such bytes with no open never hands back a copy missing it. Its
-    // own checkpoint, so a cancel during the scan is heard before the trim.
+    // Spec 0022, AC-3: an inline picture MuPDF's write would lose, judged on
+    // the same prepared copy before anything is removed, so a run handed such
+    // bytes with no open never hands back a copy missing it. Its own
+    // checkpoint, so a cancel during the scan is heard before the trim.
     refuseLostPictures(pipeline, work);
     await checkpoint();
 

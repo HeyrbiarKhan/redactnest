@@ -204,7 +204,7 @@ describe("failure copy (AC-16, AC-17)", () => {
   it("says a picture that can't come through cleanly stopped it", () => {
     expect(failureText("inline-picture", FREE)).toEqual({
       title: "A picture in this PDF can't come through cleanly",
-      body: "One of its pictures stores its colours in a way RedactNest's cleaning can't write back, so it stopped rather than hand back a copy with that picture missing or changed, and made no file.",
+      body: "One of its pictures stores its colours in a way RedactNest's cleaning can't write back, so it stopped rather than hand back a copy with that picture missing, and made no file.",
       next: failureText("unsupported", FREE).next,
     });
     expect(failureText("inline-picture", PAID)).toEqual(

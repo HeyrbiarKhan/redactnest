@@ -191,11 +191,11 @@ export async function openDocumentWith(
       throw new EngineFailure("unreadable-structure");
     }
 
-    // Spec 0022, AC-2: an inline picture MuPDF's write would lose or change,
-    // in any drawing the role walk names for a page, so the visitor hears
-    // before reviewing rather than after downloading a copy without it. The
-    // last of the open's refusals, so a file refused today keeps its kind and
-    // its advice. It names no page (INV-5), and no session exists for the file.
+    // Spec 0022, AC-2: an inline picture MuPDF's write would lose, in any
+    // drawing the role walk names for a page, so the visitor hears before
+    // reviewing rather than after downloading a copy without it. The last of
+    // the open's refusals, so a file refused today keeps its kind and its
+    // advice. It names no page (INV-5), and no session exists for the file.
     if (inspections.some(({ losesPicture }) => losesPicture)) {
       throw new EngineFailure("inline-picture");
     }
