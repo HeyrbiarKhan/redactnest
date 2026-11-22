@@ -174,7 +174,11 @@ And spec 0021's AC-7 pin: `[/I /Cs1 1 <...>]` with `/Cs1` a calibrated RGB resou
 
 ### At the build
 
-_To be filled by tasks 1, 7 and 8: each fixture's source and output on today's code, and the both keys and no colour space cases._
+Measured on today's code (the branch before task 2, MuPDF 1.28.1), with a scratch test outside the repository, on the committed fixtures only. Each fixture's picture is the same 2 by 2 palette picture, sampled at its four cell centres (red, green, blue, yellow in the source), nothing ticked. "MuPDF alone" opens the fixture and saves it with `WRITE_OPTIONS`, with no RedactNest code.
+
+| Fixture (task) | Open today | Source | Run's output | MuPDF alone | Output's inline dictionary |
+|---|---|---|---|---|---|
+| `inline-indexed.pdf`, the page's contents (task 1) | opens, no finding | drawn, all four cells | made a file, blank, `sanitized` empty | blank | `/W 2/H 2/BPC 8/CS//D[0 255]` |
 
 ### What the cross check changed
 

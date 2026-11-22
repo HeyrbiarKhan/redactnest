@@ -38,6 +38,14 @@ export interface PageInspection {
    * `no-readable-text` check.
    */
   readonly emptyClip: boolean;
+  /**
+   * A drawing the open's role walk names for the page holds an inline picture
+   * MuPDF's write would lose (spec 0022, AC-2): its contents, or a form,
+   * tiling pattern or Type 3 glyph procedure it draws. A flag, never a page
+   * finding, and dropped with the review document like `emptyClip`; the open
+   * refuses the file with `inline-picture`.
+   */
+  readonly losesPicture: boolean;
 }
 
 /**

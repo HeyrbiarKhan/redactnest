@@ -233,6 +233,15 @@ export const FAILURE_TEXT: Readonly<
     body: "Some text crosses the edge of a page, and RedactNest can't prove it removes it cleanly, so it made no file.",
     next: NEW_COPY,
   }),
+  // Spec 0022, AC-5: an inline picture MuPDF's write would lose or change, at
+  // open or before a run removes anything, from its kind alone. The next step
+  // suggests and never promises: nothing has measured whether printing gives
+  // a file this rule accepts, and printing may write the picture inline again.
+  "inline-picture": () => ({
+    title: "A picture in this PDF can't come through cleanly",
+    body: "One of its pictures stores its colours in a way RedactNest's cleaning can't write back, so it stopped rather than hand back a copy with that picture missing or changed, and made no file.",
+    next: NEW_COPY,
+  }),
   // The four a tick can cause. Each names the likely cause, because a
   // refusal cannot say which item it was (spec 0007, *Follow-up*).
   "redaction-overreach": () => ({

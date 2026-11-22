@@ -461,7 +461,7 @@ spec [0020](../specs/0020-type3-glyphs-stay-in-font/index.md) (2026-11-17: the g
   - [x] The review minors' strings: `kept-lang.pdf` and `kept-cid-strings.pdf` failing first, the catalog `/Lang` rule, the narrowed `LANG_TAG`, the token, the ticked text check and the gate rows (spec 0021, tasks 1 to 7) · AC-1 to AC-5, AC-9
   - [x] The review minors' scan and drawn shape: the 16 retry cap with its cost test, the indexed inline base with its MuPDF pin, and the drawn shape over every reached stream, run first on a font file, pattern and shading (spec 0021, tasks 8 to 10) · AC-6 to AC-8
   - [x] The review minors' close: the security page's source comment, and specs 0004 and 0019 amended (spec 0021, tasks 11 and 12) · AC-9
-  - [ ] The lost inline picture as a thin whole: `inline-indexed.pdf` failing first, the `inline-picture` kind and its words, the scan's rule, and the open's refusal (spec 0022, tasks 1 to 4) · AC-1, AC-2, AC-5, AC-6
+  - [x] The lost inline picture as a thin whole: `inline-indexed.pdf` failing first, the `inline-picture` kind and its words, the scan's rule, and the open's refusal (spec 0022, tasks 1 to 4) · AC-1, AC-2, AC-5, AC-6
   - [ ] The run's refusal and the check's backstop: `inline.ts` and its seam with the named indexed base pin swapped, and `"lost-picture"` with its ticked page limit pinned (spec 0022, tasks 5 and 6) · AC-3, AC-4, AC-7
   - [ ] The other places, the pin and the gate: the form, tiling pattern and Type 3 fixtures with each place measured, the MuPDF pin, the gate rows and both budgets (spec 0022, tasks 7 to 9) · AC-1, AC-6, AC-7
   - [ ] The close: spec 0021's owed test, and specs 0001, 0004, 0006, 0007, 0019 and 0021 amended (spec 0022, tasks 10 and 11) · AC-8

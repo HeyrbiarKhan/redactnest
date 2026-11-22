@@ -148,6 +148,7 @@ const MAIN_FIXTURES: readonly string[] = [
   "header-at-1019.pdf",
   "header-at-1020.pdf",
   "images-under.pdf",
+  "inline-indexed.pdf",
   "kept-annotations.pdf",
   "kept-catalog.pdf",
   "kept-cid-strings.pdf",
@@ -523,6 +524,8 @@ function runKindNow(name: string): EngineErrorKind | null {
  * spec 0006's Follow-up does (feature 30): a page holding a character MuPDF
  * cannot place, refused at open rather than in every run. And where spec 0021
  * does (its AC-3, AC-5): a CID font whose `/Ordering` is outside the token.
+ * And where spec 0022 does (its AC-2, AC-6): an inline picture MuPDF's write
+ * would lose, one fixture per place the open's role walk reads.
  * Read with `in`, like `RUN_NOW`.
  */
 const OPEN_NOW: Readonly<Record<string, EngineErrorKind | null>> = {
@@ -530,6 +533,7 @@ const OPEN_NOW: Readonly<Record<string, EngineErrorKind | null>> = {
   "glyph-shared-picture.pdf": "unreadable-structure",
   "glyph-text.pdf": "unreadable-structure",
   "glyph-undrawn-form.pdf": "unreadable-structure",
+  "inline-indexed.pdf": "inline-picture",
   "kept-cid-strings.pdf": "unreadable-structure",
   "trim-unplaced.pdf": "unsupported",
 };

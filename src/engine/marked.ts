@@ -16,12 +16,15 @@ import { readsAsLanguageTag } from "./allowlist";
  * The one named exception to spec 0001's "one PDF parser" (INV-4). It reads the
  * bytes MuPDF decodes, never a raw filtered stream, edits nothing and computes
  * no geometry. Its only outputs are whether a property list holds a string
- * that counts, which resource names the streams use, and whether they show
- * text (`showsText`, spec 0020, which the glyph rule reads), and nothing it
- * answers changes what the rebuild keeps: the glyph rule refuses a file, it
- * never deletes. Any doubt is `"unsure"`, which warns at open and fails the
- * check, so a fault in here can add a warning or a refusal, never pass a file
- * the rest of the check would fail.
+ * that counts, which resource names the streams use, whether they show text
+ * (`showsText`, spec 0020, which the glyph rule reads), whether an inline
+ * picture would be lost by MuPDF's write (`losesPicture`) and which colour
+ * space names inline pictures write under `/CS` (`inlineSpaces`, spec 0022,
+ * which the inline picture rule and the check read). Nothing it answers
+ * changes what the rebuild keeps: the glyph rule and the inline picture rule
+ * refuse a file, they never delete. Any doubt is `"unsure"`, which warns at
+ * open and fails the check, so a fault in here can add a warning or a refusal,
+ * never pass a file the rest of the check would fail.
  */
 
 /** The resource dictionaries a drawing names entries of. */
@@ -40,6 +43,18 @@ export interface DrawingRead {
    * operator. Spec 0020, AC-3.
    */
   readonly showsText: boolean;
+  /**
+   * An inline picture here is one MuPDF 1.28.1's write would lose or change
+   * (spec 0022, AC-1): the inline picture rule refuses the file, and the check
+   * fails an output that still holds one.
+   */
+  readonly losesPicture: boolean;
+  /**
+   * Every name, neither empty nor a device name, an inline picture's `/CS`
+   * holds directly: the names the writer prints as `/CS/Name`, which the
+   * check holds against the owner's `/ColorSpace` entries (spec 0022, AC-4).
+   */
+  readonly inlineSpaces: ReadonlySet<string>;
 }
 
 /**
@@ -70,11 +85,15 @@ export function readDrawing(
   if (reads.some((read) => read === "unsure")) return "unsure";
 
   const names = new Map<ResourceCategory, Set<string>>();
+  const inlineSpaces = new Set<string>();
   let describes = false;
   let showsText = false;
+  let losesPicture = false;
   for (const read of reads as DrawingRead[]) {
     describes ||= read.describes;
     showsText ||= read.showsText;
+    losesPicture ||= read.losesPicture;
+    for (const name of read.inlineSpaces) inlineSpaces.add(name);
     for (const [category, found] of read.names) {
       let into = names.get(category);
       if (!into) {
@@ -84,7 +103,7 @@ export function readDrawing(
       for (const name of found) into.add(name);
     }
   }
-  return Object.freeze({ describes, names, showsText });
+  return Object.freeze({ describes, names, showsText, losesPicture, inlineSpaces });
 }
 
 /** A stream's decoded bytes, copied out of MuPDF's heap, or `null` if MuPDF cannot decode it. */
@@ -123,9 +142,15 @@ const DELIMITERS = new Set([0x28, 0x29, 0x3c, 0x3e, 0x5b, 0x5d, 0x7b, 0x7d, 0x2f
 const isWhite = (byte: number): boolean => WHITE.has(byte);
 const isDelimiter = (byte: number): boolean => DELIMITERS.has(byte);
 
-/** An operand, as far as the scan needs to know it. */
+/**
+ * An operand, as far as the scan needs to know it. The keyword `true` is its
+ * own value only inside an inline picture's dictionary, where the mask test
+ * reads it (spec 0022, AC-1); everywhere else `true`, `false` and `null` are
+ * scalars.
+ */
 type Value =
   | { readonly is: "scalar" }
+  | { readonly is: "true" }
   | { readonly is: "name"; readonly name: string }
   | { readonly is: "string"; readonly bytes: Uint8Array }
   | { readonly is: "array"; readonly items: readonly Value[] }
@@ -149,13 +174,17 @@ interface Sequence {
  * again. `showsText` lives here rather than beside the scan, so a retry after a
  * false `EI` forgets an operator read from the image's data: kept outside, it
  * would stick, and a bitmap font whose data holds `Tj` would be refused (spec
- * 0020, *Data model sketch*).
+ * 0020, *Data model sketch*). `losesPicture` and `inlineSpaces` live here for
+ * the same reason: a picture read from another picture's data is forgotten
+ * once the scan settles on a later end (spec 0022, AC-1).
  */
 interface Semantics {
   readonly sequences: Sequence[];
   readonly names: Map<ResourceCategory, Set<string>>;
+  readonly inlineSpaces: Set<string>;
   describes: boolean;
   showsText: boolean;
+  losesPicture: boolean;
 }
 
 /** An inline image whose data's end may be tried again further on. */
@@ -201,8 +230,10 @@ export function scanContent(
   let state: Semantics = {
     sequences: [],
     names: new Map(),
+    inlineSpaces: new Set(),
     describes: false,
     showsText: false,
+    losesPicture: false,
   };
   const choices: Choice[] = [];
   // Whether the rest of a stream reads to its end depends only on where the
@@ -311,6 +342,11 @@ export function scanContent(
           ) {
             named("ColorSpace", image.colourSpace);
           }
+          // Spec 0022, AC-1: recorded before the state is saved for a retry,
+          // so a later end for this picture keeps it, and a retry back to an
+          // earlier picture forgets it.
+          if (image.lost) state.losesPicture = true;
+          if (image.printed !== null) state.inlineSpaces.add(image.printed);
           const end = nextEnd(bytes, image.dataStart, image.dataStart, failed);
           if (end === null) {
             if (retry()) continue;
@@ -340,6 +376,8 @@ export function scanContent(
     describes: state.describes,
     names: state.names,
     showsText: state.showsText,
+    losesPicture: state.losesPicture,
+    inlineSpaces: state.inlineSpaces,
   });
 }
 
@@ -483,8 +521,10 @@ function copy(state: Semantics): Semantics {
     names: new Map(
       [...state.names].map(([category, found]) => [category, new Set(found)]),
     ),
+    inlineSpaces: new Set(state.inlineSpaces),
     describes: state.describes,
     showsText: state.showsText,
+    losesPicture: state.losesPicture,
   };
 }
 
@@ -668,15 +708,23 @@ function latin1(bytes: Uint8Array, start: number, end: number): string {
   return text;
 }
 
+/** What the scan reads from one inline picture's dictionary. */
+interface InlinePicture {
+  /** The resource name its colour space uses, for resource use (spec 0021, AC-7). */
+  readonly colourSpace: string | null;
+  /** Where its data starts: one white space byte after `ID`. */
+  readonly dataStart: number;
+  /** MuPDF 1.28.1's write would lose or change it (spec 0022, AC-1). */
+  readonly lost: boolean;
+  /** The name its `/CS` holds directly, when neither empty nor a device name (AC-1). */
+  readonly printed: string | null;
+}
+
 /**
- * An inline image's dictionary, from just after `BI` to its `ID`: the colour
- * space it names, if any, and where its data starts (one white space byte
- * after `ID`). `null` if the dictionary cannot be read to an `ID`.
+ * An inline image's dictionary, from just after `BI` to its `ID`. `null` if
+ * the dictionary cannot be read to an `ID`.
  */
-function inlineImage(
-  bytes: Uint8Array,
-  start: number,
-): { readonly colourSpace: string | null; readonly dataStart: number } | null {
+function inlineImage(bytes: Uint8Array, start: number): InlinePicture | null {
   const items: Value[] = [];
   const open: Open[] = [];
   let pos = start;
@@ -707,17 +755,90 @@ function inlineImage(
       ) {
         return null;
       }
-      add({ is: "scalar" });
+      // Spec 0022, AC-1: `true` kept apart, so the mask test can read it.
+      add(token.word === "true" ? { is: "true" } : { is: "scalar" });
     } else if (token.is === "number") {
       add({ is: "scalar" });
     } else {
       add(token.value);
     }
   }
-  const dictionary = dictionaryOf(items) as Extract<Value, { is: "dict" }>;
-  const space = dictionary.entries.get("CS") ?? dictionary.entries.get("ColorSpace");
+  const { entries } = dictionaryOf(items) as Extract<Value, { is: "dict" }>;
+  const space = entries.get("CS") ?? entries.get("ColorSpace");
   const dataStart = pos < bytes.length && isWhite(bytes[pos]) ? pos + 1 : pos;
-  return { colourSpace: inlineSpaceName(space), dataStart };
+  const short = entries.get("CS");
+  return {
+    colourSpace: inlineSpaceName(space),
+    dataStart,
+    lost: losesPicture(entries),
+    printed:
+      short?.is === "name" && short.name !== "" && !INLINE_DEVICE_SPACES.has(short.name)
+        ? short.name
+        : null,
+  };
+}
+
+/**
+ * Would MuPDF 1.28.1's write lose or change this inline picture? Spec 0022,
+ * AC-1, by the rule its loader and writer follow (`pdf_load_image_imp`,
+ * `parse_inline_image`, `pdf_out_BI`; `rationale.md`, *MuPDF 1.28.1's
+ * source*):
+ *
+ *  - a `/JPXDecode` filter under `/Filter` or `/F`, a mask included: MuPDF
+ *    throws on an inline JPX picture, so it is never written;
+ *  - not a mask, and no colour space for MuPDF to load (`/ColorSpace` when
+ *    present, else `/CS`): every write throws;
+ *  - not a mask, the loaded space not a device space, and the name the writer
+ *    prints not naming it. The writer prints `/CS` whenever it is a direct
+ *    name, whatever `/ColorSpace` says, and the empty name otherwise, so it
+ *    names the loaded space only when `/CS` is a name that is not empty and
+ *    `/ColorSpace` is absent or holds that same name.
+ *
+ * It looks no resource up and follows no drawing state, so a `/ColorSpace`
+ * name whose resource is a device space, `/ColorSpace /Pattern` and a picture
+ * under a clip with no area count as lost although the write keeps them. It
+ * leans to refusing (INV-4).
+ */
+function losesPicture(entries: ReadonlyMap<string, Value>): boolean {
+  if (namesJpx(entries.get("Filter")) || namesJpx(entries.get("F"))) return true;
+
+  const mask = entries.has("ImageMask") ? entries.get("ImageMask") : entries.get("IM");
+  if (mask?.is === "true") return false;
+
+  const loaded = entries.has("ColorSpace")
+    ? entries.get("ColorSpace")
+    : entries.get("CS");
+  if (loaded === undefined) return true;
+  if (isDeviceSpace(loaded)) return false;
+
+  const short = entries.get("CS");
+  if (short?.is !== "name" || short.name === "") return true;
+  const long = entries.get("ColorSpace");
+  return !(long === undefined || (long.is === "name" && long.name === short.name));
+}
+
+/** A filter value naming `/JPXDecode`, alone or in an array. */
+function namesJpx(filter: Value | undefined): boolean {
+  if (filter?.is === "name") return filter.name === "JPXDecode";
+  if (filter?.is !== "array") return false;
+  return filter.items.some((item) => item.is === "name" && item.name === "JPXDecode");
+}
+
+/**
+ * A device space as MuPDF loads one inline (spec 0022, AC-1): a name in
+ * `INLINE_DEVICE_SPACES`, or an array whose first item is such a name or
+ * `/CalCMYK`, of any length, since MuPDF loads that array as its device space
+ * and ignores the rest (`pdf_load_colorspace_imp`). Anything else present, a
+ * number, a string or a dictionary included, is not one.
+ */
+function isDeviceSpace(space: Value): boolean {
+  if (space.is === "name") return INLINE_DEVICE_SPACES.has(space.name);
+  if (space.is !== "array") return false;
+  const [family] = space.items;
+  return (
+    family?.is === "name" &&
+    (INLINE_DEVICE_SPACES.has(family.name) || family.name === "CalCMYK")
+  );
 }
 
 /**

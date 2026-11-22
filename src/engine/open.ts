@@ -85,10 +85,10 @@ export async function openDocument(
  * cannot skip it. On the path through `openDocument` it has passed already and
  * costs a scan of at most 1024 bytes.
  *
- * The order is fixed (spec 0006, *State transitions*, as specs 0019 and 0020
- * amend it): door, open, password, page cap, layers, prepare, the role walk,
- * inspect, the refusal, the empty clip refusal, the role walk's refusal, the
- * glyph rule's refusal, trim.
+ * The order is fixed (spec 0006, *State transitions*, as specs 0019, 0020
+ * and 0022 amend it): door, open, password, page cap, layers, prepare, the
+ * role walk, inspect, the refusal, the empty clip refusal, the role walk's
+ * refusal, the glyph rule's refusal, the inline picture refusal, trim.
  * Detection follows, when the worker asks the handle for its matches, on the
  * trimmed page.
  */
@@ -189,6 +189,15 @@ export async function openDocumentWith(
     }
     if (glyphs !== "clean") {
       throw new EngineFailure("unreadable-structure");
+    }
+
+    // Spec 0022, AC-2: an inline picture MuPDF's write would lose or change,
+    // in any drawing the role walk names for a page, so the visitor hears
+    // before reviewing rather than after downloading a copy without it. The
+    // last of the open's refusals, so a file refused today keeps its kind and
+    // its advice. It names no page (INV-5), and no session exists for the file.
+    if (inspections.some(({ losesPicture }) => losesPicture)) {
+      throw new EngineFailure("inline-picture");
     }
 
     // AC-14: what lies outside each page's visible area goes from the review

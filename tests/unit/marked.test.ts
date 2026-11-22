@@ -344,6 +344,136 @@ describe("whether a drawing shows text (spec 0020)", () => {
   });
 });
 
+/**
+ * Spec 0022, AC-1: an inline picture MuPDF 1.28.1's write would lose or
+ * change, judged by the rule its loader and writer follow. Each case is one
+ * picture whose dictionary holds `dict` beside its size and depth.
+ */
+describe("an inline picture MuPDF's write would lose (spec 0022)", () => {
+  const PALETTE = "<FF0000 00FF00 0000FF FFFF00>";
+  const TINT = "<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [1 0 0 0] /N 1 >>";
+  const picture = (dict: string) => `BI /W 1 /H 1 /BPC 8 ${dict} ID x EI`;
+  const loses = (dict: string) => read(picture(dict)).losesPicture;
+  const spacesOf = (dict: string) => [...read(picture(dict)).inlineSpaces].sort();
+
+  it.each([
+    ["an indexed space over a short device base", `/CS [/I /RGB 3 ${PALETTE}]`],
+    [
+      "an indexed space over a full device base",
+      `/CS [/Indexed /DeviceRGB 3 ${PALETTE}]`,
+    ],
+    ["an indexed space over a named resource", "/CS [/I /Cs1 1 <FF000000FF00>]"],
+    ["an inline CalRGB space", "/CS [/CalRGB << /WhitePoint [0.9505 1 1.089] >>]"],
+    ["an inline Lab space", "/CS [/Lab << /WhitePoint [0.9505 1 1.089] >>]"],
+    ["an inline Separation space", `/CS [/Separation /Spot /DeviceCMYK ${TINT}]`],
+    ["an inline DeviceN space", `/CS [/DeviceN [/Cyan] /DeviceCMYK ${TINT}]`],
+    ["a resource name under /ColorSpace", "/ColorSpace /Cs1"],
+    ["a number under /ColorSpace", "/ColorSpace 3"],
+    ["a string under /ColorSpace", "/ColorSpace (DeviceRGB)"],
+    ["a dictionary under /ColorSpace", "/ColorSpace << >>"],
+    [
+      "/Pattern under /ColorSpace, which the scan does not look up",
+      "/ColorSpace /Pattern",
+    ],
+    [
+      "a device /CS beside an indexed /ColorSpace",
+      `/CS /RGB /ColorSpace [/I /RGB 3 ${PALETTE}]`,
+    ],
+    ["/CS and /ColorSpace naming different resources", "/CS /Cs1 /ColorSpace /Cs2"],
+    ["no colour space, not a mask", ""],
+    ["an inline JPX picture", "/CS /RGB /Filter /JPXDecode"],
+    ["a JPX filter in an /F array", "/CS /RGB /F [/AHx /JPXDecode]"],
+    ["a mask with a JPX filter", "/IM true /Filter /JPXDecode"],
+    ["the empty name MuPDF writes for a lost one", "/CS/"],
+    [
+      "/ImageMask false beside /IM true, with no colour space",
+      "/ImageMask false /IM true",
+    ],
+  ])("counts %s as lost", (_label, dict) => {
+    expect(loses(dict)).toBe(true);
+  });
+
+  it.each([
+    ["a mask", "/IM true"],
+    ["a mask under the long key", "/ImageMask true"],
+    ["/IM true beside an indexed array", `/IM true /CS [/I /RGB 3 ${PALETTE}]`],
+    ["a short device name", "/CS /G"],
+    ["a full device name", "/CS /DeviceCMYK"],
+    ["a resource name under /CS alone", "/CS /Cs1"],
+    ["/CS and /ColorSpace naming the same resource", "/CS /Cs1 /ColorSpace /Cs1"],
+    ["[/DeviceRGB] under /CS", "/CS [/DeviceRGB]"],
+    ["[/RGB] under /CS", "/CS [/RGB]"],
+    ["[/DeviceRGB 7] under /CS", "/CS [/DeviceRGB 7]"],
+    ["[/CalCMYK << >>] under /CS", "/CS [/CalCMYK << >>]"],
+    ["[/RGB] under /ColorSpace", "/ColorSpace [/RGB]"],
+    ["[/CalCMYK << >>] under /ColorSpace", "/ColorSpace [/CalCMYK << >>]"],
+    ["a device name under /ColorSpace", "/ColorSpace /DeviceRGB"],
+    [
+      "a device /ColorSpace beside an indexed /CS",
+      `/ColorSpace /DeviceRGB /CS [/I /RGB 3 ${PALETTE}]`,
+    ],
+    ["a device /ColorSpace beside a resource /CS", "/ColorSpace /G /CS /Cs1"],
+  ])("keeps %s", (_label, dict) => {
+    expect(loses(dict)).toBe(false);
+  });
+
+  it("holds the name /CS writes directly, whatever /ColorSpace says", () => {
+    expect(spacesOf("/CS /Cs1")).toEqual(["Cs1"]);
+    expect(spacesOf("/CS /Cs1 /ColorSpace /Cs2")).toEqual(["Cs1"]);
+  });
+
+  it("holds no device name, no empty name and nothing written inside an array", () => {
+    expect(spacesOf("/CS /RGB")).toEqual([]);
+    expect(spacesOf("/CS/")).toEqual([]);
+    expect(spacesOf("/CS [/I /Cs1 1 <FF000000FF00>]")).toEqual([]);
+    expect(spacesOf("/ColorSpace /Cs1")).toEqual([]);
+  });
+
+  it("joins every picture a drawing holds", () => {
+    const result = read(
+      `${picture("/CS /Cs1")} ${picture("/CS /G")} ${picture("/CS /Cs2")} ${picture("/CS [/I /RGB 0 <000000>]")}`,
+    );
+    expect(result.losesPicture).toBe(true);
+    expect([...result.inlineSpaces].sort()).toEqual(["Cs1", "Cs2"]);
+  });
+
+  it("reads the keyword true as a scalar outside a picture's dictionary", () => {
+    expect(read("/Span << /Open true >> BDC EMC true pop").describes).toBe(false);
+  });
+
+  /**
+   * A false `EI` in the first picture's data. The bytes after it read as a
+   * second, lost picture's dictionary, whose data holds no end, so the scan
+   * goes back to the first picture and settles on its real end, written inside
+   * the second dictionary's comment. The second picture was never there.
+   */
+  it("forgets a lost picture read from another picture's data once the scan settles on a later end", () => {
+    const result = read(
+      "BI /W 4 /H 1 /CS /G /BPC 8 ID a EI BI /CS [/I /RGB 0 <000000>] /W 1 % EI\n/BPC 8 ID z Q",
+    );
+    expect(result.losesPicture).toBe(false);
+    expect([...result.inlineSpaces]).toEqual([]);
+  });
+
+  it("ORs a lost picture and joins the names across glyph procedures read apart", () => {
+    const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
+      stream("", `1000 0 d0 ${picture("/CS /Cs1")}`),
+      stream("", `1000 0 d0 ${picture("/CS [/I /RGB 0 <000000>]")}`),
+    ];
+    withDoc(objects, (doc) => {
+      const kept = readDrawing([doc.newIndirect(4)], null, false);
+      const both = readDrawing([doc.newIndirect(4), doc.newIndirect(5)], null, false);
+      expect(kept).toMatchObject({ losesPicture: false });
+      expect(both).toMatchObject({ losesPicture: true });
+      if (both === "unsure") throw new Error("expected a reading");
+      expect([...both.inlineSpaces]).toEqual(["Cs1"]);
+    });
+  });
+});
+
 describe("what makes the scan unsure", () => {
   it.each([
     ["an unbalanced string", "BT (abc Tj ET"],

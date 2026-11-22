@@ -191,9 +191,28 @@ describe("failure copy (AC-16, AC-17)", () => {
       "edge-text",
       "no-readable-text",
       "unreadable-structure",
+      "inline-picture",
     ] as const) {
       expect(failureText(kind, FREE).body, kind).toMatch(/made no file|no file was made/);
     }
+  });
+
+  /**
+   * Spec 0022, AC-5: its words from its kind alone, the same at open and as a
+   * run's refusal, the new copy as its next step, suggested and never promised.
+   */
+  it("says a picture that can't come through cleanly stopped it", () => {
+    expect(failureText("inline-picture", FREE)).toEqual({
+      title: "A picture in this PDF can't come through cleanly",
+      body: "One of its pictures stores its colours in a way RedactNest's cleaning can't write back, so it stopped rather than hand back a copy with that picture missing or changed, and made no file.",
+      next: failureText("unsupported", FREE).next,
+    });
+    expect(failureText("inline-picture", PAID)).toEqual(
+      failureText("inline-picture", FREE),
+    );
+    expect(runRefusalText("inline-picture", FREE, 0)).toEqual(
+      failureText("inline-picture", FREE),
+    );
   });
 
   /** Spec 0019, AC-3: its words from its kind alone, the new copy as its next step. */
@@ -217,8 +236,8 @@ describe("failure copy (AC-16, AC-17)", () => {
     }
   });
 
-  it("suggests a new copy of the file, without promising it, for the two refusals no setting changes", () => {
-    for (const kind of ["unsupported", "edge-text"] as const) {
+  it("suggests a new copy of the file, without promising it, for the refusals no setting changes", () => {
+    for (const kind of ["unsupported", "edge-text", "inline-picture"] as const) {
       const { next } = failureText(kind, FREE);
       expect(next, kind).toContain("Printing it to a new PDF from your PDF app");
       expect(next, kind).toMatch(/\bmay\b/);

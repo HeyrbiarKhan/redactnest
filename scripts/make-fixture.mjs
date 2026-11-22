@@ -57,6 +57,7 @@ import {
   glyphText,
   glyphUndrawnForm,
 } from "./lib/glyph-fixtures.mjs";
+import { inlineIndexed } from "./lib/inline-fixtures.mjs";
 import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { termsDense, termsPdf } from "./lib/terms-fixtures.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
@@ -718,6 +719,13 @@ const FIXTURES = [
     "glyph-bitmap.pdf",
     glyphBitmap(),
     "the control: a bitmap font with no resources, inline masks holding EI and Tj",
+  ],
+  // Spec 0022: an inline picture MuPDF's write would lose, one per place the
+  // open's role walk reads, each refused at open with inline-picture (AC-6).
+  [
+    "inline-indexed.pdf",
+    inlineIndexed(),
+    "an inline picture with its palette written inline, in the page's contents",
   ],
 ];
 

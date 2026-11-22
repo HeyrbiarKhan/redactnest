@@ -1,7 +1,7 @@
 # 0022. Refuse an inline picture the write would lose
 
 **Date**: 2026-11-22
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 
@@ -222,10 +222,10 @@ The reasoning, the options, every per point runner up, MuPDF's source lines and 
 
 Skateboard, as the scope asks. The page contents case goes first as a thin whole (its fixture failing, the kind and its words, the scan rule, the open's refusal). Then the run's refusal and the check's backstop grow around it, then the other three places, the pin and the gate.
 
-1. [ ] Add `scripts/lib/inline-fixtures.mjs` with `inline-indexed.pdf` and wire it into `make-fixture.mjs`. Measure it on today's code with nothing ticked and record the result in `rationale.md`. Write its open test expecting `inline-picture` and watch it fail. Satisfies **AC-6**.
-2. [ ] Append `inline-picture` to `ENGINE_ERROR_KINDS`, add its words to `FAILURE_TEXT`, and update `protocol.test.ts`, `flow-text.test.ts` and any component test that walks the kinds. Satisfies **AC-5**.
-3. [ ] In `marked.ts`, add `{ is: "true" }` inside `inlineImage`, give `inlineImage` the rule, and add `losesPicture` and `inlineSpaces` to `Semantics`, `copy()` and `DrawingRead`. Write the scan cases in `marked.test.ts`, the lost ones failing first. Satisfies **AC-1**.
-4. [ ] Replace `describesAnything` with `readPageDrawings`, attach `PageInspection.losesPicture` in `inspectOne`, and add the refusal in `open.ts` after the glyph rule's. `inline-indexed.pdf`'s open test passes, and `marked-descriptions.pdf` warns as before. Satisfies **AC-2**.
+1. [x] Add `scripts/lib/inline-fixtures.mjs` with `inline-indexed.pdf` and wire it into `make-fixture.mjs`. Measure it on today's code with nothing ticked and record the result in `rationale.md`. Write its open test expecting `inline-picture` and watch it fail. Satisfies **AC-6**.
+2. [x] Append `inline-picture` to `ENGINE_ERROR_KINDS`, add its words to `FAILURE_TEXT`, and update `protocol.test.ts`, `flow-text.test.ts` and any component test that walks the kinds. Satisfies **AC-5**.
+3. [x] In `marked.ts`, add `{ is: "true" }` inside `inlineImage`, give `inlineImage` the rule, and add `losesPicture` and `inlineSpaces` to `Semantics`, `copy()` and `DrawingRead`. Write the scan cases in `marked.test.ts`, the lost ones failing first. Satisfies **AC-1**.
+4. [x] Replace `describesAnything` with `readPageDrawings`, attach `PageInspection.losesPicture` in `inspectOne`, and add the refusal in `open.ts` after the glyph rule's. `inline-indexed.pdf`'s open test passes, and `marked-descriptions.pdf` warns as before. Satisfies **AC-2**.
 5. [ ] Add `src/engine/inline.ts`, `Pipeline.judgeInlinePictures` with its default, and the step after `refuseBrokenGlyphs` with its checkpoint, with the run cases in `redaction-inline.test.ts`. Swap the seam in the named indexed base pin and any other run on a counted picture. Satisfies **AC-3**, **AC-7**.
 6. [ ] Add `"lost-picture"` to `StructureVerdict`, its arm in `resourceUse`, the read of resourceless units in `structureIsClean`, and its handling in `checkOutput`. Add the backstop cases (the nothing ticked run failing first, the ticked limit pinned), the `structureIsClean` cases (a page with no `/Resources` among them) and the `rewrite` case. Satisfies **AC-4**.
 7. [ ] Add `inline-indexed-form.pdf`, `inline-indexed-pattern.pdf` and `inline-indexed-glyph.pdf`. Measure each place on today's code and record it in `rationale.md`. Write their open tests, failing first, then passing. Satisfies **AC-2**, **AC-6**.

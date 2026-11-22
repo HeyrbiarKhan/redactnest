@@ -2004,6 +2004,12 @@ describe("the page readings (spec 0006)", () => {
       "RedactNest stopped to be safe",
       "Part of this file is built in a way RedactNest can't check safely, so it stopped rather than guess, and made no file.",
     ],
+    // Spec 0022, AC-5: from its kind alone.
+    [
+      "inline-picture",
+      "A picture in this PDF can't come through cleanly",
+      "One of its pictures stores its colours in a way RedactNest's cleaning can't write back, so it stopped rather than hand back a copy with that picture missing or changed, and made no file.",
+    ],
   ] as const)(
     "says plainly why no file was made for %s, above the full drop zone (AC-26)",
     async (kind, title, words) => {

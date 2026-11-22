@@ -159,12 +159,13 @@ describe("the findings of each page", () => {
     }
   });
 
-  it("carries closed findings, two flags and concealed glyphs, and only the findings reach the summary (INV-1)", async () => {
+  it("carries closed findings, three flags and concealed glyphs, and only the findings reach the summary (INV-1)", async () => {
     for (const inspection of await inspect("read-pages.pdf")) {
       expect(Object.keys(inspection).sort()).toEqual([
         "concealed",
         "emptyClip",
         "findings",
+        "losesPicture",
         "readable",
       ]);
     }
