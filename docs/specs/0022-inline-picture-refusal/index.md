@@ -259,9 +259,9 @@ Skateboard, as the scope asks. The page contents case goes first as a thin whole
    - Search the tests again for a run on a picture the corrected rule now counts, and swap its seam (AC-7).
    - Measure the rows AC-6 marks *Measured in the build*, and record them in `rationale.md`. A row that differs from its expectation stops the build for `/architect`.
    - Write the MuPDF pin row by row, as AC-6 lists it, and the ticked runs on the three spellings in `redaction-inline.test.ts`. Satisfies **AC-1**, **AC-4**, **AC-5**, **AC-6**, **AC-7**.
-9. [ ] Add the four fixtures to the gate (`MAIN_FIXTURES` and `OPEN_NOW`, no main rows needed). On the corrected rule, run the gate, `cost.test.ts` on its own (if a budget fails, share the walk as AC-3 says), `pnpm lint`, `pnpm typecheck`, and the page tests. Satisfies **AC-7**.
+9. [x] Add the four fixtures to the gate (`MAIN_FIXTURES` and `OPEN_NOW`, no main rows needed). On the corrected rule, run the gate, `cost.test.ts` on its own (if a budget fails, share the walk as AC-3 says), `pnpm lint`, `pnpm typecheck`, and the page tests. Satisfies **AC-7**.
 10. [x] Write spec 0021's owed test in `redaction-kept.test.ts`. Satisfies **AC-8**.
-11. [ ] Amend specs 0001, 0004, 0006, 0007, 0019 and 0021 per *Amends*. Tick feature 30's design step for this item. `/sync` writes the `AGENTS.md` lines (Follow-up). Satisfies **AC-1** to **AC-8**.
+11. [x] Amend specs 0001, 0004, 0006, 0007, 0019 and 0021 per *Amends*. Tick feature 30's design step for this item. `/sync` writes the `AGENTS.md` lines (Follow-up). Satisfies **AC-1** to **AC-8**.
 
 ## Consequences
 
