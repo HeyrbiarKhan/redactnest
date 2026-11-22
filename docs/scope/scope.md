@@ -463,7 +463,7 @@ spec [0020](../specs/0020-type3-glyphs-stay-in-font/index.md) (2026-11-17: the g
   - [x] The review minors' close: the security page's source comment, and specs 0004 and 0019 amended (spec 0021, tasks 11 and 12) · AC-9
   - [x] The lost inline picture as a thin whole: `inline-indexed.pdf` failing first, the `inline-picture` kind and its words, the scan's rule, and the open's refusal (spec 0022, tasks 1 to 4) · AC-1, AC-2, AC-5, AC-6
   - [x] The run's refusal and the check's backstop: `inline.ts` and its seam with the named indexed base pin swapped, and `"lost-picture"` with its ticked page limit pinned (spec 0022, tasks 5 and 6) · AC-3, AC-4, AC-7
-  - [ ] The other places, the pin and the gate: the form, tiling pattern and Type 3 fixtures with each place measured, the MuPDF pin, the gate rows and both budgets (spec 0022, tasks 7 to 9) · AC-1, AC-6, AC-7
+  - [ ] The other places, the pin and the gate: the form, tiling pattern and Type 3 fixtures with each place measured, the scan's key order corrected (short key first) with the words' "or changed" dropped, the MuPDF pin row by row with the ticked runs, the gate rows and both budgets (spec 0022, tasks 7 to 9) · AC-1, AC-4 to AC-7
   - [ ] The close: spec 0021's owed test, and specs 0001, 0004, 0006, 0007, 0019 and 0021 amended (spec 0022, tasks 10 and 11) · AC-8
 - [ ] Verify it: `/check verify engine and code follow ups` (the glyph rule verified 2026-11-17, spec 0020's `verify.md`; the other items and spec 0021 verified 2026-11-22, from spec 0021's, 0006's and 0007's `verify.md`; still owed for the lost inline picture and the `/ActualText` measure)
 

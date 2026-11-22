@@ -75,7 +75,7 @@ Judging by the loader's and the writer's exact rule, not by "anything that is no
 | Response | refuse at open | warn and make the file | INV-2 stays whole. The count measures how often, for a later decision. |
 | Kind | a new `inline-picture` | reuse `unreadable-structure` | A real reason for the visitor, and a count of its own. `unreadable-structure` already has three causes a count cannot tell apart. |
 | Name | `inline-picture` | `lost-picture` | Names the thing, as `edge-text` and `slanted-text` do. "Lost" reads as if something already went missing. |
-| Words | own title, naming the picture | the shared "stopped to be safe" title | Says what happened in the visitor's terms. The body says "missing or changed", because a picture holding both keys is written wrongly rather than dropped. |
+| Words | own title, naming the picture | the shared "stopped to be safe" title | Says what happened in the visitor's terms. The body first said "missing or changed", for a picture whose two keys disagreed; task 8 showed none is written changed, so it says "missing" (your call, 2026-11-22). |
 | Next step | `NEW_COPY`, unchanged | new advice naming the picture | It already suggests and never promises, and nothing has measured whether printing helps (your call). |
 | Trigger | the loader's and writer's exact rule | every inline space that is not a device name | Refuses nothing the write carries but a few rare unresolved cases. `[/DeviceRGB]`, `[/RGB]` and `/ColorSpace /DeviceRGB` keep working. |
 | Where | open, run and check | open and run only | The run cannot disagree with the open, and the check catches a scan miss on a page with nothing ticked. |
@@ -104,7 +104,7 @@ else
 
 The caller passes `csname[0] ? csname : NULL` on to `op_BI`.
 
-**`pdf_load_image_imp`** (`pdf-image.c`) loads the picture from the long keys first:
+**`pdf_load_image_imp`** (`pdf-image.c`) loads the picture through `pdf_dict_geta`. The call names the long key first, but that is not the order it looks them up in (`pdf_dict_geta`, below):
 
 ```c
 imagemask = pdf_to_bool(ctx, pdf_dict_geta(ctx, dict, PDF_NAME(ImageMask), PDF_NAME(IM)));
@@ -117,7 +117,9 @@ if (obj && !imagemask && !forcemask)
     colorspace = pdf_load_colorspace(ctx, obj);
 ```
 
-So the space that is loaded and the name that is printed can come from different keys. A picture that is not a mask and has neither key gets no colour space at all.
+**`pdf_dict_geta`** (`pdf-object.c`) looks the short name up first, under the comment "ISO 32000-2:2020 (PDF 2.0) - abbreviated names take precedence", and the long one only when the short one is absent (read from the 1.28.1 tag, 2026-11-22). So `/IM` decides the mask and `/CS` the loaded space whenever each is present, and task 8 measured the same, both pairs in both orders (*Task 8's measurements* below). The first draft of this section read the call's argument order as the lookup order, and AC-1 was first written from that.
+
+So the space that is loaded comes from `/CS` when it is present, and so does the printed name (below); when `/CS` is a name, the two always agree. A picture that is not a mask and has neither key gets no colour space at all.
 
 **`pdf_filter_BI`** (`pdf-op-filter.c`) copies the named resource and hands on the same name: `copy_resource(ctx, p, PDF_NAME(ColorSpace), colorspace)`, then `op_BI(..., image, colorspace)`. With a NULL name, nothing is copied, which is why `/ColorSpace /Cs1` also loses its resource entry.
 
@@ -142,10 +144,10 @@ Taken together:
 
 - An inline JPX picture is never loaded, so never written.
 - A mask, or a loaded device space, is written correctly whatever the keys said.
-- A loaded space that is not a device space is written under the name from `/CS`, which `parse_inline_image` takes whenever `/CS` is a direct name, whatever `/ColorSpace` says. That is right when `/CS` names the loaded space: `/ColorSpace` absent, or holding the same name. It is the empty name when `/CS` is no name (lost). It is the wrong name when `/ColorSpace` holds a different space (changed).
+- A loaded space that is not a device space is written under the name from `/CS`, which `parse_inline_image` takes whenever `/CS` is a direct name. Since the space was loaded from `/CS` first, that name always names it (kept). It is the empty name when `/CS` holds no name, or is absent and the space came from `/ColorSpace` (lost). No picture is written under another space's name.
 - No loaded space throws.
 
-AC-1's rule is that table, with "device space" read from the dictionary rather than from the loaded space. The differences are the rare cases AC-1 lists. A `/ColorSpace` name whose resource holds a device space, and `/ColorSpace /Pattern`, are written correctly, but the scan, which does not look resources up, counts them as lost. A picture under a clip with no area is dropped by the filter (`pdf_filter_BI` returns at an empty clip), in the source's drawing as in the output, but the scan does not follow the clip, so it counts.
+AC-1's rule is that table, with "device space" read from the dictionary rather than from the loaded space. The differences are the rare cases AC-1 lists. A `/ColorSpace` name whose resource holds a device space, and `/ColorSpace /Pattern`, each with no `/CS`, are written correctly, but the scan, which does not look resources up, counts them as lost. A picture under a clip with no area is dropped by the filter (`pdf_filter_BI` returns at an empty clip), in the source's drawing as in the output, but the scan does not follow the clip, so it counts.
 
 Upstream fixed only the indexed case on master in a9e17fa86c (bug 709906, 2026-10-28), by writing `/CS[/I ...]` inline. Read from master's code, not measured: the other arrays throw there instead. No release carries it; 1.28.6 still has the bug.
 
@@ -219,13 +221,13 @@ The two keys, each in both orders:
 | `/ImageMask false` beside `/IM true`, no colour space | drawn as a mask | `/IM true` | drawn, same |
 | `/ImageMask true` beside `/IM false`, no colour space | not drawn, and neither is the rest of the stream | no `BI`, the rest dropped | blank |
 
-So MuPDF 1.28.1 reads the short key first: `/CS` before `/ColorSpace` and `/IM` before `/ImageMask`, whichever comes first in the dictionary. That is the opposite of the order AC-1 and *MuPDF 1.28.1's source* above give (`pdf_dict_geta` takes the short name first, as PDF 2.0 asks for inline pictures). By what was measured, the space MuPDF loads is `/CS` when present, else `/ColorSpace`, and the writer's name always names it when `/CS` is a name that is not empty. Against AC-1 as written, the measured writes differ in four places: `/CS /Cs1` beside `/ColorSpace /Cs2`, `/CS /RGB` beside an indexed `/ColorSpace`, and `/ImageMask false` beside `/IM true` all come through, though AC-1 counts them lost; and a device `/ColorSpace` beside a `/CS` that is not a device space is lost, though AC-1 says such a picture never counts. Taken to `/architect` before the pin is written (the build stopped at task 8).
+So MuPDF 1.28.1 reads the short key first: `/CS` before `/ColorSpace` and `/IM` before `/ImageMask`, whichever comes first in the dictionary. That is the opposite of the order AC-1 and *MuPDF 1.28.1's source* first gave (`pdf_dict_geta` takes the short name first, as PDF 2.0 asks for inline pictures). By what was measured, the space MuPDF loads is `/CS` when present, else `/ColorSpace`, and the writer's name always names it when `/CS` is a name that is not empty. Against AC-1 as written, the measured writes differ in four places: `/CS /Cs1` beside `/ColorSpace /Cs2`, `/CS /RGB` beside an indexed `/ColorSpace`, and `/ImageMask false` beside `/IM true` all come through, though AC-1 counts them lost; and a device `/ColorSpace` beside a `/CS` that is not a device space is lost, though AC-1 says such a picture never counts. Taken to `/architect` before the pin is written (the build stopped at task 8), which corrected the spec the same day (*What task 8's measurements changed*, below).
 
 ### What the cross check changed
 
 A read only pass on another model (Sonnet 5.5, 2026-11-22) read the draft, the engine code it touches and the saved MuPDF source. It found the design sound. These changes followed, applied as recommended (your call):
 
-- **Both keys.** The draft said the writer prints nothing when `/ColorSpace` is present. `parse_inline_image` prints the `/CS` name whatever `/ColorSpace` says, so `/CS /Cs1` beside `/ColorSpace /Cs1` is written correctly and the draft refused it. AC-1 now keeps that case, and loses a picture whose two keys name different spaces. The check cannot see the changed case, which AC-4 now says.
+- **Both keys.** The draft said the writer prints nothing when `/ColorSpace` is present. `parse_inline_image` prints the `/CS` name whatever `/ColorSpace` says, so `/CS /Cs1` beside `/ColorSpace /Cs1` is written correctly and the draft refused it. AC-1 now keeps that case, and loses a picture whose two keys name different spaces. The check cannot see the changed case, which AC-4 now says. (Task 8 later showed the short key wins, so such a picture is kept and no changed case exists; see below.)
 - **Device spaces.** Reading `pdf-colorspace.c` while checking that finding showed that an array whose first item is a device name or `/CalCMYK` loads as a device space at any length. The draft allowed only a one item array. The pin now holds `[/RGB]` and `[/CalCMYK << >>]` too.
 - **Drawings with no resources.** `resourceUse` reads only drawings that have a resource dictionary, so the draft's backstop missed a page with none. `structureIsClean` now reads those units too (AC-4).
 - **The open's pass.** `describesAnything` stops at its first hit, so it cannot also answer `losesPicture`; `readPageDrawings` replaces it with one full pass (AC-2).
@@ -233,7 +235,28 @@ A read only pass on another model (Sonnet 5.5, 2026-11-22) read the draft, the e
 - **Malformed values and inline JPX.** A present value that is not a device space counts as lost, said outright, and an inline JPX picture counts, since MuPDF throws on it (AC-1).
 - **Smaller points**: the Type 3 fixture's recipe written out, with an open on today's code first; the gate needs only `MAIN_FIXTURES` and `OPEN_NOW` for a refused fixture; a checkpoint after the run's step; `judgeInlinePictures` takes a walk, so a shared walk is a drop in; the lexer change named; and the over refusals and the check's words listed under *Consequences*.
 
-The pass also confirmed, against the code and the source: the mask and colour space key order; that an inline dictionary cannot hold an indirect reference (`1 0 R` makes the scan unsure); that `copy()` restores the new fields after a false `EI`; that `roles.pages` reaches forms, tiling patterns and glyph procedures; that the run can walk from the pages where the step sits; that the open's order holds; that `resourceUse` has each owner's `/ColorSpace`; that `"lost-picture"` before `unused-colour-space` never reaches `"rewrite"`; that every page is still compared; that the committed fixtures hold no counted picture; and that telemetry builds its kinds from `ENGINE_ERROR_KINDS`.
+The pass also confirmed, against the code and the source: the mask and colour space key order (wrong: like the draft, it read `pdf_dict_geta`'s argument order as its lookup order, and task 8's measurements corrected it); that an inline dictionary cannot hold an indirect reference (`1 0 R` makes the scan unsure); that `copy()` restores the new fields after a false `EI`; that `roles.pages` reaches forms, tiling patterns and glyph procedures; that the run can walk from the pages where the step sits; that the open's order holds; that `resourceUse` has each owner's `/ColorSpace`; that `"lost-picture"` before `unused-colour-space` never reaches `"rewrite"`; that every page is still compared; that the committed fixtures hold no counted picture; and that telemetry builds its kinds from `ENGINE_ERROR_KINDS`.
+
+### What task 8's measurements changed (2026-11-22)
+
+`/architect` corrected the spec from *Task 8's measurements*, with `pdf_dict_geta`'s source read to confirm them.
+
+- **The key order.** The short key wins: `/CS` before `/ColorSpace`, `/IM` before `/ImageMask`, whichever comes first in the bytes. AC-1's rule, its definitions and examples, the value sourcing and the pin follow.
+- **Now refused, missed before.** A device `/ColorSpace` beside a `/CS` that is neither a device space nor a name, for example an indexed array. MuPDF loads the `/CS` and writes `/CS/`, so the picture is blank in the output. The first rule called it kept, and on a page with a target nothing in the output shows the loss (AC-4), so nothing would have caught it there.
+- **No longer refused.** `/CS /Cs1` beside `/ColorSpace /Cs2`, `/CS /RGB` beside an indexed `/ColorSpace`, and `/ImageMask false` beside `/IM true`. Each was measured written as its `/CS` or `/IM` and drawn the same. On a page with a target, the second filter pass reads the first pass's one key spelling (`/CS/Cs1`, `/CS/RGB`, `/IM true`), which the rule already keeps, so two passes carry them as one does. That is reasoned from the one pass measurements, not measured with a tick; AC-6 now has task 8 measure it with a tick.
+- **No changed picture.** No measured picture is written under a name other than the one loaded, so AC-4's bullet on it and the matching consequence go, and the refusal's body drops "or changed" (your call).
+- **The pin.** Task 8 found four outcomes for a lost picture (`/CS/`, no `BI` with the rest kept, no `BI` with the rest dropped, a throw), not one, so the pin holds each row's measured outcome instead of "`/CS/` for every lost case". Its two key rows, each in both orders, become the key order's tripwire.
+- **`/F /JPXDecode`.** AC-1 counted it under INV-4 for want of a measurement. The write throws on it (measured), so it now counts on evidence.
+- **Unchanged.** The rule's other parts, the open's and the run's refusals, the check's backstop, the four fixtures, the gate, and every committed fixture's outcome: all four fixtures and every committed inline picture use one key.
+
+A second read only cross check on another model (Sonnet 5.5, 2026-11-22) checked every measured row against the corrected rule and found each on the right side. Its gaps were applied as recommended (your call):
+
+- **What the check sees.** INV-3, AC-4 and a consequence said the check fails a lost picture whenever nothing is ticked. Only a picture the output still shows as `/CS/` or a missing entry leaves a trace; the rows written as no `BI` leave nothing, and MuPDF draws none of them in the source either. The text now says so.
+- **A `/CS` name with no resource entry.** The scan keeps it and the write drops it, against INV-4's lean, and the first draft already did. It stays kept, named as the one under refusal: the file never defines its colours and MuPDF draws nothing for it in the source, while refusing it would mean looking resources up, which the scan never does. The pin measures it.
+- **`null` and a repeated key.** `null` counts as present. Whether MuPDF reads it as absent or not, that can only refuse more, so it is not measured. A repeated key takes the last, as the scan already does; if MuPDF kept the first, one order would be a miss, so the pin measures both.
+- **`/CS/` beside a device `/ColorSpace`.** The case where the short key matters most, unmeasured; now a scan case and a pin row.
+- **Two passes.** The three spellings this correction keeps are now run with a tick in task 8, so the reasoning above becomes a measurement.
+- **Smaller.** Scan cases for `/IM 0`, `[]`, `[/Pattern]` and a device array under `/CS` beside an indexed `/ColorSpace`, and this file's `pdf_dict_geta` wording. `inlineSpaces` needed no change: it is read only on the output, where a mask prints no `/CS` and a JPX picture is never written.
 
 ### Real files
 
