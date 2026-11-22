@@ -52,7 +52,11 @@ import { findTargets } from "./targets";
  *    `tests/unit/redaction-kept.test.ts` is what holds `/Lang`. So was
  *    `kept-cid-strings.pdf`, the same day: main opened it and made a file
  *    with nothing ticked, reporting nothing, and spec 0021 refuses it at open
- *    (`OPEN_NOW`).
+ *    (`OPEN_NOW`). Spec 0022's four `inline-indexed*.pdf` fixtures, added on
+ *    2026-11-22, need no main row at all: main opened each and made a file
+ *    with its picture gone (spec 0022's `rationale.md`), and spec 0022
+ *    refuses each at open (`OPEN_NOW`), so no main run or `sanitized` row is
+ *    read for them, and none has a ticked set.
  *  - Against the same run with the pipeline's prune and structure check both
  *    swapped out, which writes main's output byte for byte (`MAIN`): the same
  *    outcome, the same `removedByType`, and every page rendered pixel for pixel
@@ -70,7 +74,11 @@ import { findTargets } from "./targets";
  * not finite (feature 30) refuses `trim-unplaced.pdf` at open the same way,
  * with `unsupported`, where main failed every run on it. `MAIN` swaps the run's glyph rule out too,
  * so its runs write main's output, and the two controls are ticked as
- * `tests/unit/redaction-glyphs.test.ts` ticks them (its AC-10).
+ * `tests/unit/redaction-glyphs.test.ts` ticks them (its AC-10). Spec 0021
+ * refuses `kept-cid-strings.pdf` and spec 0022 its four fixtures at open the
+ * same way (`inline-picture` for the latter). `MAIN` keeps spec 0022's inline
+ * picture rule: no gated fixture that runs holds a picture it counts, so it
+ * answers `"kept"` on every one (its AC-6).
  *
  * Two fixtures change on purpose (AC-7). `shared-forms.pdf`, which main
  * refused with `unsupported` when its forms lost their text in the write, now
