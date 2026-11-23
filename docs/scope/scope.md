@@ -483,7 +483,7 @@ spec [0024](../specs/0024-search-pages/index.md) (2026-11-23: three search pages
   - [x] The other two pages: `/remove-text-from-pdf` with the custom terms line and `/black-box-redaction` with the `CoverFigure`, each joined to every test, and the `CoverFigure` fixed at 320 pixels with 200% text (`grid-cols-1`, `wrap-anywhere` on each panel; spec 0024, *CoverFigure at narrow widths*, task 11, decided 2026-11-23) · AC-1 to AC-9, AC-12 to AC-14, AC-16
   - [ ] Your read and the measure: every word read before merge, Lighthouse's mobile figures in spec 0024's `verify.md`, and PageSpeed Insights after the deploy · AC-5, AC-6, AC-15
 - [x] Verify it: `/check verify marketing site` (2026-11-23, on 9b686da: every before merge step passed; PageSpeed Insights and Search Console stay open until after the deploy)
-- [ ] Test it: `/test marketing site`
+- [x] Test it: `/test marketing site` (2026-11-23: the gaps against spec 0024 filled in `tests/component/app/search-pages.test.tsx`; the eleven Vitest files the feature touches, 511 tests, pass)
 
 ### 29. Home page reflow · in-progress · from spec 0013
 At 320 pixels wide with text at 200%, the home page's main content scrolls sideways, with the header's menu shut or open. It is older than feature 28, whose menu is not the cause. Spec 0013's AC-26 checks 320 pixels and 200% text apart, so no criterion asks for both at once, but a visitor who needs both meets it. Built beside feature 15, since the search pages reuse the same shell and `FeatureList` (your call, 2026-11-11).

@@ -11,6 +11,9 @@
  * axe with styles, 320 pixels, 200% text and forced colours.
  */
 
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -19,6 +22,7 @@ import * as redactPdf from "@/app/redact-pdf/page";
 import * as removeText from "@/app/remove-text-from-pdf/page";
 import { SearchPage, searchPageMetadata } from "@/app/search-page";
 import { config } from "@/config";
+import { lookedFor } from "@/lib/detectors";
 import { IDLE_STEPS } from "@/lib/flow-text";
 import { capLine } from "@/lib/home-text";
 import { LEGAL } from "@/lib/legal";
@@ -412,7 +416,82 @@ describe.each(SEARCH_PAGES)("%s", (kind) => {
   });
 });
 
+/**
+ * covers: AC-6. `/black-box-redaction` says each G1 risk once, as a risk: the
+ * trio's titles carry them, and the checks and the lead name neither again.
+ */
+describe("black-box's risks", () => {
+  const COPY_RISK = /\bcopy\s+and\s+paste\s+can\b/;
+  const SEARCH_RISK = /\bsearch\s+can\b/;
+  // The other pages' way of saying both risks at once.
+  const BOTH_RISKS = /\bcan\s+still\s+be\s+copied\s+or\s+found\b/;
+
+  it("says copy and paste can reveal it once, and search can find it once", () => {
+    render(<blackBox.default />);
+
+    const words = contentText();
+    expect(countIn(words, COPY_RISK)).toBe(1);
+    expect(countIn(words, SEARCH_RISK)).toBe(1);
+    expect(countIn(words, BOTH_RISKS)).toBe(0);
+  });
+
+  it("keeps both risks out of the lead", () => {
+    const { lead } = SEARCH_PAGE_TEXT["black-box"];
+
+    for (const risk of [COPY_RISK, SEARCH_RISK, BOTH_RISKS]) {
+      expect(countIn(lead, risk)).toBe(0);
+    }
+  });
+});
+
+describe("otherSearchPages", () => {
+  /** covers: AC-3. The close links every other page, in footer order, never itself. */
+  it.each(SEARCH_PAGES)("%s: lists every other page in SEARCH_PAGES order", (kind) => {
+    expect(otherSearchPages(kind)).toEqual(
+      SEARCH_PAGES.filter((other) => other !== kind),
+    );
+  });
+
+  it("returns a frozen list", () => {
+    expect(Object.isFrozen(otherSearchPages("redact-pdf"))).toBe(true);
+  });
+});
+
 describe("the records", () => {
+  /**
+   * covers: AC-3, row M4 (verify step 21). A lead that says what RedactNest
+   * looks for names exactly the detectors that exist, as the tool's coverage
+   * note does, so a detector added or dropped changes the page with it.
+   */
+  it("name the detectors through lookedFor wherever a lead says what RedactNest looks for", () => {
+    const naming = SEARCH_PAGES.filter((kind) =>
+      SEARCH_PAGE_TEXT[kind].lead.includes("looks for"),
+    );
+
+    expect(naming).toEqual(["redact-pdf", "remove-text"]);
+    for (const kind of naming) {
+      expect(SEARCH_PAGE_TEXT[kind].lead).toContain(
+        `looks for ${lookedFor("conjunction")} in your PDF`,
+      );
+    }
+  });
+
+  /** covers: AC-1. Each record's path is the route folder that serves it. */
+  it.each(SEARCH_PAGES)("%s: its path has a page under src/app", (kind) => {
+    const { path } = SEARCH_PAGE_TEXT[kind];
+
+    expect(path).toMatch(/^\/[a-z-]+$/);
+    expect(existsSync(join(process.cwd(), "src/app", path, "page.tsx"))).toBe(true);
+  });
+
+  /** covers: AC-3, AC-9. No two pages share a path, title, nav label, eyebrow or headline. */
+  it("give each page its own path, title, nav label, eyebrow and headline", () => {
+    for (const field of ["path", "title", "navLabel", "eyebrow", "headline"] as const) {
+      const values = SEARCH_PAGES.map((kind) => SEARCH_PAGE_TEXT[kind][field]);
+      expect(new Set(values).size).toBe(SEARCH_PAGES.length);
+    }
+  });
+
   /** covers: AC-16. The card's alt text is the eyebrow and the headline. */
   it.each(SEARCH_PAGES)(
     "%s: socialAlt reads RedactNest, the eyebrow, the headline",
