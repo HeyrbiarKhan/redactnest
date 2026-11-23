@@ -149,6 +149,8 @@ describe("BrandLockup", () => {
       "tracking-[-0.02em]",
       "text-ink",
       "text-heading",
+      // A size down in a row under 10rem. Spec 0024, *The lockup at narrow widths*.
+      "@max-[10rem]:text-body",
     );
   });
 

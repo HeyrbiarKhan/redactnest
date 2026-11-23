@@ -55,10 +55,10 @@ export type LockupSize = "md" | "lg";
 /**
  * The header and footer use `md`. `lg` is a larger stage for a page that
  * wants one; since the sign in panel dropped its lockup (spec 0013, AC-23),
- * no page does.
+ * no page does. `md` steps down a size in a narrow row (see `BrandLockup`).
  */
 const LOCKUP_SIZE: Readonly<Record<LockupSize, string>> = Object.freeze({
-  md: "text-heading",
+  md: "text-heading @max-[10rem]:text-body",
   lg: "text-title",
 });
 
@@ -69,6 +69,14 @@ const LOCKUP_SIZE: Readonly<Record<LockupSize, string>> = Object.freeze({
  * so it scales with the visitor's font size and is read as the word it is.
  * The mark is sized in `em` from the same text, about 1.25 times its cap
  * height, so the two stay in proportion at every size and zoom.
+ *
+ * At `md` it steps down from `text-heading` to `text-body` in a row narrower
+ * than 10rem. The full lockup is about 9rem wide (9.1 on Linux), so a
+ * narrower row cannot hold it with room: at 320 pixels with 200% text it
+ * reached the window's edge. The query reads the nearest `@container`, which
+ * `SiteHeader` and `SiteFooter` set on their rows, and it is in rem like the
+ * lockup, so it holds at every text size and never reads the viewport (spec
+ * 0003, INV-6). Spec 0024, AC-14, *The lockup at narrow widths*.
  */
 export function BrandLockup({ size = "md" }: { readonly size?: LockupSize }) {
   return (

@@ -10,6 +10,12 @@ import { PageContainer } from "./page-container";
  * From `md` the brand column and the groups share one row; below it they
  * stack in page order.
  *
+ * The grid is the lockup's container (`@container`), which steps it down a
+ * size when the row is narrower than 10rem. Below `md` the brand column is
+ * as wide as the row, so the step reaches it; from `md` the column is
+ * narrower than the row, which the step does not cover. Spec 0024, AC-14,
+ * *The lockup at narrow widths*.
+ *
  * It reads nothing itself. The layout passes in the brand, the groups (spec
  * 0011, AC-4) and the notice with its source link (spec 0009, INV-8), because
  * `src/ui` may not import the config those come from (spec 0003, AC-19).
@@ -28,7 +34,7 @@ export function SiteFooter({
     <footer className="border-t border-border bg-canvas">
       <PageContainer
         width="wide"
-        className="grid gap-8 py-10 text-small text-ink-muted md:grid-cols-[minmax(0,1fr)_auto]"
+        className="@container grid gap-8 py-10 text-small text-ink-muted md:grid-cols-[minmax(0,1fr)_auto]"
       >
         <div className="flex flex-col gap-3">{brand}</div>
         <div className="flex flex-wrap gap-x-16 gap-y-6">{groups}</div>
