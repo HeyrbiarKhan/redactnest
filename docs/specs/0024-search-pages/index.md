@@ -82,7 +82,7 @@ Also in this module: `MORE_GUIDES_TITLE = "More guides"`, `LOOK_OVER_LINK_TEXT =
 
 The site line (`HOME_TEXT.siteLine`, AC-11): "Redact PDFs in your browser, with nothing uploaded. The selectable text you tick is taken out of the page, then marked, and every new file is checked before you download it." (M1, M2, M3.)
 
-The lead of each page carries none of upload, "in your browser" or removed then marked; it says what the page is about in the page's own terms (on `/redact-pdf`, M4 with `lookedFor`).
+The lead of each page carries none of upload, "in your browser" or removed then marked; it says what the page is about in the page's own terms. On `/redact-pdf` and `/remove-text-from-pdf` it carries M4: what RedactNest looks for, with `lookedFor()`, and that you choose from its list, so `/remove-text-from-pdf` never reads as removing any text you pick.
 
 **Claim register** (the only things a search page says RedactNest does; anything else needs a change to this table first):
 
