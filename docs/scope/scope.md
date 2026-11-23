@@ -25,7 +25,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 12 | Remaining detectors | Release 3 | done |
 | 13 | Custom terms | Release 4 | done |
 | 14 | Manual rectangle redaction | Release 6 | planned |
-| 15 | Marketing site | Release 5 | planned |
+| 15 | Marketing site | Release 5 | in-progress |
 | 16 | Security & how it works page | Release 5 | done |
 | 17 | Data processing agreement | Release 5 | planned |
 | 18 | AGPL compliance & source publication | Release 1 | done |
@@ -469,19 +469,28 @@ spec [0020](../specs/0020-type3-glyphs-stay-in-font/index.md) (2026-11-17: the g
   - [x] The edges, the words and the close: the blocked row, the gate's rows and `NEEDLES`, the budgets alone, `replacement-text`'s body, and specs 0001, 0004, 0007, 0019 and 0021 amended (spec 0023, tasks 4 to 6) · AC-4 to AC-7
 - [x] Verify it: `/check verify engine and code follow ups` (the glyph rule verified 2026-11-17, spec 0020's `verify.md`; the other items and spec 0021 verified 2026-11-22, from spec 0021's, 0006's and 0007's `verify.md`; the lost inline picture and spec 0023's ticked text in a description verified 2026-11-23, from spec 0022's and 0023's `verify.md`)
 
-### 15. Marketing site · needs a decision
+### 15. Marketing site · in-progress
 A small set of pages on what this audience actually searches for, since search is the acquisition channel for a self serve tool at this price. The landing page itself, the brand and the site wide social preview image are built in feature 22.
 **Done when:** the search pages are server rendered with metadata, a sitemap and their own social cards, they lead into the tool, and Core Web Vitals pass on mobile.
 **Also owed here:** the search pages reuse the shell, `FeatureList` and the social card's composition (spec 0013). Per page social cards, and whether a manifest is worth a policy change, are this feature's calls.
 **Also owed here:** the search pages may name custom terms, which Pro has done since spec 0017, under spec 0012's INV-8 (only what Pro does today, every cap from `config`).
 **Also owed here:** spec 0004's Follow-up (features 15 and 16; feature 16 is done): a run draws a black box once the text is gone, so the search pages never say text is "never covered with a black box"; say it is removed, then marked.
-- [ ] Design it (spec): `/architect marketing site`
+spec [0024](../specs/0024-search-pages/index.md) (2026-11-23: three search pages, `/redact-pdf`, `/remove-text-from-pdf` and `/black-box-redaction`, on one template over typed records, claiming only a closed register of outcomes and linking `/security` for engine detail; a sitemap, robots, per page cards from `make-brand.mjs`, a footer Guides group, `WebSite` JSON-LD on `/`, the site line reworded; no manifest; feature 29 as slice 1)
+- [x] Design it (spec): `/architect marketing site`
+- [ ] Build it: `/develop marketing site`
+  - [ ] The home page reflow (feature 29): `/` recorded at 1280 pixels, the wide element found with `/debug` and fixed (a primitive change goes back to `/architect`), the combined 320 pixel and 200% text test over `REFLOW_PAGES`, and spec 0013's AC-26 amended · AC-14
+  - [ ] One search page whole: `/redact-pdf`'s record, template, metadata and words under the claim register, the shared banned phrases, the sitemap and robots, the site line and the `WebSite` block, the footer Guides group, its page kind, its card with root `AGENTS.md`'s brand file line, and every browser suite · AC-1 to AC-13, AC-16
+  - [ ] The other two pages: `/remove-text-from-pdf` with the custom terms line and `/black-box-redaction` with the `CoverFigure`, each joined to every test · AC-1 to AC-9, AC-12 to AC-14, AC-16
+  - [ ] Your read and the measure: every word read before merge, Lighthouse's mobile figures in spec 0024's `verify.md`, and PageSpeed Insights after the deploy · AC-5, AC-6, AC-15
+- [ ] Verify it: `/check verify marketing site`
+- [ ] Test it: `/test marketing site`
 
 ### 29. Home page reflow · from spec 0013
 At 320 pixels wide with text at 200%, the home page's main content scrolls sideways, with the header's menu shut or open. It is older than feature 28, whose menu is not the cause. Spec 0013's AC-26 checks 320 pixels and 200% text apart, so no criterion asks for both at once, but a visitor who needs both meets it. Built beside feature 15, since the search pages reuse the same shell and `FeatureList` (your call, 2026-11-11).
 **Done when:** at 320 pixels with 200% text, `/` has no sideways scroll with the menu shut or open; the element that was wider than the window wraps or shrinks rather than being clipped; wider screens look as today; and a browser test holds 320 pixels and 200% text together on `/`, which feature 15's search pages can join.
 **Also owed here:** find the wide element first, with `/debug` if it is not obvious. Spec 0013's AC-26 amended to name the combined case, and `scripts/make-brand.mjs` rerun only if a brand picture changes (each is drawn at desktop width, so none should).
-- [ ] Build it: `/develop home page reflow`
+spec [0024](../specs/0024-search-pages/index.md) (its AC-14 and build tasks 1 and 2: this row is that spec's first slice, and closes with feature 15)
+- [ ] Build it: within `/develop marketing site`, slice 1 (spec 0024, AC-14)
 
 ### 32. Details inside pictures · needs a decision · from spec 0019
 A picture under no removed item leaves with the bytes the source stored (spec 0006, AC-29), so a photo's own details written inside its data (EXIF camera details, sometimes a location, XMP, IPTC) stay in the cleaned copy. Split out of feature 31 (your call, 2026-11-15), because it is stream data rather than a pointer from a kept object, never holds a ticked value, and needs its own proof. It follows the search pages (your call, 2026-11-18).
@@ -539,6 +548,7 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **Date variants still missed after feature 25**: `A.D.` or `in the year` before a year, number words (`twenty-seventh day`), a day range in a new form (`3-5 Jan-2026`), a written year first date with spaces (`2026 Sep 27`), uneven spacing round a separator, an ordinal or mixed dashes in a flush form, a space before a comma, a number right before a month first date read as a two digit year (`19 December, 16 2015`), and two dates joined where one is unseparated (`20260927-20260928`, which main misses too). Bring one to `/architect` when a review or a visitor meets it, measured through `detect` against main · needs a decision · from spec 0015
 - **A natural text corpus for detector noise**: spec 0015's noise figures come from synthetic shapes and token soup; a corpus of made up but natural documents would tighten them, the two digit year and numbered list figures first · needs a decision · from spec 0015
 - **Read the first month of counts**: once feature 11 has run for a month (it went live on 2026-11-08, so from about 2026-12-08), bring its numbers to `/architect` for spec 0006's thresholds and `off-page-picture`, spec 0005's `replacement-text` refusals and spec 0007's named refused item (*Name the item behind a refused run*, above); and read spec 0017's counts (`term` rows, `terms` and `termsSetAside`) to see whether Pro's custom terms are used and how often a Free job meets a kept list; and read spec 0019's `pagesWith["marked-descriptions"]` and its `unreadable-structure` failures, to judge how often real files meet the new warning and the new refusal at open, knowing that since spec 0020 that kind has two causes (the role walk and the glyph rule) the counts cannot tell apart, and since spec 0021 a third (a `/Registry` or `/Ordering` outside its token), while `redaction-incomplete` also counts a ticked text at a string place; and read spec 0022's `inline-picture` refusals, and if real files meet it often, bring the warning option back to `/architect` with the numbers · needs a decision · from specs 0016, 0017, 0019, 0020, 0021 and 0022
+- **`/security` counts as `not-found`**: `PAGE_KINDS` and `PAGE_PATHS` in `src/telemetry/events.ts` have no `security` kind, so every view of the security page is counted as `not-found`. Older than feature 15's branch (spec 0016 predates spec 0018), found while designing spec 0024 (2026-11-23), not fixed there (your call). Add the kind and its path, with the telemetry unit tests · from spec 0024
 - **Automated browsers in the counts**: if page visits look inflated, measure, then consider skipping `navigator.webdriver`, keeping the e2e flag so the privacy proof still runs · needs a decision · from spec 0016
 - **A custom term split by a running footer**: spec 0017 carries a page's end into the next page, so a term split by a page break is found, but text drawn between the two parts in reading order (a running footer or a page number) still keeps them apart. Measure how often real documents do this before any design · needs a decision · from spec 0017
 - **Patterns in a custom term**: a term today is literal text; a reference number's shape (`INV-` and any four digits) or a wildcard would be a decision of its own, with its own noise measured · needs a decision · from spec 0017
