@@ -2401,10 +2401,15 @@ test.describe("the cursor (spec 0013, AC-33)", () => {
  * pixels and 200% text at once, which together are roughly 800% zoom. WCAG
  * does not ask for that, but a visitor who needs both meets it, and on `/` the
  * headline's longest word and the band cards' tiles were wider than the window.
- * The search pages join `REFLOW_PAGES` as each is built.
+ * `REFLOW_PAGES` holds `/` and each search page.
  */
 test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
-  const REFLOW_PAGES = ["/", "/redact-pdf"] as const;
+  const REFLOW_PAGES = [
+    "/",
+    "/redact-pdf",
+    "/remove-text-from-pdf",
+    "/black-box-redaction",
+  ] as const;
 
   /**
    * Every box and every run of text in the page ends inside the window, and
@@ -2497,6 +2502,8 @@ test.describe("every page (spec 0013, AC-26; spec 0024, AC-13)", () => {
   const PAGES = [
     "/",
     "/redact-pdf",
+    "/remove-text-from-pdf",
+    "/black-box-redaction",
     "/pricing",
     "/privacy",
     "/terms",
@@ -2581,7 +2588,14 @@ test.describe("every page (spec 0013, AC-26; spec 0024, AC-13)", () => {
  * applies, and the walk stops once focus leaves the page or comes round.
  */
 test.describe("the search pages' focus rings (spec 0024, AC-13)", () => {
-  for (const path of ["/redact-pdf"] as const) {
+  /** Each page's two buttons into the tool, by their words (spec 0024, *Page frames*). */
+  const PRIMARY = {
+    "/redact-pdf": "Redact a PDF now",
+    "/remove-text-from-pdf": "Remove text from a PDF",
+    "/black-box-redaction": "Redact a PDF properly",
+  } as const;
+
+  for (const [path, primary] of Object.entries(PRIMARY)) {
     test(`${path}: every control keeps a visible ring`, async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.goto(path);
@@ -2605,7 +2619,7 @@ test.describe("the search pages' focus rings (spec 0024, AC-13)", () => {
       // The skip link, the header, both buttons into the tool, the look over
       // link and the footer's links, at the least.
       expect(seen.length).toBeGreaterThan(8);
-      expect(seen.filter((name) => name === "A /tool Redact a PDF now")).toHaveLength(2);
+      expect(seen.filter((name) => name === `A /tool ${primary}`)).toHaveLength(2);
       expect(seen.some((name) => name.includes("/security#what-it-can-miss"))).toBe(true);
     });
   }

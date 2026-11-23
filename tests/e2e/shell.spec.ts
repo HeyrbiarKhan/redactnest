@@ -577,7 +577,14 @@ test.describe("the header", () => {
  * Guides group between Product and Legal (spec 0024, AC-9).
  */
 test.describe("the footer", () => {
-  for (const path of ["/", "/tool", "/security", "/redact-pdf"]) {
+  for (const path of [
+    "/",
+    "/tool",
+    "/security",
+    "/redact-pdf",
+    "/remove-text-from-pdf",
+    "/black-box-redaction",
+  ]) {
     test(`shows the brand line and its three groups on ${path}`, async ({ page }) => {
       await page.goto(path);
       const footer = page.getByRole("contentinfo");
@@ -593,11 +600,16 @@ test.describe("the footer", () => {
         }),
       ).toHaveAttribute("href", "/security");
       const guides = footer.getByRole("navigation", { name: "Guides" });
-      await expect(guides.getByRole("link")).toHaveText(["Redact without uploading"]);
-      await expect(guides.getByRole("link").first()).toHaveAttribute(
-        "href",
-        "/redact-pdf",
-      );
+      await expect(guides.getByRole("link")).toHaveText([
+        "Redacting a PDF",
+        "Removing text from a PDF",
+        "Black box redaction",
+      ]);
+      expect(
+        await guides
+          .getByRole("link")
+          .evaluateAll((links) => links.map((link) => link.getAttribute("href"))),
+      ).toEqual(["/redact-pdf", "/remove-text-from-pdf", "/black-box-redaction"]);
       for (const link of await guides.getByRole("link").all()) {
         expect((await link.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(24);
       }
@@ -696,6 +708,23 @@ test.describe("the head on / and the search pages", () => {
       description:
         "Redact a PDF in your browser. RedactNest looks for details such as email addresses and phone numbers, and the selectable text you tick is taken out of the page.",
       alt: "RedactNest. Redact a PDF. Redact a PDF without uploading it.",
+      primary: "Redact a PDF now",
+    },
+    {
+      path: "/remove-text-from-pdf",
+      title: "Remove text from a PDF, not just cover it",
+      description:
+        "Take text out of a PDF instead of only covering it: tick what to remove, and RedactNest takes the selectable text out of the page, then marks where it was.",
+      alt: "RedactNest. Remove text from a PDF. Take text out of a PDF, not just cover it.",
+      primary: "Remove text from a PDF",
+    },
+    {
+      path: "/black-box-redaction",
+      title: "Why a black box over text isn't redaction",
+      description:
+        "A box drawn over text can leave the words in the PDF, where copy and paste or search can still reach them. How to check a file, and what real redaction does.",
+      alt: "RedactNest. Black box redaction. A black box over text isn't redaction.",
+      primary: "Redact a PDF properly",
     },
   ] as const;
 
@@ -778,7 +807,8 @@ test.describe("the head on / and the search pages", () => {
       await page.goto(head.path);
       await page.waitForLoadState("networkidle");
       const buttons = page.getByTestId("search-page").getByRole("link", {
-        name: "Redact a PDF now",
+        name: head.primary,
+        exact: true,
       });
       await expect(buttons).toHaveCount(2);
       for (const button of await buttons.all()) await button.hover();
@@ -827,9 +857,17 @@ test.describe("the sitemap and the robots file", () => {
 
     const addresses = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(([, at]) => at);
     expect(addresses).toEqual(
-      ["/", "/redact-pdf", "/tool", "/security", "/privacy", "/terms", "/pricing"].map(
-        (path) => `https://redactnest.test${path}`,
-      ),
+      [
+        "/",
+        "/redact-pdf",
+        "/remove-text-from-pdf",
+        "/black-box-redaction",
+        "/tool",
+        "/security",
+        "/privacy",
+        "/terms",
+        "/pricing",
+      ].map((path) => `https://redactnest.test${path}`),
     );
     expect(xml).not.toMatch(/<lastmod>|<changefreq>|<priority>/);
   });

@@ -259,7 +259,7 @@ describe("the footer's Guides group (spec 0024, AC-9)", () => {
       ]),
     );
     expect(linksIn(screen.getByRole("navigation", { name: "Guides" }))).toContainEqual([
-      "Redact without uploading",
+      "Redacting a PDF",
       "/redact-pdf",
     ]);
   });

@@ -18,10 +18,12 @@
 import {
   ACCOUNT_PATH,
   BILLING_PATH,
+  BLACK_BOX_PATH,
   HOME_PATH,
   PRICING_PATH,
   PRIVACY_PATH,
   REDACT_PDF_PATH,
+  REMOVE_TEXT_PATH,
   SIGN_IN_PATH,
   SIGN_UP_PATH,
   TERMS_PATH,
@@ -116,6 +118,8 @@ export const PAGE_KINDS = Object.freeze([
   // `not-found`. `SEARCH_PAGES` in `src/lib/search-pages.ts` is held to this
   // list, so a search page added without its kind fails `pnpm typecheck`.
   "redact-pdf",
+  "remove-text",
+  "black-box",
   "not-found",
 ] as const);
 
@@ -138,6 +142,8 @@ export const PAGE_PATHS: Readonly<Record<PageKind, string>> = Object.freeze({
   billing: BILLING_PATH,
   welcome: WELCOME_PATH,
   "redact-pdf": REDACT_PDF_PATH,
+  "remove-text": REMOVE_TEXT_PATH,
+  "black-box": BLACK_BOX_PATH,
   // No route of ours lives here; it is the name Umami shows for a missing page.
   "not-found": "/404",
 });
@@ -168,6 +174,10 @@ export function pageKindFor(pathname: string): PageKind {
       return "welcome";
     case REDACT_PDF_PATH:
       return "redact-pdf";
+    case REMOVE_TEXT_PATH:
+      return "remove-text";
+    case BLACK_BOX_PATH:
+      return "black-box";
   }
   if (isUnder(pathname, SIGN_IN_PATH)) return "sign-in";
   if (isUnder(pathname, SIGN_UP_PATH)) return "sign-up";

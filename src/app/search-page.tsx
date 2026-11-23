@@ -4,6 +4,7 @@ import { config } from "@/config";
 import { IDLE_STEPS } from "@/lib/flow-text";
 import { capLine } from "@/lib/home-text";
 import { LEGAL } from "@/lib/legal";
+import { PRO_PLAN } from "@/lib/plans";
 import { SECURITY_SECTIONS, sectionId } from "@/lib/policy-sections";
 import { SECURITY_PATH, TOOL_PATH } from "@/lib/routes";
 import {
@@ -12,11 +13,13 @@ import {
   LOOK_OVER_LINK_TEXT,
   MORE_GUIDES_TITLE,
   otherSearchPages,
+  removeTextTermsLine,
   SEARCH_PAGE_TEXT,
   type AnswerPart,
   type SearchPageKind,
 } from "@/lib/search-pages";
 import { Button } from "@/ui/button";
+import { CoverFigure } from "@/ui/cover-figure";
 import { FeatureList } from "@/ui/feature-list";
 import { PageContainer } from "@/ui/page-container";
 import { Prose } from "@/ui/prose";
@@ -67,7 +70,7 @@ export function searchPageMetadata(kind: SearchPageKind): Metadata {
  * One search page. Spec 0024, AC-1 to AC-8: the hero, the trio, How it works,
  * the answer, then the close, every word from `src/lib/search-pages.ts`
  * except the tool's own steps (`IDLE_STEPS`), the cap line (`capLine`) and
- * the plan names inside it (INV-2).
+ * the plan name in `removeTextTermsLine` (`PRO_PLAN.name`) (INV-2).
  *
  * A static server component with no client component and no script element
  * (AC-1, INV-3), so the standard content security policy and the page budget
@@ -125,8 +128,10 @@ export function SearchPage({ kind }: { readonly kind: SearchPageKind }) {
               <Prose>
                 <section>
                   {text.answer.map((part) => (
-                    <Answer key={part.text} part={part} />
+                    <Answer key={answerKey(part)} part={part} />
                   ))}
+                  {/* `/black-box-redaction`'s drawing, after the checks (*Page frames*). */}
+                  {text.figure !== null && <CoverFigure {...text.figure} />}
                   {/* AC-7: every answer ends on the look over line and its link. */}
                   <p>
                     {LOOK_OVER_LINE} <a href={WHAT_IT_CAN_MISS}>{LOOK_OVER_LINK_TEXT}</a>.
@@ -189,7 +194,36 @@ function ToolButton({
   );
 }
 
-/** One part of the answer, as its kind says. */
+/**
+ * One part of the answer, as its kind says. The terms line shows only with
+ * billing on, naming `PRO_PLAN.name` (AC-8); with billing off it is absent,
+ * so no plan is named outside the cap line.
+ */
 function Answer({ part }: { readonly part: AnswerPart }) {
-  return <p>{part.text}</p>;
+  switch (part.kind) {
+    case "paragraph":
+      return <p>{part.text}</p>;
+    case "checks":
+      return (
+        <ol>
+          {part.items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ol>
+      );
+    case "terms":
+      return config.billingEnabled ? <p>{removeTextTermsLine(PRO_PLAN.name)}</p> : null;
+  }
+}
+
+/** A part's key: its words, or its kind where it holds none of its own. */
+function answerKey(part: AnswerPart): string {
+  switch (part.kind) {
+    case "paragraph":
+      return part.text;
+    case "checks":
+      return part.items.join(" ");
+    case "terms":
+      return part.kind;
+  }
 }

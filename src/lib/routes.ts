@@ -37,6 +37,8 @@ export const SECURITY_PATH = "/security";
  * from here, so a page and every link to it cannot drift apart (INV-5).
  */
 export const REDACT_PDF_PATH = "/redact-pdf";
+export const REMOVE_TEXT_PATH = "/remove-text-from-pdf";
+export const BLACK_BOX_PATH = "/black-box-redaction";
 
 /**
  * The home page, where sign out lands. Spec 0012, AC-12 and INV-13: sign out

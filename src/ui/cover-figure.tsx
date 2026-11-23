@@ -18,7 +18,8 @@ export interface CoverPanel {
   readonly reads: string;
 }
 
-interface CoverFigureProps {
+/** Exported so a search page's record can hold its figure (spec 0024, *Data model sketch*). */
+export interface CoverFigureProps {
   readonly panels: readonly CoverPanel[];
   /** Names the figure and says what the panels compare. */
   readonly caption: string;

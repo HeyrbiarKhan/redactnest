@@ -14,7 +14,9 @@
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import * as blackBox from "@/app/black-box-redaction/page";
 import * as redactPdf from "@/app/redact-pdf/page";
+import * as removeText from "@/app/remove-text-from-pdf/page";
 import { SearchPage, searchPageMetadata } from "@/app/search-page";
 import { config } from "@/config";
 import { IDLE_STEPS } from "@/lib/flow-text";
@@ -28,6 +30,7 @@ import {
   LOOK_OVER_LINK_TEXT,
   MORE_GUIDES_TITLE,
   otherSearchPages,
+  removeTextTermsLine,
   SEARCH_PAGE_TEXT,
   SEARCH_PAGES,
   type SearchPageKind,
@@ -69,15 +72,45 @@ afterEach(() => {
 /** Each page's route module, so a page added to `SEARCH_PAGES` without one fails typecheck. */
 const ROUTES: Readonly<Record<SearchPageKind, typeof redactPdf>> = Object.freeze({
   "redact-pdf": redactPdf,
+  "remove-text": removeText,
+  "black-box": blackBox,
 });
+
+/** The answer's parts as rendered: a paragraph's words, or a list's items. */
+function renderedParts(kind: SearchPageKind, billingEnabled: boolean): string[][] {
+  return SEARCH_PAGE_TEXT[kind].answer.flatMap((part) => {
+    switch (part.kind) {
+      case "paragraph":
+        return [[part.text]];
+      case "checks":
+        return [[...part.items]];
+      case "terms":
+        return billingEnabled ? [[removeTextTermsLine(PRO_PLAN.name)]] : [];
+    }
+  });
+}
+
+/** Whether a page's answer holds the terms line's place (AC-8). */
+const hasTermsLine = (kind: SearchPageKind) =>
+  SEARCH_PAGE_TEXT[kind].answer.some((part) => part.kind === "terms");
 
 /** The page's content, where every claim and every counted idea lives (AC-3). */
 function content() {
   return screen.getByTestId("search-page");
 }
 
+/**
+ * The content's words, each text node apart, since `textContent` runs a
+ * heading into the paragraph after it ("uploadYour"), which hides a whole word
+ * from the counts and the banned phrases.
+ */
 function contentText(): string {
-  return (content().textContent ?? "").replace(/\s+/g, " ");
+  const walker = document.createTreeWalker(content(), NodeFilter.SHOW_TEXT);
+  const words: string[] = [];
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    words.push(node.textContent ?? "");
+  }
+  return words.join(" ").replace(/\s+/g, " ");
 }
 
 /** How often a pattern occurs in the page's content. */
@@ -217,16 +250,66 @@ describe.each(SEARCH_PAGES)("%s", (kind) => {
       .getByRole("heading", { level: 2, name: text.answerTitle })
       .closest("section");
     if (section === null) throw new Error("The answer sits in no section");
-    const paragraphs = section.querySelectorAll("p");
-    const last = paragraphs[paragraphs.length - 1];
+    // The answer's own column: its parts, the figure where there is one, then the line.
+    const column = section.querySelector("section");
+    if (column === null) throw new Error("The answer has no column");
+    const children = [...column.children];
+    const last = children[children.length - 1];
+    expect(last.tagName).toBe("P");
     expect(last.textContent).toBe(`${LOOK_OVER_LINE} ${LOOK_OVER_LINK_TEXT}.`);
-    const link = within(last).getByRole("link", { name: LOOK_OVER_LINK_TEXT });
+    const link = within(last as HTMLElement).getByRole("link", {
+      name: LOOK_OVER_LINK_TEXT,
+    });
     expect(link).toHaveAttribute("href", "/security#what-it-can-miss");
     expect(link).not.toHaveAttribute("target");
-    // Every answer part, in order, before it.
+    // Every answer part, in order, before it, then the figure on its page alone.
+    const parts = children.filter((child) => child.tagName !== "FIGURE").slice(0, -1);
     expect(
-      [...paragraphs].slice(0, -1).map((paragraph) => paragraph.textContent),
-    ).toEqual(text.answer.map((part) => part.text));
+      parts.map((part) =>
+        part.tagName === "OL"
+          ? [...part.querySelectorAll("li")].map((item) => item.textContent)
+          : [part.textContent],
+      ),
+    ).toEqual(renderedParts(kind, true));
+    const figures = children.filter((child) => child.tagName === "FIGURE");
+    expect(figures).toHaveLength(text.figure === null ? 0 : 1);
+    if (text.figure !== null) {
+      expect(children.indexOf(figures[0])).toBe(children.length - 2);
+    }
+  });
+
+  /** covers: AC-3, AC-5, AC-13. The figure's words reach assistive technology, its drawings do not. */
+  it("draws the figure only where the frame names it, its words in the record", () => {
+    render(<Page />);
+
+    const figure = within(content()).queryByRole("figure");
+    if (text.figure === null) {
+      expect(figure).toBeNull();
+      return;
+    }
+    if (figure === null) throw new Error("The figure is missing");
+    expect(figure.querySelector("figcaption")).toHaveTextContent(text.figure.caption);
+    for (const panel of text.figure.panels) {
+      expect(within(figure).getByText(panel.title)).toBeInTheDocument();
+    }
+    for (const drawing of within(figure).getAllByTestId("cover-drawing")) {
+      expect(drawing).toHaveAttribute("aria-hidden", "true");
+    }
+  });
+
+  /** covers: AC-8. The terms line names Pro with billing on, on the page whose frame holds it. */
+  it("shows the custom terms line with billing on only, where the frame holds it", () => {
+    render(<Page />);
+
+    const line = removeTextTermsLine(PRO_PLAN.name);
+    expect(contentText().includes(line)).toBe(hasTermsLine(kind));
+  });
+
+  it("drops the custom terms line with billing off", () => {
+    mocks.billingEnabled = false;
+    render(<Page />);
+
+    expect(contentText()).not.toContain(removeTextTermsLine(PRO_PLAN.name));
   });
 
   /** covers: AC-3. The trio's words are the record's. */
@@ -286,12 +369,14 @@ describe.each(SEARCH_PAGES)("%s", (kind) => {
     }
   });
 
-  /** covers: AC-8. With billing on, no sentence but the cap line names a plan. */
-  it("names a plan nowhere but the cap line with billing on", () => {
+  /** covers: AC-8. With billing on, no sentence but the cap line and the terms line names a plan. */
+  it("names a plan nowhere but the cap line and the terms line with billing on", () => {
     render(<Page />);
 
     const caps = screen.getByTestId("search-caps").textContent ?? "";
-    const rest = contentText().replace(caps, "");
+    const rest = contentText()
+      .replace(caps, "")
+      .replace(removeTextTermsLine(PRO_PLAN.name), "");
     for (const plan of [FREE_PLAN.name, PRO_PLAN.name]) {
       expect(rest).not.toMatch(new RegExp(`\\b${plan}\\b`));
     }
@@ -337,6 +422,14 @@ describe("the records", () => {
       expect(socialAlt).toBe(`RedactNest. ${eyebrow}. ${headline}.`);
     },
   );
+
+  /** covers: AC-3, AC-8. The frame puts the terms line and the figure on one page each. */
+  it("hold the terms line on remove-text alone and the figure on black-box alone", () => {
+    expect(SEARCH_PAGES.filter(hasTermsLine)).toEqual(["remove-text"]);
+    expect(SEARCH_PAGES.filter((kind) => SEARCH_PAGE_TEXT[kind].figure !== null)).toEqual(
+      ["black-box"],
+    );
+  });
 
   it("are frozen", () => {
     expect(Object.isFrozen(SEARCH_PAGES)).toBe(true);

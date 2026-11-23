@@ -147,6 +147,9 @@ describe("the home page", () => {
 const SEARCH_FILES = [
   "src/app/search-page.tsx",
   "src/app/redact-pdf/page.tsx",
+  "src/app/remove-text-from-pdf/page.tsx",
+  "src/app/black-box-redaction/page.tsx",
+  "src/ui/cover-figure.tsx",
   "src/lib/search-pages.ts",
   "src/app/site-nav.tsx",
   "src/ui/feature-list.tsx",

@@ -71,6 +71,8 @@ const PUBLIC_ROUTES = [
   "/terms",
   // Spec 0024, AC-13: a search page asks its own origin only.
   "/redact-pdf",
+  "/remove-text-from-pdf",
+  "/black-box-redaction",
 ] as const;
 
 /**
@@ -582,19 +584,25 @@ test("a full run sends no document, text, match or name anywhere", async ({ page
  * Spec 0024, AC-12: a view of a search page posts its own kind, never
  * `not-found`.
  */
-test("a view of /redact-pdf posts its own page kind", async ({ page }) => {
-  const requests = recordRequests(page);
+for (const [path, kind] of [
+  ["/redact-pdf", "redact-pdf"],
+  ["/remove-text-from-pdf", "remove-text"],
+  ["/black-box-redaction", "black-box"],
+] as const) {
+  test(`a view of ${path} posts its own page kind`, async ({ page }) => {
+    const requests = recordRequests(page);
 
-  await page.goto("/redact-pdf");
+    await page.goto(path);
 
-  await expect
-    .poll(() => requests.filter(isTelemetry).map(parsedBody))
-    .toContainEqual({ name: "page-view", page: "redact-pdf" });
-  expect(requests.filter(isTelemetry).map(parsedBody)).not.toContainEqual({
-    name: "page-view",
-    page: "not-found",
+    await expect
+      .poll(() => requests.filter(isTelemetry).map(parsedBody))
+      .toContainEqual({ name: "page-view", page: kind });
+    expect(requests.filter(isTelemetry).map(parsedBody)).not.toContainEqual({
+      name: "page-view",
+      page: "not-found",
+    });
   });
-});
+}
 
 test.describe("what the tool counts, once each", () => {
   /** Leave for `/`, then hand back every event, the fence included. */

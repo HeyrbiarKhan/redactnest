@@ -37,9 +37,17 @@ describe("the sitemap", () => {
   /** covers: AC-10 */
   it("lists every public page, the search pages in order, Pricing last with billing on", () => {
     expect(sitemap()).toEqual(
-      ["/", "/redact-pdf", "/tool", "/security", "/privacy", "/terms", "/pricing"].map(
-        (path) => ({ url: at(path) }),
-      ),
+      [
+        "/",
+        "/redact-pdf",
+        "/remove-text-from-pdf",
+        "/black-box-redaction",
+        "/tool",
+        "/security",
+        "/privacy",
+        "/terms",
+        "/pricing",
+      ].map((path) => ({ url: at(path) })),
     );
   });
 
@@ -48,7 +56,7 @@ describe("the sitemap", () => {
     mocks.billingEnabled = false;
 
     expect(sitemap().map(({ url }) => url)).not.toContain(at("/pricing"));
-    expect(sitemap()).toHaveLength(6);
+    expect(sitemap()).toHaveLength(8);
   });
 
   /** covers: AC-10 */
