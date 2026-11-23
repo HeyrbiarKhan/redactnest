@@ -7,6 +7,7 @@ import { recordPage, targetArea, type PageRecord } from "./characters";
 import { checkpoint as yieldThenCheck, EngineFailure } from "./failure";
 import { lineBox, paddedArea, removalBand } from "./geometry";
 import { glyphRuleOf, type GlyphVerdict } from "./glyphs";
+import { inlineRuleOf, type InlineVerdict } from "./inline";
 import { takeInventory } from "./inventory";
 import { loadEngine, type MuPdf } from "./load";
 import { boxPass, paddedPass, textPass, type Pass } from "./passes";
@@ -54,7 +55,10 @@ import type {
  * drop, throw, or change what a page draws, and watch the run fail (AC-15).
  * Spec 0020 adds the glyph rule: swapped out, a run writes main's output, so
  * a test can watch the check fail text below a glyph on its own, and the gate
- * can compare what main drew (AC-7, AC-10). A parameter with a frozen default,
+ * can compare what main drew (AC-7, AC-10). Spec 0022 adds the inline picture
+ * rule: swapped for one that keeps every picture, a test can watch the check's
+ * backstop fail a lost picture on its own, and pin where it cannot see one
+ * (AC-4, AC-6). A parameter with a frozen default,
  * rather than a setter, so the walled module holds no mutable hook and the
  * worker can only ever run the real thing.
  */
@@ -64,6 +68,12 @@ export interface Pipeline {
    * AC-6: the run refuses on any answer but `"clean"`, and on a throw.
    */
   readonly judgeGlyphs: (pdf: PDFDocument) => GlyphVerdict | "problem";
+  /**
+   * The inline picture rule on the prepared working copy (`inline.ts`). Spec
+   * 0022, AC-3: `"lost"` refuses with `inline-picture`, `"problem"` with
+   * `unreadable-structure`, and a throw with `unsupported`.
+   */
+  readonly judgeInlinePictures: (pdf: PDFDocument) => InlineVerdict | "problem";
   /** What lies outside each page's visible area, removed (`trim.ts`). */
   readonly trim: (
     mupdf: MuPdf,
@@ -91,6 +101,7 @@ export interface Pipeline {
 
 export const PIPELINE: Pipeline = Object.freeze({
   judgeGlyphs: glyphRuleOf,
+  judgeInlinePictures: inlineRuleOf,
   trim: trimToVisibleArea,
   pruneToRoles,
   sweepCarriers,
@@ -123,15 +134,18 @@ export async function redactDocument(
  * `openDocumentWith` gives Vitest, so both run the real MuPDF in Node.
  *
  * The pipeline order is fixed (spec 0004, *State transitions*, as specs 0006,
- * 0019 and 0020 amend it): inventory, prepare, the glyph rule, trim, validate
- * targets, slant, images, record every page, the three passes page by page,
+ * 0019, 0020 and 0022 amend it): inventory, prepare, the glyph rule, the inline
+ * picture rule, trim, validate targets, slant, images, record every page, the
+ * three passes page by page,
  * rebuild, write, self check; on the check's `unused-colour-space` verdict
  * alone, a checkpoint, the second write and the whole self check on its bytes.
  * The inventory comes before preparing, or flattened annotations would
  * no longer be found. Preparing comes before any Redact annotation is added,
  * or the flatten would bake the markers into the page. The glyph rule comes
  * right after preparing, on the page the bake drew, as it does at open, and
- * before anything is removed. The trim comes next, as it does at open, so
+ * before anything is removed, and the inline picture rule right after it, for
+ * the same reasons, after the glyph rule as the open's refusals run, so a file
+ * both rules refuse keeps the glyph rule's kind. The trim comes next, as it does at open, so
  * targets are checked on the page detection read, prepared and trimmed alike
  * (spec 0004, INV-9, as spec 0006 rewords it). Every page is recorded before any page is redacted, and after
  * the trim, so a trimmed character is never expected back, and a pass that
@@ -177,6 +191,13 @@ export async function redactDocumentWith(
     // never survive through a glyph. The open refused such a file already;
     // this holds it for any bytes a run is handed.
     refuseBrokenGlyphs(pipeline, work);
+    await checkpoint();
+
+    // Spec 0022, AC-3: an inline picture MuPDF's write would lose, judged on
+    // the same prepared copy before anything is removed, so a run handed such
+    // bytes with no open never hands back a copy missing it. Its own
+    // checkpoint, so a cancel during the scan is heard before the trim.
+    refuseLostPictures(pipeline, work);
     await checkpoint();
 
     // Spec 0006, AC-14: on every working copy, with nothing ticked as well,
@@ -287,6 +308,24 @@ function refuseBrokenGlyphs(pipeline: Pipeline, work: PDFDocument): void {
     throw new EngineFailure("unreadable-structure");
   }
   if (verdict !== "clean") throw new EngineFailure("unreadable-structure");
+}
+
+/**
+ * The inline picture rule's refusal (spec 0022, AC-3): `inline-picture` on
+ * `"lost"`; `unreadable-structure` on `"problem"`, which the glyph rule's own
+ * walk answers first on the same document, so only a swapped seam reaches it
+ * here; and `unsupported` on a throw, as a throw while the open reads a page
+ * is. The words name no page (INV-5).
+ */
+function refuseLostPictures(pipeline: Pipeline, work: PDFDocument): void {
+  let verdict: InlineVerdict | "problem";
+  try {
+    verdict = pipeline.judgeInlinePictures(work);
+  } catch {
+    throw new EngineFailure("unsupported");
+  }
+  if (verdict === "problem") throw new EngineFailure("unreadable-structure");
+  if (verdict === "lost") throw new EngineFailure("inline-picture");
 }
 
 /** Load a page, read it, and hand it back to MuPDF whatever happens. */

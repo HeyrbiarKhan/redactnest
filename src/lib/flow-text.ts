@@ -233,6 +233,15 @@ export const FAILURE_TEXT: Readonly<
     body: "Some text crosses the edge of a page, and RedactNest can't prove it removes it cleanly, so it made no file.",
     next: NEW_COPY,
   }),
+  // Spec 0022, AC-5: an inline picture MuPDF's write would lose, at open or
+  // before a run removes anything, from its kind alone. The next step
+  // suggests and never promises: nothing has measured whether printing gives
+  // a file this rule accepts, and printing may write the picture inline again.
+  "inline-picture": () => ({
+    title: "A picture in this PDF can't come through cleanly",
+    body: "One of its pictures stores its colours in a way RedactNest's cleaning can't write back, so it stopped rather than hand back a copy with that picture missing, and made no file.",
+    next: NEW_COPY,
+  }),
   // The four a tick can cause. Each names the likely cause, because a
   // refusal cannot say which item it was (spec 0007, *Follow-up*).
   "redaction-overreach": () => ({
@@ -240,9 +249,12 @@ export const FAILURE_TEXT: Readonly<
     body: "Something drawn across a ticked item would be cut too: most often a stamp such as CONFIDENTIAL or DRAFT, or a picture under the item. RedactNest stopped and made no file.",
     next: "Untick items that sit under a stamp or on a picture, then redact again. RedactNest can't say which item it was, so unticking one group at a time can find it.",
   }),
+  // Spec 0023, AC-5: since the self check fails a ticked text a description
+  // keeps, this kind covers a description for screen readers as well as
+  // replacement text, still from the kind alone.
   "replacement-text": () => ({
     title: "A ticked item can't be removed safely",
-    body: "It sits inside hidden replacement text (the words copy and paste gives instead of what's drawn), which can't be removed safely. RedactNest made no file.",
+    body: "It sits inside hidden text written into the file, such as replacement text (the words copy and paste gives instead of what's drawn) or a description for screen readers, which can't be removed safely. RedactNest made no file.",
     next: "RedactNest can't say which item it was. Untick one group at a time to find it, then redact again.",
   }),
   "slanted-text": () => ({

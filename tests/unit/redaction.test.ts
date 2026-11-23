@@ -645,32 +645,34 @@ describe("a flattened form value and typed note", () => {
 
 /**
  * Spec 0004, AC-17. A run looks at `isCancelled` after opening its working
- * copy, after preparing it, after every page of the recording loop and of the
- * redaction loop, and after the rebuild, and stops with `RunCancelled`, which
- * is not a failure and carries no kind.
+ * copy, after preparing it, after the inline picture rule (spec 0022, AC-3),
+ * after every page of the recording loop and of the redaction loop, and after
+ * the rebuild, and stops with `RunCancelled`, which is not a failure and
+ * carries no kind.
  */
 describe("cancelling a run", () => {
-  it("checks after opening, preparing, every page of the trim and both loops, and the rebuild", async () => {
+  it("checks after opening, preparing, the inline picture rule, every page of the trim and both loops, and the rebuild", async () => {
     const isCancelled = vi.fn(() => false);
 
     await redact("metadata.pdf", [], { isCancelled });
 
-    // Two pages: open, prepare, trim 1 and 2 (spec 0006, AC-29), record 1
-    // and 2, redact 1 and 2, rebuild.
-    expect(isCancelled).toHaveBeenCalledTimes(9);
+    // Two pages: open, prepare, the inline picture rule (spec 0022, AC-3),
+    // trim 1 and 2 (spec 0006, AC-29), record 1 and 2, redact 1 and 2,
+    // rebuild.
+    expect(isCancelled).toHaveBeenCalledTimes(10);
   });
 
   it("stops within a page, before anything is written", async () => {
     const onPhase = vi.fn();
     let checks = 0;
     // True from the check after the first page onwards.
-    const isCancelled = () => (checks += 1) >= 3;
+    const isCancelled = () => (checks += 1) >= 4;
 
     const run = redact("metadata.pdf", [], { onPhase, isCancelled });
 
     await expect(run).rejects.toBeInstanceOf(RunCancelled);
     await expect(run).rejects.not.toBeInstanceOf(EngineFailure);
-    expect(checks).toBe(3);
+    expect(checks).toBe(4);
     expect(onPhase).not.toHaveBeenCalledWith("writing");
   });
 

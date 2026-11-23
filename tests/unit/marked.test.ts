@@ -14,6 +14,7 @@ import {
   silenceEngineLog,
   type DrawingRead,
 } from "@/engine";
+import { foldTicked } from "@/engine/allowlist";
 
 import { MARKED_TEXT } from "../../scripts/lib/kept-fixtures.mjs";
 import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
@@ -344,6 +345,441 @@ describe("whether a drawing shows text (spec 0020)", () => {
   });
 });
 
+/**
+ * Spec 0023, AC-1: whether the description strings a drawing settles hold a
+ * ticked text. Each string is decoded and folded as the check's string places
+ * are, the folds joined in the order settled, one join per scan, and tested
+ * for containment of any ticked fold. An `/ActualText` over text drawn in its
+ * own stream is never compared, so the character check alone reads it.
+ */
+describe("whether a description holds a ticked text (spec 0023)", () => {
+  /** Scan `text` with `ticked` as the run's folded ticked texts. */
+  function scanTicked(text: string, ...ticked: string[]): DrawingRead {
+    const result = scanContent(bytes(text), null, foldTicked(ticked));
+    if (result === "unsure") throw new Error("expected the scan to read to its end");
+    return result;
+  }
+  const hits = (text: string, ...ticked: string[]): boolean =>
+    scanTicked(text, ...ticked).describesTicked;
+
+  it("never compares an inline /ActualText around text", () => {
+    expect(
+      hits(
+        "/Span << /ActualText (Jane Smith) >> BDC BT (Jane Smith) Tj ET EMC",
+        "Jane Smith",
+      ),
+    ).toBe(false);
+  });
+
+  /**
+   * Text is drawn, so the scan leaves it to the character check, which catches
+   * the word while its glyphs stay; once MuPDF removes them, the span holds no
+   * text and the scan catches it (`marked-ticked.pdf`, pages 1 to 4).
+   */
+  it("never compares an /ActualText around text and a shape", () => {
+    expect(
+      hits(
+        "/Span << /ActualText (Jane Smith) >> BDC BT (Jane Smith) Tj ET 0 0 9 9 re f EMC",
+        "Jane Smith",
+      ),
+    ).toBe(false);
+  });
+
+  it("hits an inline /ActualText around only a shape", () => {
+    expect(
+      hits("/Span << /ActualText (Jane Smith) >> BDC 0 0 9 9 re f EMC", "Jane Smith"),
+    ).toBe(true);
+  });
+
+  it("hits an /ActualText around no text in a sequence never closed", () => {
+    expect(
+      hits("/Span << /ActualText (Jane Smith) >> BDC 0 0 9 9 re f", "Jane Smith"),
+    ).toBe(true);
+  });
+
+  it("never compares an outer /ActualText when text runs in a nested sequence", () => {
+    expect(
+      hits(
+        "/Span << /ActualText (Jane Smith) >> BDC /P << /MCID 1 >> BDC BT (x) Tj ET EMC EMC",
+        "Jane Smith",
+      ),
+    ).toBe(false);
+  });
+
+  it("hits a DP's inline /ActualText, beside drawn text too, since a point is never a sequence", () => {
+    expect(
+      hits("/Note << /ActualText (Jane Smith) >> DP BT (x) Tj ET", "Jane Smith"),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["an /ActualText written as an array", "/Span << /ActualText [(Jane Smith)] >> BDC"],
+    [
+      "an ActualText key nested under another",
+      "/Span << /Private << /ActualText (Jane Smith) >> >> BDC",
+    ],
+  ])("settles %s at once, around text too", (_label, list) => {
+    expect(hits(`${list} BT (x) Tj ET EMC`, "Jane Smith")).toBe(true);
+  });
+
+  it.each([
+    ["an /Alt", "/Span << /Alt (A photo of Jane Smith) >> BDC BT (x) Tj ET EMC"],
+    ["an /E", "/Span << /E (Jane Smith) >> BDC BT (x) Tj ET EMC"],
+    [
+      "a private key nested in an array",
+      "/Span << /Private [1 [(Jane Smith)]] >> BDC EMC",
+    ],
+  ])("hits %s holding the ticked text", (_label, text) => {
+    expect(hits(text, "Jane Smith")).toBe(true);
+  });
+
+  /** A language tag or not, as spec 0021 holds the catalog's `/Lang`. */
+  it("hits a /Lang that reads as a language tag when part of it is ticked", () => {
+    expect(hits("/Span << /Lang (en-GB) >> BDC BT (x) Tj ET EMC", "GB")).toBe(true);
+    expect(describes("/Span << /Lang (en-GB) >> BDC BT (x) Tj ET EMC")).toBe(false);
+  });
+
+  it("decodes a hex string and a UTF-16 string before comparing", () => {
+    expect(hits("/Span << /Alt <4A616E65> >> BDC EMC", "Jane")).toBe(true);
+    expect(hits("/Span << /Alt <FEFF004A0061006E0065> >> BDC EMC", "Jane")).toBe(true);
+  });
+
+  /** INV-6: `<FEFF00650E>` opens as UTF-16 and ends on half a unit. */
+  it("hits a string that cannot be decoded, whatever is ticked", () => {
+    expect(hits("/Span << /Alt <FEFF00650E> >> BDC EMC", "Unrelated")).toBe(true);
+  });
+
+  it("misses a description that holds no ticked text", () => {
+    expect(hits("/Span << /Alt (A photo of a harbour) >> BDC EMC", "Jane Smith")).toBe(
+      false,
+    );
+  });
+
+  it("hits a ticked text split across two spans round shapes, by the join", () => {
+    expect(
+      hits(
+        "/Span << /ActualText (Jane) >> BDC 0 0 9 9 re f EMC " +
+          "/Span << /ActualText (Smith) >> BDC 20 0 9 9 re f EMC",
+        "Jane Smith",
+      ),
+    ).toBe(true);
+  });
+
+  it("joins each call on its own, so the halves in two drawings miss", () => {
+    expect(
+      hits("/Span << /ActualText (Jane) >> BDC 0 0 9 9 re f EMC", "Jane Smith"),
+    ).toBe(false);
+    expect(
+      hits("/Span << /ActualText (Smith) >> BDC 0 0 9 9 re f EMC", "Jane Smith"),
+    ).toBe(false);
+  });
+
+  /** The recorded false refusal: text a form draws through `Do` is not drawn here. */
+  it("hits an /ActualText whose only drawing is a form", () => {
+    expect(
+      hits("/Span << /ActualText (Jane Smith) >> BDC /Fm1 Do EMC", "Jane Smith"),
+    ).toBe(true);
+  });
+
+  it("forgets a string read past a false EI once the scan tries the next one", () => {
+    const text = "BI /W 4 /H 1 /CS /G /BPC 8 ID a EI /S << /Alt (Jane) >> DP ) EI Q";
+    expect(hits(text, "Jane")).toBe(false);
+    expect(
+      hits("BI /W 1 /H 1 /CS /G /BPC 8 ID z EI /S << /Alt (Jane) >> DP", "Jane"),
+    ).toBe(true);
+  });
+
+  /** INV-5: with nothing ticked the answer is false and nothing else moves. */
+  it("answers false everywhere with nothing ticked, describes unchanged", () => {
+    const texts = [
+      "/Span << /ActualText (Jane Smith) >> BDC 0 0 9 9 re f EMC",
+      "/Span << /Alt <FEFF00650E> >> BDC EMC",
+      "/Note << /ActualText (Jane Smith) >> DP",
+      "/Span << /ActualText (Jane Smith) >> BDC BT (x) Tj ET EMC",
+    ];
+    for (const text of texts) {
+      expect(read(text).describesTicked, text).toBe(false);
+      expect(scanTicked(text, "Jane Smith").describes, text).toBe(read(text).describes);
+    }
+  });
+
+  it("reads a named list's /ActualText: a hit round a shape, a miss round text, and a DP's always", () => {
+    const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+        "/Resources << /Properties << /P1 7 0 R >> >> /Contents 4 0 R >>",
+      stream("", "/Span /P1 BDC 0 0 9 9 re f EMC"),
+      stream("", "/Span /P1 BDC BT (x) Tj ET EMC"),
+      stream("", "/Note /P1 DP BT (x) Tj ET"),
+      "<< /ActualText (Jane Smith) /MCID 2 >>",
+    ];
+    withDoc(objects, (doc) => {
+      const properties = doc.findPage(0).get("Resources", "Properties");
+      const ticked = foldTicked(["Jane Smith"]);
+      const answer = (num: number) =>
+        readDrawing([doc.newIndirect(num)], properties, true, ticked);
+      expect(answer(4)).toMatchObject({ describesTicked: true });
+      expect(answer(5)).toMatchObject({ describesTicked: false });
+      expect(answer(6)).toMatchObject({ describesTicked: true });
+      // A drawing with no resource dictionary names no list.
+      expect(readDrawing([doc.newIndirect(4)], null, true, ticked)).toMatchObject({
+        describesTicked: false,
+      });
+    });
+  });
+
+  it("joins a glyph procedure on its own when read apart, and the parts as one when joined", () => {
+    const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
+      stream("", "/Span << /ActualText (Jane) >> BDC 0 0 9 9 re f EMC"),
+      stream("", "/Span << /ActualText (Smith) >> BDC 0 0 9 9 re f EMC"),
+    ];
+    withDoc(objects, (doc) => {
+      const both = [doc.newIndirect(4), doc.newIndirect(5)];
+      const ticked = foldTicked(["Jane Smith"]);
+      expect(readDrawing(both, null, false, ticked)).toMatchObject({
+        describesTicked: false,
+      });
+      expect(readDrawing(both, null, true, ticked)).toMatchObject({
+        describesTicked: true,
+      });
+    });
+  });
+});
+
+/**
+ * Spec 0022, AC-1: an inline picture MuPDF 1.28.1's write would lose, judged
+ * by the rule its loader and writer follow, the short key first (`/CS` before
+ * `/ColorSpace`, `/IM` before `/ImageMask`, measured in task 8). Each case is
+ * one picture whose dictionary holds `dict` beside its size and depth.
+ */
+describe("an inline picture MuPDF's write would lose (spec 0022)", () => {
+  const PALETTE = "<FF0000 00FF00 0000FF FFFF00>";
+  const TINT = "<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [1 0 0 0] /N 1 >>";
+  const WHITE = "<< /WhitePoint [0.9505 1 1.089] >>";
+  const picture = (dict: string) => `BI /W 1 /H 1 /BPC 8 ${dict} ID x EI`;
+  const loses = (dict: string) => read(picture(dict)).losesPicture;
+  const spacesOf = (dict: string) => [...read(picture(dict)).inlineSpaces].sort();
+
+  /**
+   * A case with two keys, written in both orders, so the scan cannot lean on
+   * which key comes first in the bytes (AC-6). Each title names the key
+   * written first.
+   */
+  const bothOrders = (label: string, one: string, other: string): string[][] =>
+    [
+      [one, other],
+      [other, one],
+    ].map(([first, second]) => [
+      `${label}, ${first.split(" ")[0]} first`,
+      `${first} ${second}`,
+    ]);
+
+  /** Every colour space that is neither a device space nor a name (AC-1). */
+  const LOST_SPACES = [
+    ["an indexed space over a short device base", `[/I /RGB 3 ${PALETTE}]`],
+    ["an indexed space over a full device base", `[/Indexed /DeviceRGB 3 ${PALETTE}]`],
+    ["an indexed space over a named resource", "[/I /Cs1 1 <FF000000FF00>]"],
+    ["an inline CalRGB space", `[/CalRGB ${WHITE}]`],
+    ["an inline Lab space", `[/Lab ${WHITE}]`],
+    ["an inline Separation space", `[/Separation /Spot /DeviceCMYK ${TINT}]`],
+    ["an inline DeviceN space", `[/DeviceN [/Cyan] /DeviceCMYK ${TINT}]`],
+  ] as const;
+
+  /** Every device space, which MuPDF writes back as `/CS/G`, `/CS/RGB` or `/CS/CMYK`. */
+  const DEVICE_SPACES = [
+    ["[/DeviceRGB]", "[/DeviceRGB]"],
+    ["[/RGB]", "[/RGB]"],
+    ["[/DeviceRGB 7]", "[/DeviceRGB 7]"],
+    ["[/CalCMYK << >>]", "[/CalCMYK << >>]"],
+    ["a device name", "/DeviceRGB"],
+  ] as const;
+
+  it.each([
+    ...LOST_SPACES.map(([label, space]) => [`${label} under /CS`, `/CS ${space}`]),
+    ...LOST_SPACES.map(([label, space]) => [
+      `${label} under /ColorSpace, with no /CS`,
+      `/ColorSpace ${space}`,
+    ]),
+    ["a resource name under /ColorSpace", "/ColorSpace /Cs1"],
+    ["a number under /ColorSpace", "/ColorSpace 3"],
+    ["a string under /ColorSpace", "/ColorSpace (DeviceRGB)"],
+    ["a dictionary under /ColorSpace", "/ColorSpace << >>"],
+    [
+      "/Pattern under /ColorSpace, which the scan does not look up",
+      "/ColorSpace /Pattern",
+    ],
+    ["an empty array under /CS", "/CS []"],
+    ["a pattern array under /CS", "/CS [/Pattern]"],
+    ...bothOrders(
+      "an indexed /CS beside a device /ColorSpace",
+      `/CS [/I /RGB 3 ${PALETTE}]`,
+      "/ColorSpace /DeviceRGB",
+    ),
+    ["no colour space, not a mask", ""],
+    ...bothOrders(
+      "/ImageMask true beside /IM false, with no colour space",
+      "/ImageMask true",
+      "/IM false",
+    ),
+    ...bothOrders(
+      "/ImageMask true beside /IM 0, with no colour space",
+      "/ImageMask true",
+      "/IM 0",
+    ),
+    ...bothOrders(
+      "/ImageMask true beside /IM null, with no colour space",
+      "/ImageMask true",
+      "/IM null",
+    ),
+    ["an inline JPX picture", "/CS /RGB /Filter /JPXDecode"],
+    ["a JPX filter in a /Filter array", "/CS /RGB /Filter [/JPXDecode]"],
+    ["a JPX filter under /F", "/CS /RGB /F /JPXDecode"],
+    ["a JPX filter in an /F array", "/CS /RGB /F [/AHx /JPXDecode]"],
+    ["a mask with a JPX filter", "/IM true /Filter /JPXDecode"],
+    ["the empty name MuPDF writes for a lost one", "/CS/"],
+    ...bothOrders(
+      "the empty name beside a device /ColorSpace",
+      "/CS/",
+      "/ColorSpace /DeviceRGB",
+    ),
+    ...bothOrders(
+      "/CS null beside a device /ColorSpace",
+      "/CS null",
+      "/ColorSpace /DeviceRGB",
+    ),
+    [
+      "a repeated /CS whose last is an indexed space",
+      `/CS /RGB /CS [/I /RGB 3 ${PALETTE}]`,
+    ],
+  ])("counts %s as lost", (_label, dict) => {
+    expect(loses(dict)).toBe(true);
+  });
+
+  it.each([
+    ["a mask", "/IM true"],
+    ["a mask under the long key", "/ImageMask true"],
+    ...bothOrders(
+      "/IM true beside an indexed /CS",
+      "/IM true",
+      `/CS [/I /RGB 3 ${PALETTE}]`,
+    ),
+    ...bothOrders(
+      "/IM true beside /ImageMask false, with no colour space",
+      "/IM true",
+      "/ImageMask false",
+    ),
+    ["a short device name", "/CS /G"],
+    ["a full device name", "/CS /DeviceCMYK"],
+    ["a resource name under /CS alone", "/CS /Cs1"],
+    ["a resource name under /CS with no entry, since the scan looks none up", "/CS /Cs9"],
+    ...bothOrders(
+      "/CS and /ColorSpace naming the same resource",
+      "/CS /Cs1",
+      "/ColorSpace /Cs1",
+    ),
+    ...bothOrders(
+      "/CS and /ColorSpace naming different resources",
+      "/CS /Cs1",
+      "/ColorSpace /Cs2",
+    ),
+    ...bothOrders(
+      "a device /CS beside an indexed /ColorSpace",
+      "/CS /RGB",
+      `/ColorSpace [/I /RGB 3 ${PALETTE}]`,
+    ),
+    ...bothOrders(
+      "a device array /CS beside an indexed /ColorSpace",
+      "/CS [/RGB]",
+      `/ColorSpace [/I /RGB 3 ${PALETTE}]`,
+    ),
+    ...bothOrders(
+      "a device /CS beside a resource /ColorSpace",
+      "/CS /G",
+      "/ColorSpace /Cs1",
+    ),
+    ...bothOrders(
+      "a resource /CS beside a device /ColorSpace",
+      "/CS /Cs1",
+      "/ColorSpace /G",
+    ),
+    ...DEVICE_SPACES.map(([label, space]) => [`${label} under /CS`, `/CS ${space}`]),
+    ...DEVICE_SPACES.map(([label, space]) => [
+      `${label} under /ColorSpace, with no /CS`,
+      `/ColorSpace ${space}`,
+    ]),
+    ...bothOrders(
+      "a device /CS beside /ImageMask true and /IM 0, as a device picture",
+      "/CS /RGB /IM 0",
+      "/ImageMask true",
+    ),
+    ["a repeated /CS whose last is a device name", `/CS [/I /RGB 3 ${PALETTE}] /CS /RGB`],
+  ])("keeps %s", (_label, dict) => {
+    expect(loses(dict)).toBe(false);
+  });
+
+  it("holds the name /CS writes directly, whatever /ColorSpace says", () => {
+    expect(spacesOf("/CS /Cs1")).toEqual(["Cs1"]);
+    expect(spacesOf("/CS /Cs1 /ColorSpace /Cs2")).toEqual(["Cs1"]);
+    expect(spacesOf("/ColorSpace /Cs2 /CS /Cs1")).toEqual(["Cs1"]);
+    expect(spacesOf(`/ColorSpace [/I /RGB 3 ${PALETTE}] /CS /Cs1`)).toEqual(["Cs1"]);
+  });
+
+  it("holds no device name, no empty name and nothing written inside an array", () => {
+    expect(spacesOf("/CS /RGB")).toEqual([]);
+    expect(spacesOf("/CS/")).toEqual([]);
+    expect(spacesOf("/CS [/I /Cs1 1 <FF000000FF00>]")).toEqual([]);
+    expect(spacesOf("/ColorSpace /Cs1")).toEqual([]);
+  });
+
+  it("joins every picture a drawing holds", () => {
+    const result = read(
+      `${picture("/CS /Cs1")} ${picture("/CS /G")} ${picture("/CS /Cs2")} ${picture("/CS [/I /RGB 0 <000000>]")}`,
+    );
+    expect(result.losesPicture).toBe(true);
+    expect([...result.inlineSpaces].sort()).toEqual(["Cs1", "Cs2"]);
+  });
+
+  it("reads the keyword true as a scalar outside a picture's dictionary", () => {
+    expect(read("/Span << /Open true >> BDC EMC true pop").describes).toBe(false);
+  });
+
+  /**
+   * A false `EI` in the first picture's data. The bytes after it read as a
+   * second, lost picture's dictionary, whose data holds no end, so the scan
+   * goes back to the first picture and settles on its real end, written inside
+   * the second dictionary's comment. The second picture was never there.
+   */
+  it("forgets a lost picture read from another picture's data once the scan settles on a later end", () => {
+    const result = read(
+      "BI /W 4 /H 1 /CS /G /BPC 8 ID a EI BI /CS [/I /RGB 0 <000000>] /W 1 % EI\n/BPC 8 ID z Q",
+    );
+    expect(result.losesPicture).toBe(false);
+    expect([...result.inlineSpaces]).toEqual([]);
+  });
+
+  it("ORs a lost picture and joins the names across glyph procedures read apart", () => {
+    const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
+      stream("", `1000 0 d0 ${picture("/CS /Cs1")}`),
+      stream("", `1000 0 d0 ${picture("/CS [/I /RGB 0 <000000>]")}`),
+    ];
+    withDoc(objects, (doc) => {
+      const kept = readDrawing([doc.newIndirect(4)], null, false);
+      const both = readDrawing([doc.newIndirect(4), doc.newIndirect(5)], null, false);
+      expect(kept).toMatchObject({ losesPicture: false });
+      expect(both).toMatchObject({ losesPicture: true });
+      if (both === "unsure") throw new Error("expected a reading");
+      expect([...both.inlineSpaces]).toEqual(["Cs1"]);
+    });
+  });
+});
+
 describe("what makes the scan unsure", () => {
   it.each([
     ["an unbalanced string", "BT (abc Tj ET"],
@@ -626,9 +1062,22 @@ describe("marked-descriptions.pdf", () => {
     );
   });
 
-  it("is the only committed fixture that warns", async () => {
+  /**
+   * Spec 0023, AC-3: with nothing ticked, `marked-ticked.pdf` warns where a
+   * description sits round no text drawn in its own stream (an `/Alt`, a
+   * `DP`, an `/ActualText` round only a form), and nowhere a span draws its
+   * name.
+   */
+  it("warns on marked-ticked.pdf's pages 6, 7 and 10", async () => {
+    await expect(warnedPages(fixture("marked-ticked.pdf"))).resolves.toEqual([6, 7, 10]);
+  });
+
+  it("is, with marked-ticked.pdf, the only committed fixture that warns", async () => {
     const names = readdirSync(new URL("../fixtures/", import.meta.url)).filter(
-      (name) => name.endsWith(".pdf") && name !== "marked-descriptions.pdf",
+      (name) =>
+        name.endsWith(".pdf") &&
+        name !== "marked-descriptions.pdf" &&
+        name !== "marked-ticked.pdf",
     );
     expect(names.length).toBeGreaterThan(90);
     for (const name of names) {

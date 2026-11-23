@@ -1,7 +1,7 @@
 # 0020. Type 3 glyphs stay inside their font
 
 **Date**: 2026-11-17
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 

@@ -1526,6 +1526,17 @@ describe("the redaction path (spec 0004)", () => {
     },
   );
 
+  /** Spec 0023, AC-5: the body names both kinds of hidden text. */
+  it("says a replacement-text refusal's item sits in replacement text or a description", async () => {
+    const run = sessionWithRun();
+    await openAndRedact(run);
+    await run.fail(new EngineError("replacement-text"));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "It sits inside hidden text written into the file, such as replacement text (the words copy and paste gives instead of what's drawn) or a description for screen readers, which can't be removed safely. RedactNest made no file.",
+    );
+  });
+
   it("drops a reply that arrives after starting over", async () => {
     // A run in flight is unsaved work, so Start over asks first.
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -2003,6 +2014,12 @@ describe("the page readings (spec 0006)", () => {
       "unreadable-structure",
       "RedactNest stopped to be safe",
       "Part of this file is built in a way RedactNest can't check safely, so it stopped rather than guess, and made no file.",
+    ],
+    // Spec 0022, AC-5: from its kind alone.
+    [
+      "inline-picture",
+      "A picture in this PDF can't come through cleanly",
+      "One of its pictures stores its colours in a way RedactNest's cleaning can't write back, so it stopped rather than hand back a copy with that picture missing, and made no file.",
     ],
   ] as const)(
     "says plainly why no file was made for %s, above the full drop zone (AC-26)",

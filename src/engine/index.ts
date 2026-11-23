@@ -65,6 +65,14 @@
  *     every Type 3 font also reaches. The open and the run refuse such a file
  *     before anything is removed, and the self check fails text below a glyph.
  *
+ * Spec 0022 added the inline picture rule:
+ *
+ *   - `inline.ts` judges whether any drawing holds an inline picture MuPDF's
+ *     write would lose (`judgeInlinePictures`, reading `marked.ts`'s
+ *     `losesPicture`). The open refuses such a file from its inspection, a run
+ *     refuses it before anything is removed, and the self check fails an
+ *     output that still shows one.
+ *
  * Nothing in this folder calls `search()` (spec 0005, INV-11); lint holds it.
  *
  * The functions ending in `With` take the loaded MuPDF module as a parameter.
@@ -130,6 +138,7 @@ export {
 } from "./device";
 export { hasPdfHeader, PDF_HEADER_WINDOW } from "./door";
 export { glyphRuleOf, judgeGlyphs, type GlyphVerdict } from "./glyphs";
+export { inlineRuleOf, judgeInlinePictures, type InlineVerdict } from "./inline";
 export { checkpoint, EngineFailure, RunCancelled } from "./failure";
 export { findMatchesIn, findTermsIn, offLineGlyphs } from "./find";
 export {

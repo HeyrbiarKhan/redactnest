@@ -194,11 +194,13 @@ function inspectOne(
   try {
     page = pdf.loadPage(index);
     const inspection = inspectPage(mupdf, page);
-    if (!describesAnything(drawings)) return inspection;
+    const { describes, losesPicture } = readPageDrawings(drawings);
+    if (!describes) return { ...inspection, losesPicture };
     const found = new Set<PageFinding>([...inspection.findings, "marked-descriptions"]);
     return {
       ...inspection,
       findings: PAGE_FINDINGS.filter((finding) => found.has(finding)),
+      losesPicture,
     };
   } catch {
     throw new EngineFailure("unsupported");
@@ -208,21 +210,38 @@ function inspectOne(
 }
 
 /**
- * Spec 0019, AC-9: does any drawing on the page hold a marked content property
- * list with a string that counts, or one the scan cannot read to its end? The
- * page's contents, and every form, tiling pattern and Type 3 glyph procedure
- * it draws, as the role walk names them, each with its owning `/Properties`.
+ * One full pass over every drawing on the page, each read once: the page's
+ * contents, and every form, tiling pattern and Type 3 glyph procedure it
+ * draws, as the role walk names them, each with its owning `/Properties`.
+ *
+ * `describes` (spec 0019, AC-9): a drawing holds a marked content property
+ * list with a string that counts, or cannot be read to its end. `losesPicture`
+ * (spec 0022, AC-2): a drawing holds an inline picture MuPDF's write would
+ * lose. A drawing the scan cannot read sets `describes`, adds no lost picture
+ * (INV-4's one exception), and the pass carries on, so a lost picture in a
+ * later drawing is still found.
  */
-function describesAnything(drawings: readonly DrawingUnit[]): boolean {
-  return drawings.some((drawing) => {
+function readPageDrawings(drawings: readonly DrawingUnit[]): {
+  readonly describes: boolean;
+  readonly losesPicture: boolean;
+} {
+  let describes = false;
+  let losesPicture = false;
+  for (const drawing of drawings) {
     const properties = drawing.resources?.get("Properties") ?? null;
     const read = scanDrawing(
       drawing.streams,
       properties !== null && properties.isDictionary() ? properties : null,
       drawing.joined,
     );
-    return read === "unsure" || read.describes;
-  });
+    if (read === "unsure") {
+      describes = true;
+      continue;
+    }
+    describes ||= read.describes;
+    losesPicture ||= read.losesPicture;
+  }
+  return { describes, losesPicture };
 }
 
 /** What the ordinary mode read says about a page's text. */
@@ -469,6 +488,8 @@ function inspectPage(mupdf: MuPdf, page: PDFPage): PageInspection {
     readable: text.readableCount > 0,
     concealed,
     emptyClip: drawing.emptyClip,
+    // Read from the role walk's drawings in `inspectOne`, never here.
+    losesPicture: false,
   };
 }
 

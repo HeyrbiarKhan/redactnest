@@ -61,6 +61,9 @@ describe("the closed set of failures", () => {
       // Added by spec 0019: a file whose shape the typed allowlist cannot
       // read, refused at open or by a run before anything is written.
       "unreadable-structure",
+      // Added by spec 0022: an inline picture MuPDF's write would lose or
+      // change, refused at open or by a run before anything is removed.
+      "inline-picture",
     ]);
   });
 

@@ -15,18 +15,22 @@ import {
   walkRoles,
   WRITE_OPTIONS,
   type DrawnShape,
+  type Pass,
   type Pipeline,
   type RedactionTarget,
   type StructureVerdict,
 } from "@/engine";
 import { foldTicked, holdsTicked } from "@/engine/allowlist";
 import { forEachDictionary } from "@/engine/objects";
+import { asTermId } from "@/worker/protocol";
 import { checkOutput, sameDrawnShape } from "@/engine/self-check";
 
 import {
   cidDocument,
   COLOUR_TEXT,
   KEPT_TEXT,
+  MARKED_BLOCKED_TEXT,
+  MARKED_TICKED_TEXT,
   UNREADABLE_PROFILE,
 } from "../../scripts/lib/kept-fixtures.mjs";
 import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
@@ -51,7 +55,7 @@ import {
   pageContent,
   pageRenders,
 } from "../support/mupdf";
-import { findTarget } from "../support/targets";
+import { findTarget, findTargets } from "../support/targets";
 
 /**
  * What a kept object points at. Spec 0019, AC-4.
@@ -338,6 +342,44 @@ describe("a ticked text at a string place (spec 0021)", () => {
 
   it("passes every string place with nothing ticked", () => {
     expect(placeCheck("Ordering", "RowanAshby", "")).toBeNull();
+  });
+
+  /**
+   * Spec 0021's AC-4 as built, owed by its build and written by spec 0022's
+   * (its AC-8): a string place the check cannot decode fails it whenever
+   * anything is ticked, since it may hold anything. The walk refuses such a
+   * string at every one of these places first, so only bytes built here, with
+   * a structure check that answers clean, reach it. `<FEFF00650E>` opens as
+   * UTF-16 and ends on half a unit, so it cannot be decoded.
+   */
+  describe("an /Ordering the check cannot decode (spec 0021's owed test)", () => {
+    const undecodable = (ticked: readonly string[]) => {
+      const { bytes } = writePdf({
+        objects: document({
+          extra: ["<< /Registry (Adobe) /Ordering <FEFF00650E> /Supplement 0 >>"],
+        }),
+        trailer: "/Root 1 0 R",
+      });
+      return checkOutput(
+        mupdf,
+        bytes.slice().buffer,
+        [],
+        new Map(),
+        foldTicked(ticked),
+        () => "clean",
+      );
+    };
+
+    it.each([["Clean"], ["e"], ["Rowan Ashby"]])(
+      "fails with redaction-incomplete with %j ticked",
+      (ticked) => {
+        expect(undecodable([ticked])).toBe("redaction-incomplete");
+      },
+    );
+
+    it("passes with nothing ticked", () => {
+      expect(undecodable([])).toBeNull();
+    });
   });
 
   it("fails beside an unused colour space entry and never writes twice", async () => {
@@ -922,8 +964,8 @@ function unloadableSpace(fault: Parameters<typeof document>[0] = {}): ArrayBuffe
 /** A structure check that answers `answer`, or the real verdict, and counts every call. */
 function countedCheck(answer?: StructureVerdict) {
   const verdicts: StructureVerdict[] = [];
-  const checkStructure: Pipeline["checkStructure"] = (check, count) => {
-    const verdict = answer ?? structureIsClean(check, count);
+  const checkStructure: Pipeline["checkStructure"] = (check, count, ticked) => {
+    const verdict = answer ?? structureIsClean(check, count, ticked);
     verdicts.push(verdict);
     return verdict;
   };
@@ -981,8 +1023,8 @@ describe("the second write", () => {
   it("never writes twice beside an unreadable drawing, which fails with unsupported", async () => {
     const seen: StructureVerdict[] = [];
     const { rewrite, calls } = countedRewrite();
-    const checkStructure: Pipeline["checkStructure"] = (check, count) => {
-      seen.push(structureIsClean(check, count));
+    const checkStructure: Pipeline["checkStructure"] = (check, count, ticked) => {
+      seen.push(structureIsClean(check, count, ticked));
       return "unreadable";
     };
 
@@ -1362,8 +1404,21 @@ describe("MuPDF and an inline picture over a named indexed base", () => {
     expect(pageRenders(inlineIndexed("[/I /RGB 1 <FF000000FF00>]"))).not.toEqual(without);
   });
 
+  /**
+   * Spec 0022 refuses this picture (AC-1, AC-3), so the run swaps its inline
+   * picture rule out: this pins MuPDF's behaviour, not the rule (AC-7).
+   */
   it("leaves a run's output with no inline picture and no colour space entry", async () => {
-    const { output } = await redactDocumentWith(mupdf, inlineIndexed(NAMED), []);
+    const { output } = await redactDocumentWith(
+      mupdf,
+      inlineIndexed(NAMED),
+      [],
+      {},
+      {
+        ...PIPELINE,
+        judgeInlinePictures: () => "kept",
+      },
+    );
 
     expect(pageContent(output, 0)).not.toMatch(/\bBI\b/);
     expect(colourSpaceEntries(output)).toBe(0);
@@ -1476,5 +1531,446 @@ describe("MuPDF's empty stream after a resolve", () => {
     expect(documentImages(written(false))).toEqual(
       documentImages(fixture("shared-pictures.pdf")),
     );
+  });
+});
+
+/** `marked-ticked.pdf`'s name for a page, from 1. */
+function markedName(page: number): string {
+  return MARKED_TICKED_TEXT[page as keyof typeof MARKED_TICKED_TEXT];
+}
+
+/** Every place `findTargets` finds a page's name, the page counted from 1. */
+function markedTargets(page: number): RedactionTarget[] {
+  return findTargets(fixture("marked-ticked.pdf"), page - 1, markedName(page));
+}
+
+/**
+ * Spec 0023, AC-3. Each page of `marked-ticked.pdf` writes its own made up
+ * name into a description that MuPDF keeps once the name's glyphs go: a span
+ * that also draws a shape, a highlight, a clip or a form, a named list, an
+ * inline `/Alt`, a `DP` and a name split across two spans. On the code before
+ * spec 0023 each of those runs made a file still holding the name (page 9:
+ * both words), with the check passing. Page 7's `DP` was measured first (task
+ * 1, 2026-11-23): MuPDF 1.28.1 keeps it beside the name's removed glyphs.
+ */
+describe("a ticked text in a description (spec 0023)", () => {
+  it.each([1, 2, 3, 4, 5, 6, 7, 9])(
+    "fails page %i with its name ticked with replacement-text, and makes no file",
+    async (page) => {
+      const targets = markedTargets(page);
+      expect(targets).toHaveLength(1);
+
+      await expect(kindOf(fixture("marked-ticked.pdf"), targets)).resolves.toBe(
+        "replacement-text",
+      );
+    },
+  );
+
+  /**
+   * The recorded false refusal (AC-1, *Consequences*): the span's
+   * `/ActualText` sits round only a form that draws other text, which the
+   * scan never counts as drawn, so ticking the plain row refuses although the
+   * character check would read the span. The find step blocks the span's row,
+   * so the plain row is the one a visitor can tick; every place
+   * `findTargets` finds refuses the same way.
+   */
+  it("fails page 10 with replacement-text, its plain row alone or every place", async () => {
+    const bytes = fixture("marked-ticked.pdf");
+    const targets = markedTargets(10);
+    expect(targets).toHaveLength(2);
+
+    await expect(kindOf(bytes, targets.slice(0, 1))).resolves.toBe("replacement-text");
+    await expect(kindOf(bytes, targets)).resolves.toBe("replacement-text");
+  });
+
+  it("makes a file from page 8, the control, without its name", async () => {
+    const bytes = fixture("marked-ticked.pdf");
+    const { output } = await redactDocumentWith(mupdf, bytes, markedTargets(8));
+
+    expect(holds(output, markedName(8))).toBe(false);
+  });
+
+  it("makes a file with nothing ticked", async () => {
+    await expect(kindOf(fixture("marked-ticked.pdf"), [])).resolves.toBeNull();
+  });
+});
+
+/**
+ * Spec 0023, AC-4: the one recorded limit. `marked-blocked.pdf` draws a name
+ * plainly, and below it writes the same name as replacement text over other
+ * glyphs. The find step blocks the second place (`replacement-text`), so only
+ * the plain row can be ticked, and the span keeps the name in the output with
+ * the check passing: it still draws glyphs, so the character check reads its
+ * replacement text as an unticked place, and the scan never compares it.
+ */
+describe("a blocked row's replacement text, a shown limit (spec 0023)", () => {
+  it("lists the span's place as a blocked row beside the plain one", async () => {
+    const doc = await openDocumentWith(mupdf, fixture("marked-blocked.pdf"), LIMITS);
+    try {
+      const name = MARKED_BLOCKED_TEXT.name;
+      const found = await doc.findTerms({
+        contextChars: 30,
+        terms: [{ id: asTermId(name), text: name }],
+      });
+      expect(found.map((match) => [match.text, match.blocked])).toEqual([
+        [name, null],
+        [name, "replacement-text"],
+      ]);
+    } finally {
+      doc.close();
+    }
+  });
+
+  it("makes a file from the plain row ticked, the span's /ActualText still holding the name", async () => {
+    const bytes = fixture("marked-blocked.pdf");
+    const [plain] = findTargets(bytes, 0, MARKED_BLOCKED_TEXT.name);
+    const { output } = await redactDocumentWith(mupdf, bytes, [plain]);
+
+    const content = pageContent(output, 0);
+    expect(content).toContain(`/ActualText(${MARKED_BLOCKED_TEXT.name})`);
+    expect(content.split(MARKED_BLOCKED_TEXT.name)).toHaveLength(2);
+    expect(documentText(output)).toContain(MARKED_BLOCKED_TEXT.name);
+  });
+});
+
+/** The name the places and the order of kinds tests draw, and describe. */
+const PLACE_NAME = "Hester Quayle";
+
+/** An inline `/Alt` naming `PLACE_NAME` around a square `size` wide. */
+const placeAlt = (size: number): string =>
+  `/Figure << /Alt (A photo of ${PLACE_NAME}) >> BDC 0 0 ${size} ${size} re f EMC`;
+
+/** The page line drawing `PLACE_NAME` in Helvetica. */
+const PLACE_LINE = `BT /F1 12 Tf 72 700 Td (${PLACE_NAME}) Tj ET`;
+
+/**
+ * One page drawing `PLACE_NAME`, beside a description naming it inside
+ * `place`: a form XObject, a coloured tiling pattern, or a Type 3 glyph
+ * procedure that draws only a square (so spec 0020's glyph rule passes it),
+ * its font with or without `/Resources`.
+ */
+function placeDocument(
+  place: "form" | "pattern" | "glyph" | "glyph with resources",
+): ArrayBuffer {
+  const helvetica = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+  const page = (resources: string) =>
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+    `/Resources << /Font << /F1 5 0 R ${resources.startsWith("/T3") ? resources : ""}>> ` +
+    `${resources.startsWith("/T3") ? "" : resources} >> /Contents 4 0 R >>`;
+  const head = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+  ];
+  const objects: Body[] =
+    place === "form"
+      ? [
+          ...head,
+          page("/XObject << /Fm0 6 0 R >>"),
+          stream("", `${PLACE_LINE}\nq 1 0 0 1 72 500 cm /Fm0 Do Q`),
+          helvetica,
+          stream("/Type /XObject /Subtype /Form /BBox [0 0 100 100]", placeAlt(100)),
+        ]
+      : place === "pattern"
+        ? [
+            ...head,
+            page("/Pattern << /P1 6 0 R >>"),
+            stream("", `${PLACE_LINE}\n/Pattern cs /P1 scn 72 500 100 100 re f`),
+            helvetica,
+            stream(
+              "/Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 100 100] " +
+                "/XStep 100 /YStep 100 /Matrix [1 0 0 1 72 500] /Resources << >>",
+              placeAlt(100),
+            ),
+          ]
+        : [
+            ...head,
+            page("/T3 6 0 R"),
+            stream("", `${PLACE_LINE}\nBT /T3 100 Tf 72 500 Td (A) Tj ET`),
+            helvetica,
+            "<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1000 1000] " +
+              "/FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << /sq 7 0 R >> " +
+              "/Encoding << /Type /Encoding /Differences [65 /sq] >> " +
+              "/FirstChar 65 /LastChar 65 /Widths [1000] " +
+              `${place === "glyph with resources" ? "/Resources << >> " : ""}>>`,
+            stream("", `1000 0 d0 ${placeAlt(1000)}`),
+          ];
+  return writePdf({ objects, trailer: "/Root 1 0 R" }).bytes.slice().buffer;
+}
+
+/**
+ * Spec 0023, AC-2 and AC-3: the rule holds in every drawing the walk reaches,
+ * not only a page's contents. A form, a tiling pattern and a Type 3 glyph
+ * procedure each keep an inline `/Alt` naming the ticked name; each run
+ * refuses, and the same document with nothing ticked makes a file. The glyph
+ * procedures are read per procedure (`joined` false), under the font's owner
+ * when the font has `/Resources`, else with the drawings that have none.
+ */
+describe("a ticked text in a description, in every place (spec 0023)", () => {
+  it.each(["form", "pattern", "glyph", "glyph with resources"] as const)(
+    "fails a %s naming the ticked name with replacement-text",
+    async (place) => {
+      const bytes = placeDocument(place);
+
+      await expect(kindOf(bytes, [findTarget(bytes, 0, PLACE_NAME)])).resolves.toBe(
+        "replacement-text",
+      );
+    },
+  );
+
+  it.each(["form", "pattern", "glyph", "glyph with resources"] as const)(
+    "makes a file from the %s with nothing ticked",
+    async (place) => {
+      await expect(kindOf(placeDocument(place), [])).resolves.toBeNull();
+    },
+  );
+
+  /** Read on the source: the hit is found in each place, by both readers. */
+  it.each(["form", "pattern", "glyph", "glyph with resources"] as const)(
+    "answers ticked-description for the %s, and clean with nothing ticked",
+    (place) => {
+      const doc = mupdf.Document.openDocument(placeDocument(place), "application/pdf");
+      try {
+        const pdf = doc.asPDF() as PDFDocument;
+        expect(structureIsClean(pdf, 1, foldTicked([PLACE_NAME]))).toBe(
+          "ticked-description",
+        );
+        expect(structureIsClean(pdf, 1)).toBe("clean");
+      } finally {
+        doc.destroy();
+      }
+    },
+  );
+
+  /**
+   * Where the glyph procedures are read, as measured in this build
+   * (2026-11-23): always in resource use. A font with `/Resources` is an owner
+   * of its own; a font with none is read under the dictionary it is reached
+   * from, the page's, as a form with none is (`drawer.from` in the walk), so
+   * the hit in the font with no `/Resources` comes through the page's owner,
+   * never `resourcelessUse`. Spec 0023's AC-2 and AC-3 expected that one in
+   * `resourcelessUse`; the next test reaches that reader through a page with
+   * no resource dictionary.
+   */
+  it.each([
+    ["glyph with resources", "an owner of its own"],
+    ["glyph", "the page's owner"],
+  ] as const)("reads the %s's procedures in %s", (place, where) => {
+    const doc = mupdf.Document.openDocument(placeDocument(place), "application/pdf");
+    try {
+      const walk = walkRoles(doc.asPDF() as PDFDocument, "read");
+      const holders = walk.owners.filter(({ units }) =>
+        units.some((unit) => !unit.joined),
+      );
+      expect(holders).toHaveLength(1);
+      const withPage = holders[0].units.some((unit) => unit.joined);
+      expect(withPage ? "the page's owner" : "an owner of its own").toBe(where);
+      expect(
+        walk.pages.flat().some((unit) => !unit.joined && unit.resources === null),
+      ).toBe(false);
+    } finally {
+      doc.destroy();
+    }
+  });
+
+  /**
+   * `resourcelessUse`, which reads every drawing with no resource dictionary:
+   * a second page with none, holding only an inline `/Alt` naming the name
+   * the first page draws. Read on the source, since a run on a page with no
+   * `/Resources` already refuses with nothing ticked, `/Alt` or not (seen in
+   * this build, older than spec 0023, and failing safe).
+   */
+  it("answers ticked-description for a page with no resource dictionary", () => {
+    const objects: Body[] = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+        "/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+      stream("", PLACE_LINE),
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 7 0 R >>",
+      stream("", `q 1 0 0 1 72 500 cm ${placeAlt(100)} Q`),
+    ];
+    withDoc(objects, (doc) => {
+      const walk = walkRoles(doc, "read");
+      expect(walk.pages[1].every((unit) => unit.resources === null)).toBe(true);
+      expect(structureIsClean(doc, 2, foldTicked([PLACE_NAME]))).toBe(
+        "ticked-description",
+      );
+      expect(structureIsClean(doc, 2)).toBe("clean");
+    });
+  });
+});
+
+/**
+ * Two pages: the first draws `PLACE_NAME` beside an inline `/Alt` naming it
+ * around a square; the second paints a square through the unreadable profile,
+ * so the first write keeps a colour space entry nothing names (spec 0019,
+ * AC-15), on a page nobody ticks.
+ */
+function describedBesideUnusedSpace(): ArrayBuffer {
+  const { bytes } = writePdf({
+    objects: [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+        "/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+      stream("", `${PLACE_LINE}\nq 1 0 0 1 72 500 cm ${placeAlt(100)} Q`),
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << " +
+        "/Font << /F1 5 0 R >> /ColorSpace << /CS0 [/ICCBased 8 0 R] >> >> /Contents 7 0 R >>",
+      stream(
+        "",
+        "q /CS0 cs 0.2 0.4 0.6 sc 72 500 100 100 re f Q BT /F1 18 Tf 72 700 Td (A square) Tj ET",
+      ),
+      stream("/N 3", UNREADABLE_PROFILE),
+    ],
+    trailer: "/Root 1 0 R",
+  });
+  return bytes.slice().buffer;
+}
+
+/**
+ * `document()`'s page, its contents also holding an inline `/Alt` naming
+ * `Clean` around a square, and its form's stream unbalanced, so the scan
+ * cannot read it. `ownResources` gives the form a resource dictionary of its
+ * own, so it is read under another owner than the page's.
+ */
+function describedBesideUnreadable(ownResources: boolean): Body[] {
+  const objects = document({ form: ownResources ? "/Resources << >>" : "" });
+  objects[3] = stream(
+    "",
+    "BT /F1 12 Tf 72 700 Td (Clean) Tj ET /Fm1 Do /Im1 Do " +
+      "/Figure << /Alt (Clean) >> BDC 0 0 1 1 re f EMC",
+  );
+  objects[5] = stream(
+    `/Type /XObject /Subtype /Form /BBox [0 0 10 10] ${ownResources ? "/Resources << >>" : ""}`,
+    "BT (abc Tj ET",
+  );
+  return objects;
+}
+
+/** A ticked target for `checkOutput`'s kind, on a record with no page to compare. */
+const TICKED_ELSEWHERE: RedactionTarget = Object.freeze({
+  page: 0,
+  quads: [],
+  start: 0,
+  end: 5,
+  kind: "email",
+  term: null,
+  text: "Clean",
+});
+
+/**
+ * Spec 0023, AC-2: where `"ticked-description"` ranks, in the structure part
+ * and in `checkOutput`'s kinds.
+ */
+describe("the order of kinds for a ticked description (spec 0023)", () => {
+  it("fails beside an unused colour space entry with replacement-text and never writes twice", async () => {
+    const bytes = describedBesideUnusedSpace();
+    const { rewrite, calls } = countedRewrite();
+    const { checkStructure, verdicts } = countedCheck();
+
+    await expect(
+      kindOf(bytes, [findTarget(bytes, 0, PLACE_NAME)], {
+        ...PIPELINE,
+        checkStructure,
+        rewrite,
+      }),
+    ).resolves.toBe("replacement-text");
+    expect(verdicts).toEqual(["ticked-description"]);
+    expect(calls.count).toBe(0);
+  });
+
+  it.each([
+    ["in the same owner", false],
+    ["in another owner", true],
+  ] as const)(
+    "outranks an unreadable stream %s, which reads unreadable with nothing ticked",
+    (_label, ownResources) => {
+      const objects = describedBesideUnreadable(ownResources);
+      withDoc(objects, (doc) => {
+        expect(structureIsClean(doc, 1, foldTicked(["Clean"]))).toBe(
+          "ticked-description",
+        );
+        expect(structureIsClean(doc, 1)).toBe("unreadable");
+      });
+
+      const { bytes } = writePdf({ objects, trailer: "/Root 1 0 R" });
+      expect(
+        checkOutput(
+          mupdf,
+          bytes.slice().buffer,
+          [],
+          new Map([[0, [TICKED_ELSEWHERE]]]),
+          foldTicked(["Clean"]),
+          (check, _count, ticked) => structureIsClean(check, 1, ticked),
+        ),
+      ).toBe("replacement-text");
+    },
+  );
+
+  /**
+   * A page that still shows the ticked name is a leak, which outranks the
+   * hit: the text pass skipped on `marked-ticked.pdf`'s page 6 leaves the
+   * name's glyphs, beside its `/Alt` naming it.
+   */
+  it("gives way to a ticked leak on a page, which is redaction-incomplete", async () => {
+    const skip: Pass = () => {};
+    const { checkStructure, verdicts } = countedCheck();
+
+    await expect(
+      kindOf(fixture("marked-ticked.pdf"), markedTargets(6), {
+        ...PIPELINE,
+        textPass: skip,
+        checkStructure,
+      }),
+    ).resolves.toBe("redaction-incomplete");
+    expect(verdicts).toEqual(["ticked-description"]);
+  });
+
+  /** Spec 0021's string place check runs right after, outside the seam, and wins. */
+  it("gives way to a ticked text at a string place, which is redaction-incomplete", () => {
+    const { bytes } = writePdf({
+      objects: document({
+        extra: ["<< /Registry (Adobe) /Ordering (RowanAshby) /Supplement 0 >>"],
+      }),
+      trailer: "/Root 1 0 R",
+    });
+
+    expect(
+      checkOutput(
+        mupdf,
+        bytes.slice().buffer,
+        [],
+        new Map([[0, [TICKED_ELSEWHERE]]]),
+        foldTicked(["Rowan Ashby"]),
+        () => "ticked-description",
+      ),
+    ).toBe("redaction-incomplete");
+  });
+
+  it("answers replacement-text from the verdict alone, on a run with something ticked", () => {
+    const { bytes } = writePdf({ objects: document(), trailer: "/Root 1 0 R" });
+
+    expect(
+      checkOutput(
+        mupdf,
+        bytes.slice().buffer,
+        [],
+        new Map([[0, [TICKED_ELSEWHERE]]]),
+        foldTicked(["Clean"]),
+        () => "ticked-description",
+      ),
+    ).toBe("replacement-text");
+  });
+
+  /** With nothing ticked the list is empty, so the scan never compares. */
+  it("cannot arise with nothing ticked", () => {
+    const objects = describedBesideUnreadable(false);
+    objects[5] = stream("/Type /XObject /Subtype /Form /BBox [0 0 10 10]", "");
+    withDoc(objects, (doc) => {
+      expect(structureIsClean(doc, 1, [])).toBe("clean");
+      expect(structureIsClean(doc, 1, foldTicked(["Clean"]))).toBe("ticked-description");
+    });
   });
 });

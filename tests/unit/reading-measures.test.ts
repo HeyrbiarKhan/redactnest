@@ -143,7 +143,7 @@ describe("a paint's contrast with white paper", () => {
 });
 
 function inspection(readable: boolean, ...findings: PageFinding[]): PageInspection {
-  return { findings, readable, concealed: [], emptyClip: false };
+  return { findings, readable, concealed: [], emptyClip: false, losesPicture: false };
 }
 
 /**

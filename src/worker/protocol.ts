@@ -65,6 +65,9 @@ export const ENGINE_ERROR_KINDS = [
   // refused at open on the prepared review copy, or by a run on its own
   // rebuilt document before anything is written.
   "unreadable-structure",
+  // Spec 0022, AC-5: an inline picture MuPDF's write would lose, refused at
+  // open, or by a run before anything is removed.
+  "inline-picture",
 ] as const;
 
 export type EngineErrorKind = (typeof ENGINE_ERROR_KINDS)[number];

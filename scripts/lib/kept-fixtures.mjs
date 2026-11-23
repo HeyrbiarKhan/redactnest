@@ -557,6 +557,152 @@ export function markedDescriptions() {
 }
 
 /**
+ * The made up name each page of `marked-ticked.pdf` draws, keyed by page
+ * (spec 0023, AC-3). No name, and no folded name, appears on any other page
+ * or inside another page's name, so ticking a page's name ticks that page
+ * alone. Page 9's two words sit in two spans; page 10's name is drawn once
+ * and written once as replacement text.
+ */
+export const MARKED_TICKED_TEXT = Object.freeze({
+  1: "Odile Brask",
+  2: "Tamsin Quell",
+  3: "Perrin Vasko",
+  4: "Ilse Marwood",
+  5: "Dorian Pake",
+  6: "Mirela Strand",
+  7: "Caspar Lune",
+  8: "Wren Halloway",
+  9: "Corin Vale",
+  10: "Esme Tarrow",
+});
+
+/** The text page 10's form draws inside the span, which holds no name. */
+export const MARKED_FORM_TEXT = "A caption inside a form";
+
+/** The name `marked-blocked.pdf` draws plainly and writes over other glyphs (spec 0023, AC-4). */
+export const MARKED_BLOCKED_TEXT = Object.freeze({
+  name: "Juno Pellar",
+  /** The glyphs the span's replacement text sits over. */
+  shown: "Signed by the tenant",
+});
+
+/** Where each case draws its name, and a filled shape well outside that line's box. */
+const NAME_Y = 690;
+const SHAPE_OUTSIDE = "0.6 g 72 560 120 60 re f 0 g\n";
+
+/** A span holding `/ActualText (text)` around `inside`. */
+function actualTextSpan(text, inside) {
+  return `/Span << /ActualText ${literal(text)} >> BDC ${inside}EMC\n`;
+}
+
+/**
+ * Spec 0023, AC-3. One page per case `/debug` measured, each drawing its own
+ * name from `MARKED_TICKED_TEXT` in Helvetica:
+ *
+ *  1. an inline `/ActualText` span around the name and a shape outside its box;
+ *  2. the same, with a highlight wider than the name's box inside the span;
+ *  3. the same, with only a clip inside the span besides the glyphs;
+ *  4. the same, with a form XObject drawn inside the span;
+ *  5. a named list's `/ActualText` around the name and a shape;
+ *  6. the name drawn plainly, beside an inline `/Alt` naming it around a shape;
+ *  7. the name drawn plainly, beside a `DP` whose inline `/ActualText` is the name;
+ *  8. the control: an inline `/ActualText` span around exactly the name;
+ *  9. the name's two words, each in a span of its own with a shape;
+ * 10. the name drawn plainly, beside an `/ActualText` span whose only drawing
+ *     is a form that draws other text.
+ *
+ * Ticked, today's code makes a file still holding the name on pages 1 to 7
+ * and 9; the check fails each with `replacement-text` once spec 0023 holds.
+ */
+export function markedTicked() {
+  const name = (page) => MARKED_TICKED_TEXT[page];
+  const drawn = (page) => line("F1", 12, 72, NAME_Y, name(page));
+  return keptDocument(({ add, fonts }) => {
+    const named = add(`<< /ActualText ${literal(name(5))} >>`);
+    const box = add(
+      stream(
+        "/Type /XObject /Subtype /Form /BBox [0 0 120 60]",
+        "0.6 g 0 0 120 60 re f\n",
+      ),
+    );
+    const caption = form(add, fonts, MARKED_FORM_TEXT);
+    const [first, second] = name(9).split(" ");
+    // Page 9's second word starts one Helvetica space past the first's end
+    // (`Corin`, 2.389 em, and a space, 0.278 em, at 12 points).
+    const secondX = 72 + (2.389 + 0.278) * 12;
+    return {
+      pages: [
+        { content: actualTextSpan(name(1), drawn(1) + SHAPE_OUTSIDE) },
+        {
+          content: actualTextSpan(
+            name(2),
+            `1 1 0 rg 66 ${NAME_Y - 6} 200 22 re f 0 g\n` + drawn(2),
+          ),
+        },
+        {
+          content: actualTextSpan(
+            name(3),
+            `q 66 ${NAME_Y - 6} 200 22 re W n\n` + drawn(3) + "Q\n",
+          ),
+        },
+        {
+          resources: `/XObject << /Fm1 ${box} 0 R >>`,
+          content: actualTextSpan(name(4), drawn(4) + "q 1 0 0 1 72 560 cm /Fm1 Do Q\n"),
+        },
+        {
+          resources: `/Properties << /MC0 ${named} 0 R >>`,
+          content: `/Span /MC0 BDC ${drawn(5)}${SHAPE_OUTSIDE}EMC\n`,
+        },
+        {
+          content:
+            drawn(6) +
+            `/Figure << /Alt ${literal(`A photo of ${name(6)}`)} >> BDC ${SHAPE_OUTSIDE}EMC\n`,
+        },
+        {
+          content: drawn(7) + `/Note << /ActualText ${literal(name(7))} >> DP\n`,
+        },
+        { content: actualTextSpan(name(8), drawn(8)) },
+        {
+          content:
+            actualTextSpan(first, line("F1", 12, 72, NAME_Y, first) + SHAPE_OUTSIDE) +
+            actualTextSpan(
+              second,
+              line("F1", 12, secondX, NAME_Y, second) + "0.6 g 300 560 120 60 re f 0 g\n",
+            ),
+        },
+        {
+          resources: `/XObject << /Fm1 ${caption} 0 R >>`,
+          content:
+            drawn(10) + actualTextSpan(name(10), "q 1 0 0 1 72 560 cm /Fm1 Do Q\n"),
+        },
+      ],
+    };
+  });
+}
+
+/**
+ * Spec 0023, AC-4. One page: the name drawn plainly, and below it an inline
+ * `/ActualText` span holding the same name over other glyphs, the blocked
+ * shape `/debug` measured. The find step lists the span as a blocked row, so
+ * only the plain row can be ticked, and the span keeps the name in the output
+ * with the check passing: the one recorded limit.
+ */
+export function markedBlocked() {
+  return keptDocument(() => ({
+    pages: [
+      {
+        content:
+          line("F1", 12, 72, 720, MARKED_BLOCKED_TEXT.name) +
+          actualTextSpan(
+            MARKED_BLOCKED_TEXT.name,
+            line("F1", 12, 72, 690, MARKED_BLOCKED_TEXT.shown),
+          ),
+      },
+    ],
+  }));
+}
+
+/**
  * Every line the fourth pass fixtures draw, one for every page of every
  * fixture and one for each of `shared-forms.pdf`'s forms, so two builds write
  * the same bytes and a test can tick any page's line. Spec 0019, AC-17.

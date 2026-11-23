@@ -45,7 +45,9 @@ import {
   keptLang,
   keptPicture,
   keptProgramKeys,
+  markedBlocked,
   markedDescriptions,
+  markedTicked,
   sharedForms,
   sharedPictures,
 } from "./lib/kept-fixtures.mjs";
@@ -57,6 +59,12 @@ import {
   glyphText,
   glyphUndrawnForm,
 } from "./lib/glyph-fixtures.mjs";
+import {
+  inlineIndexed,
+  inlineIndexedForm,
+  inlineIndexedGlyph,
+  inlineIndexedPattern,
+} from "./lib/inline-fixtures.mjs";
 import { encryptObjects } from "./lib/pdf-encrypt.mjs";
 import { termsDense, termsPdf } from "./lib/terms-fixtures.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
@@ -654,6 +662,17 @@ const FIXTURES = [
     markedDescriptions(),
     "one page per case of descriptions written into a page, warned and quiet",
   ],
+  // Spec 0023: a ticked text in a description.
+  [
+    "marked-ticked.pdf",
+    markedTicked(),
+    "one page per description that keeps a ticked name, and two controls",
+  ],
+  [
+    "marked-blocked.pdf",
+    markedBlocked(),
+    "a name drawn plainly and written as replacement text over other glyphs",
+  ],
   // Spec 0021: a ticked value at a string place.
   ["kept-lang.pdf", keptLang(), "a catalog /Lang repeating the name the page shows"],
   [
@@ -718,6 +737,28 @@ const FIXTURES = [
     "glyph-bitmap.pdf",
     glyphBitmap(),
     "the control: a bitmap font with no resources, inline masks holding EI and Tj",
+  ],
+  // Spec 0022: an inline picture MuPDF's write would lose, one per place the
+  // open's role walk reads, each refused at open with inline-picture (AC-6).
+  [
+    "inline-indexed.pdf",
+    inlineIndexed(),
+    "an inline picture with its palette written inline, in the page's contents",
+  ],
+  [
+    "inline-indexed-form.pdf",
+    inlineIndexedForm(),
+    "the same picture in a form the page draws once",
+  ],
+  [
+    "inline-indexed-pattern.pdf",
+    inlineIndexedPattern(),
+    "the same picture as a tiling pattern's one cell",
+  ],
+  [
+    "inline-indexed-glyph.pdf",
+    inlineIndexedGlyph(),
+    "the same picture as a coloured Type 3 glyph, shown once",
   ],
 ];
 

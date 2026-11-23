@@ -1,6 +1,6 @@
 import type { PDFObject } from "mupdf";
 
-import { readsAsLanguageTag } from "./allowlist";
+import { decodeTextString, foldPlaceText, readsAsLanguageTag } from "./allowlist";
 
 /**
  * The read only scan of a page's drawing instructions. Spec 0019, AC-9, *Scan
@@ -16,12 +16,17 @@ import { readsAsLanguageTag } from "./allowlist";
  * The one named exception to spec 0001's "one PDF parser" (INV-4). It reads the
  * bytes MuPDF decodes, never a raw filtered stream, edits nothing and computes
  * no geometry. Its only outputs are whether a property list holds a string
- * that counts, which resource names the streams use, and whether they show
- * text (`showsText`, spec 0020, which the glyph rule reads), and nothing it
- * answers changes what the rebuild keeps: the glyph rule refuses a file, it
- * never deletes. Any doubt is `"unsure"`, which warns at open and fails the
- * check, so a fault in here can add a warning or a refusal, never pass a file
- * the rest of the check would fail.
+ * that counts, which resource names the streams use, whether they show text
+ * (`showsText`, spec 0020, which the glyph rule reads), whether an inline
+ * picture would be lost by MuPDF's write (`losesPicture`) and which colour
+ * space names inline pictures write under `/CS` (`inlineSpaces`, spec 0022,
+ * which the inline picture rule and the check read), and whether a
+ * description string holds a ticked text (`describesTicked`, spec 0023, which
+ * only the check asks for). Nothing it answers changes what the rebuild keeps:
+ * the glyph rule, the inline picture rule and the check refuse a file, they
+ * never delete. Any doubt is `"unsure"`, which warns at
+ * open and fails the check, so a fault in here can add a warning or a refusal,
+ * never pass a file the rest of the check would fail.
  */
 
 /** The resource dictionaries a drawing names entries of. */
@@ -40,6 +45,25 @@ export interface DrawingRead {
    * operator. Spec 0020, AC-3.
    */
   readonly showsText: boolean;
+  /**
+   * An inline picture here is one MuPDF 1.28.1's write would lose (spec 0022,
+   * AC-1): the inline picture rule refuses the file, and the check fails an
+   * output that still holds one.
+   */
+  readonly losesPicture: boolean;
+  /**
+   * Every name, neither empty nor a device name, an inline picture's `/CS`
+   * holds directly: the names the writer prints as `/CS/Name`, which the
+   * check holds against the owner's `/ColorSpace` entries (spec 0022, AC-4).
+   */
+  readonly inlineSpaces: ReadonlySet<string>;
+  /**
+   * The description strings this drawing settles hold a ticked text (spec
+   * 0023, AC-1): every string in an inline property list, and an
+   * `/ActualText` round no text drawn in its own stream, their folds joined
+   * in the order settled. Always false when no ticked list is passed.
+   */
+  readonly describesTicked: boolean;
 }
 
 /**
@@ -50,12 +74,16 @@ export interface DrawingRead {
  * own (a Type 3 font's glyph procedures) and the answers joined. `properties`
  * is the owning `/Properties` dictionary, for a property list named by a name
  * operand. A stream MuPDF cannot decode, or one this cannot read to its end,
- * makes the whole answer `"unsure"`.
+ * makes the whole answer `"unsure"`. `ticked` is the run's folded ticked texts
+ * (`foldTicked`), which only the self check passes (spec 0023, AC-1); each
+ * call of `scanContent` joins its own description strings, so a glyph
+ * procedure read on its own is joined on its own.
  */
 export function readDrawing(
   streams: readonly PDFObject[],
   properties: PDFObject | null,
   joined = true,
+  ticked: readonly string[] = [],
 ): DrawingRead | "unsure" {
   const parts: Uint8Array[] = [];
   for (const stream of streams) {
@@ -65,16 +93,22 @@ export function readDrawing(
   }
 
   const reads = joined
-    ? [scanContent(joinParts(parts), properties)]
-    : parts.map((part) => scanContent(part, properties));
+    ? [scanContent(joinParts(parts), properties, ticked)]
+    : parts.map((part) => scanContent(part, properties, ticked));
   if (reads.some((read) => read === "unsure")) return "unsure";
 
   const names = new Map<ResourceCategory, Set<string>>();
+  const inlineSpaces = new Set<string>();
   let describes = false;
   let showsText = false;
+  let losesPicture = false;
+  let describesTicked = false;
   for (const read of reads as DrawingRead[]) {
     describes ||= read.describes;
     showsText ||= read.showsText;
+    losesPicture ||= read.losesPicture;
+    describesTicked ||= read.describesTicked;
+    for (const name of read.inlineSpaces) inlineSpaces.add(name);
     for (const [category, found] of read.names) {
       let into = names.get(category);
       if (!into) {
@@ -84,7 +118,14 @@ export function readDrawing(
       for (const name of found) into.add(name);
     }
   }
-  return Object.freeze({ describes, names, showsText });
+  return Object.freeze({
+    describes,
+    names,
+    showsText,
+    losesPicture,
+    inlineSpaces,
+    describesTicked,
+  });
 }
 
 /** A stream's decoded bytes, copied out of MuPDF's heap, or `null` if MuPDF cannot decode it. */
@@ -123,9 +164,15 @@ const DELIMITERS = new Set([0x28, 0x29, 0x3c, 0x3e, 0x5b, 0x5d, 0x7b, 0x7d, 0x2f
 const isWhite = (byte: number): boolean => WHITE.has(byte);
 const isDelimiter = (byte: number): boolean => DELIMITERS.has(byte);
 
-/** An operand, as far as the scan needs to know it. */
+/**
+ * An operand, as far as the scan needs to know it. The keyword `true` is its
+ * own value only inside an inline picture's dictionary, where the mask test
+ * reads it (spec 0022, AC-1); everywhere else `true`, `false` and `null` are
+ * scalars.
+ */
 type Value =
   | { readonly is: "scalar" }
+  | { readonly is: "true" }
   | { readonly is: "name"; readonly name: string }
   | { readonly is: "string"; readonly bytes: Uint8Array }
   | { readonly is: "array"; readonly items: readonly Value[] }
@@ -139,8 +186,12 @@ interface Open {
 
 /** One open marked content sequence. */
 interface Sequence {
-  /** Its property list held an `/ActualText` that counts unless text is drawn inside. */
-  readonly actualText: boolean;
+  /**
+   * The bytes of its property list's top level string `/ActualText`, which
+   * counts unless text is drawn inside, or `null` for none (spec 0023, AC-1).
+   * Never changed after it is read, so `copy()` may share it.
+   */
+  readonly actualText: Uint8Array | null;
   drew: boolean;
 }
 
@@ -149,13 +200,23 @@ interface Sequence {
  * again. `showsText` lives here rather than beside the scan, so a retry after a
  * false `EI` forgets an operator read from the image's data: kept outside, it
  * would stick, and a bitmap font whose data holds `Tj` would be refused (spec
- * 0020, *Data model sketch*).
+ * 0020, *Data model sketch*). `losesPicture` and `inlineSpaces` live here for
+ * the same reason: a picture read from another picture's data is forgotten
+ * once the scan settles on a later end (spec 0022, AC-1). So do the join and
+ * `describesTicked` (spec 0023, AC-1): a description string read from a
+ * picture's data is forgotten too.
  */
 interface Semantics {
   readonly sequences: Sequence[];
   readonly names: Map<ResourceCategory, Set<string>>;
+  readonly inlineSpaces: Set<string>;
   describes: boolean;
   showsText: boolean;
+  losesPicture: boolean;
+  /** Every settled description string's fold, joined in the order settled (spec 0023). */
+  joined: string;
+  /** A settled string could not be decoded, so it may hold anything (spec 0023, INV-6). */
+  describesTicked: boolean;
 }
 
 /** An inline image whose data's end may be tried again further on. */
@@ -192,17 +253,23 @@ export const INLINE_END_RETRIES = 16;
  * Scan decoded drawing instructions (spec 0019, *Scan rules*), or `"unsure"`
  * when they cannot be read to their end: an unbalanced string, array or
  * dictionary, a stray closing delimiter, or an inline image with no workable
- * `EI`.
+ * `EI`. With `ticked` empty no description string is decoded or compared,
+ * so every caller that passes none answers as before (spec 0023, INV-5).
  */
 export function scanContent(
   bytes: Uint8Array,
   properties: PDFObject | null,
+  ticked: readonly string[] = [],
 ): DrawingRead | "unsure" {
   let state: Semantics = {
     sequences: [],
     names: new Map(),
+    inlineSpaces: new Set(),
     describes: false,
     showsText: false,
+    losesPicture: false,
+    joined: "",
+    describesTicked: false,
   };
   const choices: Choice[] = [];
   // Whether the rest of a stream reads to its end depends only on where the
@@ -311,6 +378,11 @@ export function scanContent(
           ) {
             named("ColorSpace", image.colourSpace);
           }
+          // Spec 0022, AC-1: recorded before the state is saved for a retry,
+          // so a later end for this picture keeps it, and a retry back to an
+          // earlier picture forgets it.
+          if (image.lost) state.losesPicture = true;
+          if (image.printed !== null) state.inlineSpaces.add(image.printed);
           const end = nextEnd(bytes, image.dataStart, image.dataStart, failed);
           if (end === null) {
             if (retry()) continue;
@@ -321,7 +393,7 @@ export function scanContent(
           operands = [];
           break;
         }
-        operate(token.word, operands, state, named, properties);
+        operate(token.word, operands, state, named, properties, ticked);
         operands = [];
         break;
       }
@@ -332,15 +404,57 @@ export function scanContent(
   }
 
   // A sequence the stream never closes: its `/ActualText` counts unless text
-  // was drawn inside it, as at an `EMC`.
-  for (const sequence of state.sequences) {
-    if (sequence.actualText && !sequence.drew) state.describes = true;
+  // was drawn inside it, as at an `EMC`, innermost first, as they would close.
+  for (const sequence of [...state.sequences].reverse()) {
+    closeSequence(sequence, state, ticked);
   }
+  const { joined } = state;
   return Object.freeze({
     describes: state.describes,
     names: state.names,
     showsText: state.showsText,
+    losesPicture: state.losesPicture,
+    inlineSpaces: state.inlineSpaces,
+    // Spec 0023, AC-1: containment, as `holdsTicked` tests a string place,
+    // on the one join this call made.
+    describesTicked:
+      state.describesTicked ||
+      ticked.some((fold) => fold.length > 0 && joined.includes(fold)),
   });
+}
+
+/**
+ * Settle one description string (spec 0023, AC-1): decoded and folded as the
+ * check's string places are (`decodeTextString`, `foldPlaceText`, INV-1), and
+ * appended to the join with nothing between, so a ticked text split across
+ * two strings is still found. One that cannot be decoded may hold anything,
+ * so it is a hit at once (INV-6). With nothing ticked nothing is decoded
+ * (INV-5). Only the boolean the join answers leaves the scan (INV-3).
+ */
+function settle(state: Semantics, bytes: Uint8Array, ticked: readonly string[]): void {
+  if (ticked.length === 0) return;
+  const text = decodeTextString(bytes);
+  if (text === null) {
+    state.describesTicked = true;
+    return;
+  }
+  state.joined += foldPlaceText(text);
+}
+
+/**
+ * A sequence's end, at its `EMC` or the stream's: its `/ActualText` counts,
+ * and is settled, only when no text was drawn inside it (spec 0019, AC-9;
+ * spec 0023, AC-1). Text a form draws through `Do` is not drawn here, on
+ * purpose: counting it would reopen the measured form leak.
+ */
+function closeSequence(
+  sequence: Sequence,
+  state: Semantics,
+  ticked: readonly string[],
+): void {
+  if (sequence.actualText === null || sequence.drew) return;
+  state.describes = true;
+  settle(state, sequence.actualText, ticked);
 }
 
 /** One operator, with the operands collected before it. */
@@ -350,6 +464,7 @@ function operate(
   state: Semantics,
   named: (category: ResourceCategory, name: string) => void,
   properties: PDFObject | null,
+  ticked: readonly string[],
 ): void {
   const last = operands.at(-1);
   const lastName = last?.is === "name" ? last.name : null;
@@ -385,85 +500,120 @@ function operate(
       if (lastName !== null) named("Pattern", lastName);
       return;
     case "BMC":
-      state.sequences.push({ actualText: false, drew: false });
+      state.sequences.push({ actualText: null, drew: false });
       return;
     case "BDC":
     case "DP": {
       // The tag first, then the property list: a lone tag is no list.
       const list = operands.length >= 2 ? operands.at(-1) : undefined;
-      let reading: ListReading = { counts: false, actualText: false };
+      let reading: ListReading = NO_LIST;
       if (list?.is === "dict") {
         reading = readInlineList(list);
       } else if (list?.is === "name") {
         named("Properties", list.name);
         reading = readNamedList(properties, list.name);
       }
+      // Spec 0023, AC-1: every string but a pending `/ActualText` is
+      // settled here, in the order the list writes them.
+      for (const bytes of reading.strings) settle(state, bytes, ticked);
       if (word === "BDC") {
         if (reading.counts) state.describes = true;
         state.sequences.push({ actualText: reading.actualText, drew: false });
-      } else if (reading.counts || reading.actualText) {
-        // A point is never a sequence, so its `/ActualText` always counts.
+      } else if (reading.counts || reading.actualText !== null) {
+        // A point is never a sequence, so its `/ActualText` always counts,
+        // and is settled at once.
         state.describes = true;
+        if (reading.actualText !== null) settle(state, reading.actualText, ticked);
       }
       return;
     }
     case "EMC": {
       const sequence = state.sequences.pop();
-      if (sequence?.actualText && !sequence.drew) state.describes = true;
+      if (sequence) closeSequence(sequence, state, ticked);
       return;
     }
   }
 }
 
-/** What one property list holds: a string that counts now, and an `/ActualText` that counts unless text is drawn. */
+/**
+ * What one property list holds: a string that counts now (the warning, spec
+ * 0019, AC-9), the top level string `/ActualText` that counts unless text is
+ * drawn, or `null`, and every other string, to settle at once (spec 0023,
+ * AC-1).
+ */
 interface ListReading {
   readonly counts: boolean;
-  readonly actualText: boolean;
+  readonly actualText: Uint8Array | null;
+  readonly strings: readonly Uint8Array[];
 }
+
+const NO_LIST: ListReading = Object.freeze({
+  counts: false,
+  actualText: null,
+  strings: [],
+});
 
 /**
  * A property list written inline. Every string anywhere inside it counts,
  * except an `/ActualText`, which waits for its sequence's end, and a `/Lang`
  * that reads as a language tag (AC-9), by the one rule the catalog's `/Lang`
- * is held to too (`readsAsLanguageTag`, spec 0021, AC-2).
+ * is held to too (`readsAsLanguageTag`, spec 0021, AC-2). For spec 0023 every
+ * string is settled, a language tag included, except that top level string
+ * `/ActualText`, which is handed back pending. An `/ActualText` written as an
+ * array or a dictionary, or nested under another key, is an ordinary string.
  */
 function readInlineList(list: Extract<Value, { is: "dict" }>): ListReading {
   let counts = false;
-  let actualText = false;
+  let actualText: Uint8Array | null = null;
+  const strings: Uint8Array[] = [];
   for (const [key, value] of list.entries) {
     if (key === "ActualText" && value.is === "string") {
-      actualText = true;
-    } else if (key === "Lang" && value.is === "string") {
+      actualText = value.bytes;
+      continue;
+    }
+    const inside = stringsIn(value);
+    strings.push(...inside);
+    if (key === "Lang" && value.is === "string") {
       if (!readsAsLanguageTag(value.bytes)) counts = true;
-    } else if (holdsString(value)) {
+    } else if (inside.length > 0) {
       counts = true;
     }
   }
-  return { counts, actualText };
+  return { counts, actualText, strings };
 }
 
 /**
  * A property list named in the owning `/Properties`. The prune cuts it to
- * `/ActualText` and `/MCID`, so `/ActualText` is the one string that can stay.
+ * `/ActualText` and `/MCID`, and any other key there fails the role walk, so
+ * its string `/ActualText` is the one string read (spec 0023, AC-1).
  */
 function readNamedList(properties: PDFObject | null, name: string): ListReading {
-  if (properties === null || !properties.isDictionary())
-    return { counts: false, actualText: false };
+  if (properties === null || !properties.isDictionary()) return NO_LIST;
   const list = properties.get(name);
-  if (!list.isDictionary()) return { counts: false, actualText: false };
-  return { counts: false, actualText: list.get("ActualText").isString() };
+  if (!list.isDictionary()) return NO_LIST;
+  const actualText = list.get("ActualText");
+  return {
+    counts: false,
+    actualText: actualText.isString() ? actualText.asByteString() : null,
+    strings: [],
+  };
 }
 
-/** Is there a string anywhere inside this value? Walked with a list, never recursion. */
-function holdsString(value: Value): boolean {
+/**
+ * Every string anywhere inside this value, in the order it is written. Walked
+ * with a list, never recursion, so a deep nesting cannot stop it.
+ */
+function stringsIn(value: Value): Uint8Array[] {
+  const found: Uint8Array[] = [];
   const pending: Value[] = [value];
   while (pending.length > 0) {
     const next = pending.pop() as Value;
-    if (next.is === "string") return true;
-    if (next.is === "array") pending.push(...next.items);
-    if (next.is === "dict") pending.push(...next.entries.values());
+    if (next.is === "string") found.push(next.bytes);
+    // Pushed last to first, so the first item is read next.
+    if (next.is === "array") pending.push(...[...next.items].reverse());
+    if (next.is === "dict") pending.push(...[...next.entries.values()].reverse());
   }
-  return false;
+  return found;
 }
 
 /** A dictionary from its items read in order: each name key and the value after it. */
@@ -483,8 +633,12 @@ function copy(state: Semantics): Semantics {
     names: new Map(
       [...state.names].map(([category, found]) => [category, new Set(found)]),
     ),
+    inlineSpaces: new Set(state.inlineSpaces),
     describes: state.describes,
     showsText: state.showsText,
+    losesPicture: state.losesPicture,
+    joined: state.joined,
+    describesTicked: state.describesTicked,
   };
 }
 
@@ -668,15 +822,23 @@ function latin1(bytes: Uint8Array, start: number, end: number): string {
   return text;
 }
 
+/** What the scan reads from one inline picture's dictionary. */
+interface InlinePicture {
+  /** The resource name its colour space uses, for resource use (spec 0021, AC-7). */
+  readonly colourSpace: string | null;
+  /** Where its data starts: one white space byte after `ID`. */
+  readonly dataStart: number;
+  /** MuPDF 1.28.1's write would lose it (spec 0022, AC-1). */
+  readonly lost: boolean;
+  /** The name its `/CS` holds directly, when neither empty nor a device name (AC-1). */
+  readonly printed: string | null;
+}
+
 /**
- * An inline image's dictionary, from just after `BI` to its `ID`: the colour
- * space it names, if any, and where its data starts (one white space byte
- * after `ID`). `null` if the dictionary cannot be read to an `ID`.
+ * An inline image's dictionary, from just after `BI` to its `ID`. `null` if
+ * the dictionary cannot be read to an `ID`.
  */
-function inlineImage(
-  bytes: Uint8Array,
-  start: number,
-): { readonly colourSpace: string | null; readonly dataStart: number } | null {
+function inlineImage(bytes: Uint8Array, start: number): InlinePicture | null {
   const items: Value[] = [];
   const open: Open[] = [];
   let pos = start;
@@ -707,17 +869,89 @@ function inlineImage(
       ) {
         return null;
       }
-      add({ is: "scalar" });
+      // Spec 0022, AC-1: `true` kept apart, so the mask test can read it.
+      add(token.word === "true" ? { is: "true" } : { is: "scalar" });
     } else if (token.is === "number") {
       add({ is: "scalar" });
     } else {
       add(token.value);
     }
   }
-  const dictionary = dictionaryOf(items) as Extract<Value, { is: "dict" }>;
-  const space = dictionary.entries.get("CS") ?? dictionary.entries.get("ColorSpace");
+  const { entries } = dictionaryOf(items) as Extract<Value, { is: "dict" }>;
+  const space = entries.get("CS") ?? entries.get("ColorSpace");
   const dataStart = pos < bytes.length && isWhite(bytes[pos]) ? pos + 1 : pos;
-  return { colourSpace: inlineSpaceName(space), dataStart };
+  const short = entries.get("CS");
+  return {
+    colourSpace: inlineSpaceName(space),
+    dataStart,
+    lost: losesPicture(entries),
+    printed:
+      short?.is === "name" && short.name !== "" && !INLINE_DEVICE_SPACES.has(short.name)
+        ? short.name
+        : null,
+  };
+}
+
+/**
+ * Would MuPDF 1.28.1's write lose this inline picture? Spec 0022, AC-1, by the
+ * rule its loader and writer follow (`pdf_load_image_imp`,
+ * `parse_inline_image`, `pdf_out_BI`; `rationale.md`, *MuPDF 1.28.1's
+ * source*). MuPDF reads both pairs of keys short key first (`pdf_dict_geta`:
+ * `/IM` before `/ImageMask`, `/CS` before `/ColorSpace`), whichever comes first
+ * in the bytes, as task 8 measured, so the long key counts only when the short
+ * one is absent. A key is present whatever its value, `null` included, which
+ * can only refuse more (INV-4). The lost cases:
+ *
+ *  - a `/JPXDecode` filter under `/Filter` or `/F`, a mask included: MuPDF
+ *    throws on an inline JPX picture, so it is never written;
+ *  - not a mask, and no colour space for MuPDF to load: every write throws;
+ *  - not a mask, the loaded space not a device space, and `/CS` not a name
+ *    that is not empty. The writer prints `/CS` whenever it is a direct name
+ *    and the empty name otherwise, and since `/CS` is the space MuPDF loads, a
+ *    name that is not empty there is always written under its own name.
+ *
+ * It looks no resource up and follows no drawing state, so a `/ColorSpace`
+ * name whose resource is a device space, `/ColorSpace /Pattern` and a picture
+ * under a clip with no area count as lost although the write keeps them. It
+ * leans to refusing (INV-4), with one exception: a `/CS` name with no resource
+ * entry is kept, though the write drops it, because the file never defines its
+ * colours and MuPDF draws nothing for it in the source either.
+ */
+function losesPicture(entries: ReadonlyMap<string, Value>): boolean {
+  if (namesJpx(entries.get("Filter")) || namesJpx(entries.get("F"))) return true;
+
+  const mask = entries.has("IM") ? entries.get("IM") : entries.get("ImageMask");
+  if (mask?.is === "true") return false;
+
+  const short = entries.get("CS");
+  const loaded = entries.has("CS") ? short : entries.get("ColorSpace");
+  if (loaded === undefined) return true;
+  if (isDeviceSpace(loaded)) return false;
+  return !(short?.is === "name" && short.name !== "");
+}
+
+/** A filter value naming `/JPXDecode`, alone or in an array. */
+function namesJpx(filter: Value | undefined): boolean {
+  if (filter?.is === "name") return filter.name === "JPXDecode";
+  if (filter?.is !== "array") return false;
+  return filter.items.some((item) => item.is === "name" && item.name === "JPXDecode");
+}
+
+/**
+ * A device space as MuPDF loads one inline (spec 0022, AC-1): a name in
+ * `INLINE_DEVICE_SPACES`, or an array whose first item is such a name or
+ * `/CalCMYK`, of any length, since MuPDF loads that array as its device space
+ * and ignores the rest (`pdf_load_colorspace_imp`). Anything else present, a
+ * number, a string or a dictionary included, is not one.
+ */
+function isDeviceSpace(space: Value): boolean {
+  if (space.is === "name") return INLINE_DEVICE_SPACES.has(space.name);
+  if (space.is !== "array") return false;
+  const [family] = space.items;
+  return (
+    family?.is === "name" &&
+    (INLINE_DEVICE_SPACES.has(family.name) || family.name === "CalCMYK")
+  );
 }
 
 /**

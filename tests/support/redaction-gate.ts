@@ -15,7 +15,12 @@ import {
 import type { EngineErrorKind, SanitizedKind } from "@/worker/protocol";
 
 import { GLYPH_TEXT } from "../../scripts/lib/glyph-fixtures.mjs";
-import { COLOUR_TEXT, KEPT_TEXT } from "../../scripts/lib/kept-fixtures.mjs";
+import {
+  COLOUR_TEXT,
+  KEPT_TEXT,
+  MARKED_BLOCKED_TEXT,
+  MARKED_TICKED_TEXT,
+} from "../../scripts/lib/kept-fixtures.mjs";
 import { TRIM_CARRY, TRIM_ROTATED } from "../../scripts/lib/reading-fixtures.mjs";
 import { fixture } from "./bytes";
 import { LIMITS, mupdf, pageRenders } from "./mupdf";
@@ -52,7 +57,19 @@ import { findTargets } from "./targets";
  *    `tests/unit/redaction-kept.test.ts` is what holds `/Lang`. So was
  *    `kept-cid-strings.pdf`, the same day: main opened it and made a file
  *    with nothing ticked, reporting nothing, and spec 0021 refuses it at open
- *    (`OPEN_NOW`).
+ *    (`OPEN_NOW`). Spec 0022's four `inline-indexed*.pdf` fixtures, added on
+ *    2026-11-22, need no main row at all: main opened each and made a file
+ *    with its picture gone (spec 0022's `rationale.md`), and spec 0022
+ *    refuses each at open (`OPEN_NOW`), so no main run or `sanitized` row is
+ *    read for them, and none has a ticked set. Spec 0023's `marked-ticked.pdf`
+ *    and `marked-blocked.pdf` were read from that commit's code on
+ *    2026-11-23: main opened both, made a file from each with nothing ticked,
+ *    reporting nothing, and made a file from each ticked set below (page 8's
+ *    name, the control, and the blocked fixture's plain row), so neither has
+ *    a main refusal or `sanitized` row, and neither needs an `OPEN_NOW` or
+ *    `RUN_NOW` row. The refusals of `marked-ticked.pdf`'s other pages are
+ *    spec 0023's own, held in `tests/unit/redaction-kept.test.ts`: `MAIN`
+ *    swaps the structure check out, which is where that comparison runs.
  *  - Against the same run with the pipeline's prune and structure check both
  *    swapped out, which writes main's output byte for byte (`MAIN`): the same
  *    outcome, the same `removedByType`, and every page rendered pixel for pixel
@@ -70,7 +87,11 @@ import { findTargets } from "./targets";
  * not finite (feature 30) refuses `trim-unplaced.pdf` at open the same way,
  * with `unsupported`, where main failed every run on it. `MAIN` swaps the run's glyph rule out too,
  * so its runs write main's output, and the two controls are ticked as
- * `tests/unit/redaction-glyphs.test.ts` ticks them (its AC-10).
+ * `tests/unit/redaction-glyphs.test.ts` ticks them (its AC-10). Spec 0021
+ * refuses `kept-cid-strings.pdf` and spec 0022 its four fixtures at open the
+ * same way (`inline-picture` for the latter). `MAIN` keeps spec 0022's inline
+ * picture rule: no gated fixture that runs holds a picture it counts, so it
+ * answers `"kept"` on every one (its AC-6).
  *
  * Two fixtures change on purpose (AC-7). `shared-forms.pdf`, which main
  * refused with `unsupported` when its forms lost their text in the write, now
@@ -148,6 +169,10 @@ const MAIN_FIXTURES: readonly string[] = [
   "header-at-1019.pdf",
   "header-at-1020.pdf",
   "images-under.pdf",
+  "inline-indexed-form.pdf",
+  "inline-indexed-glyph.pdf",
+  "inline-indexed-pattern.pdf",
+  "inline-indexed.pdf",
   "kept-annotations.pdf",
   "kept-catalog.pdf",
   "kept-cid-strings.pdf",
@@ -160,7 +185,9 @@ const MAIN_FIXTURES: readonly string[] = [
   "layers-all-on.pdf",
   "layers-one-off.pdf",
   "lone-glyphs.pdf",
+  "marked-blocked.pdf",
   "marked-descriptions.pdf",
+  "marked-ticked.pdf",
   "metadata.pdf",
   "next-line-0.pdf",
   "next-line-1.pdf",
@@ -367,7 +394,11 @@ const NEEDLES: Readonly<Record<string, readonly Ticked[]>> = {
     [[0, "after300"]],
   ],
   "lone-glyphs.pdf": [[[0, "."]], [[0, "i"]]],
+  // Spec 0023, AC-6: the blocked fixture's plain row (its first place), and
+  // `marked-ticked.pdf`'s page 8, the control, which make a file as on main.
+  "marked-blocked.pdf": [[[0, MARKED_BLOCKED_TEXT.name]]],
   "marked-descriptions.pdf": [[[0, "jane.doe@example.com"]]],
+  "marked-ticked.pdf": [[[7, MARKED_TICKED_TEXT[8]]]],
   "metadata.pdf": [[[0, "Form field value"]], [[0, "Visible typed note"]]],
   "next-line-0.pdf": [[[0, "Jeremy Quigley"]]],
   "next-line-1.pdf": [[[0, "Jeremy Quigley"]]],
@@ -523,6 +554,8 @@ function runKindNow(name: string): EngineErrorKind | null {
  * spec 0006's Follow-up does (feature 30): a page holding a character MuPDF
  * cannot place, refused at open rather than in every run. And where spec 0021
  * does (its AC-3, AC-5): a CID font whose `/Ordering` is outside the token.
+ * And where spec 0022 does (its AC-2, AC-6): an inline picture MuPDF's write
+ * would lose, one fixture per place the open's role walk reads.
  * Read with `in`, like `RUN_NOW`.
  */
 const OPEN_NOW: Readonly<Record<string, EngineErrorKind | null>> = {
@@ -530,6 +563,10 @@ const OPEN_NOW: Readonly<Record<string, EngineErrorKind | null>> = {
   "glyph-shared-picture.pdf": "unreadable-structure",
   "glyph-text.pdf": "unreadable-structure",
   "glyph-undrawn-form.pdf": "unreadable-structure",
+  "inline-indexed-form.pdf": "inline-picture",
+  "inline-indexed-glyph.pdf": "inline-picture",
+  "inline-indexed-pattern.pdf": "inline-picture",
+  "inline-indexed.pdf": "inline-picture",
   "kept-cid-strings.pdf": "unreadable-structure",
   "trim-unplaced.pdf": "unsupported",
 };
