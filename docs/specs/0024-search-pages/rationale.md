@@ -66,3 +66,24 @@ Smaller calls, each made in the conversation:
 - **No manifest**, as spec 0013 decided: no search value, and both policies would change.
 - **Feature 29 as slice 1**, so the combined test exists before any search page joins it.
 - **The security page's miscounted views** wait for a follow up, your call.
+
+### CoverFigure at narrow widths (2026-11-23)
+
+AC-14's stop rule held on `/black-box-redaction`, so this one call came back to `/architect`. Measured on the build at 320 pixels with 200% text, with a scratch Playwright script that read each element's box, its `scrollWidth` against its `clientWidth`, and each word's width:
+
+| Variant | `/black-box-redaction` | `/security` |
+|---|---|---|
+| As built | page 333 wide, panel 301 in a 256 figure | page 482 wide, panel 450 |
+| Box hidden | unchanged, 333 | unchanged, 482 |
+| Column floor only (`minmax(0, 1fr)`) | no page scroll, but "Outpatients" overflows its line (153 in 108) | not run |
+| Column floor, panel padding 1rem and drawing side padding 0.75rem | still overflows its line (153 in 140) | not run |
+| Column floor and `wrap-anywhere` (chosen) | no scroll, nothing overflows, box 108 | no scroll, nothing overflows, box 108 |
+| Chosen, at 1280 pixels, default text | unchanged: panels 344, box 128 | unchanged: panels 344, box 128 |
+
+So the box was never the cause; the longest word and the rem padding were. Options weighed:
+- **Column floor and break anywhere** (chosen): two classes (`wrap-anywhere` once on each panel after the cross check, so the title and label are covered too, where the measurement put it on the lines and the copy), fixes every figure whatever its words, and adds no rule a later figure's author has to know. Cost: a word can break with no hyphen at 200% text on a phone.
+- **Column floor and `hyphens-auto`**: neater breaks, but they depend on each browser's hyphenation dictionary, so the reflow test could pass in Chromium and fail elsewhere, and an address must never gain a hyphen, so the copy would still need `wrap-anywhere`.
+- **Shorter drawing words**: fixes `/black-box-redaction` only, leaves `/security`'s address spilling, and leaves an unwritten word length rule for the next figure.
+- **Tighter padding when narrow**: measured as not enough on its own.
+- **Break anywhere without the column floor**: not measured. It would likely shrink the automatic column on its own, but `grid-cols-1` costs nothing and holds the floor whatever the words, so both stay.
+- **Text sized to the container** (container units): rejected without measuring. Spec 0003's INV-6 bars viewport units for text and any text below 14 pixels, and text sized to a 256 pixel figure would fall below that.
