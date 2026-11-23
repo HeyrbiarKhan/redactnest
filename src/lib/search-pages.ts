@@ -363,11 +363,11 @@ export const SEARCH_PAGE_TEXT: Readonly<Record<SearchPageKind, SearchPageText>> 
       navLabel: "Black box redaction",
       primary: "Redact a PDF properly",
       /**
-       * Row G1, a "can" sentence about PDFs in general, then what the page
-       * holds. It names neither risk (the trio carries each once, AC-6), and
-       * none of upload, "in your browser" or removed then marked.
+       * Names the page's subject and claims nothing, so the copy and search
+       * risks stay said once, in the trio (spec 0024, AC-6). It says none of
+       * upload, "in your browser" or removed then marked.
        */
-      lead: "A PDF that looks redacted can still hold the words under its boxes. Here is how to check a file before you share it, and what real redaction does.",
+      lead: "Before you share a PDF that looks redacted, here is how to check it, and what real redaction does.",
       features: Object.freeze<readonly FeatureItem[]>([
         Object.freeze({
           icon: ClipboardCopy,
