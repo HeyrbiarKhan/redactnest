@@ -63,7 +63,15 @@ const ASSET_PATHS = [
  * Spec 0012, AC-9: the routes outside the account group, none of which may
  * load Clerk or reach its hosts.
  */
-const PUBLIC_ROUTES = ["/", "/tool", "/pricing", "/privacy", "/terms"] as const;
+const PUBLIC_ROUTES = [
+  "/",
+  "/tool",
+  "/pricing",
+  "/privacy",
+  "/terms",
+  // Spec 0024, AC-13: a search page asks its own origin only.
+  "/redact-pdf",
+] as const;
 
 /**
  * Every origin Clerk's sign in uses, its images included, read from the same
@@ -570,6 +578,24 @@ test("a full run sends no document, text, match or name anywhere", async ({ page
  * once the home page's view is recorded, nothing the tool sent is still to
  * come, and an event sent twice would be in the list.
  */
+/**
+ * Spec 0024, AC-12: a view of a search page posts its own kind, never
+ * `not-found`.
+ */
+test("a view of /redact-pdf posts its own page kind", async ({ page }) => {
+  const requests = recordRequests(page);
+
+  await page.goto("/redact-pdf");
+
+  await expect
+    .poll(() => requests.filter(isTelemetry).map(parsedBody))
+    .toContainEqual({ name: "page-view", page: "redact-pdf" });
+  expect(requests.filter(isTelemetry).map(parsedBody)).not.toContainEqual({
+    name: "page-view",
+    page: "not-found",
+  });
+});
+
 test.describe("what the tool counts, once each", () => {
   /** Leave for `/`, then hand back every event, the fence included. */
   async function eventsUpToHome(

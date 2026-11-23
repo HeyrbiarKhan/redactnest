@@ -56,7 +56,7 @@ async function valuesOf(response: APIResponse, name: string): Promise<string[]> 
 // all of them at once. That makes the effective policy very hard to reason
 // about, so the route matching is arranged to produce exactly one. `/` is
 // checked too since spec 0012's referrer rule matches every path beside it.
-for (const path of ["/tool", "/"]) {
+for (const path of ["/tool", "/", "/redact-pdf"]) {
   test(`exactly one policy header is sent on ${path}`, async ({ request }) => {
     const response = await request.get(path);
     expect(await valuesOf(response, "content-security-policy")).toHaveLength(1);
@@ -84,6 +84,17 @@ test("other routes get the standard regime", async ({ request }) => {
   expect(policy).toBeTruthy();
   expect(policy).toContain("default-src 'none'");
   expect(policy).toContain("frame-ancestors 'none'");
+});
+
+/** Spec 0024, AC-1: a search page runs under the standard policy, unchanged. */
+test("a search page gets the standard regime, the same policy as /", async ({
+  request,
+}) => {
+  const home = (await request.get("/")).headers()["content-security-policy"];
+  const search = (await request.get("/redact-pdf")).headers()["content-security-policy"];
+
+  expect(search).toBeTruthy();
+  expect(search).toBe(home);
 });
 
 test("the wasm asset is served as application/wasm from our own origin", async ({

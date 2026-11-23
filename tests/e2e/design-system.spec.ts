@@ -2404,7 +2404,7 @@ test.describe("the cursor (spec 0013, AC-33)", () => {
  * The search pages join `REFLOW_PAGES` as each is built.
  */
 test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
-  const REFLOW_PAGES = ["/"] as const;
+  const REFLOW_PAGES = ["/", "/redact-pdf"] as const;
 
   /**
    * Every box and every run of text in the page ends inside the window, and
@@ -2493,8 +2493,15 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
   });
 });
 
-test.describe("every page (spec 0013, AC-26)", () => {
-  const PAGES = ["/", "/pricing", "/privacy", "/terms", "/no-such-page"] as const;
+test.describe("every page (spec 0013, AC-26; spec 0024, AC-13)", () => {
+  const PAGES = [
+    "/",
+    "/redact-pdf",
+    "/pricing",
+    "/privacy",
+    "/terms",
+    "/no-such-page",
+  ] as const;
 
   /** AC-25: the On this page list stuck beside the text, mid scroll. */
   for (const path of ["/privacy", "/terms"]) {
@@ -2563,6 +2570,43 @@ test.describe("every page (spec 0013, AC-26)", () => {
 
       await expectNoHorizontalScroll(page);
       await expectContained(page.getByRole("main"));
+    });
+  }
+});
+
+/**
+ * Spec 0024, AC-13: every control on a search page keeps the ring as the
+ * keyboard reaches it, in page order, from the skip link to the footer's
+ * last link. Tab moves focus as a visitor's would, so `:focus-visible`
+ * applies, and the walk stops once focus leaves the page or comes round.
+ */
+test.describe("the search pages' focus rings (spec 0024, AC-13)", () => {
+  for (const path of ["/redact-pdf"] as const) {
+    test(`${path}: every control keeps a visible ring`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(path);
+
+      const seen: string[] = [];
+      for (let step = 0; step < 60; step += 1) {
+        await page.keyboard.press("Tab");
+        const focused = page.locator(":focus");
+        if ((await focused.count()) === 0) break;
+        // Each control is marked as it is reached, so two with the same name
+        // (the page's two buttons) are both walked, and coming round stops it.
+        const name = await focused.evaluate((element) => {
+          if (element.hasAttribute("data-walked")) return null;
+          element.setAttribute("data-walked", "");
+          return `${element.tagName} ${element.getAttribute("href") ?? ""} ${element.textContent?.trim() ?? ""}`;
+        });
+        if (name === null) break;
+        seen.push(name);
+        await expectFocusRing(focused);
+      }
+      // The skip link, the header, both buttons into the tool, the look over
+      // link and the footer's links, at the least.
+      expect(seen.length).toBeGreaterThan(8);
+      expect(seen.filter((name) => name === "A /tool Redact a PDF now")).toHaveLength(2);
+      expect(seen.some((name) => name.includes("/security#what-it-can-miss"))).toBe(true);
     });
   }
 });

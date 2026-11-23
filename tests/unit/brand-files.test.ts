@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { HOME_TEXT } from "@/lib/home-text";
+import { SEARCH_PAGE_TEXT, SEARCH_PAGES } from "@/lib/search-pages";
 import { MARK_PATHS } from "@/ui/brand-mark";
 
 const ROOT = join(__dirname, "..", "..");
@@ -140,6 +141,26 @@ describe("the social card's alt text (AC-5)", () => {
 });
 
 /**
+ * Spec 0024, AC-16 and INV-4: each search page's card and alt text, made by
+ * the script from the built page, beside the page's own route.
+ */
+describe.each(SEARCH_PAGES)("the %s card (spec 0024, AC-16)", (kind) => {
+  const { path, socialAlt } = SEARCH_PAGE_TEXT[kind];
+  const folder = ["src", "app", ...path.split("/").filter(Boolean)];
+
+  it("is 1200 by 630 and under 1 MB", () => {
+    const card = read(...folder, "opengraph-image.png");
+
+    expect(pngSize(card)).toEqual({ width: 1200, height: 630 });
+    expect(card.length).toBeLessThan(1024 * 1024);
+  });
+
+  it("has alt text equal to the record's socialAlt, word for word", () => {
+    expect(read(...folder, "opengraph-image.alt.txt").toString("utf8")).toBe(socialAlt);
+  });
+});
+
+/**
  * AC-27 and AC-28: the script draws only with the site's own tokens and adds
  * no package. Read as text, as the script reads what it draws from, so a
  * colour typed into it or a TypeScript import fails here rather than in a
@@ -153,6 +174,14 @@ describe("scripts/make-brand.mjs, read as text (AC-27, AC-28)", () => {
     expect(code).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(code).not.toMatch(/\b(rgba?|hsla?|oklch|oklab|lab|lch)\(/);
     expect(code).toContain('readFile(at("src", "app", "globals.css")');
+  });
+
+  /** Spec 0024, AC-16: the Polar image is only ever the home page's. */
+  it("writes the Polar image from the home page's card alone", () => {
+    expect(code.match(/OUT\.polar/g)?.length).toBe(3);
+    expect(code).toMatch(/polar: true/);
+    expect(code.match(/polar: true/g)).toHaveLength(1);
+    expect(code).toMatch(/polar: false/);
   });
 
   it("imports only Node's own modules and @playwright/test, never a TypeScript module", () => {

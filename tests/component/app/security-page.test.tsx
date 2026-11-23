@@ -23,6 +23,7 @@ import {
 import { TOOL_PATH } from "@/lib/routes";
 
 import { expectNoAxeViolations } from "../../setup/component";
+import { CLAIM_BANNED_PHRASES, phrasePattern } from "../../support/claim-phrases";
 
 /** The text of `main`, where every claim lives. */
 function mainText(): string {
@@ -286,20 +287,10 @@ describe("the security page", () => {
    * any case. A limit is a "can" line instead. An honest sentence this catches
    * is reworded, never let through (spec 0018, *Consequences*).
    */
-  it.each([
-    "is found",
-    "are found",
-    "found whole",
-    "is read",
-    "are read",
-    "starts ticked",
-    "start ticked",
-    "never stops",
-  ])("never says %s", (phrase) => {
+  it.each(CLAIM_BANNED_PHRASES)("never says %s", (phrase) => {
     render(<SecurityPage />);
 
-    const words = phrase.split(" ").join("\\s+");
-    expect(mainText()).not.toMatch(new RegExp(`\\b${words}\\b`, "i"));
+    expect(mainText()).not.toMatch(phrasePattern(phrase));
   });
 
   /**

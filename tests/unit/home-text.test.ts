@@ -227,7 +227,12 @@ describe("AC-30: each thing said once", () => {
    * the page says it another way, once, or not at all.
    */
   it("says browser only in the eyebrow and the social card's alt text", () => {
-    const { eyebrow, socialAlt, ...rest } = HOME_TEXT;
+    // The site line is the head's description, outside the main content this
+    // rule counts (spec 0024, AC-11), as the social card's alt text is.
+    const { eyebrow, socialAlt } = HOME_TEXT;
+    const rest = Object.entries(HOME_TEXT).filter(
+      ([key]) => !["eyebrow", "socialAlt", "siteLine"].includes(key),
+    );
 
     expect(eyebrow).toMatch(/browser/);
     expect(socialAlt).toMatch(/browser/);
@@ -241,7 +246,9 @@ describe("AC-30: each thing said once", () => {
     const [first] = HOME_TEXT.features;
 
     expect(first?.body).toMatch(/never uploaded/i);
-    expect(JSON.stringify(HOME_TEXT).match(/uploaded/gi)).toHaveLength(1);
+    // The site line is the head's, outside the main content (spec 0024, AC-11).
+    const main = Object.entries(HOME_TEXT).filter(([key]) => key !== "siteLine");
+    expect(JSON.stringify(main).match(/uploaded/gi)).toHaveLength(1);
   });
 });
 

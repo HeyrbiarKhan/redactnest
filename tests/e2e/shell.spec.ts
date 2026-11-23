@@ -573,11 +573,12 @@ test.describe("the header", () => {
 
 /**
  * Spec 0013, AC-8. The footer's brand column and link groups, with the
- * security page in the Product group (spec 0018, AC-2).
+ * security page in the Product group (spec 0018, AC-2) and the search pages'
+ * Guides group between Product and Legal (spec 0024, AC-9).
  */
 test.describe("the footer", () => {
-  for (const path of ["/", "/tool", "/security"]) {
-    test(`shows the brand line and both groups on ${path}`, async ({ page }) => {
+  for (const path of ["/", "/tool", "/security", "/redact-pdf"]) {
+    test(`shows the brand line and its three groups on ${path}`, async ({ page }) => {
       await page.goto(path);
       const footer = page.getByRole("contentinfo");
 
@@ -591,9 +592,24 @@ test.describe("the footer", () => {
           name: "Security",
         }),
       ).toHaveAttribute("href", "/security");
+      const guides = footer.getByRole("navigation", { name: "Guides" });
+      await expect(guides.getByRole("link")).toHaveText(["Redact without uploading"]);
+      await expect(guides.getByRole("link").first()).toHaveAttribute(
+        "href",
+        "/redact-pdf",
+      );
+      for (const link of await guides.getByRole("link").all()) {
+        expect((await link.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(24);
+      }
       await expect(
         footer.getByRole("navigation", { name: "Legal" }).getByRole("link"),
       ).toHaveText(["Privacy policy", "Terms of service"]);
+      // Product, then Guides, then Legal.
+      expect(
+        await footer
+          .getByRole("navigation")
+          .evaluateAll((navs) => navs.map((nav) => nav.getAttribute("aria-label"))),
+      ).toEqual(["Product", "Guides", "Legal"]);
       // The lockup here is not a link, and the notice is still the one paragraph.
       await expect(footer.getByRole("link", { name: "RedactNest" })).toHaveCount(0);
       await expect(footer.locator("p")).toHaveCount(1);
@@ -660,6 +676,177 @@ test.describe("the head tags", () => {
       expect(await page.evaluate(() => Reflect.get(window, "__violations"))).toEqual([]);
     });
   }
+});
+
+/**
+ * Spec 0024, AC-2 and AC-11: the head on `/` and on each search page, with
+ * absolute addresses on the build's site (`https://redactnest.test`). A
+ * search page carries its own title, description, canonical, Open Graph and
+ * card; `/` the site line, a canonical to the root and the site's own card.
+ * Nothing asks not to be indexed, and there is no manifest.
+ */
+test.describe("the head on / and the search pages", () => {
+  const SITE = "https://redactnest.test";
+  const SITE_LINE =
+    "Redact PDFs in your browser, with nothing uploaded. The selectable text you tick is taken out of the page, then marked, and every new file is checked before you download it.";
+  const SEARCH_HEADS = [
+    {
+      path: "/redact-pdf",
+      title: "Redact a PDF online, free and without uploading",
+      description:
+        "Redact a PDF in your browser. RedactNest looks for details such as email addresses and phone numbers, and the selectable text you tick is taken out of the page.",
+      alt: "RedactNest. Redact a PDF. Redact a PDF without uploading it.",
+    },
+  ] as const;
+
+  const meta = (page: Page, selector: string) =>
+    page.locator(selector).first().getAttribute("content");
+
+  test("/ carries the site line, a canonical to the root and the WebSite block", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    expect(await meta(page, 'meta[name="description"]')).toBe(SITE_LINE);
+    // Next.js writes the root with no trailing slash; it is the same address.
+    const canonical = await page.locator('link[rel="canonical"]').getAttribute("href");
+    expect(new URL(canonical ?? "").href).toBe(`${SITE}/`);
+    await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+    await expect(page.locator('link[rel="manifest"]')).toHaveCount(0);
+    const blocks = page.locator('script[type="application/ld+json"]');
+    await expect(blocks).toHaveCount(1);
+    expect(JSON.parse((await blocks.textContent()) ?? "")).toEqual({
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "RedactNest",
+      url: SITE,
+    });
+  });
+
+  for (const head of SEARCH_HEADS) {
+    test(`${head.path} carries its own head and card`, async ({ page }) => {
+      const response = await page.goto(head.path);
+      expect(response?.status()).toBe(200);
+
+      const address = `${SITE}${head.path}`;
+      await expect(page).toHaveTitle(`${head.title} · RedactNest`);
+      expect(await meta(page, 'meta[name="description"]')).toBe(head.description);
+      await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+        "href",
+        address,
+      );
+      for (const [selector, value] of [
+        ['meta[property="og:title"]', head.title],
+        ['meta[name="twitter:title"]', head.title],
+        ['meta[property="og:description"]', head.description],
+        ['meta[name="twitter:description"]', head.description],
+        ['meta[property="og:url"]', address],
+        ['meta[property="og:type"]', "website"],
+        ['meta[property="og:site_name"]', "RedactNest"],
+        ['meta[property="og:image:alt"]', head.alt],
+        ['meta[name="twitter:card"]', "summary_large_image"],
+      ] as const) {
+        expect(await meta(page, selector), selector).toBe(value);
+      }
+      const image = await meta(page, 'meta[property="og:image"]');
+      expect(image).toMatch(
+        new RegExp(`^${address.replaceAll(".", "\\.")}/opengraph-image\\.png(\\?|$)`),
+      );
+      expect(await meta(page, 'meta[name="twitter:image"]')).toBe(image);
+      const card = await page.request.get(
+        new URL(image ?? "").pathname + new URL(image ?? "").search,
+      );
+      expect(card.status()).toBe(200);
+      expect(card.headers()["content-type"]).toContain("image/png");
+      await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+      await expect(page.locator('link[rel="manifest"]')).toHaveCount(0);
+      // AC-1: no script element of the page's own, the data block included.
+      await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(0);
+    });
+
+    /** AC-4 and spec 0003, INV-10: both buttons are real page loads into /tool. */
+    test(`${head.path}'s two buttons load /tool as a document, and nothing prefetches it`, async ({
+      page,
+    }) => {
+      const toolRequests: string[] = [];
+      page.on("request", (request) => {
+        const { pathname } = new URL(request.url());
+        if (pathname.startsWith("/tool") && request.resourceType() !== "document") {
+          toolRequests.push(pathname);
+        }
+      });
+      await page.goto(head.path);
+      await page.waitForLoadState("networkidle");
+      const buttons = page.getByTestId("search-page").getByRole("link", {
+        name: "Redact a PDF now",
+      });
+      await expect(buttons).toHaveCount(2);
+      for (const button of await buttons.all()) await button.hover();
+      await page.waitForLoadState("networkidle");
+      expect(toolRequests).toEqual([]);
+
+      for (const index of [0, 1]) {
+        await page.goto(head.path);
+        await buttons.nth(index).click();
+        await expect(page).toHaveURL(/\/tool$/);
+        const loadedAt = await page.evaluate(
+          () => performance.getEntriesByType("navigation")[0]?.name ?? "",
+        );
+        expect(new URL(loadedAt).pathname).toBe("/tool");
+      }
+    });
+
+    /** AC-7: the look over link lands on the security page's What it can miss. */
+    test(`${head.path}'s look over link lands on a heading that exists`, async ({
+      page,
+    }) => {
+      await page.goto(head.path);
+      await page
+        .getByTestId("search-page")
+        .getByRole("link", { name: "What it can miss" })
+        .click();
+
+      await expect(page).toHaveURL(/\/security#what-it-can-miss$/);
+      await expect(page.locator("main h2#what-it-can-miss")).toHaveText(
+        "What it can miss",
+      );
+    });
+  }
+});
+
+/**
+ * Spec 0024, AC-10: the sitemap and the robots file, as served. Every address
+ * absolute on the build's site, Pricing listed because the build has billing
+ * on, nothing under the account pages or `/api`, and no date.
+ */
+test.describe("the sitemap and the robots file", () => {
+  test("/sitemap.xml lists every public page and nothing else", async ({ request }) => {
+    const response = await request.get("/sitemap.xml");
+    expect(response.status()).toBe(200);
+    const xml = await response.text();
+
+    const addresses = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(([, at]) => at);
+    expect(addresses).toEqual(
+      ["/", "/redact-pdf", "/tool", "/security", "/privacy", "/terms", "/pricing"].map(
+        (path) => `https://redactnest.test${path}`,
+      ),
+    );
+    expect(xml).not.toMatch(/<lastmod>|<changefreq>|<priority>/);
+  });
+
+  test("/robots.txt allows everything but /api/ and names the sitemap", async ({
+    request,
+  }) => {
+    const response = await request.get("/robots.txt");
+    expect(response.status()).toBe(200);
+    const text = await response.text();
+
+    expect(text).toMatch(/User-Agent: \*/i);
+    expect(text).toMatch(/^Allow: \/$/m);
+    expect(text).toMatch(/^Disallow: \/api\/$/m);
+    expect(text).toContain("Sitemap: https://redactnest.test/sitemap.xml");
+    expect(text).not.toMatch(/account|sign-in|sign-up/);
+  });
 });
 
 /** Spec 0013, AC-9. Every address that is not a page. */

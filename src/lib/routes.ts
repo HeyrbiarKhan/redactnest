@@ -31,6 +31,14 @@ export const TERMS_PATH = "/terms";
 export const SECURITY_PATH = "/security";
 
 /**
+ * The search pages (spec 0024). Each page's record in
+ * `src/lib/search-pages.ts` names its path from here, and the footer's Guides
+ * group, the sitemap and the telemetry kinds read it from that record or
+ * from here, so a page and every link to it cannot drift apart (INV-5).
+ */
+export const REDACT_PDF_PATH = "/redact-pdf";
+
+/**
  * The home page, where sign out lands. Spec 0012, AC-12 and INV-13: sign out
  * reaches it as a full page load (`window.location.assign`), so Clerk's
  * script stops with the account pages, and the provider's `afterSignOutUrl`

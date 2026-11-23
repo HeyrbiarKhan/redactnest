@@ -22,8 +22,8 @@ import { isUsageEvent, reportKey, type TelemetryEvent } from "./events";
  * The error reports this page load has sent, by `reportKey` (AC-28). A
  * deliberate cache, the module level state `AGENTS.md` allows, and never
  * browser storage: a full page load starts it empty, and a client side
- * navigation keeps it. It holds at most the 24 shapes a page can send
- * (`browser-crash` on 11 page kinds from 2 sources, `engine-unavailable` and
+ * navigation keeps it. It holds at most the 26 shapes a page can send
+ * (`browser-crash` on 12 page kinds from 2 sources, `engine-unavailable` and
  * `still-waiting`), so it never needs pruning.
  */
 const SENT = new Set<string>();

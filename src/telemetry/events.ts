@@ -21,6 +21,7 @@ import {
   HOME_PATH,
   PRICING_PATH,
   PRIVACY_PATH,
+  REDACT_PDF_PATH,
   SIGN_IN_PATH,
   SIGN_UP_PATH,
   TERMS_PATH,
@@ -111,6 +112,10 @@ export const PAGE_KINDS = Object.freeze([
   "account",
   "billing",
   "welcome",
+  // The search pages (spec 0024, AC-12): each counted as its own kind, never
+  // `not-found`. `SEARCH_PAGES` in `src/lib/search-pages.ts` is held to this
+  // list, so a search page added without its kind fails `pnpm typecheck`.
+  "redact-pdf",
   "not-found",
 ] as const);
 
@@ -132,6 +137,7 @@ export const PAGE_PATHS: Readonly<Record<PageKind, string>> = Object.freeze({
   account: ACCOUNT_PATH,
   billing: BILLING_PATH,
   welcome: WELCOME_PATH,
+  "redact-pdf": REDACT_PDF_PATH,
   // No route of ours lives here; it is the name Umami shows for a missing page.
   "not-found": "/404",
 });
@@ -160,6 +166,8 @@ export function pageKindFor(pathname: string): PageKind {
       return "billing";
     case WELCOME_PATH:
       return "welcome";
+    case REDACT_PDF_PATH:
+      return "redact-pdf";
   }
   if (isUnder(pathname, SIGN_IN_PATH)) return "sign-in";
   if (isUnder(pathname, SIGN_UP_PATH)) return "sign-up";

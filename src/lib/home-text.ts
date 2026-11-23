@@ -234,6 +234,23 @@ export const HOME_TEXT = Object.freeze({
     }),
   }),
 
+  /**
+   * The site line (spec 0024, AC-11): the root layout's description, which
+   * every page without its own falls back to, and `/`'s. Held to spec 0024's
+   * *Claim register*, as a search page is (AC-5): "in your browser, with
+   * nothing uploaded" is row M1 (privacy claim C1; `/tool`'s `connect-src
+   * 'self'`, spec 0011, INV-1 and INV-2); "the selectable text you tick is
+   * taken out of the page, then marked" is row M2 (the self check's text
+   * part, which reads what each page draws, so "selectable" and "the page",
+   * never "the file": spec 0004, AC-13 and INV-2; spec 0019, AC-12; removed
+   * first, then marked, spec 0004's Follow-up); "every new file is checked
+   * before you download it" is row M3 (spec 0004, INV-2). It replaces the
+   * line that said the text was "not covered with a black box", which a run
+   * that marks where text was does not bear out.
+   */
+  siteLine:
+    "Redact PDFs in your browser, with nothing uploaded. The selectable text you tick is taken out of the page, then marked, and every new file is checked before you download it.",
+
   /** The product shot's alt text (AC-12). */
   shotAlt:
     "RedactNest reviewing a sample employment agreement: email addresses and phone numbers found and ticked, with a Redact button beside them.",

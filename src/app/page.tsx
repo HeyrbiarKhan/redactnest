@@ -1,4 +1,5 @@
 import { Check, FileMinus, Info, ScanSearch, type LucideIcon } from "lucide-react";
+import type { Metadata } from "next";
 import Image from "next/image";
 
 import { config } from "@/config";
@@ -9,7 +10,8 @@ import {
   HOME_TEXT,
   strippedItems,
 } from "@/lib/home-text";
-import { PRICING_PATH, TOOL_PATH } from "@/lib/routes";
+import { LEGAL } from "@/lib/legal";
+import { HOME_PATH, PRICING_PATH, TOOL_PATH } from "@/lib/routes";
 import { Button } from "@/ui/button";
 import { Card } from "@/ui/card";
 import { FeatureList } from "@/ui/feature-list";
@@ -27,7 +29,7 @@ import { PageHeader } from "./site-nav";
  * Every word in the main content comes from `src/lib/home-text.ts`; the caps
  * and whether billing is on come from `config`, read here and passed in. A
  * static server component with no client component of its own, and its
- * metadata is the layout's.
+ * title is the layout's.
  *
  * Both ways into the tool are real page loads (`reload`), never `next/link`
  * (spec 0003, AC-21): a content security policy belongs to the document it
@@ -40,9 +42,38 @@ import { PageHeader } from "./site-nav";
  * origin. A static import, so its size is known and nothing shifts as it
  * loads; eager and high priority, because it is the hero.
  */
+/**
+ * `/`'s own head (spec 0024, AC-11): the site line as its description, the
+ * same words as the root layout's fallback, and a canonical to the root of
+ * `config.siteUrl` (through the layout's `metadataBase`). The title stays the
+ * layout's default, "RedactNest".
+ */
+export const metadata: Metadata = {
+  description: HOME_TEXT.siteLine,
+  alternates: { canonical: HOME_PATH },
+};
+
+/**
+ * The `WebSite` block for search engines (AC-11): the trading name and the
+ * site's address, through `JSON.stringify` with every `<` escaped, so no
+ * value can close the element. A data block (`application/ld+json`), which
+ * the browser never runs, so the standard policy needs no change; the one
+ * script element any page in spec 0024 adds.
+ */
+const WEBSITE_JSON_LD = JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: LEGAL.tradingName,
+  url: config.siteUrl,
+}).replaceAll("<", "\\u003c");
+
 export default function HomePage() {
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: WEBSITE_JSON_LD }}
+      />
       <PageHeader />
       {/* The skip link's target, allowed to drop its outline (spec 0003, AC-14). */}
       <main id="main" tabIndex={-1} className="flex flex-1 flex-col focus:outline-none">

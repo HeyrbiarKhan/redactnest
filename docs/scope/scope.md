@@ -479,7 +479,7 @@ spec [0024](../specs/0024-search-pages/index.md) (2026-11-23: three search pages
 - [x] Design it (spec): `/architect marketing site`
 - [ ] Build it: `/develop marketing site`
   - [x] The home page reflow (feature 29): `/` recorded at 1280 pixels, the wide element found with `/debug` and fixed (a primitive change goes back to `/architect`), the combined 320 pixel and 200% text test over `REFLOW_PAGES`, and spec 0013's AC-26 amended · AC-14
-  - [ ] One search page whole: `/redact-pdf`'s record, template, metadata and words under the claim register, the shared banned phrases, the sitemap and robots, the site line and the `WebSite` block, the footer Guides group, its page kind, its card with root `AGENTS.md`'s brand file line, and every browser suite · AC-1 to AC-13, AC-16
+  - [x] One search page whole: `/redact-pdf`'s record, template, metadata and words under the claim register, the shared banned phrases, the sitemap and robots, the site line and the `WebSite` block, the footer Guides group, its page kind, its card with root `AGENTS.md`'s brand file line, and every browser suite · AC-1 to AC-13, AC-16
   - [ ] The other two pages: `/remove-text-from-pdf` with the custom terms line and `/black-box-redaction` with the `CoverFigure`, each joined to every test · AC-1 to AC-9, AC-12 to AC-14, AC-16
   - [ ] Your read and the measure: every word read before merge, Lighthouse's mobile figures in spec 0024's `verify.md`, and PageSpeed Insights after the deploy · AC-5, AC-6, AC-15
 - [ ] Verify it: `/check verify marketing site`
