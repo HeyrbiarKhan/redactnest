@@ -174,8 +174,8 @@ Skateboard: feature 29's test first, then one search page as a complete whole (f
 9. [x] `/redact-pdf` in the browser suites: axe, 320 pixels, 200% text, forced colours, `REFLOW_PAGES`, the per page head check (`shell.spec.ts`), same origin requests (`privacy.spec.ts`), the look over link landing. Satisfies **AC-2**, **AC-7**, **AC-13**, **AC-14**.
 10. [x] `remove-text` and `black-box`: records, words, routes, `CoverFigureProps` exported and the figure's new words, the terms line, kinds, cards, and each joined to every test above. Satisfies **AC-1** to **AC-9**, **AC-12** to **AC-14**, **AC-16**.
 11. [x] `CoverFigure` at narrow widths, as *CoverFigure at narrow widths* says: `grid-cols-1` on the grid, `wrap-anywhere` once on each panel, `wrap-break-word` dropped from the `samp`, the header comment updated as that section says, and `cover-figure.test.tsx` holding its three assertions. Task 10's `/black-box-redaction` case in `REFLOW_PAGES` then passes, and the existing `/security` suites in `design-system.spec.ts` are rerun, since its figure changes too. Satisfies **AC-13**, **AC-14**.
-12. Your read of every word on the three pages, the figure and the site line before merge. Satisfies **AC-5**, **AC-6**.
-13. Lighthouse's mobile preset on each search page against the production build, figures in `verify.md` with the machine and preset; PageSpeed Insights on the live pages after the deploy. Satisfies **AC-15**.
+12. [x] Your read of every word on the three pages, the figure and the site line before merge. Satisfies **AC-5**, **AC-6**. _Read by the owner on the Vercel Preview at 9b686da, 2026-11-23: all fine._
+13. Lighthouse's mobile preset on each search page against the production build, figures in `verify.md` with the machine and preset; PageSpeed Insights on the live pages after the deploy. Satisfies **AC-15**. _Before merge part done 2026-11-23: all three pass (`verify.md`, step 2). PageSpeed Insights stays open until after the deploy, so the box stays unticked._
 
 ## Consequences
 
@@ -202,6 +202,7 @@ Skateboard: feature 29's test first, then one search page as a complete whole (f
 ## Follow-up
 
 - [ ] `/security` is missing from `PAGE_KINDS`, so its page views count as `not-found`. Older than this branch, found while designing this spec (2026-11-23), not fixed here (your call): add `security` to `PAGE_KINDS` and `PAGE_PATHS`. Recorded in the scope's Deferred list.
+- [ ] With a scrollbar that takes space (headed Chromium on Windows), every page at 320 pixels with 200% text scrolls 15 pixels sideways, because the header and footer wordmark is 288 pixels wide at 200% text, which with its gutter fills 320 exactly. Older than this branch (the 404 page does it too), measured by `/check verify` on 2026-11-23, not fixed here. Phones are unaffected, since their scrollbars overlay the page, and the browser suites (headless, overlay scrollbars) cannot see it. Recorded in the scope's Deferred list.
 - [ ] Check the combined 320 pixel and 200% text case on `/tool`, `/pricing`, `/privacy`, `/terms` and `/security`, and add any that pass to `REFLOW_PAGES`. On `/security` the `CoverFigure` no longer spills after task 11 (measured 2026-11-23); the rest of the page is unchecked.
 - [ ] Read the search pages' page view counts once they have a month of visits, before writing more pages.
 - [ ] The home page's product shot (`src/app/product-review.png`) was captured before `/tool`'s Custom terms section. Older than this branch, not refreshed here (your call, 2026-11-23): rerun `scripts/make-brand.mjs` in its own change. Recorded in the scope's Deferred list.

@@ -7,15 +7,44 @@ The steps no test runs. Everything else is in the suites the build plan names.
 1. **The claim walk.** On each search page, read every sentence that says what RedactNest does. Each must match a *Claim register* row and carry a source comment naming it. Fail a sentence only when it promises more than its row (spec 0018, AC-5, *What fails a verify*); a limit worded too strongly is a note.
 2. **Lighthouse, mobile.** Build with Playwright's environment (`tests/e2e/build-env.ts`) and start it. For each search page, run Lighthouse's mobile preset through `npx lighthouse`, pointed at Playwright's Chromium (`CHROME_PATH`), three runs each, median kept. Record LCP, CLS and TBT per page in the table below, with the machine and Lighthouse's throttling preset above it, so a later rerun is comparable. Pass: LCP at or under 2.5 s, CLS at or under 0.1, TBT at or under 200 ms (AC-15). Measure `/` too, for reference only.
 3. **Feature 29 by eye.** At 320 pixels with 200% text, open and shut the header's menu on `/` and each search page, and confirm nothing is clipped and wider screens look as before (AC-14).
-4. **Rich results check.** Paste `/`'s HTML into Google's Rich Results Test (HTML input, not a URL) and confirm one valid `WebSite` item (AC-11).
+4. **Structured data check.** Paste `/`'s `WebSite` block into Schema.org's validator (validator.schema.org, Code snippet, not a URL) and confirm one valid `WebSite` item with no errors (AC-11). Not Google's Rich Results Test: it no longer reports a `WebSite` block on its own ("No items detected"). Paste the block inside a bare page rather than the whole of `/`, so the footer's name does not go to an outside service.
 5. **Preview noindex.** On a Vercel preview of this branch, confirm the response carries `X-Robots-Tag: noindex`, so no preview address is indexed beside production.
+
+Measured 2026-11-23 (task 13, before merge), on the production build of 9b686da (only docs changed since), built and served with Playwright's environment on `localhost:3000`.
+
+- **Machine**: Dell Inspiron 15 3530, Intel Core i5-1335U (10 cores, 12 threads), 16 GB RAM, Windows 11 Home. Lighthouse's benchmark index across the 12 runs: 3,086 to 3,211.
+- **Tool**: Lighthouse 13.6.0 CLI, default config (the mobile preset), `--only-categories=performance`, Chrome for Testing 153.0.8010.12 headless (Playwright 1.63.0's `chromium-1243`, through `CHROME_PATH`).
+- **Preset**: form factor mobile, screen 412 by 823 at 1.75 device pixel ratio, simulated throttling: 150 ms round trip, 1,638.4 Kbps throughput, CPU slowed 4 times.
+- **Method**: three runs per page, the median of each figure kept separately.
 
 | Page | LCP | CLS | TBT | Pass |
 |---|---|---|---|---|
-| `/redact-pdf` | | | | |
-| `/remove-text-from-pdf` | | | | |
-| `/black-box-redaction` | | | | |
-| `/` (reference) | | | | n/a |
+| `/redact-pdf` | 0.76 s (0.77, 0.76, 0.76) | 0 | 69 ms (82, 35, 69) | yes |
+| `/remove-text-from-pdf` | 0.76 s (0.76, 0.76, 0.76) | 0 | 63 ms (33, 63, 65) | yes |
+| `/black-box-redaction` | 0.76 s (0.76, 0.76, 0.76) | 0 | 70 ms (70, 123, 59) | yes |
+| `/` (reference) | 2.57 s (2.59, 2.57, 2.57) | 0 | 70 ms (63, 107, 70) | n/a |
+
+On each search page the largest paint is text, so it lands with the first paint (0.76 s). On `/` it is the product shot image, which puts `/` just over 2.5 s. `/` is outside AC-15, so this is a note for later, not a failure.
+
+### Verified 2026-11-23 (`/check verify marketing site`, on 9b686da)
+
+Every before merge step passed, on a build with Playwright's environment served on 3000, plus one variant build. Lighthouse (step 2) was not rerun: no code changed since the figures above.
+
+- [x] 1. Claim walk: every sentence on the three pages, the figure and the site line matches its register row and carries its source comment. Nothing promises more than its row.
+- [x] 3. At 320 pixels with 200% text, menu shut and open, on `/` and the three pages: nothing past the window in `main`, nothing clipped. Screenshots in `.playwright-mcp/search-verify/`.
+- [x] 4. One valid `WebSite` item (0 errors, 0 warnings), in Schema.org's validator (validator.schema.org), from `/`'s block in a bare page. Google's Rich Results Test answers "No items detected" for it, because `WebSite` alone is no longer a Google rich result type, so step 4 now names Schema.org's validator.
+- [x] 5. The preview at 9b686da answers anonymous requests with Vercel's sign in redirect and `X-Robots-Tag: noindex`, on `/`, `/redact-pdf` and `/black-box-redaction`.
+- [x] 10 to 14 (slice 2), over all three pages: frames in order, one `h1`, More guides on each; both buttons load `/tool` as a new document; the look over link lands on `/security`'s "What it can miss" heading; the footer shows Product, Guides, Legal, links 24 pixels tall, one paragraph; each card shows its eyebrow and headline, served 200, alt files as specced.
+- [x] 15. Vitest: 8 files, 397 tests passed (the five named, plus `cover-figure`, `telemetry-events` and `security-page`).
+- [x] 16. `○` for the three pages, their cards, `/sitemap.xml` and `/robots.txt`.
+- [x] 17. Each page's head: canonical, `og:url` and `og:image` absolute, alt words as specced, no JSON-LD.
+- [x] 18. The five suites: 434 passed in 2.8 minutes.
+- [x] 19 and 20. Variant build with billing off, `NEXT_PUBLIC_FREE_PAGE_CAP=7` and `NEXT_PUBLIC_SITE_URL=https://example.test`: each page reads "Up to 7 pages a document.", no Free or Pro, no terms line, `/pricing` gone from the sitemap and 404; every address, the robots line and the `WebSite` `url` on `example.test`.
+- [x] 21. Each lead names the same seven detectors (held by the component test).
+- [x] 23. Page views post `redact-pdf`, `remove-text` and `black-box`.
+- [ ] 22. Not run: the card words were not varied in a scratch copy. `brand-files.test.ts` (step 15) holds each alt file equal to its record.
+
+Note, older than this branch: with a classic (non overlay) scrollbar, as in a headed Chromium on Windows, every page at 320 pixels with 200% text scrolls 15 pixels sideways, the 404 page included. The header and footer wordmark is 288 pixels wide there, which with its gutter fills 320 exactly. The suite's headless browser has overlay scrollbars, so it cannot see this. Recorded in the spec's Follow-up and the scope's Deferred list.
 
 ## After the production deploy
 
