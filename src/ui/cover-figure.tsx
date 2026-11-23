@@ -47,18 +47,29 @@ export interface CoverFigureProps {
  * Side by side once the figure is 40rem wide, a container query on the figure
  * itself, so in the legal pages' 44rem reading column at the default text size
  * the panels pair up, and at 200% text, or on a phone, they stack. 40rem, not
- * less, so a 1280 pixel window at 200% text lands well clear of the switch. Only `ink` and
+ * less, so a 1280 pixel window at 200% text lands well clear of the switch.
+ * Below the switch the one column is `grid-cols-1` (`minmax(0, 1fr)`), never
+ * an automatic track: an automatic column is never narrower than its longest
+ * word, so at 320 pixels with 200% text one long word plus the panel's rem
+ * padding pushed the figure past the window. Only `ink` and
  * `ink-muted` on `surface`, `canvas` and `subtle`, so no new pairing joins the
  * contrast contract (spec 0003, INV-2).
+ *
+ * Each panel takes `wrap-anywhere`, which every word inside it inherits (the
+ * title, the drawn lines, the label and the copy), so a word wider than its
+ * line breaks inside itself, with no hyphen, rather than widening the panel.
+ * It replaces `wrap-break-word` on the copy, which breaks a long word too but
+ * does not lower the narrowest width the column is sized from. Spec 0024,
+ * *CoverFigure at narrow widths* and AC-14.
  */
 export function CoverFigure({ panels, caption, className }: CoverFigureProps) {
   return (
     <figure className={cx("@container flex flex-col gap-3", className)}>
-      <div className="grid gap-4 @min-[40rem]:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 @min-[40rem]:grid-cols-2">
         {panels.map((panel) => (
           <div
             key={panel.title}
-            className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-xs"
+            className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-xs wrap-anywhere"
           >
             <p className="font-semibold text-ink">{panel.title}</p>
             <div
@@ -80,7 +91,7 @@ export function CoverFigure({ panels, caption, className }: CoverFigureProps) {
             </div>
             <p className="flex flex-col gap-1 text-small">
               <span className="text-ink-muted">{panel.readsLabel}</span>
-              <samp className="block rounded-lg border border-transparent bg-subtle px-3 py-2 font-sans text-ink wrap-break-word">
+              <samp className="block rounded-lg border border-transparent bg-subtle px-3 py-2 font-sans text-ink">
                 {panel.reads}
               </samp>
             </p>
