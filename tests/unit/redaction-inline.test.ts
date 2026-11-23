@@ -371,8 +371,8 @@ function counted() {
   const calls = { rewrite: 0 };
   const pipeline: Pipeline = {
     ...SKIP_RULE,
-    checkStructure: (check, count) => {
-      const verdict = structureIsClean(check, count);
+    checkStructure: (check, count, ticked) => {
+      const verdict = structureIsClean(check, count, ticked);
       verdicts.push(verdict);
       return verdict;
     },

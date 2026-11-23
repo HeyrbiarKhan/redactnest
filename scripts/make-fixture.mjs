@@ -45,7 +45,9 @@ import {
   keptLang,
   keptPicture,
   keptProgramKeys,
+  markedBlocked,
   markedDescriptions,
+  markedTicked,
   sharedForms,
   sharedPictures,
 } from "./lib/kept-fixtures.mjs";
@@ -659,6 +661,17 @@ const FIXTURES = [
     "marked-descriptions.pdf",
     markedDescriptions(),
     "one page per case of descriptions written into a page, warned and quiet",
+  ],
+  // Spec 0023: a ticked text in a description.
+  [
+    "marked-ticked.pdf",
+    markedTicked(),
+    "one page per description that keeps a ticked name, and two controls",
+  ],
+  [
+    "marked-blocked.pdf",
+    markedBlocked(),
+    "a name drawn plainly and written as replacement text over other glyphs",
   ],
   // Spec 0021: a ticked value at a string place.
   ["kept-lang.pdf", keptLang(), "a catalog /Lang repeating the name the page shows"],

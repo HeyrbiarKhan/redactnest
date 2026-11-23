@@ -84,6 +84,14 @@ import type { RedactionTarget } from "./types";
  * leads to a second write, and it runs again on the second write's bytes. It
  * runs here, never through the `checkStructure` seam, so a swapped structure
  * check still faces it.
+ *
+ * Spec 0023, AC-2: the structure part is handed `tickedTexts` too, and answers
+ * `"ticked-description"` when a description string a drawing settles holds a
+ * ticked text. It never leads to `"rewrite"`, and every page is still
+ * compared: a character outside the visible area or a ticked leak on a page
+ * is `redaction-incomplete`, then the hit is `replacement-text`, ahead of an
+ * unreadable stream or a lost picture (`unsupported`), a page's replaced text
+ * and overreach. The string place check above outranks it.
  */
 export function checkOutput(
   mupdf: MuPdf,
@@ -118,13 +126,14 @@ export function checkOutput(
   let replaced = false;
   let overreached = false;
   let unreadable = false;
+  let described = false;
   let check: Document | null = null;
 
   try {
     check = mupdf.Document.openDocument(output, "application/pdf");
     const pdf: PDFDocument | null = check.asPDF();
     if (!pdf) return "redaction-incomplete";
-    const structure = checkStructure(pdf, record.length);
+    const structure = checkStructure(pdf, record.length, tickedTexts);
     if (structure === "leak") return "redaction-incomplete";
     // Spec 0021, AC-4: a ticked text at a string place is a leak, whatever the
     // rebuild did (INV-3), so it comes before the second write is offered.
@@ -140,6 +149,9 @@ export function checkOutput(
     // outranks it; every page is still compared. Spec 0022, AC-4: a lost
     // inline picture is handled the same way.
     unreadable = structure === "unreadable" || structure === "lost-picture";
+    // Spec 0023, AC-2: a ticked text a description keeps. The verdicts are
+    // exclusive, so `unreadable` stays false here.
+    described = structure === "ticked-description";
 
     for (let index = 0; index < record.length; index += 1) {
       const quads = (targets.get(index) ?? []).flatMap((target) => target.quads);
@@ -176,9 +188,14 @@ export function checkOutput(
   }
 
   if (escaped) return "redaction-incomplete";
+  // With nothing ticked the list is empty, so `described` cannot arise; a
+  // swapped structure check that answers it anyway fails closed.
   if (!ticked)
-    return leaked || replaced || overreached || unreadable ? "unsupported" : null;
+    return leaked || replaced || overreached || unreadable || described
+      ? "unsupported"
+      : null;
   if (leaked) return "redaction-incomplete";
+  if (described) return "replacement-text";
   if (unreadable) return "unsupported";
   if (replaced) return "replacement-text";
   if (overreached) return "redaction-overreach";
@@ -230,22 +247,32 @@ function placeHoldsTicked(
 
 /**
  * What the structure part found: nothing, something the rebuild should not
- * have carried (a leak), a drawing stream it could not read to its end, an
- * inline picture the write lost (spec 0022, AC-4), or, as its only finding, a
- * colour space entry no drawing names (spec 0019, AC-5). They rank in that
- * order from the leak down: a leak outranks an unreadable stream, which
- * outranks a lost picture, and all three outrank an unused colour space, so a
- * file holding any of them is never written twice (AC-15). A second write is
- * a second filter pass, which drops a `/CS/` picture whole, and the check
- * could then no longer see the loss.
+ * have carried (a leak), a description string holding a ticked text (spec
+ * 0023, AC-2), a drawing stream it could not read to its end, an inline
+ * picture the write lost (spec 0022, AC-4), or, as its only finding, a colour
+ * space entry no drawing names (spec 0019, AC-5). They rank in that order
+ * from the leak down: a leak outranks a ticked description, which outranks an
+ * unreadable stream, which outranks a lost picture, and all four outrank an
+ * unused colour space, so a file holding any of them is never written twice
+ * (AC-15). A second write is a second filter pass, which drops a `/CS/`
+ * picture whole, and the check could then no longer see the loss.
  */
 export type StructureVerdict =
-  "clean" | "leak" | "unreadable" | "lost-picture" | "unused-colour-space";
+  | "clean"
+  | "leak"
+  | "ticked-description"
+  | "unreadable"
+  | "lost-picture"
+  | "unused-colour-space";
 
-/** The structure part of the self check, as the `Pipeline` seam holds it. */
+/**
+ * The structure part of the self check, as the `Pipeline` seam holds it.
+ * `ticked` is the run's folded ticked texts (`foldTicked`, spec 0023, AC-2).
+ */
 export type StructureCheck = (
   check: PDFDocument,
   sourcePageCount: number,
+  ticked: readonly string[],
 ) => StructureVerdict;
 
 /**
@@ -287,10 +314,17 @@ export type StructureCheck = (
  * makes no owner, so the units of `walk.pages` whose `resources` is null are
  * read here too, and only those, so nothing is read twice
  * (`resourcelessUse`).
+ *
+ * Spec 0023's, AC-2: no description string a drawing settles holds a ticked
+ * text. Resource use and `resourcelessUse` pass `ticked` to every read, so
+ * each page's contents and every form, tiling pattern and Type 3 glyph
+ * procedure it draws is read once, against the list. A hit answers
+ * `"ticked-description"`, which only a leak outranks.
  */
 export function structureIsClean(
   check: PDFDocument,
   sourcePageCount: number,
+  ticked: readonly string[] = [],
 ): StructureVerdict {
   const trailer = check.getTrailer();
 
@@ -308,7 +342,7 @@ export function structureIsClean(
   if (walk.problem !== null || walk.strays > 0) return "leak";
   if (!everyObjectReached(check, walk.reached)) return "leak";
 
-  const use = resourceUse(walk.owners);
+  const use = resourceUse(walk.owners, ticked);
   if (use === "leak") return "leak";
 
   let clean = true;
@@ -326,15 +360,19 @@ export function structureIsClean(
   // Text below a glyph is a leak that outranks `"unreadable"` and
   // `"unused-colour-space"`, so it never leads to a second write.
   if (judgeGlyphs(walk) === "text") return "leak";
-  return worseOf(use, resourcelessUse(walk.pages));
+  return worseOf(use, resourcelessUse(walk.pages, ticked));
 }
 
-/** The structure part's verdicts from the least to the worst (spec 0022, AC-4). */
+/**
+ * The structure part's verdicts from the least to the worst (spec 0022, AC-4,
+ * as spec 0023's AC-2 adds `ticked-description`).
+ */
 const VERDICT_RANK: readonly StructureVerdict[] = Object.freeze([
   "clean",
   "unused-colour-space",
   "lost-picture",
   "unreadable",
+  "ticked-description",
   "leak",
 ]);
 
@@ -348,20 +386,32 @@ function worseOf(first: StructureVerdict, second: StructureVerdict): StructureVe
  * which resource use never reads. One loses a picture when its read has
  * `losesPicture`, or any name in `inlineSpaces`, since it has no entry to
  * name; one the scan cannot read makes the answer `"unreadable"`, as it does
- * in an owner.
+ * in an owner. Spec 0023, AC-2: a read with `describesTicked` answers
+ * `"ticked-description"`, on the same terms as resource use, ahead of an
+ * unreadable drawing elsewhere. Such a drawing names no `/Properties`, so only
+ * its inline lists are read.
  */
 function resourcelessUse(
   pages: readonly (readonly DrawingUnit[])[],
-): "clean" | "unreadable" | "lost-picture" {
+  ticked: readonly string[],
+): "clean" | "ticked-description" | "unreadable" | "lost-picture" {
+  let described = false;
+  let unreadable = false;
   let lostPicture = false;
   for (const units of pages) {
     for (const unit of units) {
       if (unit.resources !== null) continue;
-      const read = readDrawing(unit.streams, null, unit.joined);
-      if (read === "unsure") return "unreadable";
+      const read = readDrawing(unit.streams, null, unit.joined, ticked);
+      if (read === "unsure") {
+        unreadable = true;
+        continue;
+      }
+      if (read.describesTicked) described = true;
       if (read.losesPicture || read.inlineSpaces.size > 0) lostPicture = true;
     }
   }
+  if (described) return "ticked-description";
+  if (unreadable) return "unreadable";
   return lostPicture ? "lost-picture" : "clean";
 }
 
@@ -406,8 +456,17 @@ const DEFAULT_SPACES: ReadonlySet<string> = new Set([
  * key of the owner's `/ColorSpace` dictionary. That answers `"lost-picture"`,
  * ranked after `"unreadable"` and before `"unused-colour-space"`, so it never
  * leads to a second write.
+ *
+ * Spec 0023, AC-2: every read is handed `ticked`, and one with
+ * `describesTicked` sets a flag of its own, kept even when another drawing
+ * of the same owner reads `"unsure"`, and answered before `"unreadable"`. An
+ * early `"leak"` return still wins.
  */
-function resourceUse(owners: readonly ResourceOwner[]): StructureVerdict {
+function resourceUse(
+  owners: readonly ResourceOwner[],
+  ticked: readonly string[],
+): StructureVerdict {
+  let described = false;
   let unreadable = false;
   let lostPicture = false;
   let unusedColourSpace = false;
@@ -422,11 +481,13 @@ function resourceUse(owners: readonly ResourceOwner[]): StructureVerdict {
         unit.streams,
         properties.isDictionary() ? properties : null,
         unit.joined,
+        ticked,
       );
       if (read === "unsure") {
         unsure = true;
         continue;
       }
+      if (read.describesTicked) described = true;
       if (read.losesPicture) lostPicture = true;
       for (const name of read.inlineSpaces) printed.add(name);
       for (const [category, names] of read.names) {
@@ -460,6 +521,7 @@ function resourceUse(owners: readonly ResourceOwner[]): StructureVerdict {
       }
     }
   }
+  if (described) return "ticked-description";
   if (unreadable) return "unreadable";
   if (lostPicture) return "lost-picture";
   return unusedColourSpace ? "unused-colour-space" : "clean";

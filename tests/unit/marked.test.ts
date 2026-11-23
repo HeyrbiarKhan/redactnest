@@ -14,6 +14,7 @@ import {
   silenceEngineLog,
   type DrawingRead,
 } from "@/engine";
+import { foldTicked } from "@/engine/allowlist";
 
 import { MARKED_TEXT } from "../../scripts/lib/kept-fixtures.mjs";
 import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
@@ -340,6 +341,211 @@ describe("whether a drawing shows text (spec 0020)", () => {
       expect(readDrawing(square, null, false)).toMatchObject({ showsText: false });
       expect(readDrawing(both, null, false)).toMatchObject({ showsText: true });
       expect(readDrawing(both, null, true)).toMatchObject({ showsText: true });
+    });
+  });
+});
+
+/**
+ * Spec 0023, AC-1: whether the description strings a drawing settles hold a
+ * ticked text. Each string is decoded and folded as the check's string places
+ * are, the folds joined in the order settled, one join per scan, and tested
+ * for containment of any ticked fold. An `/ActualText` over text drawn in its
+ * own stream is never compared, so the character check alone reads it.
+ */
+describe("whether a description holds a ticked text (spec 0023)", () => {
+  /** Scan `text` with `ticked` as the run's folded ticked texts. */
+  function scanTicked(text: string, ...ticked: string[]): DrawingRead {
+    const result = scanContent(bytes(text), null, foldTicked(ticked));
+    if (result === "unsure") throw new Error("expected the scan to read to its end");
+    return result;
+  }
+  const hits = (text: string, ...ticked: string[]): boolean =>
+    scanTicked(text, ...ticked).describesTicked;
+
+  it("never compares an inline /ActualText around text", () => {
+    expect(
+      hits(
+        "/Span << /ActualText (Jane Smith) >> BDC BT (Jane Smith) Tj ET EMC",
+        "Jane Smith",
+      ),
+    ).toBe(false);
+  });
+
+  /**
+   * Text is drawn, so the scan leaves it to the character check, which catches
+   * the word while its glyphs stay; once MuPDF removes them, the span holds no
+   * text and the scan catches it (`marked-ticked.pdf`, pages 1 to 4).
+   */
+  it("never compares an /ActualText around text and a shape", () => {
+    expect(
+      hits(
+        "/Span << /ActualText (Jane Smith) >> BDC BT (Jane Smith) Tj ET 0 0 9 9 re f EMC",
+        "Jane Smith",
+      ),
+    ).toBe(false);
+  });
+
+  it("hits an inline /ActualText around only a shape", () => {
+    expect(
+      hits("/Span << /ActualText (Jane Smith) >> BDC 0 0 9 9 re f EMC", "Jane Smith"),
+    ).toBe(true);
+  });
+
+  it("hits an /ActualText around no text in a sequence never closed", () => {
+    expect(
+      hits("/Span << /ActualText (Jane Smith) >> BDC 0 0 9 9 re f", "Jane Smith"),
+    ).toBe(true);
+  });
+
+  it("never compares an outer /ActualText when text runs in a nested sequence", () => {
+    expect(
+      hits(
+        "/Span << /ActualText (Jane Smith) >> BDC /P << /MCID 1 >> BDC BT (x) Tj ET EMC EMC",
+        "Jane Smith",
+      ),
+    ).toBe(false);
+  });
+
+  it("hits a DP's inline /ActualText, beside drawn text too, since a point is never a sequence", () => {
+    expect(
+      hits("/Note << /ActualText (Jane Smith) >> DP BT (x) Tj ET", "Jane Smith"),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["an /ActualText written as an array", "/Span << /ActualText [(Jane Smith)] >> BDC"],
+    [
+      "an ActualText key nested under another",
+      "/Span << /Private << /ActualText (Jane Smith) >> >> BDC",
+    ],
+  ])("settles %s at once, around text too", (_label, list) => {
+    expect(hits(`${list} BT (x) Tj ET EMC`, "Jane Smith")).toBe(true);
+  });
+
+  it.each([
+    ["an /Alt", "/Span << /Alt (A photo of Jane Smith) >> BDC BT (x) Tj ET EMC"],
+    ["an /E", "/Span << /E (Jane Smith) >> BDC BT (x) Tj ET EMC"],
+    [
+      "a private key nested in an array",
+      "/Span << /Private [1 [(Jane Smith)]] >> BDC EMC",
+    ],
+  ])("hits %s holding the ticked text", (_label, text) => {
+    expect(hits(text, "Jane Smith")).toBe(true);
+  });
+
+  /** A language tag or not, as spec 0021 holds the catalog's `/Lang`. */
+  it("hits a /Lang that reads as a language tag when part of it is ticked", () => {
+    expect(hits("/Span << /Lang (en-GB) >> BDC BT (x) Tj ET EMC", "GB")).toBe(true);
+    expect(describes("/Span << /Lang (en-GB) >> BDC BT (x) Tj ET EMC")).toBe(false);
+  });
+
+  it("decodes a hex string and a UTF-16 string before comparing", () => {
+    expect(hits("/Span << /Alt <4A616E65> >> BDC EMC", "Jane")).toBe(true);
+    expect(hits("/Span << /Alt <FEFF004A0061006E0065> >> BDC EMC", "Jane")).toBe(true);
+  });
+
+  /** INV-6: `<FEFF00650E>` opens as UTF-16 and ends on half a unit. */
+  it("hits a string that cannot be decoded, whatever is ticked", () => {
+    expect(hits("/Span << /Alt <FEFF00650E> >> BDC EMC", "Unrelated")).toBe(true);
+  });
+
+  it("misses a description that holds no ticked text", () => {
+    expect(hits("/Span << /Alt (A photo of a harbour) >> BDC EMC", "Jane Smith")).toBe(
+      false,
+    );
+  });
+
+  it("hits a ticked text split across two spans round shapes, by the join", () => {
+    expect(
+      hits(
+        "/Span << /ActualText (Jane) >> BDC 0 0 9 9 re f EMC " +
+          "/Span << /ActualText (Smith) >> BDC 20 0 9 9 re f EMC",
+        "Jane Smith",
+      ),
+    ).toBe(true);
+  });
+
+  it("joins each call on its own, so the halves in two drawings miss", () => {
+    expect(
+      hits("/Span << /ActualText (Jane) >> BDC 0 0 9 9 re f EMC", "Jane Smith"),
+    ).toBe(false);
+    expect(
+      hits("/Span << /ActualText (Smith) >> BDC 0 0 9 9 re f EMC", "Jane Smith"),
+    ).toBe(false);
+  });
+
+  /** The recorded false refusal: text a form draws through `Do` is not drawn here. */
+  it("hits an /ActualText whose only drawing is a form", () => {
+    expect(
+      hits("/Span << /ActualText (Jane Smith) >> BDC /Fm1 Do EMC", "Jane Smith"),
+    ).toBe(true);
+  });
+
+  it("forgets a string read past a false EI once the scan tries the next one", () => {
+    const text = "BI /W 4 /H 1 /CS /G /BPC 8 ID a EI /S << /Alt (Jane) >> DP ) EI Q";
+    expect(hits(text, "Jane")).toBe(false);
+    expect(
+      hits("BI /W 1 /H 1 /CS /G /BPC 8 ID z EI /S << /Alt (Jane) >> DP", "Jane"),
+    ).toBe(true);
+  });
+
+  /** INV-5: with nothing ticked the answer is false and nothing else moves. */
+  it("answers false everywhere with nothing ticked, describes unchanged", () => {
+    const texts = [
+      "/Span << /ActualText (Jane Smith) >> BDC 0 0 9 9 re f EMC",
+      "/Span << /Alt <FEFF00650E> >> BDC EMC",
+      "/Note << /ActualText (Jane Smith) >> DP",
+      "/Span << /ActualText (Jane Smith) >> BDC BT (x) Tj ET EMC",
+    ];
+    for (const text of texts) {
+      expect(read(text).describesTicked, text).toBe(false);
+      expect(scanTicked(text, "Jane Smith").describes, text).toBe(read(text).describes);
+    }
+  });
+
+  it("reads a named list's /ActualText: a hit round a shape, a miss round text, and a DP's always", () => {
+    const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+        "/Resources << /Properties << /P1 7 0 R >> >> /Contents 4 0 R >>",
+      stream("", "/Span /P1 BDC 0 0 9 9 re f EMC"),
+      stream("", "/Span /P1 BDC BT (x) Tj ET EMC"),
+      stream("", "/Note /P1 DP BT (x) Tj ET"),
+      "<< /ActualText (Jane Smith) /MCID 2 >>",
+    ];
+    withDoc(objects, (doc) => {
+      const properties = doc.findPage(0).get("Resources", "Properties");
+      const ticked = foldTicked(["Jane Smith"]);
+      const answer = (num: number) =>
+        readDrawing([doc.newIndirect(num)], properties, true, ticked);
+      expect(answer(4)).toMatchObject({ describesTicked: true });
+      expect(answer(5)).toMatchObject({ describesTicked: false });
+      expect(answer(6)).toMatchObject({ describesTicked: true });
+      // A drawing with no resource dictionary names no list.
+      expect(readDrawing([doc.newIndirect(4)], null, true, ticked)).toMatchObject({
+        describesTicked: false,
+      });
+    });
+  });
+
+  it("joins a glyph procedure on its own when read apart, and the parts as one when joined", () => {
+    const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
+      stream("", "/Span << /ActualText (Jane) >> BDC 0 0 9 9 re f EMC"),
+      stream("", "/Span << /ActualText (Smith) >> BDC 0 0 9 9 re f EMC"),
+    ];
+    withDoc(objects, (doc) => {
+      const both = [doc.newIndirect(4), doc.newIndirect(5)];
+      const ticked = foldTicked(["Jane Smith"]);
+      expect(readDrawing(both, null, false, ticked)).toMatchObject({
+        describesTicked: false,
+      });
+      expect(readDrawing(both, null, true, ticked)).toMatchObject({
+        describesTicked: true,
+      });
     });
   });
 });
@@ -856,9 +1062,22 @@ describe("marked-descriptions.pdf", () => {
     );
   });
 
-  it("is the only committed fixture that warns", async () => {
+  /**
+   * Spec 0023, AC-3: with nothing ticked, `marked-ticked.pdf` warns where a
+   * description sits round no text drawn in its own stream (an `/Alt`, a
+   * `DP`, an `/ActualText` round only a form), and nowhere a span draws its
+   * name.
+   */
+  it("warns on marked-ticked.pdf's pages 6, 7 and 10", async () => {
+    await expect(warnedPages(fixture("marked-ticked.pdf"))).resolves.toEqual([6, 7, 10]);
+  });
+
+  it("is, with marked-ticked.pdf, the only committed fixture that warns", async () => {
     const names = readdirSync(new URL("../fixtures/", import.meta.url)).filter(
-      (name) => name.endsWith(".pdf") && name !== "marked-descriptions.pdf",
+      (name) =>
+        name.endsWith(".pdf") &&
+        name !== "marked-descriptions.pdf" &&
+        name !== "marked-ticked.pdf",
     );
     expect(names.length).toBeGreaterThan(90);
     for (const name of names) {
