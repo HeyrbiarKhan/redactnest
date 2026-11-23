@@ -1,7 +1,7 @@
 # 0023. Fail a run whose descriptions keep ticked text
 
 **Date**: 2026-11-23
-**Status**: In Progress
+**Status**: Accepted
 **Updated**: 2026-11-23, as built, wording only, no new decision. AC-2 and AC-3 said a Type 3 font with no `/Resources` is read in `resourcelessUse`; the walk reads it under the resource dictionary it inherits, the page's, and the test pins that, reaching `resourcelessUse` through a page with no resource dictionary instead. The *Amends* table adds spec 0019's INV-4, whose list of what the scan answers now includes `describesTicked`. *Follow-up* points at the older refusal of a page with no `/Resources`, now in the scope's Deferred list.
 
 ## Summary

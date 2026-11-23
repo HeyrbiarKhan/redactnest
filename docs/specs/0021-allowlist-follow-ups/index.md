@@ -1,7 +1,7 @@
 # 0021. Allowlist follow ups: string shapes, a bounded scan and a wider drawn shape
 
 **Date**: 2026-11-18
-**Status**: In Progress
+**Status**: Accepted
 **Updated**: 2026-11-21, as built, wording only, no new decision and no code. AC-5 gave both new fixtures a ticked set in the gate's `NEEDLES`, but the gate's table check ("tick only fixtures that open and run") forbids one for a fixture refused at open, so `kept-cid-strings.pdf` has none, and its ticked run's refusal is held in `redaction-kept.test.ts`, as spec 0020 holds its refused glyph fixtures' runs in `redaction-glyphs.test.ts` (AC-5, *Where the code lives*). Two choices the build made are recorded: a string at a string place decodes with the real PDFDocEncoding table, not Latin 1 (AC-1, AC-4), and a string at one of the check's three places that cannot be decoded fails the check whenever anything is ticked (AC-4, INV-3, *Value sourcing*). The reasons are in `rationale.md`, *As built*. 2026-11-22, from spec [0022](../0022-inline-picture-refusal/index.md): the Follow-up's lost inline picture is designed there, and its owed `/Ordering <FEFF00650E>` test is spec 0022's AC-8, written in that build. 2026-11-23, from spec [0023](../0023-ticked-text-in-descriptions/index.md): `/ActualText` and every other description string are held by spec 0023's check, inside the structure part (AC-4's `/ActualText` bullet), and the Follow-up's measure item is ticked.
 
 ## Summary
