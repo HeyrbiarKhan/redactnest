@@ -1,6 +1,6 @@
 # 0024. Search pages
 
-**Status**: Proposed
+**Status**: In Progress
 **Date**: 2026-11-23
 **Updated**: 2026-11-23, after the cross check (another model): the 14 gaps it found closed as recommended, the owner's call, with the brand file line in root `AGENTS.md` moved into build task 8.
 
@@ -157,8 +157,8 @@ Never on a search page: metadata or hidden data stripping, what the page warning
 
 Skateboard: feature 29's test first, then one search page as a complete whole (frame, head, card, sitemap, robots, footer, counts, every test), then the other two pages join each piece.
 
-1. Feature 29: record `/`'s hero, trio and band boxes at 1280 pixels as a test; then find the element in `/`'s main content wider than the window at 320 pixels with 200% text, menu shut and open, with `/debug` (`tests/e2e/design-system.spec.ts` already calls this case about 800% zoom, and a `size="lg"` button may be the cause), and let it wrap or shrink. If the fix needs a `src/ui` primitive to change how its label wraps or shrinks, stop and bring it to `/architect`. Satisfies **AC-14**.
-2. Feature 29: the combined test in `tests/e2e/design-system.spec.ts`, over `REFLOW_PAGES = ["/"]`, menu shut and open; amend spec 0013's AC-26 to name the combined case. Rerun `scripts/make-brand.mjs` only if a brand picture changed. Satisfies **AC-14**.
+1. [x] Feature 29: record `/`'s hero, trio and band boxes at 1280 pixels as a test; then find the element in `/`'s main content wider than the window at 320 pixels with 200% text, menu shut and open, with `/debug` (`tests/e2e/design-system.spec.ts` already calls this case about 800% zoom, and a `size="lg"` button may be the cause), and let it wrap or shrink. If the fix needs a `src/ui` primitive to change how its label wraps or shrinks, stop and bring it to `/architect`. Satisfies **AC-14**.
+2. [x] Feature 29: the combined test in `tests/e2e/design-system.spec.ts`, over `REFLOW_PAGES = ["/"]`, menu shut and open; amend spec 0013's AC-26 to name the combined case. Rerun `scripts/make-brand.mjs` only if a brand picture changed. Satisfies **AC-14**.
 3. `src/lib/search-pages.ts` with the closed set, the types and `redact-pdf`'s record; its path in `src/lib/routes.ts`; the shared `src/app/search-page.tsx` and `src/app/redact-pdf/page.tsx` with `force-static` and its full `metadata`. Satisfies **AC-1** to **AC-4**, **AC-8**.
 4. `redact-pdf`'s words under the register, each with its source comment; `tests/support/claim-phrases.ts` with the security page test moved onto it; `tests/component/app/search-pages.test.tsx` (frame order, headings, links, banned phrases, idea counts, billing on and off with `config` mocked) and `SEARCH_FILES` in `policy-pages.test.ts`. Satisfies **AC-1**, **AC-3**, **AC-5** to **AC-8**.
 5. `src/app/sitemap.ts` and `src/app/robots.ts`, with their unit tests; `HOME_TEXT.siteLine` with its source comment, used by the root layout and a new `metadata` export on `/` with its canonical; the `WebSite` block. Satisfies **AC-10**, **AC-11**.

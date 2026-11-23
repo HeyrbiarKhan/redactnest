@@ -21,3 +21,12 @@ The steps no test runs. Everything else is in the suites the build plan names.
 
 6. **PageSpeed Insights** on each live search page, mobile. Record the lab figures, and the field figures once Google has them (AC-15).
 7. **Search Console.** Submit `https://redactnest.com/sitemap.xml` and confirm it reads without errors.
+
+## Feature 29, as built (2026-11-23, tasks 1 and 2)
+
+What step 3 looks at, made concrete by the build. The wide pieces were the headline's longest word ("Redaction", 381 pixels in a 256 pixel column), the band's heading ("RedactNest"), and each band card's tile, gap and padding, wider than the card.
+
+8. **The combined test.** `pnpm exec playwright test --project=chromium tests/e2e/design-system.spec.ts --grep "spec 0024"` against a build with Playwright's environment: both cases pass, the 320 pixel and 200% text case over `REFLOW_PAGES` (menu shut and open) and `/`'s boxes at 1280 pixels (AC-14).
+9. **At 320 pixels with 200% text on `/`.** The headline breaks "Redaction" inside its column; in both band cards the tile sits above the heading, above each row's words and above the closing line, and no word reaches past its card. Open the menu: the same (AC-14).
+10. **At 200% text from `lg`.** At 1024, 1100 and 1280 pixels the headline stays inside its own column and never reaches the product shot. Before this build it ran 25 to 60 pixels into the shot at 1024 and 1100; at 1280 "Redaction" now breaks inside its column where it used to run into the gap (AC-14, wider screens).
+11. **At the default text size.** At 390, 600, 960 and 1280 pixels the hero and both band cards look as before, each tile beside its words (AC-14: nothing stacks above 12rem of card content).

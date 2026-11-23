@@ -2396,6 +2396,103 @@ test.describe("the cursor (spec 0013, AC-33)", () => {
   });
 });
 
+/**
+ * Spec 0024, AC-14 (feature 29), and spec 0013's AC-26 as it amends it: 320
+ * pixels and 200% text at once, which together are roughly 800% zoom. WCAG
+ * does not ask for that, but a visitor who needs both meets it, and on `/` the
+ * headline's longest word and the band cards' tiles were wider than the window.
+ * The search pages join `REFLOW_PAGES` as each is built.
+ */
+test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
+  const REFLOW_PAGES = ["/"] as const;
+
+  /**
+   * Every box and every run of text in the page ends inside the window, and
+   * no box in `main` holds content wider than itself, so what was too wide
+   * wraps or shrinks rather than spilling past its card or being clipped.
+   * Text runs are read as well as boxes, because a word wider than its box
+   * spills without moving the box.
+   */
+  async function expectNothingPastTheWindow(page: Page): Promise<void> {
+    await expectNoHorizontalScroll(page);
+    const spills = await page.evaluate(() => {
+      const limit = document.documentElement.clientWidth;
+      const found: string[] = [];
+      for (const element of document.querySelectorAll("body *")) {
+        const box = element.getBoundingClientRect();
+        if (box.width > 0 && box.right > limit + 0.5) {
+          found.push(`box past the window: ${element.tagName}`);
+        }
+      }
+      for (const element of document.querySelectorAll("main *")) {
+        // An inline box reports no width of its own to compare.
+        if (element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1) {
+          found.push(`content wider than its box: ${element.tagName}`);
+        }
+      }
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const box = range.getBoundingClientRect();
+        if (box.width > 0 && box.right > limit + 0.5) {
+          found.push(`text past the window: ${node.textContent?.trim().slice(0, 30)}`);
+        }
+      }
+      return found;
+    });
+    expect(spills).toEqual([]);
+  }
+
+  for (const path of REFLOW_PAGES) {
+    test(`${path}: needs no sideways scroll, with the menu shut and open`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 320, height: 640 });
+      await page.goto(path);
+      await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+
+      await expectNothingPastTheWindow(page);
+
+      const header = page.getByRole("banner");
+      await header.getByRole("button", { name: "Menu", exact: true }).click();
+      await expect(header.getByRole("link", { name: "Try it free" })).toBeVisible();
+      await expectNothingPastTheWindow(page);
+    });
+  }
+
+  /**
+   * The fix leaves wider screens as they were: `/`'s hero, trio and band at
+   * 1280 pixels, recorded from the build before it as x, y, width and height.
+   * Within a pixel, so a rounding difference between machines is not a change.
+   */
+  test("/: keeps the hero, the trio and the band where they were at 1280 pixels", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+
+    const main = page.getByRole("main");
+    for (const [box, recorded] of [
+      [page.getByTestId("home-hero"), [88, 145, 1104, 460.4]],
+      [main.getByRole("list").first(), [88, 669.4, 1104, 120]],
+      [page.getByTestId("home-band"), [88, 853.4, 1104, 603]],
+    ] as const) {
+      const measured = await box.boundingBox();
+      if (measured === null) throw new Error("a recorded box is not drawn");
+      const [x, y, width, height] = recorded;
+      for (const [value, was] of [
+        [measured.x, x],
+        [measured.y, y],
+        [measured.width, width],
+        [measured.height, height],
+      ] as const) {
+        expect(Math.abs(value - was)).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+});
+
 test.describe("every page (spec 0013, AC-26)", () => {
   const PAGES = ["/", "/pricing", "/privacy", "/terms", "/no-such-page"] as const;
 

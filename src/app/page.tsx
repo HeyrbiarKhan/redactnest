@@ -47,13 +47,23 @@ export default function HomePage() {
       {/* The skip link's target, allowed to drop its outline (spec 0003, AC-14). */}
       <main id="main" tabIndex={-1} className="flex flex-1 flex-col focus:outline-none">
         <PageContainer width="wide" className="flex flex-col gap-16 py-14 sm:py-20">
-          <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-            <div className="flex flex-col items-start gap-6">
-              <div className="flex flex-col gap-4">
+          <div
+            data-testid="home-hero"
+            className="grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]"
+          >
+            {/*
+              At 320 pixels with 200% text the headline's longest word is wider
+              than the column (spec 0024, AC-14). `min-w-0` and `max-w-full`
+              stop that word setting the column's width, and the headline
+              breaks it only when it cannot fit a line alone, so every wider
+              screen sets the headline as before.
+            */}
+            <div className="flex min-w-0 flex-col items-start gap-6">
+              <div className="flex max-w-full flex-col gap-4">
                 <p data-testid="home-eyebrow" className="eyebrow">
                   {HOME_TEXT.eyebrow}
                 </p>
-                <h1 className="text-display text-balance text-ink">
+                <h1 className="text-display text-balance text-ink wrap-break-word">
                   {HOME_TEXT.headline}
                 </h1>
               </div>
@@ -103,7 +113,8 @@ export default function HomePage() {
             data-testid="home-band"
             className="flex flex-col gap-7"
           >
-            <h2 id={HOME_BAND_ID} className="text-title text-ink">
+            {/* "RedactNest" is wider than a phone at 200% text (spec 0024, AC-14). */}
+            <h2 id={HOME_BAND_ID} className="text-title text-ink wrap-break-word">
               {HOME_TEXT.band.title}
             </h2>
             <div className="grid gap-6 md:grid-cols-2">
@@ -146,6 +157,14 @@ export default function HomePage() {
  * `role="list"` on its `ul` on purpose: Safari drops a list's semantics once
  * its bullets are removed, and the count is part of what the card says
  * (AC-11).
+ *
+ * On a card whose own content is under 12rem the tile sits above the words
+ * instead, here, in each row and in the close (spec 0024, AC-14). The card is
+ * the query container and the 12rem moves with the text size: at the default
+ * size the narrowest card, on a 320 pixel phone, is about 14.4rem, so nothing
+ * stacks at any width, while at 200% text on a phone it is about 4.4rem, too
+ * narrow for a tile, its gap and a word, which used to spill past the card.
+ * Long words break only when they cannot fit a line alone.
  */
 function BandCardHeader({
   icon,
@@ -157,9 +176,9 @@ function BandCardHeader({
   readonly subtitle: string;
 }) {
   return (
-    <div className="flex items-center gap-5">
+    <div className="flex flex-col gap-5 @min-[12rem]:flex-row @min-[12rem]:items-center">
       <IconCircle icon={icon} tone="accent" size="lg" shape="square" />
-      <div className="flex flex-col gap-1">
+      <div className="flex min-w-0 flex-col gap-1 wrap-break-word">
         <h3 className="text-heading text-ink">{title}</h3>
         <p className="text-small text-ink-muted">{subtitle}</p>
       </div>
@@ -199,10 +218,11 @@ function BandRows({
       {items.map(({ icon, label }) => (
         <li
           key={label}
-          className="flex break-inside-avoid items-center gap-5 rounded-xl bg-canvas px-3 py-2.5 font-semibold text-ink @min-[26rem]:not-last:mb-3"
+          className="flex break-inside-avoid flex-col gap-5 rounded-xl bg-canvas px-2 py-2.5 font-semibold text-ink @min-[12rem]:flex-row @min-[12rem]:items-center @min-[12rem]:px-3 @min-[26rem]:not-last:mb-3"
         >
           <IconCircle icon={icon} tone="accent" shape="square" />
-          {label}
+          {/* Its own box, so a word wider than a narrow card can break. */}
+          <span className="min-w-0 wrap-break-word">{label}</span>
         </li>
       ))}
     </ul>
@@ -215,13 +235,13 @@ function BandRows({
  */
 function BandCardClose({ children }: { readonly children: string }) {
   return (
-    <div className="flex items-center gap-3 border-t border-border pt-5">
+    <div className="flex flex-col gap-3 border-t border-border pt-5 @min-[12rem]:flex-row @min-[12rem]:items-center">
       <Info
         aria-hidden="true"
         className="size-7 shrink-0 text-accent"
         strokeWidth={1.75}
       />
-      <p className="text-small text-ink-muted">{children}</p>
+      <p className="min-w-0 text-small text-ink-muted wrap-break-word">{children}</p>
     </div>
   );
 }

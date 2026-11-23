@@ -39,7 +39,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 26 | UI polish | Release 3 | done |
 | 27 | Detector and fixture gates | Release 3 | done |
 | 28 | UI polish 2 | Release 3 | done |
-| 29 | Home page reflow | Release 5 | planned |
+| 29 | Home page reflow | Release 5 | in-progress |
 | 30 | Engine and code follow ups | Release 5 | done |
 | 31 | Leaks through kept objects | Release 5 | done |
 | 32 | Details inside pictures | Release 5 | planned |
@@ -478,19 +478,19 @@ A small set of pages on what this audience actually searches for, since search i
 spec [0024](../specs/0024-search-pages/index.md) (2026-11-23: three search pages, `/redact-pdf`, `/remove-text-from-pdf` and `/black-box-redaction`, on one template over typed records, claiming only a closed register of outcomes and linking `/security` for engine detail; a sitemap, robots, per page cards from `make-brand.mjs`, a footer Guides group, `WebSite` JSON-LD on `/`, the site line reworded; no manifest; feature 29 as slice 1)
 - [x] Design it (spec): `/architect marketing site`
 - [ ] Build it: `/develop marketing site`
-  - [ ] The home page reflow (feature 29): `/` recorded at 1280 pixels, the wide element found with `/debug` and fixed (a primitive change goes back to `/architect`), the combined 320 pixel and 200% text test over `REFLOW_PAGES`, and spec 0013's AC-26 amended · AC-14
+  - [x] The home page reflow (feature 29): `/` recorded at 1280 pixels, the wide element found with `/debug` and fixed (a primitive change goes back to `/architect`), the combined 320 pixel and 200% text test over `REFLOW_PAGES`, and spec 0013's AC-26 amended · AC-14
   - [ ] One search page whole: `/redact-pdf`'s record, template, metadata and words under the claim register, the shared banned phrases, the sitemap and robots, the site line and the `WebSite` block, the footer Guides group, its page kind, its card with root `AGENTS.md`'s brand file line, and every browser suite · AC-1 to AC-13, AC-16
   - [ ] The other two pages: `/remove-text-from-pdf` with the custom terms line and `/black-box-redaction` with the `CoverFigure`, each joined to every test · AC-1 to AC-9, AC-12 to AC-14, AC-16
   - [ ] Your read and the measure: every word read before merge, Lighthouse's mobile figures in spec 0024's `verify.md`, and PageSpeed Insights after the deploy · AC-5, AC-6, AC-15
 - [ ] Verify it: `/check verify marketing site`
 - [ ] Test it: `/test marketing site`
 
-### 29. Home page reflow · from spec 0013
+### 29. Home page reflow · in-progress · from spec 0013
 At 320 pixels wide with text at 200%, the home page's main content scrolls sideways, with the header's menu shut or open. It is older than feature 28, whose menu is not the cause. Spec 0013's AC-26 checks 320 pixels and 200% text apart, so no criterion asks for both at once, but a visitor who needs both meets it. Built beside feature 15, since the search pages reuse the same shell and `FeatureList` (your call, 2026-11-11).
 **Done when:** at 320 pixels with 200% text, `/` has no sideways scroll with the menu shut or open; the element that was wider than the window wraps or shrinks rather than being clipped; wider screens look as today; and a browser test holds 320 pixels and 200% text together on `/`, which feature 15's search pages can join.
 **Also owed here:** find the wide element first, with `/debug` if it is not obvious. Spec 0013's AC-26 amended to name the combined case, and `scripts/make-brand.mjs` rerun only if a brand picture changes (each is drawn at desktop width, so none should).
-spec [0024](../specs/0024-search-pages/index.md) (its AC-14 and build tasks 1 and 2: this row is that spec's first slice, and closes with feature 15)
-- [ ] Build it: within `/develop marketing site`, slice 1 (spec 0024, AC-14)
+spec [0024](../specs/0024-search-pages/index.md) (its AC-14 and build tasks 1 and 2: this row is that spec's first slice, and closes with feature 15) · code in `src/app/page.tsx`, `tests/e2e/design-system.spec.ts`
+- [x] Build it: within `/develop marketing site`, slice 1 (spec 0024, AC-14)
 
 ### 32. Details inside pictures · needs a decision · from spec 0019
 A picture under no removed item leaves with the bytes the source stored (spec 0006, AC-29), so a photo's own details written inside its data (EXIF camera details, sometimes a location, XMP, IPTC) stay in the cleaned copy. Split out of feature 31 (your call, 2026-11-15), because it is stream data rather than a pointer from a kept object, never holds a ticked value, and needs its own proof. It follows the search pages (your call, 2026-11-18).
