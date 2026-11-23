@@ -22,27 +22,6 @@ import productShot from "./product-review.png";
 import { PageHeader } from "./site-nav";
 
 /**
- * The home page. Spec 0013, AC-10 to AC-13 and AC-30: reference 04's hero
- * with a real picture of the tool, the trio, and in place of 04's "Trusted by"
- * row two cards saying what RedactNest looks for and strips.
- *
- * Every word in the main content comes from `src/lib/home-text.ts`; the caps
- * and whether billing is on come from `config`, read here and passed in. A
- * static server component with no client component of its own, and its
- * title is the layout's.
- *
- * Both ways into the tool are real page loads (`reload`), never `next/link`
- * (spec 0003, AC-21): a content security policy belongs to the document it
- * arrived with, so a client side navigation would open the tool under this
- * page's policy (INV-10). It also stops `/` prefetching `/tool`. See pricing
- * is a plain link too, so nothing prefetches it.
- *
- * The product shot is `scripts/make-brand.mjs`'s capture of the real tool on a
- * fictional document (AC-12, INV-2), served through `next/image` from our own
- * origin. A static import, so its size is known and nothing shifts as it
- * loads; eager and high priority, because it is the hero.
- */
-/**
  * `/`'s own head (spec 0024, AC-11): the site line as its description, the
  * same words as the root layout's fallback, and a canonical to the root of
  * `config.siteUrl` (through the layout's `metadataBase`). The title stays the
@@ -67,6 +46,27 @@ const WEBSITE_JSON_LD = JSON.stringify({
   url: config.siteUrl,
 }).replaceAll("<", "\\u003c");
 
+/**
+ * The home page. Spec 0013, AC-10 to AC-13 and AC-30: reference 04's hero
+ * with a real picture of the tool, the trio, and in place of 04's "Trusted by"
+ * row two cards saying what RedactNest looks for and strips.
+ *
+ * Every word in the main content comes from `src/lib/home-text.ts`; the caps
+ * and whether billing is on come from `config`, read here and passed in. A
+ * static server component with no client component of its own, and its
+ * title is the layout's.
+ *
+ * Both ways into the tool are real page loads (`reload`), never `next/link`
+ * (spec 0003, AC-21): a content security policy belongs to the document it
+ * arrived with, so a client side navigation would open the tool under this
+ * page's policy (INV-10). It also stops `/` prefetching `/tool`. See pricing
+ * is a plain link too, so nothing prefetches it.
+ *
+ * The product shot is `scripts/make-brand.mjs`'s capture of the real tool on a
+ * fictional document (AC-12, INV-2), served through `next/image` from our own
+ * origin. A static import, so its size is known and nothing shifts as it
+ * loads; eager and high priority, because it is the hero.
+ */
 export default function HomePage() {
   return (
     <>
