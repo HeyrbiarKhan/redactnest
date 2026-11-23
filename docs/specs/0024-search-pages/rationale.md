@@ -87,3 +87,38 @@ So the box was never the cause; the longest word and the rem padding were. Optio
 - **Tighter padding when narrow**: measured as not enough on its own.
 - **Break anywhere without the column floor**: not measured. It would likely shrink the automatic column on its own, but `grid-cols-1` costs nothing and holds the floor whatever the words, so both stay.
 - **Text sized to the container** (container units): rejected without measuring. Spec 0003's INV-6 bars viewport units for text and any text below 14 pixels, and text sized to a 256 pixel figure would fall below that.
+
+### The lockup at narrow widths (2026-11-23)
+
+CI (Ubuntu, headless Chromium, run 45146529620) failed AC-14's case on all four `REFLOW_PAGES` pages: `scrollWidth` 323 in a 320 window, menu shut, at `design-system.spec.ts:2453`. The same build passes on Windows. You asked for the cause to be measured first, then for a fit with room to spare on any machine, ideally also closing the 15 pixel Follow-up, keeping spec 0013's brand rules and not loosening the test.
+
+Measured on the Playwright build on Windows with scratch Playwright scripts that read every box near the window's edge, the lockups' widths and font sizes, and the row's content edge, at 320 pixels with 200% text:
+
+| Run | Page width / window | Header lockup | Footer lockup |
+|---|---|---|---|
+| Headless, as built | 320 / 320 | 287.7 wide, ends at 319.7 | 287.7, ends at 319.7 |
+| Headless, `--disable-font-subpixel-positioning` | 320 / 320 | 287.7, unchanged | 287.7 |
+| Headed (classic scrollbar), as built | 320 / 305 | 287.7, ends at 319.7, the only box past 305 | 287.7 |
+| Headless, step to `text-body` below 10rem | 320 / 320 | 230.2, ends at 262.2 | 230 of ink in a 256 box |
+| Headed, step to `text-body` below 10rem | 305 / 305 | 230.2, ends at 262.2 (row ends at 272.8) | 230 of ink in a 241 box |
+| Headed, step to `text-small` below 10rem | 305 / 305 | 201.4, ends at 233.4 | as above |
+| Headless 305, step to `text-body` | 305 / 305 | fits; only the hidden skip link's words reach 308 | |
+
+The lockup ends 0.3 pixels inside the window on Windows, so CI's 3 pixels are Linux drawing the word wider. That could not be reproduced here: there is no Linux browser on this machine, and turning off subpixel positioning changes nothing on Windows. Every other box reaching the edge is a full width container. With the step, `/`, the three search pages, `/security`, `/terms`, `/tool` and the 404 page pass at 320 headless and with a classic scrollbar, menu shut and open. Unchanged to the tenth of a pixel: 320 pixels at default text, 384 and 400 pixels at 200% text, and 1280 pixels at both sizes.
+
+Options weighed (your picks, 2026-11-23):
+- **Step down in a narrow row** (chosen): the header and footer rows become containers, and the lockup drops one type step when its row is under 10rem. It changes only big text on narrow windows; phones at default text and every desktop stay as they are. Cost: the lockup is one step smaller than the visitor's text would make it in that one case, and two rows gain size containment.
+- **Fluid size from the row**: `min(1.25rem, about 12.5cqi)`, always about 10% spare. Smooth, but text sized by a container unit is close to the viewport unit text spec 0003's INV-6 bans, it can fall below the 14 pixel floor in a narrow row, and a fluid size is harder to hold in a test.
+- **Smaller lockup on every phone**: below `sm` at every text size. One media query, but it shrinks the brand on every phone at default text, where it fits today with room.
+- **Mark above the word**: keeps the word large (about 230 pixels at 200% text), but changes the lockup's shape, which spec 0013's AC-2 describes as the mark before the word.
+- **Narrower gutters**: not enough. 16 pixel gutters still leave 16 + 288 + 16 = 320, so no room to spare.
+
+The step's size (your pick): `text-body`, the largest step that still fits inside the row with a classic scrollbar (11 pixels on Windows, about 8 on Linux). `text-small` would leave 39 pixels in the row but shrinks the brand further; `text-lead` (about 259 pixels) spills 18 pixels into the row's right gutter with a scrollbar.
+
+The guard (your pick): `REFLOW_PAGES` also at 305 pixels, which is the layout a 15 pixel classic scrollbar leaves at 320, so headless Chromium sees it. It fails on the build as it stands, so it guards the Follow-up. The alternatives were a spare room assertion on the lockup alone (narrower: another wide element could slip past with a scrollbar) and no new guard. Running it showed one artifact: the skip link is `sr-only` (a 1 pixel clipped box, no scroll), but a text range reports its unclipped words, 309 pixels at 200% text, which end at 308, past 305. Your first pick was that at 305 only, the text walk passes over text whose element box is at most 1 pixel wide. The cross check (another model) noted that this would also excuse any later hidden element, so at your call it narrowed to the skip link's own words (`closest('a[href="#main"]')`), at 305 only. At 320 the walk keeps every node, as today, so the existing case is not loosened. The other choices were to drop the text walk at 305 (weaker), or to use the lockup assertion instead.
+
+The cross check's other gaps were closed as recommended, at your call: it named the real component test files, settled the helper's signature and the width loop, accepted that a 305 window differs from a scrollbar only for `vw` lengths, added a read of the built CSS, and explained the footer's single column below `md`. Two of its points were not taken. It said container queries make the rows containing blocks, but `container-type: inline-size` adds style and inline size containment, not layout containment, and the open menu sits in the top layer either way. It also suggested holding the header and footer rows in the 1280 record test, but a `w-full` row cannot change size from containment, and 1280 was measured unchanged.
+
+Why a smaller size and not letting the word break: "RedactNest" is one word and the wordmark, so `break-all` or wrapping would split the brand mid word, and spec 0013's AC-2 reads it as the word it is.
+
+Recorded as an update to this spec rather than a new one (your pick), since the case, the pages and the Follow-up are this spec's; spec 0013's AC-2 gains a one line note.
