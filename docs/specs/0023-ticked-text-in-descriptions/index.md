@@ -162,6 +162,6 @@ Skateboard: the thinnest whole first is the measured leak closed end to end (a f
 
 ## Follow-up
 
-- [ ] `/develop engine and code follow ups` builds this spec's six tasks, then `/check verify engine and code follow ups` covers it with spec 0022's still owed verify.
+- [x] `/develop engine and code follow ups` builds this spec's six tasks, then `/check verify engine and code follow ups` covers it with spec 0022's still owed verify. Built and verified 2026-11-23.
 - [ ] If a MuPDF release starts dropping a marked content sequence's property list when its glyphs go, spec 0019's AC-10 pin fails first. Read this rule again then. It stays correct, but it may never fire.
 - [ ] A page with no `/Resources` at all, not inherited either, refuses every run with `redaction-incomplete`, even with nothing ticked, a blank page included. It is older than this spec (measured on main at 0ee7571 too) and fails safe. It is recorded in `docs/scope/scope.md`'s Deferred list, for `/debug` to find why before anyone decides.
