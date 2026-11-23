@@ -453,7 +453,7 @@ spec [0020](../specs/0020-type3-glyphs-stay-in-font/index.md) (2026-11-17: the g
 - [x] Decide feature 31's review minors (spec): `/architect engine and code follow ups: feature 31's five review minors`
 - [x] Decide the lost inline picture (spec): `/debug` for the cause, then `/architect engine and code follow ups: an inline picture whose indexed colour space is written inline`
 - [x] Measure a ticked word inside an `/ActualText` span (spec): `/debug` to measure, then `/architect engine and code follow ups: a ticked word inside an /ActualText span` only if it survives
-- [ ] Build it: `/develop engine and code follow ups`
+- [x] Build it: `/develop engine and code follow ups`
   - [x] The glyph rule closes the leak: the four `glyph-*.pdf` fixtures failing first and the two controls, the scan's `showsText`, the walk's `glyphs` and `outside`, `judgeGlyphs`, and the run's refusal before the trim (spec 0020, tasks 1 to 5) · AC-1 to AC-4, AC-6, AC-8, AC-9
   - [x] Refused at open and held by the check: the open's refusal after the role walk's, and the check's text part with its seam tests (spec 0020, tasks 6 and 7) · AC-5, AC-7, AC-8
   - [x] The gate, the words and the amends: the gate's rows with `OPEN_NOW`, both budgets, the security page's original copy line and its change entry (dated 2026-11-18 or later), specs 0004, 0018 and 0019 amended, and feature 31's Done when (spec 0020, tasks 8 to 10) · AC-10 to AC-12
@@ -465,8 +465,8 @@ spec [0020](../specs/0020-type3-glyphs-stay-in-font/index.md) (2026-11-17: the g
   - [x] The run's refusal and the check's backstop: `inline.ts` and its seam with the named indexed base pin swapped, and `"lost-picture"` with its ticked page limit pinned (spec 0022, tasks 5 and 6) · AC-3, AC-4, AC-7
   - [x] The other places, the pin and the gate: the form, tiling pattern and Type 3 fixtures with each place measured, the scan's key order corrected (short key first) with the words' "or changed" dropped, the MuPDF pin row by row with the ticked runs, the gate rows and both budgets (spec 0022, tasks 7 to 9) · AC-1, AC-4 to AC-7
   - [x] The close: spec 0021's owed test, and specs 0001, 0004, 0006, 0007, 0019 and 0021 amended (spec 0022, tasks 10 and 11) · AC-8
-  - [ ] A ticked text in a description, as a thin whole: `marked-ticked.pdf` and `marked-blocked.pdf` failing first (page 7's `DP` measured), the scan's joined fold, and the check's `"ticked-description"` with its order of kinds (spec 0023, tasks 1 to 3) · AC-1 to AC-3
-  - [ ] The edges, the words and the close: the blocked row, the gate's rows and `NEEDLES`, the budgets alone, `replacement-text`'s body, and specs 0001, 0004, 0007, 0019 and 0021 amended (spec 0023, tasks 4 to 6) · AC-4 to AC-7
+  - [x] A ticked text in a description, as a thin whole: `marked-ticked.pdf` and `marked-blocked.pdf` failing first (page 7's `DP` measured), the scan's joined fold, and the check's `"ticked-description"` with its order of kinds (spec 0023, tasks 1 to 3) · AC-1 to AC-3
+  - [x] The edges, the words and the close: the blocked row, the gate's rows and `NEEDLES`, the budgets alone, `replacement-text`'s body, and specs 0001, 0004, 0007, 0019 and 0021 amended (spec 0023, tasks 4 to 6) · AC-4 to AC-7
 - [ ] Verify it: `/check verify engine and code follow ups` (the glyph rule verified 2026-11-17, spec 0020's `verify.md`; the other items and spec 0021 verified 2026-11-22, from spec 0021's, 0006's and 0007's `verify.md`; still owed for the lost inline picture and spec 0023's ticked text in a description)
 
 ### 15. Marketing site · needs a decision
