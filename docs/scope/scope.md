@@ -467,7 +467,7 @@ spec [0020](../specs/0020-type3-glyphs-stay-in-font/index.md) (2026-11-17: the g
   - [x] The close: spec 0021's owed test, and specs 0001, 0004, 0006, 0007, 0019 and 0021 amended (spec 0022, tasks 10 and 11) · AC-8
   - [x] A ticked text in a description, as a thin whole: `marked-ticked.pdf` and `marked-blocked.pdf` failing first (page 7's `DP` measured), the scan's joined fold, and the check's `"ticked-description"` with its order of kinds (spec 0023, tasks 1 to 3) · AC-1 to AC-3
   - [x] The edges, the words and the close: the blocked row, the gate's rows and `NEEDLES`, the budgets alone, `replacement-text`'s body, and specs 0001, 0004, 0007, 0019 and 0021 amended (spec 0023, tasks 4 to 6) · AC-4 to AC-7
-- [ ] Verify it: `/check verify engine and code follow ups` (the glyph rule verified 2026-11-17, spec 0020's `verify.md`; the other items and spec 0021 verified 2026-11-22, from spec 0021's, 0006's and 0007's `verify.md`; still owed for the lost inline picture and spec 0023's ticked text in a description)
+- [x] Verify it: `/check verify engine and code follow ups` (the glyph rule verified 2026-11-17, spec 0020's `verify.md`; the other items and spec 0021 verified 2026-11-22, from spec 0021's, 0006's and 0007's `verify.md`; the lost inline picture and spec 0023's ticked text in a description verified 2026-11-23, from spec 0022's and 0023's `verify.md`)
 
 ### 15. Marketing site · needs a decision
 A small set of pages on what this audience actually searches for, since search is the acquisition channel for a self serve tool at this price. The landing page itself, the brand and the site wide social preview image are built in feature 22.
