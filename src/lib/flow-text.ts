@@ -249,9 +249,12 @@ export const FAILURE_TEXT: Readonly<
     body: "Something drawn across a ticked item would be cut too: most often a stamp such as CONFIDENTIAL or DRAFT, or a picture under the item. RedactNest stopped and made no file.",
     next: "Untick items that sit under a stamp or on a picture, then redact again. RedactNest can't say which item it was, so unticking one group at a time can find it.",
   }),
+  // Spec 0023, AC-5: since the self check fails a ticked text a description
+  // keeps, this kind covers a description for screen readers as well as
+  // replacement text, still from the kind alone.
   "replacement-text": () => ({
     title: "A ticked item can't be removed safely",
-    body: "It sits inside hidden replacement text (the words copy and paste gives instead of what's drawn), which can't be removed safely. RedactNest made no file.",
+    body: "It sits inside hidden text written into the file, such as replacement text (the words copy and paste gives instead of what's drawn) or a description for screen readers, which can't be removed safely. RedactNest made no file.",
     next: "RedactNest can't say which item it was. Untick one group at a time to find it, then redact again.",
   }),
   "slanted-text": () => ({

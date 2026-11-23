@@ -135,9 +135,9 @@ Skateboard: the thinnest whole first is the measured leak closed end to end (a f
 1. [x] Add `marked-ticked.pdf` (ten pages, a distinct name per page) and `marked-blocked.pdf` to `kept-fixtures.mjs` with `MARKED_TICKED_TEXT`, run `node scripts/make-fixture.mjs`, measure page 7's `DP` on today's code (AC-3), and write the fixtures' run tests in `redaction-kept.test.ts`, failing first: pages 1 to 7 and 9 ticked make a file holding the name today. Satisfies **AC-3**, **AC-4**.
 2. [x] The scan: `ticked` on `scanContent` and `readDrawing`, the pending `/ActualText` on `Sequence`, the join and `describesTicked` in `Semantics` and `copy()`, the settling at `BDC`, `DP`, `EMC` and the stream's end, and every scan case in `marked.test.ts`. Satisfies **AC-1**.
 3. [x] The check: `ticked` through `StructureCheck`, `structureIsClean`, `resourceUse` (its `described` flag before `unreadable`) and `resourcelessUse`; `"ticked-description"` in `StructureVerdict` and `VERDICT_RANK`; `checkOutput`'s `described` flag, its order and no `"rewrite"`; the fixtures' refusals now pass, then the places (form, tiling pattern, Type 3 glyph with and without `/Resources`) and the order of kinds tests. Satisfies **AC-2**, **AC-3**.
-4. The edges: the blocked row test, the gate's two main rows (read from 5c4e0d7's code, never the current code) and `NEEDLES`, `marked-descriptions.pdf`'s warnings and pin unchanged, and `cost.test.ts` run alone. Satisfies **AC-4**, **AC-6**.
-5. The words: `replacement-text`'s body in `flow-text.ts` and the tests that pin it. Satisfies **AC-5**.
-6. The close: specs 0001, 0004, 0007, 0019 and 0021 amended per the *Amends* table, spec 0021's Follow-up item ticked, and the security page's descriptions and self check sections read again against the code. Satisfies **AC-7**.
+4. [x] The edges: the blocked row test, the gate's two main rows (read from 5c4e0d7's code, never the current code) and `NEEDLES`, `marked-descriptions.pdf`'s warnings and pin unchanged, and `cost.test.ts` run alone. Satisfies **AC-4**, **AC-6**.
+5. [x] The words: `replacement-text`'s body in `flow-text.ts` and the tests that pin it. Satisfies **AC-5**.
+6. [x] The close: specs 0001, 0004, 0007, 0019 and 0021 amended per the *Amends* table, spec 0021's Follow-up item ticked, and the security page's descriptions and self check sections read again against the code. Satisfies **AC-7**.
 
 ## Consequences
 

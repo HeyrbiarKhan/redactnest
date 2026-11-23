@@ -15,7 +15,12 @@ import {
 import type { EngineErrorKind, SanitizedKind } from "@/worker/protocol";
 
 import { GLYPH_TEXT } from "../../scripts/lib/glyph-fixtures.mjs";
-import { COLOUR_TEXT, KEPT_TEXT } from "../../scripts/lib/kept-fixtures.mjs";
+import {
+  COLOUR_TEXT,
+  KEPT_TEXT,
+  MARKED_BLOCKED_TEXT,
+  MARKED_TICKED_TEXT,
+} from "../../scripts/lib/kept-fixtures.mjs";
 import { TRIM_CARRY, TRIM_ROTATED } from "../../scripts/lib/reading-fixtures.mjs";
 import { fixture } from "./bytes";
 import { LIMITS, mupdf, pageRenders } from "./mupdf";
@@ -56,7 +61,15 @@ import { findTargets } from "./targets";
  *    2026-11-22, need no main row at all: main opened each and made a file
  *    with its picture gone (spec 0022's `rationale.md`), and spec 0022
  *    refuses each at open (`OPEN_NOW`), so no main run or `sanitized` row is
- *    read for them, and none has a ticked set.
+ *    read for them, and none has a ticked set. Spec 0023's `marked-ticked.pdf`
+ *    and `marked-blocked.pdf` were read from that commit's code on
+ *    2026-11-23: main opened both, made a file from each with nothing ticked,
+ *    reporting nothing, and made a file from each ticked set below (page 8's
+ *    name, the control, and the blocked fixture's plain row), so neither has
+ *    a main refusal or `sanitized` row, and neither needs an `OPEN_NOW` or
+ *    `RUN_NOW` row. The refusals of `marked-ticked.pdf`'s other pages are
+ *    spec 0023's own, held in `tests/unit/redaction-kept.test.ts`: `MAIN`
+ *    swaps the structure check out, which is where that comparison runs.
  *  - Against the same run with the pipeline's prune and structure check both
  *    swapped out, which writes main's output byte for byte (`MAIN`): the same
  *    outcome, the same `removedByType`, and every page rendered pixel for pixel
@@ -172,7 +185,9 @@ const MAIN_FIXTURES: readonly string[] = [
   "layers-all-on.pdf",
   "layers-one-off.pdf",
   "lone-glyphs.pdf",
+  "marked-blocked.pdf",
   "marked-descriptions.pdf",
+  "marked-ticked.pdf",
   "metadata.pdf",
   "next-line-0.pdf",
   "next-line-1.pdf",
@@ -379,7 +394,11 @@ const NEEDLES: Readonly<Record<string, readonly Ticked[]>> = {
     [[0, "after300"]],
   ],
   "lone-glyphs.pdf": [[[0, "."]], [[0, "i"]]],
+  // Spec 0023, AC-6: the blocked fixture's plain row (its first place), and
+  // `marked-ticked.pdf`'s page 8, the control, which make a file as on main.
+  "marked-blocked.pdf": [[[0, MARKED_BLOCKED_TEXT.name]]],
   "marked-descriptions.pdf": [[[0, "jane.doe@example.com"]]],
+  "marked-ticked.pdf": [[[7, MARKED_TICKED_TEXT[8]]]],
   "metadata.pdf": [[[0, "Form field value"]], [[0, "Visible typed note"]]],
   "next-line-0.pdf": [[[0, "Jeremy Quigley"]]],
   "next-line-1.pdf": [[[0, "Jeremy Quigley"]]],

@@ -22,12 +22,14 @@ import {
 } from "@/engine";
 import { foldTicked, holdsTicked } from "@/engine/allowlist";
 import { forEachDictionary } from "@/engine/objects";
+import { asTermId } from "@/worker/protocol";
 import { checkOutput, sameDrawnShape } from "@/engine/self-check";
 
 import {
   cidDocument,
   COLOUR_TEXT,
   KEPT_TEXT,
+  MARKED_BLOCKED_TEXT,
   MARKED_TICKED_TEXT,
   UNREADABLE_PROFILE,
 } from "../../scripts/lib/kept-fixtures.mjs";
@@ -1590,6 +1592,44 @@ describe("a ticked text in a description (spec 0023)", () => {
 
   it("makes a file with nothing ticked", async () => {
     await expect(kindOf(fixture("marked-ticked.pdf"), [])).resolves.toBeNull();
+  });
+});
+
+/**
+ * Spec 0023, AC-4: the one recorded limit. `marked-blocked.pdf` draws a name
+ * plainly, and below it writes the same name as replacement text over other
+ * glyphs. The find step blocks the second place (`replacement-text`), so only
+ * the plain row can be ticked, and the span keeps the name in the output with
+ * the check passing: it still draws glyphs, so the character check reads its
+ * replacement text as an unticked place, and the scan never compares it.
+ */
+describe("a blocked row's replacement text, a shown limit (spec 0023)", () => {
+  it("lists the span's place as a blocked row beside the plain one", async () => {
+    const doc = await openDocumentWith(mupdf, fixture("marked-blocked.pdf"), LIMITS);
+    try {
+      const name = MARKED_BLOCKED_TEXT.name;
+      const found = await doc.findTerms({
+        contextChars: 30,
+        terms: [{ id: asTermId(name), text: name }],
+      });
+      expect(found.map((match) => [match.text, match.blocked])).toEqual([
+        [name, null],
+        [name, "replacement-text"],
+      ]);
+    } finally {
+      doc.close();
+    }
+  });
+
+  it("makes a file from the plain row ticked, the span's /ActualText still holding the name", async () => {
+    const bytes = fixture("marked-blocked.pdf");
+    const [plain] = findTargets(bytes, 0, MARKED_BLOCKED_TEXT.name);
+    const { output } = await redactDocumentWith(mupdf, bytes, [plain]);
+
+    const content = pageContent(output, 0);
+    expect(content).toContain(`/ActualText(${MARKED_BLOCKED_TEXT.name})`);
+    expect(content.split(MARKED_BLOCKED_TEXT.name)).toHaveLength(2);
+    expect(documentText(output)).toContain(MARKED_BLOCKED_TEXT.name);
   });
 });
 

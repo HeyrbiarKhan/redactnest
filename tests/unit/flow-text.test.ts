@@ -181,6 +181,16 @@ describe("failure copy (AC-16, AC-17)", () => {
     expect(body).toContain("content near a page's edge it couldn't prove it removed");
   });
 
+  /** Spec 0023, AC-5: both kinds of hidden text, from the kind alone. */
+  it("says replacement-text's item sits in replacement text or a description for screen readers", () => {
+    const text = failureText("replacement-text", FREE);
+    expect(text.title).toBe("A ticked item can't be removed safely");
+    expect(text.body).toBe(
+      "It sits inside hidden text written into the file, such as replacement text (the words copy and paste gives instead of what's drawn) or a description for screen readers, which can't be removed safely. RedactNest made no file.",
+    );
+    expect(failureText("replacement-text", PAID)).toEqual(text);
+  });
+
   it("says every refusal of a run made no file (INV-5)", () => {
     for (const kind of [
       "redaction-overreach",

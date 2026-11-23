@@ -1526,6 +1526,17 @@ describe("the redaction path (spec 0004)", () => {
     },
   );
 
+  /** Spec 0023, AC-5: the body names both kinds of hidden text. */
+  it("says a replacement-text refusal's item sits in replacement text or a description", async () => {
+    const run = sessionWithRun();
+    await openAndRedact(run);
+    await run.fail(new EngineError("replacement-text"));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "It sits inside hidden text written into the file, such as replacement text (the words copy and paste gives instead of what's drawn) or a description for screen readers, which can't be removed safely. RedactNest made no file.",
+    );
+  });
+
   it("drops a reply that arrives after starting over", async () => {
     // A run in flight is unsaved work, so Start over asks first.
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
