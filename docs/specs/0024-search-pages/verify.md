@@ -40,7 +40,7 @@ What the build added for one whole search page. Run against a build with Playwri
 10. **The frame.** Open `/redact-pdf`: the eyebrow "Redact a PDF", the one `h1` "Redact a PDF without uploading it", the lead naming every detector, "Redact a PDF now", the cap line; the trio (Stays in your browser, You choose from a list, Checked before you download); How it works with the tool's three steps; "What redacting a PDF should do" with three paragraphs and the look over line; "Redact a PDF now" again. No More guides yet: it appears once task 10 adds the other two pages (AC-3).
 11. **Into the tool.** Press each "Redact a PDF now": `/tool` loads as a new document, never a client side move (AC-4).
 12. **The look over link.** Follow "What it can miss": it lands on `/security#what-it-can-miss`, on that heading (AC-7).
-13. **The footer.** On `/`, `/tool` and `/redact-pdf`, the footer shows Product, then Guides ("Redact without uploading", to `/redact-pdf`), then Legal, and one paragraph, the licence notice (AC-9).
+13. **The footer.** On `/`, `/tool` and `/redact-pdf`, the footer shows Product, then Guides ("Redacting a PDF", to `/redact-pdf`), then Legal, and one paragraph, the licence notice (AC-9).
 14. **The card.** Share `https://<preview>/redact-pdf` in a card preview tool, or open its `og:image`: the lockup, "REDACT A PDF" and the headline, in the home card's composition (AC-2, AC-16).
 
 ### Commands
