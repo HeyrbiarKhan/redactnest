@@ -484,7 +484,7 @@ spec [0024](../specs/0024-search-pages/index.md) (2026-11-23: three search pages
   - [ ] Your read and the measure: every word read before merge, Lighthouse's mobile figures in spec 0024's `verify.md`, and PageSpeed Insights after the deploy · AC-5, AC-6, AC-15
   - [x] The lockup at narrow widths (spec 0024 tasks 14 and 15, decided 2026-11-23 after CI on Linux found the lockup 3 pixels past 320): the header and footer rows as containers, the lockup a step smaller in a row under 10rem, and `REFLOW_PAGES` also at 305 pixels, passing on CI · AC-14
   - [x] The footer at 200% text (spec 0024 tasks 16 and 17, decided 2026-11-23 after /develop found the Guides group pushing the link groups over "RedactNest" from `md`): the brand column never narrower than its own content (`minmax(min-content,1fr)`), the groups wrapping instead, and a browser case at 1280, 1024 and 768 with 200% and default text, passing on CI · AC-17
-- [x] Verify it: `/check verify marketing site` (2026-11-23, on 9b686da: every before merge step passed; PageSpeed Insights and Search Console stay open until after the deploy)
+- [x] Verify it: `/check verify marketing site` (2026-11-23, on 9b686da: every before merge step passed; PageSpeed Insights and Search Console stay open until after the deploy; the lockup and the footer at large text, tasks 14 to 17, verified 2026-11-24 on 8249559)
 - [x] Test it: `/test marketing site` (2026-11-23: the gaps against spec 0024 filled in `tests/component/app/search-pages.test.tsx`; the eleven Vitest files the feature touches, 511 tests, pass)
 
 ### 29. Home page reflow · in-progress · from spec 0013

@@ -90,3 +90,20 @@ What the build added for one whole search page. Run against a build with Playwri
 ### Acceptance criteria coverage (this slice)
 
 AC-1: 15, 16, 17, 18 · AC-2: 14, 17, 18, 20 · AC-3: 10, 15 · AC-4: 11, 18 · AC-5 and AC-6: 15, step 1 · AC-7: 12, 18 · AC-8: 15, 19 · AC-9: 13, 15 · AC-10: 15, 16, 18, 19, 20 · AC-11: 20, step 4 · AC-12: 18, 23 · AC-13: 18 · AC-14: 18 · AC-15: step 2 · AC-16: 14, 15, 22.
+
+## The lockup and the footer at large text (2026-11-24, tasks 14 to 17)
+
+What changed since 4416531: the header and footer lockup steps down a size in a narrow row (tasks 14 and 15, AC-14), and the footer's brand column never shrinks below its own content from `md` (tasks 16 and 17, AC-17). Run against a build with Playwright's environment, served on port 3000. Everything verified earlier stays as recorded above.
+
+- [x] 24. **The footer at 200% text.** Open `/` at 1280, 1024 and 768 pixels with 200% text: "RedactNest" and the brand line stay inside their column, and the link groups wrap to its right (AC-17).
+- [x] 25. **The footer at default text.** At the same widths with default text the footer looks as before: the brand and the three groups in one row (AC-17).
+
+### Verified 2026-11-24 (`/check verify marketing site`, on 8249559)
+
+Built with Playwright's environment and served on 3000. Scripts and footer shots in `.playwright-mcp/verify-1124/`.
+
+- Step 24: at 1280, 1024 and 768 with 200% text, the brand column's words end inside it (48 to 336 in a column 48 to 336), and every group starts at 400, right of it. The groups wrap: Product and Guides side by side at 1280, all three stacked at 1024 and 768. No footer word past the window.
+- Step 25: at the same widths with default text, the brand and the three groups share one row and the groups one line, as before.
+- The lockup (tasks 14 and 15): 20 pixels at default text and 40 at 1280 with 200% text; at 320 and 305 with 200% text it steps down to 32 in both header and footer and ends inside the window (footer at 288 and 273). No sideways scroll at either width.
+- `design-system.spec.ts`, the footer case, `REFLOW_PAGES` and the 320 cases: 65 passed.
+- Note, already in the spec's Follow-up: `/` at 1024 with 200% text still scrolls 3 pixels sideways from the trio card, not the footer.
