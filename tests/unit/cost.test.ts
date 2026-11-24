@@ -459,6 +459,9 @@ function collector(): () => void {
   return runInNewContext("gc") as () => void;
 }
 
+/** Macrotask yields, each followed by a collection, before a live peak run starts. */
+const SETTLE_YIELDS = 5;
+
 /**
  * One run's peak live JavaScript heap plus array buffers, in bytes: collected
  * and sampled at every checkpoint (the run asks `isCancelled` there, after each
@@ -469,6 +472,17 @@ function collector(): () => void {
  * included peaked anywhere from 210 to 395 MB on the same input, as the
  * collector's timing moved, while these live peaks agreed between the strip
  * and the baseline to within 0.1 MB.
+ *
+ * The previous run's garbage goes before this one starts. MuPDF.js registers
+ * every wrapper it makes with a `FinalizationRegistry`, and V8 keeps each dead
+ * wrapper's cell (about 70 bytes, some 230,000 a run here) until its cleanup
+ * task runs, which no collection in the same task can do. Measured
+ * (2026-11-24), a run that started before that task had run peaked about 9 MB
+ * higher at its first checkpoint, whichever pipeline it was, so the test failed
+ * about 2 runs in 3 on which pipeline the task happened to come before. Node
+ * runs V8's task in its loop's poll phase, so a timer can fire a turn ahead of
+ * it: the cells went at the first or second yield in every one of 12 runs, and
+ * `SETTLE_YIELDS` leaves room over that.
  */
 async function livePeak(source: ArrayBuffer, pipeline: Pipeline): Promise<number> {
   const collect = collector();
@@ -480,6 +494,10 @@ async function livePeak(source: ArrayBuffer, pipeline: Pipeline): Promise<number
     return false;
   };
   collect();
+  for (let turn = 0; turn < SETTLE_YIELDS; turn += 1) {
+    await new Promise((settled) => setTimeout(settled, 0));
+    collect();
+  }
   await redactDocumentWith(mupdf, source, [], { isCancelled: sample }, pipeline);
   return peak;
 }
