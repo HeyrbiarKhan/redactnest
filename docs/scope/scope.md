@@ -509,7 +509,7 @@ spec [0025](../specs/0025-picture-details/index.md) · code in `src/engine` (`pi
   - [x] The rest of the JPEG fixtures and the recorded limits: `picture-jpeg.pdf` pages 2 to 7 and `picture-kept.pdf` pages 1 to 3 (task 5) · AC-1, AC-2, AC-4, AC-7, AC-10, AC-13
   - [x] JPEG 2000 and the gate: the hand built codestream, `readJpx`, `picture-jpx.pdf`, the tile part byte comparison, and the gate's rows (tasks 6 and 7) · AC-3, AC-4, AC-10, AC-13
   - [x] Cost, the browser and the words: the 1 second budget, the e2e download, the security page line, and specs 0001, 0004, 0006, 0007, 0019 and 0021 amended (tasks 8 to 10) · AC-9, AC-11, AC-12, AC-14
-- [ ] Verify it: `/check verify details inside pictures`, with repo fixtures and documents built in tests only, never a PDF from outside the repository
+- [x] Verify it: `/check verify details inside pictures`, with repo fixtures and documents built in tests only, never a PDF from outside the repository
 - [ ] Test it: `/test details inside pictures`
 
 ### 23. Legal review · needs a decision · Alpha · from spec 0011
