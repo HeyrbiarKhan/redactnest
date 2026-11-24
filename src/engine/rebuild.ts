@@ -8,7 +8,15 @@ import {
 } from "./allowlist";
 import { EngineFailure } from "./failure";
 import type { MuPdf } from "./load";
-import { forEachDictionary, keepOnly } from "./objects";
+import { forEachDictionary, hasKey, keepOnly } from "./objects";
+import {
+  decodingParts,
+  joinParts,
+  readPicture,
+  sameDecodingParts,
+  type PictureKind,
+  type PicturePart,
+} from "./picture-reader";
 
 /**
  * The rebuild: a brand new document made from the redacted pages alone.
@@ -246,4 +254,151 @@ export function sweepCarriers(out: PDFDocument): void {
   forEachDictionary(out, (dict) => {
     for (const key of CARRIER_KEYS) dict.delete(key);
   });
+}
+
+/**
+ * What a strip dropped across every picture: an XMP packet, and anything
+ * else. Spec 0025, AC-9. Only these two kinds cross the worker boundary,
+ * never which picture, how many or what a part held (INV-5).
+ */
+export interface PictureReport {
+  readonly xmp: boolean;
+  readonly details: boolean;
+}
+
+/** How the new bytes are built from a strip's parts; a test swaps it to prove the guard (AC-6). */
+export type JoinParts = (bytes: Uint8Array, parts: readonly PicturePart[]) => Uint8Array;
+
+/**
+ * Which container a picture's filter names, or `null` when the reader leaves
+ * it alone. Spec 0025, AC-1: a direct `/DCTDecode` or `/JPXDecode` name, or a
+ * direct array of one such name. Any other filter, a chain, an indirect
+ * `/Filter`, the inline short names `/DCT` and `/JPX`, and a stream whose data
+ * lives in an external file (`/F`) are `null`. Read through the reference,
+ * never resolved (INV-3). Shared with the self check, so both read the same
+ * pictures (INV-2).
+ */
+export function pictureFilter(ref: PDFObject): PictureKind | null {
+  if (hasKey(ref, "F")) return null;
+  const filter = ref.get("Filter");
+  if (filter.isIndirect()) return null;
+  let name: PDFObject = filter;
+  if (filter.isArray()) {
+    if (filter.length !== 1) return null;
+    name = filter.get(0);
+    if (name.isIndirect()) return null;
+  }
+  if (!name.isName()) return null;
+  const value = name.asName();
+  if (value === "DCTDecode") return "jpeg";
+  if (value === "JPXDecode") return "jpx";
+  return null;
+}
+
+/**
+ * A picture's stored bytes, copied out of MuPDF's heap before its buffer is
+ * destroyed, read raw through the reference (spec 0025, *Value sourcing*).
+ */
+export function storedPicture(ref: PDFObject): Uint8Array {
+  const raw = ref.readRawStream();
+  try {
+    return raw.asUint8Array().slice();
+  } finally {
+    raw.destroy();
+  }
+}
+
+/**
+ * Every picture reached in the `image` role (AC-1): a picture a page, form,
+ * tiling pattern or Type 3 glyph draws, a soft mask and an explicit mask, by
+ * the walk's role, never the object's own `/Subtype` (INV-3). Each object
+ * once, however many places draw it, as its reference.
+ */
+export function rolePictures(
+  doc: PDFDocument,
+  reached: ReadonlyMap<number, ReadonlySet<string>>,
+): readonly { readonly ref: PDFObject; readonly kind: PictureKind }[] {
+  const found: { ref: PDFObject; kind: PictureKind }[] = [];
+  for (const [num, labels] of reached) {
+    if (!labels.has("image")) continue;
+    const ref = doc.newIndirect(num);
+    if (!ref.isStream()) continue;
+    const kind = pictureFilter(ref);
+    if (kind !== null) found.push({ ref, kind });
+  }
+  return found;
+}
+
+/**
+ * Strip the details stored inside every kept JPEG and JPEG 2000 picture.
+ * Spec 0025, AC-1 to AC-7.
+ *
+ * Runs in the rebuild after `sweepCarriers` and before the write, so it reads
+ * the rebuilt document: a picture the padded pass blanked faces the same rule
+ * as any other (AC-7). A read role walk names the pictures; a walk with a
+ * problem fails the run with `unreadable-structure`. Each picture's raw bytes
+ * go through the picture reader (`picture-reader.ts`): one it leaves `clean`
+ * or `as-stored` is never written (AC-5, INV-6). For one it would change, the
+ * new bytes are read again by the same reader before they are written, and
+ * must hold nothing to drop and keep every part a decoder reads, byte for
+ * byte (`decodingParts`); then `writeRawStream` through the reference
+ * replaces the data and nothing else, MuPDF setting `/Length` (INV-4).
+ *
+ * A failed requirement, or a throw from MuPDF while reading or writing a
+ * picture, fails the run with `unsupported`: a fault in RedactNest's own
+ * reader, never a document's (AC-6). `checkpoint` runs after each picture it
+ * writes, so a cancel lands within one picture, and a cancel is never turned
+ * into a failure. One picture's bytes are held at a time.
+ */
+export async function stripPictureDetails(
+  out: PDFDocument,
+  checkpoint: () => Promise<void>,
+  join: JoinParts = joinParts,
+): Promise<PictureReport> {
+  const walk = walkRoles(out, "read");
+  if (walk.problem !== null) throw new EngineFailure("unreadable-structure");
+
+  let xmp = false;
+  let details = false;
+  for (const { ref, kind } of rolePictures(out, walk.reached)) {
+    let dropped: ReadonlySet<string> | null;
+    try {
+      dropped = stripOne(ref, kind, join);
+    } catch (failure) {
+      if (failure instanceof EngineFailure) throw failure;
+      throw new EngineFailure("unsupported");
+    }
+    if (dropped === null) continue;
+    xmp ||= dropped.has("xmp");
+    details ||= dropped.has("other");
+    await checkpoint();
+  }
+  return { xmp, details };
+}
+
+/** One picture: written anew and what it dropped, or `null` when it is left alone. */
+function stripOne(
+  ref: PDFObject,
+  kind: PictureKind,
+  join: JoinParts,
+): ReadonlySet<string> | null {
+  const hasColourSpace = hasKey(ref, "ColorSpace");
+  const source = storedPicture(ref);
+  const read = readPicture(source, kind, hasColourSpace);
+  if (read.kind !== "strip") return null;
+
+  const next = join(source, read.parts);
+  const before = decodingParts(source, kind, hasColourSpace);
+  const after = decodingParts(next, kind, hasColourSpace);
+  if (
+    readPicture(next, kind, hasColourSpace).kind !== "clean" ||
+    before === null ||
+    after === null ||
+    !sameDecodingParts(before, after)
+  ) {
+    throw new EngineFailure("unsupported");
+  }
+
+  ref.writeRawStream(next);
+  return read.dropped;
 }

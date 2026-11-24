@@ -573,6 +573,8 @@ export const SANITIZED_TEXT: Readonly<Record<SanitizedKind, string>> = Object.fr
   "page-thumbnails": "page thumbnails",
   "accessibility-tags":
     "accessibility tags (screen readers will read the clean file less well)",
+  // Spec 0025, AC-9: from its kind alone, never which picture or what it held.
+  "picture-details": "picture details",
 });
 
 /** Also stripped: the kinds in the order the run reported them (AC-11). */

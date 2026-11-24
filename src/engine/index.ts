@@ -73,6 +73,16 @@
  *     refuses it before anything is removed, and the self check fails an
  *     output that still shows one.
  *
+ * Spec 0025 added the picture strip:
+ *
+ *   - `picture-reader.ts` reads a JPEG's marker segments and a JPEG 2000
+ *     file's boxes and codestream marker segments, bytes in and byte ranges
+ *     out, and answers which parts a viewer needs to draw it (spec 0001's
+ *     second named exception: it reads no PDF syntax and decodes no pixel).
+ *     The rebuild's `stripPictureDetails` keeps only those parts of every kept
+ *     picture, and the self check fails a picture that still holds one to
+ *     drop.
+ *
  * Nothing in this folder calls `search()` (spec 0005, INV-11); lint holds it.
  *
  * The functions ending in `With` take the loaded MuPDF module as a parameter.
@@ -200,12 +210,23 @@ export {
   CARRIER_KEYS,
   CATALOG_KEYS,
   PAGE_KEYS,
+  pictureFilter,
   pruneToRoles,
   rewriteOutput,
+  stripPictureDetails,
   stripToAllowlist,
   sweepCarriers,
   WRITE_OPTIONS,
+  type JoinParts,
+  type PictureReport,
 } from "./rebuild";
+export {
+  decodingParts,
+  joinParts,
+  readJpeg,
+  readJpx,
+  type PictureRead,
+} from "./picture-reader";
 export {
   drawnShape,
   structureIsClean,

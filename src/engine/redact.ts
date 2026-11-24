@@ -1,6 +1,12 @@
 import type { Document, PDFDocument, PDFPage } from "mupdf";
 
-import type { MatchKind, TermId, TermRemoval } from "@/worker/protocol";
+import {
+  SANITIZED_KINDS,
+  type MatchKind,
+  type SanitizedKind,
+  type TermId,
+  type TermRemoval,
+} from "@/worker/protocol";
 
 import { foldTicked } from "./allowlist";
 import { recordPage, targetArea, type PageRecord } from "./characters";
@@ -16,10 +22,12 @@ import {
   graftPages,
   pruneToRoles,
   rewriteOutput,
+  stripPictureDetails,
   stripToAllowlist,
   sweepCarriers,
   takeOutput,
   WRITE_OPTIONS,
+  type PictureReport,
 } from "./rebuild";
 import {
   checkOutput,
@@ -58,7 +66,10 @@ import type {
  * can compare what main drew (AC-7, AC-10). Spec 0022 adds the inline picture
  * rule: swapped for one that keeps every picture, a test can watch the check's
  * backstop fail a lost picture on its own, and pin where it cannot see one
- * (AC-4, AC-6). A parameter with a frozen default,
+ * (AC-4, AC-6). Spec 0025 adds the picture strip: swapped for one that
+ * changes nothing, the check fails every picture still holding a detail
+ * (AC-8), and the gate compares what main drew (AC-10). A parameter with a
+ * frozen default,
  * rather than a setter, so the walled module holds no mutable hook and the
  * worker can only ever run the real thing.
  */
@@ -84,6 +95,15 @@ export interface Pipeline {
   readonly pruneToRoles: (out: PDFDocument) => void;
   /** The carrier sweep over the rebuilt document (`rebuild.ts`). */
   readonly sweepCarriers: (out: PDFDocument) => void;
+  /**
+   * The details stored inside every kept JPEG and JPEG 2000 picture, stripped
+   * (`rebuild.ts`), with a checkpoint after each picture it writes. Spec 0025,
+   * AC-6.
+   */
+  readonly stripPictureDetails: (
+    out: PDFDocument,
+    checkpoint: () => Promise<void>,
+  ) => Promise<PictureReport>;
   /** The structure part of the self check (`self-check.ts`). Spec 0019, AC-5. */
   readonly checkStructure: StructureCheck;
   /**
@@ -105,6 +125,7 @@ export const PIPELINE: Pipeline = Object.freeze({
   trim: trimToVisibleArea,
   pruneToRoles,
   sweepCarriers,
+  stripPictureDetails,
   checkStructure: structureIsClean,
   rewrite: rewriteOutput,
   textPass,
@@ -242,6 +263,11 @@ export async function redactDocumentWith(
     stripToAllowlist(out);
     pipeline.pruneToRoles(out);
     pipeline.sweepCarriers(out);
+    // Spec 0025, AC-6: after the sweep, on the rebuilt document, so every
+    // kept picture faces the rule, a blanked one included (AC-7), and before
+    // the write, so the check reads what crosses. Whether or not anything is
+    // ticked.
+    const pictures = await pipeline.stripPictureDetails(out, checkpoint);
     await checkpoint();
 
     onPhase?.("writing");
@@ -285,13 +311,27 @@ export async function redactDocumentWith(
       output,
       removedByType: countByKind(targets),
       removedByTerm: countByTerm(targets),
-      sanitized,
+      sanitized: withPictures(sanitized, pictures),
       trim,
     };
   } finally {
     work?.destroy();
     out?.destroy();
   }
+}
+
+/**
+ * The inventory's kinds, plus `xmp-metadata` and `picture-details` when the
+ * picture strip dropped them, in `SANITIZED_KINDS` order. Spec 0025, AC-9.
+ */
+function withPictures(
+  sanitized: readonly SanitizedKind[],
+  pictures: PictureReport,
+): readonly SanitizedKind[] {
+  const found = new Set(sanitized);
+  if (pictures.xmp) found.add("xmp-metadata");
+  if (pictures.details) found.add("picture-details");
+  return SANITIZED_KINDS.filter((kind) => found.has(kind));
 }
 
 /**

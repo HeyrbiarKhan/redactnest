@@ -22,7 +22,14 @@ import type { MuPdf } from "./load";
 import { forEachDictionary, hasKey, keysOf } from "./objects";
 import { readDrawing, type ResourceCategory } from "./marked";
 import { imagesAreBlank } from "./pixels";
-import { CARRIER_KEYS, CATALOG_KEYS, PAGE_KEYS } from "./rebuild";
+import { readPicture } from "./picture-reader";
+import {
+  CARRIER_KEYS,
+  CATALOG_KEYS,
+  PAGE_KEYS,
+  rolePictures,
+  storedPicture,
+} from "./rebuild";
 import type { RedactionTarget } from "./types";
 
 /**
@@ -320,6 +327,14 @@ export type StructureCheck = (
  * each page's contents and every form, tiling pattern and Type 3 glyph
  * procedure it draws is read once, against the list. A hit answers
  * `"ticked-description"`, which only a leak outranks.
+ *
+ * Spec 0025's, AC-8: no picture reached in the `image` role still holds a
+ * part the picture reader would drop. Every JPEG and JPEG 2000 picture the
+ * strip would read (`rolePictures`, on this walk) is read with the same
+ * reader and the same `/ColorSpace` rule, so the strip and the check never
+ * disagree (INV-2). A `strip` answer is a leak, ranked with every other and
+ * never leading to the second write; a picture the reader leaves `as-stored`
+ * passes, its limit the security page's words (INV-6).
  */
 export function structureIsClean(
   check: PDFDocument,
@@ -357,10 +372,22 @@ export function structureIsClean(
     }
   });
   if (!clean) return "leak";
+  if (pictureHoldsDetails(check, walk.reached)) return "leak";
   // Text below a glyph is a leak that outranks `"unreadable"` and
   // `"unused-colour-space"`, so it never leads to a second write.
   if (judgeGlyphs(walk) === "text") return "leak";
   return worseOf(use, resourcelessUse(walk.pages, ticked));
+}
+
+/** Does any picture the strip reads still hold a part to drop? Spec 0025, AC-8. */
+function pictureHoldsDetails(
+  check: PDFDocument,
+  reached: ReadonlyMap<number, ReadonlySet<string>>,
+): boolean {
+  return rolePictures(check, reached).some(
+    ({ ref, kind }) =>
+      readPicture(storedPicture(ref), kind, hasKey(ref, "ColorSpace")).kind === "strip",
+  );
 }
 
 /**

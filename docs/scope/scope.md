@@ -505,9 +505,9 @@ A picture under no removed item leaves with the bytes the source stored (spec 00
 spec [0025](../specs/0025-picture-details/index.md) · code in `src/engine` (`picture-reader.ts`, `rebuild.ts`, `redact.ts`, `self-check.ts`), `src/worker/protocol.ts`, `src/lib/flow-text.ts`, `src/lib/home-text.ts`, `src/app/security/page.tsx`, `scripts/lib/` (`jpeg-writer.mjs`, `jp2-writer.mjs`, `picture-fixtures.mjs`)
 - [x] Design it (spec): `/architect details inside pictures`
 - [ ] Build it: `/develop details inside pictures`
-  - [ ] The thin whole: the JPEG encoder and MuPDF pins (with their stop conditions), the JPEG reader, the strip with its guard, `picture-details` with its words, and the self check's rule (spec 0025, tasks 1 to 4) · AC-1, AC-2, AC-4 to AC-9, AC-13
-  - [ ] The rest of the JPEG fixtures and the recorded limits: `picture-jpeg.pdf` pages 2 to 7 and `picture-kept.pdf` pages 1 to 3 (task 5) · AC-1, AC-2, AC-4, AC-7, AC-10, AC-13
-  - [ ] JPEG 2000 and the gate: the hand built codestream, `readJpx`, `picture-jpx.pdf`, the tile part byte comparison, and the gate's rows (tasks 6 and 7) · AC-3, AC-4, AC-10, AC-13
+  - [x] The thin whole: the JPEG encoder and MuPDF pins (with their stop conditions), the JPEG reader, the strip with its guard, `picture-details` with its words, and the self check's rule (spec 0025, tasks 1 to 4) · AC-1, AC-2, AC-4 to AC-9, AC-13
+  - [x] The rest of the JPEG fixtures and the recorded limits: `picture-jpeg.pdf` pages 2 to 7 and `picture-kept.pdf` pages 1 to 3 (task 5) · AC-1, AC-2, AC-4, AC-7, AC-10, AC-13
+  - [x] JPEG 2000 and the gate: the hand built codestream, `readJpx`, `picture-jpx.pdf`, the tile part byte comparison, and the gate's rows (tasks 6 and 7) · AC-3, AC-4, AC-10, AC-13
   - [ ] Cost, the browser and the words: the 1 second budget, the e2e download, the security page line, and specs 0001, 0004, 0006, 0007, 0019 and 0021 amended (tasks 8 to 10) · AC-9, AC-11, AC-12, AC-14
 - [ ] Verify it: `/check verify details inside pictures`, with repo fixtures and documents built in tests only, never a PDF from outside the repository
 - [ ] Test it: `/test details inside pictures`

@@ -99,3 +99,12 @@ Task 1 records here, on MuPDF 1.28.1:
 - whether MuPDF reads an embedded ICC profile for a DCT picture with no `/ColorSpace` (the rule keeps it either way).
 
 Task 8 records the cost and peak figures AC-12 holds.
+
+### Measured at task 1 (2026-11-24, MuPDF 1.28.1)
+
+Every picture below was written by `scripts/lib/jpeg-writer.mjs` or `jp2-writer.mjs`; nothing was read from outside the repository. Each is pinned in `tests/unit/redaction-pictures.test.ts` (*MuPDF 1.28.1, what the strip rests on*), so a release that changes one fails there.
+
+- `writeRawStream` through an unresolved reference on a grafted document holds: `picture-jpeg.pdf`'s page grafted into a new document, its picture's data replaced through `newIndirect`, then written with `WRITE_OPTIONS`, leaves with the new bytes, byte for byte, and its `/Filter /DCTDecode`. A JPX stream added beside it leaves byte for byte with `/Filter /JPXDecode`, so `compress` and `sanitize` touch neither. None of task 1's three stop conditions holds, so the design stands.
+- A blanked DCT picture is written again as `/FlateDecode`: a 64 pixel grey JPEG holding EXIF under a ticked address, run with the strip swapped out, leaves as Flate with no marker left (AC-7).
+- MuPDF does not read an embedded ICC profile for a DCT picture with no `/ColorSpace`: the same grey and RGB pictures with no `/ColorSpace` render pixel for pixel the same with and without a gamma 3 profile in an `APP2` segment, while with `/ColorSpace` named they render differently from both. The rule keeps the profile either way (AC-2), so nothing changes; a release that starts reading it fails the pin, which then only says the kept profile now matters to drawing.
+- The hand built codestream (2 by 2 tiles, no wavelet levels, every packet empty) decodes to an even grey of 128, as AC-13 expects.
