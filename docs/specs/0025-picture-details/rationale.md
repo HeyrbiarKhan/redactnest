@@ -83,7 +83,7 @@ Your calls, 2026-11-24, in the design conversation:
 - Fixtures: our own baseline JPEG encoder, and a hand built flat JPEG 2000 codestream, plus a test that every tile part after the main header is byte for byte the source's.
 - A leftover on the written bytes fails the run with `redaction-incomplete`.
 - The cost budget: 1 second of CPU and a peak within 5% on the 50 page scan.
-- The home Strips card keeps both kinds off, since three cases can keep a picture's own details; the scope row's "lists XMP metadata again" is dropped.
+- The home Strips card keeps both kinds off, since a picture left as stored can keep its own details; the scope row's "lists XMP metadata again" is dropped.
 
 ## What the cross check settled
 

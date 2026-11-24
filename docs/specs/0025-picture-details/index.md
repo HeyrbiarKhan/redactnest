@@ -2,6 +2,7 @@
 
 **Date**: 2026-11-24
 **Status**: Proposed
+**Updated**: 2026-11-24, wording only: AC-11's security page line and the two Consequences bullets on which pictures lose their details now state the limit by kind (spec 0018, AC-5), so they hold for every case AC-1 and AC-4 leave as stored. No design change.
 
 ## Summary
 
@@ -17,7 +18,7 @@ Applied in place when this spec is built (task 10): each spec names spec 0025 in
 | 0004 | *State transitions* (the run's order), AC-13 (the self check's structure part), the `SANITIZED_KINDS` list | The rebuild strips picture details after `sweepCarriers` and before the write, with a checkpoint after it (AC-6). The structure part fails an output whose readable picture still holds a part to drop, as a leak (AC-8). `picture-details` is appended last to `SANITIZED_KINDS` (AC-9). |
 | 0006 | AC-29 (the cost test's "same bytes") | A page image keeps its filter and its stored bytes less what this spec drops; a picture holding nothing to drop keeps every byte, and the cost test's MuPDF made JPEGs are asserted to be such pictures (AC-12). |
 | 0007 | AC-16 (words for every kind) | `picture-details` takes its words from its kind alone: "Picture details" (AC-9). |
-| 0019 | AC-12 (`HOME_STRIPPED`), AC-13 (`/tool`'s words), AC-14's last bullet (the security page's picture line) | `HOME_STRIPPED` stays false for `xmp-metadata` and is false for `picture-details`, for the reason in AC-11. "Also stripped" now names a picture's XMP and details when a run strips them, each meaning absent from every picture RedactNest reads (AC-9). The security page's picture line is replaced (AC-11). |
+| 0019 | AC-12 (`HOME_STRIPPED`), AC-13 (`/tool`'s words), AC-14's last bullet (the security page's picture line) | `HOME_STRIPPED` stays false for `xmp-metadata` and is false for `picture-details`, for the reason in AC-11. "Also stripped" now names a picture's XMP and details when a run strips them, each meaning absent from every picture RedactNest takes apart (AC-9). The security page's picture line is replaced (AC-11). |
 | 0021 | INV-6 (format constants live in `src/engine`) | `JPEG_KEPT_MARKERS`, `JP2_KEPT_BOXES`, `JP2_HEADER_BOXES`, `XMP_APP1_IDS` and `XMP_UUID` join them: rules about a file format, not caps on the visitor (INV-7). |
 
 ## Requirements
@@ -75,8 +76,8 @@ Applied in place when this spec is built (task 10): each spec names spec 0025 in
   The redaction gate's `MAIN` swaps the strip out too, so every committed fixture renders pixel for pixel the same with and without it.
 
 - **AC-11**: **The pages' words.**
-  - The security page's line "Details stored inside a picture's own data, such as a photo's camera details, can stay." becomes: "Details stored inside a JPEG or JPEG 2000 picture's own data, such as a photo's camera details, location, captions and comments, are taken out of every such picture RedactNest can read. They can stay in a picture written inside a page's drawing instructions, one stored under more than one kind of compression, or one whose structure it can't read to its end. A colour profile the picture needs to draw its colours stays." Its source comment names this spec's AC-2, AC-3, AC-4 and AC-8, and `SECURITY_CHANGES` gains one entry dated the day it merges. It passes the banned phrase list in `tests/support/claim-phrases.ts` as is.
-  - `HOME_STRIPPED["xmp-metadata"]` stays false and `HOME_STRIPPED["picture-details"]` is false, so the Strips card is unchanged: under "Whenever a file carries them:" neither would hold, since the three cases above can keep a picture's own XMP and details (your call, 2026-11-24). The comment above `HOME_STRIPPED` says so and names this spec.
+  - The security page's line "Details stored inside a picture's own data, such as a photo's camera details, can stay." becomes: "For each JPEG and JPEG 2000 picture it can take apart, RedactNest keeps only the parts on a fixed list chosen for drawing it, and the check fails any file in which such a picture still holds a part it would drop. Details stored inside a picture's own data, such as a photo's camera details, location, captions and comments, can stay in a picture it leaves as stored, such as one written inside a page's drawing instructions, one stored under more than one kind of compression, or any other picture stored or laid out in a way it does not safely take apart. A colour profile the picture needs to draw its colours stays." The first sentence's absolute rests on the self check (AC-8), a gate every file passes; the limit is stated by kind, never by exact condition (spec 0018, AC-5), so it holds for every case AC-1 leaves out and every case AC-4 keeps as stored, including pictures read to their end. Its source comment names this spec's AC-1, AC-2, AC-3, AC-4 and AC-8, and `SECURITY_CHANGES` gains one entry dated the day it merges. It passes the banned phrase list in `tests/support/claim-phrases.ts` as is. _Updated 2026-11-24, wording only: the line first said details "are taken out of every such picture RedactNest can read" and named three cases, which AC-1 and AC-4 break (a repeated JFIF or Adobe segment, a short JFIF or Adobe header, a tile part comment, an indirect `/Filter`, a stream with `/F`)._
+  - `HOME_STRIPPED["xmp-metadata"]` stays false and `HOME_STRIPPED["picture-details"]` is false, so the Strips card is unchanged: under "Whenever a file carries them:" neither would hold, since a picture left as stored can keep its own XMP and details (your call, 2026-11-24). The comment above `HOME_STRIPPED` says so and names this spec.
   - No search page changes: spec 0024's claim register keeps metadata off them.
 
 - **AC-12**: **Cost.** On spec 0006's 50 page, 300 pixels per inch scan built inside `tests/unit/cost.test.ts`, with one JPEG per page and an `APP1` of about 64 KB spliced into every JPEG so every picture is rewritten, the strip and its self check add at most 1 second of CPU time to a run in the unit project, against the same run with the strip swapped out, and the run's peak heap stays within 5% of that run's. The strip reads and writes one picture at a time and lets each buffer go before the next. The existing run over the scan's MuPDF made JPEGs asserts each picture keeps every byte (AC-5), which is spec 0006's AC-29 as amended. Spec 0019's budgets in `cost.test.ts` (50 dense pages, one page drawing 10,000 forms) still hold with the extra read walk. Run the file alone.
@@ -190,18 +191,17 @@ Skateboard: the thinnest whole first, one JPEG with an EXIF segment taken out en
 ## Consequences
 
 **Positive**:
-- A photo's camera details, location, captions, comments, thumbnails and appended pictures leave the cleaned copy for every JPEG and JPEG 2000 picture RedactNest reads, with or without a tick.
+- A photo's camera details, location, captions, comments, thumbnails and appended pictures leave the cleaned copy for every JPEG and JPEG 2000 picture RedactNest takes apart, with or without a tick.
 - Pixels and compression are exactly the source's, so no file grows and no picture loses quality; spec 0006's no decode rule holds.
 - The allowlist drops a detail nobody thought to list, as the rest of the rebuild does.
 
 **Negative / tradeoffs**:
 - A second piece of code that reads a file format beside MuPDF (spec 0001's exception widens). It is small, pure and tested on bytes, but a bug in it can fail a run with `unsupported` until fixed.
-- Three cases keep their details (inline, chained, unreadable), and the home page cannot list XMP metadata or picture details as stripped "whenever a file carries them". The scope row's "lists XMP metadata again" is dropped.
+- A picture left as stored keeps its details: one written inline, one under a chain of filters, and any other the reader does not take apart (AC-1 and AC-4 list each case). So the home page cannot list XMP metadata or picture details as stripped "whenever a file carries them". The scope row's "lists XMP metadata again" is dropped.
 - A picture with no `/ColorSpace` keeps its ICC profile, whose description can name a device.
 - JPX extension boxes (layers, compositing, labels) are dropped by the allowlist; a JPX picture that needed one to draw in some viewer would draw differently there. MuPDF and the fixtures show nothing changes, and JPX extension files inside PDFs are rare.
 - Every run reads the raw bytes of every DCT and JPX picture twice (strip and check), a copy each, within AC-12's budget.
 - A crafted picture that trips a bug in the reader refuses every run on that file after review, with no warning at open (AC-6).
-- A picture with a repeated JFIF or Adobe segment keeps its details, a fourth narrow limit inside "can't read its structure".
 
 **Neutral**:
 - `SANITIZED_KINDS` grows by one, last, so earlier kinds keep their order and telemetry's other values are unchanged.
