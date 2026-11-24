@@ -108,3 +108,10 @@ Every picture below was written by `scripts/lib/jpeg-writer.mjs` or `jp2-writer.
 - A blanked DCT picture is written again as `/FlateDecode`: a 64 pixel grey JPEG holding EXIF under a ticked address, run with the strip swapped out, leaves as Flate with no marker left (AC-7).
 - MuPDF does not read an embedded ICC profile for a DCT picture with no `/ColorSpace`: the same grey and RGB pictures with no `/ColorSpace` render pixel for pixel the same with and without a gamma 3 profile in an `APP2` segment, while with `/ColorSpace` named they render differently from both. The rule keeps the profile either way (AC-2), so nothing changes; a release that starts reading it fails the pin, which then only says the kept profile now matters to drawing.
 - The hand built codestream (2 by 2 tiles, no wavelet levels, every packet empty) decodes to an even grey of 128, as AC-13 expects.
+
+### Measured at task 8 (2026-11-24)
+
+On the 50 page cropped scan at 300 pixels per inch (12.4 MB, one 185 KB MuPDF made JPEG a page, each with its own `APP1` of about 64 KB spliced in), in the unit project, the file run alone:
+
+- CPU: the least of three runs with the strip took 1,391 ms against 1,063 ms with the strip and the structure check both swapped out, so about 330 ms added, well inside AC-12's 1 second. The baseline swaps the whole structure check out, since the check fails every picture the strip leaves, so the figure counts the rest of the structure part too.
+- Peak: with garbage counted, the same run peaked anywhere from 210 to 395 MB, as V8's collector timing moved, so a 5% bound on that would only measure the collector. `cost.test.ts` instead collects and samples at every checkpoint, the peak of what a run keeps, which is what "lets each buffer go before the next" decides: 38.7 MB with the strip and 38.7 MB without on the first round, 47.9 and 48.0 on the second, the drift between rounds being the process's own and alike for both.

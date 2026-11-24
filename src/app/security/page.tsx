@@ -387,15 +387,25 @@ export default function SecurityPage() {
         <p>
           The home page lists the <a href={HOME_BAND}>kinds of hidden data</a>.
         </p>
-        {/* Spec 0006, AC-29 (every page image in a run's output has the same
-            filter and the same bytes as in the source), held by
-            `tests/unit/cost.test.ts` and run again by the fifth verify
-            (2026-11-15). A picture under no removed item leaves as the file
-            stored it, so whatever it holds inside its own bytes leaves with
-            it; one the run blanks is written again, so "can". */}
+        {/* Spec 0025, AC-1, AC-2, AC-3, AC-4 and AC-8, its AC-11 words. The
+            first sentence's absolute rests on the self check, a gate every
+            file passes: it fails any output whose JPEG or JPEG 2000 picture,
+            one the reader takes apart, still holds a part off the kept lists
+            (AC-8). The limit is stated by kind, never by exact condition
+            (spec 0018, AC-5): a picture written inline or under a chain of
+            filters (AC-1), and every container the reader leaves as stored
+            (AC-4), keeps its stored bytes. The profile stays when the
+            dictionary names no colour space, and a JPEG 2000 colour
+            specification is kept whole (AC-2, AC-3). */}
         <p>
-          Details stored inside a picture’s own data, such as a photo’s camera details,
-          can stay.
+          For each JPEG and JPEG 2000 picture it can take apart, RedactNest keeps only the
+          parts on a fixed list chosen for drawing it, and the check fails any file in
+          which such a picture still holds a part it would drop. Details stored inside a
+          picture’s own data, such as a photo’s camera details, location, captions and
+          comments, can stay in a picture it leaves as stored, such as one written inside
+          a page’s drawing instructions, one stored under more than one kind of
+          compression, or any other picture stored or laid out in a way it does not safely
+          take apart. A colour profile the picture needs to draw its colours stays.
         </p>
         {/* Spec 0019, AC-1, AC-5 and AC-14; spec 0004, AC-7, its *Feature
             design* sentence "Stripped and never reported", and its

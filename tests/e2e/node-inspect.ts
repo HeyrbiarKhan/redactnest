@@ -9,6 +9,12 @@ export interface Inspection {
   readonly keys: string[];
   readonly text: string;
   readonly bytes: string;
+  /**
+   * Every stream as stored, read raw and never decoded, joined, one byte per
+   * character: a picture's own details live in its stored bytes (spec 0025,
+   * AC-14).
+   */
+  readonly streams: string;
 }
 
 /**
@@ -36,6 +42,14 @@ export function inspectInNode(path: string): Inspection {
     'let text = "";',
     'for (let i = 0; i < doc.countPages(); i += 1) text += doc.loadPage(i).toStructuredText("").asText();',
     'const bytes = Buffer.from(doc.saveToBuffer("decompress").asUint8Array()).toString("latin1");',
+    'let streams = "";',
+    "for (let n = 1; n < doc.countObjects(); n += 1) {",
+    "  const ref = doc.newIndirect(n);",
+    "  if (!ref.isStream()) continue;",
+    "  const raw = ref.readRawStream();",
+    '  streams += Buffer.from(raw.asUint8Array()).toString("latin1");',
+    "  raw.destroy();",
+    "}",
     "process.stdout.write(JSON.stringify({",
     "  pages: doc.countPages(),",
     "  versions: doc.countVersions(),",
@@ -44,6 +58,7 @@ export function inspectInNode(path: string): Inspection {
     "  keys: [...keys],",
     "  text,",
     "  bytes,",
+    "  streams,",
     "}));",
   ].join("\n");
 

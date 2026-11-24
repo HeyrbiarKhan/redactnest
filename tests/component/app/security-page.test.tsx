@@ -194,8 +194,17 @@ describe("the security page", () => {
     ["theCheck", "a file the check could not vouch for"],
     // Hidden data (spec 0004).
     ["hiddenData", "The home page lists the kinds of hidden data."],
-    ["hiddenData", "Details stored inside a picture’s own data"],
-    ["hiddenData", "a photo’s camera details, can stay"],
+    // Spec 0025, AC-11: what the strip and the check do, then the limit by
+    // kind, then the profile that stays.
+    [
+      "hiddenData",
+      "For each JPEG and JPEG 2000 picture it can take apart, RedactNest keeps only the parts on a fixed list chosen for drawing it, and the check fails any file in which such a picture still holds a part it would drop.",
+    ],
+    [
+      "hiddenData",
+      "Details stored inside a picture’s own data, such as a photo’s camera details, location, captions and comments, can stay in a picture it leaves as stored, such as one written inside a page’s drawing instructions, one stored under more than one kind of compression, or any other picture stored or laid out in a way it does not safely take apart.",
+    ],
+    ["hiddenData", "A colour profile the picture needs to draw its colours stays."],
     // Spec 0019, AC-14.
     [
       "hiddenData",
@@ -646,10 +655,33 @@ describe("the security page", () => {
     expect(removed).not.toContain("font character");
     expect(mainText()).not.toContain("that no text shows");
     expect(removed).toContain("such as on another page where you ticked nothing.");
-    expect(SECURITY_CHANGES[0].summary).toContain(
+    const glyphEntry = SECURITY_CHANGES.find(({ summary }) =>
+      summary.includes("can no longer stay in a font character"),
+    );
+    expect(glyphEntry?.summary).toContain(
       "The original copy of a redacted figure or picture can no longer stay in a font character.",
     );
-    expect(SECURITY_CHANGES[0].date > "2026-11-17").toBe(true);
+    expect(glyphEntry!.date > "2026-11-17").toBe(true);
+  });
+
+  /**
+   * covers: spec 0025, AC-11. The picture line says what the strip and the
+   * check do for each picture RedactNest takes apart, then where details can
+   * still stay, by kind, never by exact condition (spec 0018, AC-5), and the
+   * change entry, newest, says the same.
+   */
+  it("says which pictures keep their details, and dates the change", () => {
+    render(<SecurityPage />);
+    const hidden = sectionText(SECURITY_SECTIONS.hiddenData);
+    expect(hidden).not.toContain("such as a photo’s camera details, can stay.");
+    expect(hidden.split("can take apart").length - 1).toBe(1);
+    expect(SECURITY_CHANGES[0].date).toBe("2026-11-24");
+    expect(SECURITY_CHANGES[0].summary).toContain(
+      "the check fails any file in which such a picture still holds a part it would drop",
+    );
+    expect(SECURITY_CHANGES[0].summary).toContain(
+      "They can still stay in a picture it leaves as stored.",
+    );
   });
 
   /**

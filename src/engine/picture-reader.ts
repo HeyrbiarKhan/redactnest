@@ -180,7 +180,9 @@ function equalBytes(first: Uint8Array, second: Uint8Array): boolean {
  * One step of a walk over a container, in source order: a range kept as
  * stored, a range dropped, or a part written anew in place of a range. Each
  * kept or rewritten step that matters to drawing carries `decoding`, the
- * bytes the strip's guard compares (AC-6).
+ * bytes the strip's guard compares (AC-6): a view into the source, never a
+ * copy, so a picture is held once however many parts it has (AC-12), except
+ * the two rewritten headers, which are copies with the thumbnail size set.
  */
 type KeepStep = Extract<Step, { readonly act: "keep" }>;
 
@@ -343,7 +345,7 @@ function walkJpeg(bytes: Uint8Array, hasColourSpace: boolean): Walk {
         act: "keep",
         from: segmentEnd,
         to: dataEnd,
-        decoding: bytes.slice(segmentEnd, dataEnd),
+        decoding: bytes.subarray(segmentEnd, dataEnd),
       });
       // A missing end of image marker is fine: the data ends inside the last
       // scan, and so does the output.
@@ -425,7 +427,7 @@ function keepSegment(
   start: number,
   end: number,
 ): KeepStep {
-  return { act: "keep", from: start, to: end, decoding: bytes.slice(fill.to, end) };
+  return { act: "keep", from: start, to: end, decoding: bytes.subarray(fill.to, end) };
 }
 
 /** The fill bytes before a rewritten segment, kept as stored. */
@@ -579,7 +581,7 @@ function walkCodestream(bytes: Uint8Array, from: number, to: number): Walk {
         act: "keep",
         from: at,
         to: segmentEnd,
-        decoding: code === 0x51 ? bytes.slice(at, segmentEnd) : null,
+        decoding: code === 0x51 ? bytes.subarray(at, segmentEnd) : null,
       });
     }
     at = segmentEnd;
@@ -632,7 +634,7 @@ function walkCodestream(bytes: Uint8Array, from: number, to: number): Walk {
     act: "keep",
     from: tilesFrom,
     to: codestreamEnd,
-    decoding: bytes.slice(tilesFrom, codestreamEnd),
+    decoding: bytes.subarray(tilesFrom, codestreamEnd),
   });
   if (codestreamEnd < to) {
     if (onlyWhitespace(bytes, codestreamEnd, to)) {
@@ -751,7 +753,7 @@ function walkJp2Header(bytes: Uint8Array, box: Box): Step[] | null {
         act: "keep",
         from: child.start,
         to: child.end,
-        decoding: bytes.slice(child.start, child.end),
+        decoding: bytes.subarray(child.start, child.end),
       });
     } else {
       children.push({ act: "drop", from: child.start, to: child.end, dropped: "other" });

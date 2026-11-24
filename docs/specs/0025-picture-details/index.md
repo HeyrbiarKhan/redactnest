@@ -184,9 +184,9 @@ Skateboard: the thinnest whole first, one JPEG with an EXIF segment taken out en
 5. [x] **The rest of the JPEG fixtures.** `picture-jpeg.pdf` pages 2 to 7 and `picture-kept.pdf` pages 1 to 3, with their tests (markers, decoded pixels, render equality, kinds, as stored). Satisfies **AC-1**, **AC-2**, **AC-4**, **AC-7**, **AC-10**, **AC-13**.
 6. [x] **JPEG 2000.** `scripts/lib/jp2-writer.mjs`, `readJpx`, `picture-jpx.pdf`, `picture-kept.pdf` page 4, the reader tests and the tile part byte comparison. Satisfies **AC-3**, **AC-4**, **AC-10**, **AC-13**.
 7. [x] **The gate.** First confirm no committed fixture before this spec holds a DCT or JPX picture (the scope row says none does), so no existing row's `sanitized` changes. `MAIN` swaps the strip out; the three new fixtures' main rows read from 5c4e0d7's code (a `git archive` of it, never the current code), their `RUN_NOW` rows for the new `sanitized`, and their ticked sets in `NEEDLES`. Satisfies **AC-10**.
-8. [ ] **Cost.** In `cost.test.ts`: the spliced `APP1` run against the strip swapped out (CPU and peak), the MuPDF made JPEGs keeping every byte, spec 0019's budgets with the extra walk. Satisfies **AC-12**.
-9. [ ] **In a real browser.** The `tests/e2e/engine.spec.ts` case. Satisfies **AC-14**.
-10. [ ] **Words and amends.** The security page line, its source comment and `SECURITY_CHANGES` entry; the `HOME_STRIPPED` comment; the flow text and home text tests; specs 0001, 0004, 0006, 0007, 0019 and 0021 amended in place as the table at the top says. Read the security page's matching section again against what was built. Satisfies **AC-9**, **AC-11**, **AC-12**.
+8. [x] **Cost.** In `cost.test.ts`: the spliced `APP1` run against the strip swapped out (CPU and peak), the MuPDF made JPEGs keeping every byte, spec 0019's budgets with the extra walk. Satisfies **AC-12**.
+9. [x] **In a real browser.** The `tests/e2e/engine.spec.ts` case. Satisfies **AC-14**.
+10. [x] **Words and amends.** The security page line, its source comment and `SECURITY_CHANGES` entry; the `HOME_STRIPPED` comment; the flow text and home text tests; specs 0001, 0004, 0006, 0007, 0019 and 0021 amended in place as the table at the top says. Read the security page's matching section again against what was built. Satisfies **AC-9**, **AC-11**, **AC-12**.
 
 ## Consequences
 
