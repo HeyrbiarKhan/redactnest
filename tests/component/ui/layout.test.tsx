@@ -401,16 +401,24 @@ describe("SiteFooter", () => {
 
   /**
    * Spec 0024, AC-14, *The lockup at narrow widths*: the grid, never the
-   * `footer` element, is the lockup's container.
+   * `footer` element, is the lockup's container. And AC-17, *The footer at
+   * 200% text*: from `md` the brand column's floor is its own content, so the
+   * groups wrap rather than lie over the word. jsdom computes no layout, so the
+   * class is held here and the layout in `tests/e2e/design-system.spec.ts`.
    */
-  it("makes the grid the lockup's container", () => {
+  it("makes the grid the lockup's container, its brand column never narrower than its content", () => {
     render(<Footer />);
 
     const footer = screen.getByRole("contentinfo");
     const grid = screen.getByText("PDF redaction in your browser.").parentElement
       ?.parentElement;
     expect(grid?.parentElement).toBe(footer);
-    expect(grid).toHaveClass("@container", "grid");
+    expect(grid).toHaveClass(
+      "@container",
+      "grid",
+      "md:grid-cols-[minmax(min-content,1fr)_auto]",
+    );
+    expect(grid).not.toHaveClass("md:grid-cols-[minmax(0,1fr)_auto]");
     expect(footer).not.toHaveClass("@container");
   });
 

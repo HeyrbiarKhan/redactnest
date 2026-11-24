@@ -12,9 +12,16 @@ import { PageContainer } from "./page-container";
  *
  * The grid is the lockup's container (`@container`), which steps it down a
  * size when the row is narrower than 10rem. Below `md` the brand column is
- * as wide as the row, so the step reaches it; from `md` the column is
- * narrower than the row, which the step does not cover. Spec 0024, AC-14,
- * *The lockup at narrow widths*.
+ * as wide as the row, so the step reaches it. Spec 0024, AC-14, *The lockup
+ * at narrow widths*.
+ *
+ * From `md` the brand column is never narrower than its own content
+ * (`minmax(min-content,1fr)`): the lockup, which never wraps, or the brand
+ * line's longest word. So at large text the link groups wrap under each other
+ * in their own column rather than lie over "RedactNest". `1fr` alone has the
+ * same floor; the `minmax` says it on purpose, so a change back to
+ * `minmax(0,1fr)` reads as the change it is. Spec 0024, AC-17, *The footer at
+ * 200% text*.
  *
  * It reads nothing itself. The layout passes in the brand, the groups (spec
  * 0011, AC-4) and the notice with its source link (spec 0009, INV-8), because
@@ -34,7 +41,7 @@ export function SiteFooter({
     <footer className="border-t border-border bg-canvas">
       <PageContainer
         width="wide"
-        className="@container grid gap-8 py-10 text-small text-ink-muted md:grid-cols-[minmax(0,1fr)_auto]"
+        className="@container grid gap-8 py-10 text-small text-ink-muted md:grid-cols-[minmax(min-content,1fr)_auto]"
       >
         <div className="flex flex-col gap-3">{brand}</div>
         <div className="flex flex-wrap gap-x-16 gap-y-6">{groups}</div>

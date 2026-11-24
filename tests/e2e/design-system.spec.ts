@@ -2515,6 +2515,107 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
   });
 });
 
+/**
+ * Spec 0024, AC-17, *The footer at 200% text*. From `md` the footer is two
+ * columns, the brand and the link groups. The Guides group widened the groups'
+ * line, and with the brand column free to shrink to nothing, "RedactNest" lay
+ * under the groups at 200% text. Its floor is now its own content, so the
+ * groups wrap under each other instead.
+ *
+ * Every check compares a box with a box, never a pixel figure, because Linux
+ * draws text about 3 pixels wider than Windows (CI run 45146529620), so both
+ * sides move together. The footer is the root layout's, the same on every
+ * page, so `/` stands for all of them. Nothing reads the page's `scrollWidth`:
+ * `/` at 1024 pixels with 200% text is wider than the window from its main
+ * content (the spec's Follow-up), not from the footer.
+ */
+test.describe("the footer from md (spec 0024, AC-17)", () => {
+  for (const width of [1280, 1024, 768] as const) {
+    for (const large of [true, false] as const) {
+      const title = large
+        ? `keeps the brand clear of the link groups at ${width} pixels with 200% text`
+        : `keeps the brand and the link groups in one row at ${width} pixels with default text`;
+      test(title, async ({ page }) => {
+        await page.setViewportSize({ width, height: 800 });
+        await page.goto("/");
+        if (large) {
+          await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+        }
+        // Measure the words in Inter, never in the fallback face.
+        await page.evaluate(async () => {
+          await document.fonts.ready;
+        });
+
+        const footer = await page.getByRole("contentinfo").evaluate((element) => {
+          /**
+           * The right edge of every line of text inside an element: each text
+           * node's client rects, line by line, so a word that wraps is read on
+           * the line it ends on, never as one bounding box.
+           */
+          function textEdge(root: Element): number {
+            let edge = Number.NEGATIVE_INFINITY;
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+            for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+              if (!node.textContent?.trim()) continue;
+              const range = document.createRange();
+              range.selectNodeContents(node);
+              for (const rect of range.getClientRects()) {
+                if (rect.width > 0) edge = Math.max(edge, rect.right);
+              }
+            }
+            return edge;
+          }
+
+          // The `PageContainer` grid: the brand column, then the groups' column.
+          const grid = element.querySelector(":scope > div");
+          const brand = grid?.children[0];
+          const groupsColumn = grid?.children[1];
+          if (!brand || !groupsColumn) throw new Error("the footer's grid has changed");
+          const brandBox = brand.getBoundingClientRect();
+          return {
+            window: document.documentElement.clientWidth,
+            brand: { top: brandBox.top, bottom: brandBox.bottom, right: brandBox.right },
+            brandText: textEdge(brand),
+            groupsLeft: groupsColumn.getBoundingClientRect().left,
+            groups: [...groupsColumn.querySelectorAll("nav")].map((nav) => {
+              const box = nav.getBoundingClientRect();
+              return { top: box.top, bottom: box.bottom, left: box.left };
+            }),
+            text: textEdge(element),
+          };
+        });
+
+        // Product, Guides and Legal, so no check below passes on an empty list.
+        expect(footer.groups).toHaveLength(3);
+
+        // The check that fails on the bug: the brand column's words end inside
+        // it. One pixel covers subpixel edges only.
+        expect(footer.brandText).toBeLessThanOrEqual(footer.brand.right + 1);
+
+        if (large) {
+          // A sanity check on the layout: a group that shares rows with the
+          // brand column starts right of it. Two grid cells never overlap, so
+          // this alone cannot fail on the bug.
+          for (const group of footer.groups) {
+            if (group.top < footer.brand.bottom && group.bottom > footer.brand.top) {
+              expect(group.left).toBeGreaterThanOrEqual(footer.brand.right);
+            }
+          }
+          // The footer's words end inside the window, with the suite's allowance.
+          expect(footer.text).toBeLessThanOrEqual(footer.window + 0.5);
+        } else {
+          // Default text, as before: the brand and the groups side by side in
+          // one row, and the three groups on one line.
+          expect(footer.groupsLeft).toBeGreaterThanOrEqual(footer.brand.right);
+          for (const group of footer.groups) {
+            expect(Math.abs(group.top - footer.brand.top)).toBeLessThanOrEqual(1);
+          }
+        }
+      });
+    }
+  }
+});
+
 test.describe("every page (spec 0013, AC-26; spec 0024, AC-13)", () => {
   const PAGES = [
     "/",
