@@ -2,7 +2,7 @@
 
 **Date**: 2026-11-24
 **Status**: In Progress
-**Updated**: 2026-11-24, wording only: AC-11's security page line and the two Consequences bullets on which pictures lose their details now state the limit by kind (spec 0018, AC-5), so they hold for every case AC-1 and AC-4 leave as stored. No design change.
+**Updated**: 2026-11-24, wording only: AC-11's security page line and the two Consequences bullets on which pictures lose their details now state the limit by kind (spec 0018, AC-5), so they hold for every case AC-1 and AC-4 leave as stored. No design change. Later the same day, as built (your calls, 2026-11-24): the kind's words are lowercase "picture details", shown as "Picture details" when it leads the line (AC-9); AC-12's 5% peak is the run's live heap, collected and sampled at every checkpoint, with the 1 second CPU budget and the 5% bound unchanged (AC-12); the browser test answers the plan check as Pro, since the fixture has 7 pages (AC-14). No design change.
 
 ## Summary
 
@@ -17,7 +17,7 @@ Applied in place when this spec is built (task 10): each spec names spec 0025 in
 | 0001 | The named exception to "one PDF parser", as specs 0019, 0020, 0022 and 0023 amend it | A second named exception: `src/engine/picture-reader.ts` reads a JPEG's marker segments and a JPEG 2000 file's boxes and codestream marker segments, bytes in and byte ranges out. It reads no PDF syntax, never decodes compressed picture data, and computes no pixel (INV-1). |
 | 0004 | *State transitions* (the run's order), AC-13 (the self check's structure part), the `SANITIZED_KINDS` list | The rebuild strips picture details after `sweepCarriers` and before the write, with a checkpoint after it (AC-6). The structure part fails an output whose readable picture still holds a part to drop, as a leak (AC-8). `picture-details` is appended last to `SANITIZED_KINDS` (AC-9). |
 | 0006 | AC-29 (the cost test's "same bytes") | A page image keeps its filter and its stored bytes less what this spec drops; a picture holding nothing to drop keeps every byte, and the cost test's MuPDF made JPEGs are asserted to be such pictures (AC-12). |
-| 0007 | AC-16 (words for every kind) | `picture-details` takes its words from its kind alone: "Picture details" (AC-9). |
+| 0007 | AC-16 (words for every kind) | `picture-details` takes its words from its kind alone: "picture details", shown as "Picture details" when it leads the line (AC-9). |
 | 0019 | AC-12 (`HOME_STRIPPED`), AC-13 (`/tool`'s words), AC-14's last bullet (the security page's picture line) | `HOME_STRIPPED` stays false for `xmp-metadata` and is false for `picture-details`, for the reason in AC-11. "Also stripped" now names a picture's XMP and details when a run strips them, each meaning absent from every picture RedactNest takes apart (AC-9). The security page's picture line is replaced (AC-11). |
 | 0021 | INV-6 (format constants live in `src/engine`) | `JPEG_KEPT_MARKERS`, `JP2_KEPT_BOXES`, `JP2_HEADER_BOXES`, `XMP_APP1_IDS` and `XMP_UUID` join them: rules about a file format, not caps on the visitor (INV-7). |
 
@@ -65,7 +65,7 @@ Applied in place when this spec is built (task 10): each spec names spec 0025 in
   - `xmp-metadata` when it dropped an `APP1` whose payload starts `http://ns.adobe.com/xap/1.0/\0` or `http://ns.adobe.com/xmp/extension/\0`, or a `uuid` box whose first 16 bytes are XMP's (`BE 7A CF CB 97 A9 42 E8 9C 71 99 94 91 E3 AF AC`);
   - `picture-details`, a new kind appended last to `SANITIZED_KINDS`, when it dropped anything else: any other segment or box, a JFIF thumbnail, a codestream comment, or bytes after an end marker that are not all whitespace.
 
-  `SANITIZED_TEXT["picture-details"]` is "Picture details", so `/tool`'s "Also stripped" line names it. Telemetry carries it as one more value of `stripped`, a kind from a closed list. Nothing says which picture, how many, or what a part held.
+  `SANITIZED_TEXT["picture-details"]` is "picture details", lowercase like every other stripped kind's words, so `/tool`'s "Also stripped" line names it: "Picture details" when it leads the line, "picture details" after another kind ("XMP metadata and picture details"). _As built, your call 2026-11-24: the first draft wrote "Picture details", which would read capitalised mid line._ Telemetry carries it as one more value of `stripped`, a kind from a closed list. Nothing says which picture, how many, or what a part held.
 
 - **AC-10**: **The details are gone and the pictures unchanged** (the proof, in tests). On the new fixtures (AC-13):
   - no stored stream of any output holds any of the fixture's marker strings (the EXIF camera make, the GPS tag, the XMP packet, the IPTC caption, each comment, the thumbnail's bytes, the appended picture, the JP2 boxes' text), read with `tests/support/mupdf.ts`, which reads raw streams with its own code;
@@ -80,14 +80,14 @@ Applied in place when this spec is built (task 10): each spec names spec 0025 in
   - `HOME_STRIPPED["xmp-metadata"]` stays false and `HOME_STRIPPED["picture-details"]` is false, so the Strips card is unchanged: under "Whenever a file carries them:" neither would hold, since a picture left as stored can keep its own XMP and details (your call, 2026-11-24). The comment above `HOME_STRIPPED` says so and names this spec.
   - No search page changes: spec 0024's claim register keeps metadata off them.
 
-- **AC-12**: **Cost.** On spec 0006's 50 page, 300 pixels per inch scan built inside `tests/unit/cost.test.ts`, with one JPEG per page and an `APP1` of about 64 KB spliced into every JPEG so every picture is rewritten, the strip and its self check add at most 1 second of CPU time to a run in the unit project, against the same run with the strip swapped out, and the run's peak heap stays within 5% of that run's. The strip reads and writes one picture at a time and lets each buffer go before the next. The existing run over the scan's MuPDF made JPEGs asserts each picture keeps every byte (AC-5), which is spec 0006's AC-29 as amended. Spec 0019's budgets in `cost.test.ts` (50 dense pages, one page drawing 10,000 forms) still hold with the extra read walk. Run the file alone.
+- **AC-12**: **Cost.** On spec 0006's 50 page, 300 pixels per inch scan built inside `tests/unit/cost.test.ts`, with one JPEG per page and an `APP1` of about 64 KB spliced into every JPEG so every picture is rewritten, the strip and its self check add at most 1 second of CPU time to a run in the unit project, against the same run with the strip swapped out, and the run's peak live heap stays within 5% of that run's. The peak is measured on live heap: each run collects garbage and samples the JavaScript heap plus array buffers at every checkpoint (after each page and each picture written), each pipeline warmed first, and CPU is timed on separate runs with no forced collection. _As built, your call 2026-11-24: the raw peak, garbage included, varied from 210 to 395 MB between identical runs as the collector's timing moved, so a 5% bound on it would measure only the collector. The 1 second CPU budget and the 5% bound are unchanged._ The strip reads and writes one picture at a time and lets each buffer go before the next. The existing run over the scan's MuPDF made JPEGs asserts each picture keeps every byte (AC-5), which is spec 0006's AC-29 as amended. Spec 0019's budgets in `cost.test.ts` (50 dense pages, one page drawing 10,000 forms) still hold with the extra read walk. Run the file alone.
 
 - **AC-13**: **Fixtures built from code.** `scripts/make-fixture.mjs` writes every JPEG and JPEG 2000 picture from code: no real photo is committed, none is made by MuPDF, and nothing reads a PDF or a picture from outside the repository.
   - `scripts/lib/jpeg-writer.mjs`: a baseline JPEG encoder (colour conversion, forward DCT, quantisation, the standard Huffman tables), writing a small patterned picture in grey or in colour, colour as one interleaved scan or as three scans of one component each, and handing back its segments so a fixture can place a detail segment anywhere, between scans included.
   - `scripts/lib/jp2-writer.mjs`: a JPEG 2000 codestream written by hand, 2 by 2 tiles, no wavelet levels, every packet empty, so it decodes to an even grey picture; plus the JP2 boxes around it.
   - `scripts/lib/picture-fixtures.mjs` writes `picture-jpeg.pdf`, `picture-jpx.pdf` and `picture-kept.pdf` (pages in *Fixtures* below), each page with a readable line of text so the open reads it.
 
-- **AC-14**: **In a real browser.** `tests/e2e/engine.spec.ts` opens `picture-jpeg.pdf`, ticks its ticked line, makes and downloads the file, finds none of the fixture's marker strings in the downloaded bytes' raw streams, and sees "Picture details" in the result card's "Also stripped" line.
+- **AC-14**: **In a real browser.** `tests/e2e/engine.spec.ts` answers the plan check as Pro through Playwright's routing of `/api/entitlement`, as `cancel.spec.ts` does, since the fixture's 7 pages pass the free cap (_as built, your call 2026-11-24_). It then opens `picture-jpeg.pdf`, ticks its ticked line, makes and downloads the file, finds none of the fixture's marker strings in the downloaded bytes' raw streams, and sees "XMP metadata and picture details" in the result card's "Also stripped" line.
 
 ## Decision
 
@@ -146,7 +146,7 @@ Reasoning and options: see [rationale.md](rationale.md).
 | strip | the guard's comparison | `decodingParts` of the source and of the new bytes (AC-6) |
 | run | `sanitized` | the inventory's kinds, plus `xmp-metadata` from `report.xmp` and `picture-details` from `report.details`, in `SANITIZED_KINDS` order (AC-9) |
 | self check | the verdict | the same reader on the written bytes' pictures; any `strip` answer is `"leak"` (AC-8) |
-| result card | "Picture details" | `SANITIZED_TEXT["picture-details"]` (AC-9) |
+| result card | "picture details", capitalised when it leads the line | `SANITIZED_TEXT["picture-details"]` and the "Also stripped" line's own casing (AC-9) |
 | security page | the picture line | AC-11's words, written in `page.tsx` |
 
 **Key invariants**:
@@ -171,7 +171,7 @@ Reasoning and options: see [rationale.md](rationale.md).
 - The check with the strip skipped: `redaction-incomplete` on each fixture picture holding a detail; with nothing to strip, the run passes, verifies **AC-8**.
 - The gate with `MAIN` swapping the strip: every fixture pixel for pixel, verifies **AC-10**.
 - The cost budget and spec 0019's budgets, run alone, verifies **AC-12**.
-- In a real browser: download free of markers, "Picture details" shown, verifies **AC-14**.
+- In a real browser, the plan check answered as Pro: download free of markers, "XMP metadata and picture details" shown, verifies **AC-14**.
 
 ## Build plan
 

@@ -85,6 +85,14 @@ Your calls, 2026-11-24, in the design conversation:
 - The cost budget: 1 second of CPU and a peak within 5% on the 50 page scan.
 - The home Strips card keeps both kinds off, since a picture left as stored can keep its own details; the scope row's "lists XMP metadata again" is dropped.
 
+## Your calls as built (2026-11-24)
+
+Three calls made while building, recorded so the spec says what the code does. None changes the design.
+
+- **The kind's words.** `SANITIZED_TEXT["picture-details"]` is lowercase "picture details", like every other stripped kind, and the "Also stripped" line capitalises whichever kind leads it, so it reads "Picture details" alone and "XMP metadata and picture details" after XMP. The draft's capitalised "Picture details" would have read wrong mid line.
+- **AC-12's peak is live heap.** The raw peak, garbage included, moved from 210 to 395 MB between identical runs as V8's collector timing moved, so a 5% bound on it measures the collector, not the strip. `cost.test.ts` collects and samples at every checkpoint instead, the peak of what a run keeps, which is what "lets each buffer go before the next" decides. The 1 second CPU budget and the 5% bound are unchanged; CPU is timed on runs with no forced collection, since collecting at every checkpoint slows a run.
+- **The browser test answers as Pro.** `picture-jpeg.pdf` has 7 pages, past the free cap, so `tests/e2e/engine.spec.ts` routes `/api/entitlement` to a Pro answer, as `cancel.spec.ts` does for its long document. No product seam is added.
+
 ## What the cross check settled
 
 A read only cross check on another model (2026-11-24) found sixteen edges the first draft left to the builder; you applied every recommended fix. The reader's rules now name where a scan's data ends and whose fill bytes are whose, keep tables after a scan in place, cut an Adobe segment longer than 12 bytes to 12 (libjpeg reads only those) instead of leaving the picture as stored, rewrite a JFIF header with extra bytes as it rewrites one with a thumbnail, and leave a picture with a repeated JFIF or Adobe segment as stored (libjpeg acts on each, so dropping one could change colours). The strip reads each object once by number through `newIndirect`, treats an indirect `/Filter`, the short filter names and `/F` as limits, and checkpoints after each picture it writes. The JPEG 2000 rules now say how box length forms are kept, that `jp2h` must keep `ihdr` and `colr`, and that the codestream is walked by tile part lengths, never by searching for marker bytes. Task 1 gained stop conditions, and page 6's outcome is stated: a blanked picture is written again as Flate, so its details go with the decode.
