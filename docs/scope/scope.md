@@ -25,7 +25,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 12 | Remaining detectors | Release 3 | done |
 | 13 | Custom terms | Release 4 | done |
 | 14 | Manual rectangle redaction | Release 6 | planned |
-| 15 | Marketing site | Release 5 | in-progress |
+| 15 | Marketing site | Release 5 | done |
 | 16 | Security & how it works page | Release 5 | done |
 | 17 | Data processing agreement | Release 5 | planned |
 | 18 | AGPL compliance & source publication | Release 1 | done |
@@ -39,7 +39,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 26 | UI polish | Release 3 | done |
 | 27 | Detector and fixture gates | Release 3 | done |
 | 28 | UI polish 2 | Release 3 | done |
-| 29 | Home page reflow | Release 5 | in-progress |
+| 29 | Home page reflow | Release 5 | done |
 | 30 | Engine and code follow ups | Release 5 | done |
 | 31 | Leaks through kept objects | Release 5 | done |
 | 32 | Details inside pictures | Release 5 | planned |
@@ -396,7 +396,7 @@ spec [0017](../specs/0017-custom-terms/index.md) · code in `src/detect/terms.ts
 
 ## Release 5: Get found and get trusted
 
-Pulled ahead of rectangles (your call, 2026-11-14). Pro already has two things worth paying for, no page cap and custom terms, and the product is live, so visitors are what is missing now. The first month of counts (from about 2026-12-08) also says more once they arrive. The security page went first, since it needed no spec. Its verifies measured a real leak, so that leak (feature 31, split out of feature 30) and then the rest of feature 30 come next, ahead of the search pages (your call, 2026-11-15). Feature 30's glyph rule (spec 0020) merged on 2026-11-18, and its other items follow, joined by spec 0020's matplotlib chart refusal (your call, 2026-11-18). Feature 30 closed on 2026-11-23 (PR #36, tag `prod-2026-11-23-ad8f05c`, live check passed), so the search pages (feature 15) come next, with the home page reflow (feature 29) built beside them on one branch, and then feature 32, which never carries a ticked value and whose limit the security page already states, while search pages take weeks to be indexed (your call, 2026-11-18). Features 23 and 17 stay in this release but wait for 100+ users and the lawyer, so release 6 can start while they wait.
+Pulled ahead of rectangles (your call, 2026-11-14). Pro already has two things worth paying for, no page cap and custom terms, and the product is live, so visitors are what is missing now. The first month of counts (from about 2026-12-08) also says more once they arrive. The security page went first, since it needed no spec. Its verifies measured a real leak, so that leak (feature 31, split out of feature 30) and then the rest of feature 30 come next, ahead of the search pages (your call, 2026-11-15). Feature 30's glyph rule (spec 0020) merged on 2026-11-18, and its other items follow, joined by spec 0020's matplotlib chart refusal (your call, 2026-11-18). Feature 30 closed on 2026-11-23 (PR #36, tag `prod-2026-11-23-ad8f05c`, live check passed), so the search pages (feature 15) come next, with the home page reflow (feature 29) built beside them on one branch, and then feature 32, which never carries a ticked value and whose limit the security page already states, while search pages take weeks to be indexed (your call, 2026-11-18). Features 15 and 29 closed on 2026-11-24 (PR #37, tag `prod-2026-11-24-91cb119`, live check and PageSpeed Insights passed, sitemap submitted), so feature 32 is next. Features 23 and 17 stay in this release but wait for 100+ users and the lawyer, so release 6 can start while they wait.
 
 ### 16. Security & how it works page · done · Alpha + review · spec 0018
 The page that closes the sale for HR, legal and healthcare buyers: what in memory processing means, what the logs do and do not hold, and why covering text with a box is not redaction.
@@ -469,7 +469,7 @@ spec [0020](../specs/0020-type3-glyphs-stay-in-font/index.md) (2026-11-17: the g
   - [x] The edges, the words and the close: the blocked row, the gate's rows and `NEEDLES`, the budgets alone, `replacement-text`'s body, and specs 0001, 0004, 0007, 0019 and 0021 amended (spec 0023, tasks 4 to 6) · AC-4 to AC-7
 - [x] Verify it: `/check verify engine and code follow ups` (the glyph rule verified 2026-11-17, spec 0020's `verify.md`; the other items and spec 0021 verified 2026-11-22, from spec 0021's, 0006's and 0007's `verify.md`; the lost inline picture and spec 0023's ticked text in a description verified 2026-11-23, from spec 0022's and 0023's `verify.md`)
 
-### 15. Marketing site · in-progress
+### 15. Marketing site · done
 A small set of pages on what this audience actually searches for, since search is the acquisition channel for a self serve tool at this price. The landing page itself, the brand and the site wide social preview image are built in feature 22.
 **Done when:** the search pages are server rendered with metadata, a sitemap and their own social cards, they lead into the tool, and Core Web Vitals pass on mobile.
 **Also owed here:** the search pages reuse the shell, `FeatureList` and the social card's composition (spec 0013). Per page social cards, and whether a manifest is worth a policy change, are this feature's calls.
@@ -477,27 +477,31 @@ A small set of pages on what this audience actually searches for, since search i
 **Also owed here:** spec 0004's Follow-up (features 15 and 16; feature 16 is done): a run draws a black box once the text is gone, so the search pages never say text is "never covered with a black box"; say it is removed, then marked.
 spec [0024](../specs/0024-search-pages/index.md) (2026-11-23: three search pages, `/redact-pdf`, `/remove-text-from-pdf` and `/black-box-redaction`, on one template over typed records, claiming only a closed register of outcomes and linking `/security` for engine detail; a sitemap, robots, per page cards from `make-brand.mjs`, a footer Guides group, `WebSite` JSON-LD on `/`, the site line reworded; no manifest; feature 29 as slice 1)
 - [x] Design it (spec): `/architect marketing site`
-- [ ] Build it: `/develop marketing site`
+- [x] Build it: `/develop marketing site`
   - [x] The home page reflow (feature 29): `/` recorded at 1280 pixels, the wide element found with `/debug` and fixed (a primitive change goes back to `/architect`), the combined 320 pixel and 200% text test over `REFLOW_PAGES`, and spec 0013's AC-26 amended · AC-14
   - [x] One search page whole: `/redact-pdf`'s record, template, metadata and words under the claim register, the shared banned phrases, the sitemap and robots, the site line and the `WebSite` block, the footer Guides group, its page kind, its card with root `AGENTS.md`'s brand file line, and every browser suite · AC-1 to AC-13, AC-16
   - [x] The other two pages: `/remove-text-from-pdf` with the custom terms line and `/black-box-redaction` with the `CoverFigure`, each joined to every test, and the `CoverFigure` fixed at 320 pixels with 200% text (`grid-cols-1`, `wrap-anywhere` on each panel; spec 0024, *CoverFigure at narrow widths*, task 11, decided 2026-11-23) · AC-1 to AC-9, AC-12 to AC-14, AC-16
-  - [ ] Your read and the measure: every word read before merge, Lighthouse's mobile figures in spec 0024's `verify.md`, and PageSpeed Insights after the deploy · AC-5, AC-6, AC-15
+  - [x] Your read and the measure: every word read before merge, Lighthouse's mobile figures in spec 0024's `verify.md`, and PageSpeed Insights after the deploy · AC-5, AC-6, AC-15 (read 2026-11-23; PageSpeed Insights mobile on the live pages 2026-11-24, every score 100; the sitemap submitted to Search Console the same day)
   - [x] The lockup at narrow widths (spec 0024 tasks 14 and 15, decided 2026-11-23 after CI on Linux found the lockup 3 pixels past 320): the header and footer rows as containers, the lockup a step smaller in a row under 10rem, and `REFLOW_PAGES` also at 305 pixels, passing on CI · AC-14
   - [x] The footer at 200% text (spec 0024 tasks 16 and 17, decided 2026-11-23 after /develop found the Guides group pushing the link groups over "RedactNest" from `md`): the brand column never narrower than its own content (`minmax(min-content,1fr)`), the groups wrapping instead, and a browser case at 1280, 1024 and 768 with 200% and default text, passing on CI · AC-17
 - [x] Verify it: `/check verify marketing site` (2026-11-23, on 9b686da: every before merge step passed; PageSpeed Insights and Search Console stay open until after the deploy; the lockup and the footer at large text, tasks 14 to 17, verified 2026-11-24 on 8249559)
 - [x] Test it: `/test marketing site` (2026-11-23: the gaps against spec 0024 filled in `tests/component/app/search-pages.test.tsx`; the eleven Vitest files the feature touches, 511 tests, pass)
 
-### 29. Home page reflow · in-progress · from spec 0013
+Merged 2026-11-24 (PR #37, 91cb119, tag `prod-2026-11-24-91cb119`), with the live check passed, which closes this row and feature 29. Search Console's first read of the sitemap said "Couldn't fetch", normal for a new property: recheck in a few days that it reads without errors (spec 0024's `verify.md`, step 7).
+
+### 29. Home page reflow · done · from spec 0013
 At 320 pixels wide with text at 200%, the home page's main content scrolls sideways, with the header's menu shut or open. It is older than feature 28, whose menu is not the cause. Spec 0013's AC-26 checks 320 pixels and 200% text apart, so no criterion asks for both at once, but a visitor who needs both meets it. Built beside feature 15, since the search pages reuse the same shell and `FeatureList` (your call, 2026-11-11).
 **Done when:** at 320 pixels with 200% text, `/` has no sideways scroll with the menu shut or open; the element that was wider than the window wraps or shrinks rather than being clipped; wider screens look as today; and a browser test holds 320 pixels and 200% text together on `/`, which feature 15's search pages can join.
 **Also owed here:** find the wide element first, with `/debug` if it is not obvious. Spec 0013's AC-26 amended to name the combined case, and `scripts/make-brand.mjs` rerun only if a brand picture changes (each is drawn at desktop width, so none should).
 spec [0024](../specs/0024-search-pages/index.md) (its AC-14 and build tasks 1 and 2: this row is that spec's first slice, and closes with feature 15) · code in `src/app/page.tsx`, `tests/e2e/design-system.spec.ts`
 - [x] Build it: within `/develop marketing site`, slice 1 (spec 0024, AC-14)
 
+Merged with feature 15 on 2026-11-24 (PR #37, 91cb119, tag `prod-2026-11-24-91cb119`), with the live check passed, which closes this row.
+
 ### 32. Details inside pictures · needs a decision · from spec 0019
-A picture under no removed item leaves with the bytes the source stored (spec 0006, AC-29), so a photo's own details written inside its data (EXIF camera details, sometimes a location, XMP, IPTC) stay in the cleaned copy. Split out of feature 31 (your call, 2026-11-15), because it is stream data rather than a pointer from a kept object, never holds a ticked value, and needs its own proof. It follows the search pages (your call, 2026-11-18).
+A picture under no removed item leaves with the bytes the source stored (spec 0006, AC-29), so a photo's own details written inside its data (EXIF camera details, sometimes a location, XMP, IPTC) stay in the cleaned copy. Split out of feature 31 (your call, 2026-11-15), because it is stream data rather than a pointer from a kept object, never holds a ticked value, and needs its own proof. It follows the search pages (your call, 2026-11-18), which closed on 2026-11-24, so it is next.
 **Done when:** the metadata segments inside a DCT picture (APP1 for EXIF and XMP, APP13 for IPTC, comments) and the matching JPEG 2000 boxes are removed without decoding the picture, decoded pixels are shown unchanged, spec 0006's AC-29 says what a kept picture's bytes may lose, and the home page's Strips card lists XMP metadata again (`HOME_STRIPPED["xmp-metadata"]`, spec 0019, AC-12) while the security page's picture "can" line goes.
-**Also owed here:** no fixture holds a JPEG today, so the fixture script needs one built from code, with no real photo committed.
+**Also owed here:** no fixture holds a JPEG today, so the fixture script needs one built from code, with no real photo committed. Spec 0024 left a "remove metadata from a PDF" search page waiting on this feature; whether to write it is a call for after this ships, with the search pages' counts in hand (see Deferred).
 - [ ] Design it (spec): `/architect details inside pictures`
 
 ### 23. Legal review · needs a decision · Alpha · from spec 0011
@@ -553,6 +557,8 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **Read the first month of counts**: once feature 11 has run for a month (it went live on 2026-11-08, so from about 2026-12-08), bring its numbers to `/architect` for spec 0006's thresholds and `off-page-picture`, spec 0005's `replacement-text` refusals and spec 0007's named refused item (*Name the item behind a refused run*, above); and read spec 0017's counts (`term` rows, `terms` and `termsSetAside`) to see whether Pro's custom terms are used and how often a Free job meets a kept list; and read spec 0019's `pagesWith["marked-descriptions"]` and its `unreadable-structure` failures, to judge how often real files meet the new warning and the new refusal at open, knowing that since spec 0020 that kind has two causes (the role walk and the glyph rule) the counts cannot tell apart, and since spec 0021 a third (a `/Registry` or `/Ordering` outside its token), while `redaction-incomplete` also counts a ticked text at a string place; and read spec 0022's `inline-picture` refusals, and if real files meet it often, bring the warning option back to `/architect` with the numbers · needs a decision · from specs 0016, 0017, 0019, 0020, 0021 and 0022
 - **`/security` counts as `not-found`**: `PAGE_KINDS` and `PAGE_PATHS` in `src/telemetry/events.ts` have no `security` kind, so every view of the security page is counted as `not-found`. Older than feature 15's branch (spec 0016 predates spec 0018), found while designing spec 0024 (2026-11-23), not fixed there (your call). Add the kind and its path, with the telemetry unit tests · from spec 0024
 - **`/` is 1027 pixels wide at 1024 with 200% text**: the trio's "Checked before you download" card (its title and line) ends at 1027.2, on main too (measured by /develop, 2026-11-23). On feature 15's branch `/redact-pdf` and `/remove-text-from-pdf`, which carry the same card, are 1027 wide as well; `/black-box-redaction` fits. No test covers 200% text at that width on main content · from spec 0024
+- **The other pages at 320 pixels with 200% text**: `/tool`, `/terms` and `/security` measured with no sideways scroll (menu shut, page width only, 2026-11-23), but not yet run through `expectNothingPastTheWindow` or with the menu open; `/pricing` (334 wide, its plan cards) and `/privacy` (361 wide) scroll for reasons of their own. Fix the two, then add each page that passes to `REFLOW_PAGES` · from spec 0024
+- **Read the search pages' counts**: once they have a month of visits (live from 2026-11-24, so from about 2026-12-24), read their page view counts before writing more pages. Audience pages (HR, legal, healthcare) were considered and left out; a "remove metadata from a PDF" page waits on feature 32 · needs a decision · from spec 0024
 - **Automated browsers in the counts**: if page visits look inflated, measure, then consider skipping `navigator.webdriver`, keeping the e2e flag so the privacy proof still runs · needs a decision · from spec 0016
 - **A custom term split by a running footer**: spec 0017 carries a page's end into the next page, so a term split by a page break is found, but text drawn between the two parts in reading order (a running footer or a page number) still keeps them apart. Measure how often real documents do this before any design · needs a decision · from spec 0017
 - **Patterns in a custom term**: a term today is literal text; a reference number's shape (`INV-` and any four digits) or a wildcard would be a decision of its own, with its own noise measured · needs a decision · from spec 0017
