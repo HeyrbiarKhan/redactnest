@@ -423,11 +423,31 @@ describe("the main content's words (AC-13)", () => {
 });
 
 /**
- * AC-13: the page keeps today's title and description by exporting no
- * metadata of its own, so it inherits the root layout's.
+ * AC-13, as spec 0024's AC-11 amends it: the page keeps the layout's title,
+ * and exports the site line as its description and a canonical to the root.
  */
-describe("the home page's metadata (AC-13)", () => {
-  it("exports none of its own", () => {
-    expect(Object.keys(homePage).sort()).toEqual(["default"]);
+describe("the home page's metadata (AC-13; spec 0024, AC-11)", () => {
+  it("exports the site line and a canonical to the root, and no title", () => {
+    expect(Object.keys(homePage).sort()).toEqual(["default", "metadata"]);
+    expect(homePage.metadata).toEqual({
+      description: HOME_TEXT.siteLine,
+      alternates: { canonical: "/" },
+    });
+  });
+
+  /** Spec 0024, AC-11: one data block, the trading name and the site's address. */
+  it("carries one WebSite block the browser never runs", () => {
+    const { container } = render(<HomePage />);
+
+    const scripts = container.querySelectorAll("script");
+    expect(scripts).toHaveLength(1);
+    expect(scripts[0]).toHaveAttribute("type", "application/ld+json");
+    expect(JSON.parse(scripts[0].textContent ?? "")).toEqual({
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "RedactNest",
+      url: config.siteUrl,
+    });
+    expect(scripts[0].textContent).not.toContain("<");
   });
 });

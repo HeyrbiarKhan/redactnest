@@ -6,11 +6,19 @@
  *
  * Writes the favicon and the Apple icon from `src/app/icon.svg`, then builds
  * and starts the production app and captures the social card and the Polar
- * product image from the built home page, and the home page's product shot
- * from the built tool page. The outputs are committed, like the
+ * product image from the built home page, each search page's own card and
+ * its alt text from that page (spec 0024, AC-16), and the home page's product
+ * shot from the built tool page. The outputs are committed, like the
  * fixtures, and nobody edits one by hand. PNG bytes differ a little between
  * machines, so rerun this only when the look changes: the mark, the home
- * page's eyebrow or headline, or the tool's look.
+ * page's eyebrow or headline, a search page's eyebrow or headline, or the
+ * tool's look.
+ *
+ * The search pages are found in the running build, never listed here: every
+ * address in its `/sitemap.xml` whose page carries `search-eyebrow`. Each
+ * card goes beside its page, `src/app/<path>/opengraph-image.png`, with
+ * `opengraph-image.alt.txt` reading `RedactNest. <eyebrow>. <headline>.` from
+ * the page's own text. The Polar image is only ever the home page's.
  *
  * No new package: it drives the Chromium that `@playwright/test` installs. It
  * never imports a TypeScript module. Every colour it draws with is parsed from
@@ -49,8 +57,20 @@ const FAVICON_SIZES = Object.freeze([16, 32]);
 /** The Apple icon (AC-3): 180 pixels, the mark across 62% of the width. */
 const APPLE_ICON = Object.freeze({ size: 180, markShare: 0.62 });
 
-/** The social card and the Polar image (AC-5, AC-6). */
+/** The social card and the Polar image (AC-5, AC-6), and each search page's card. */
 const CARD = Object.freeze({ width: 1200, height: 630 });
+
+/** The home page's card, the one the Polar image is drawn from (AC-6). */
+const HOME_CARD = Object.freeze({
+  path: "/",
+  eyebrow: '[data-testid="home-eyebrow"]',
+  out: OUT.social,
+  alt: null,
+  polar: true,
+});
+
+/** How a search page marks its eyebrow (spec 0024, AC-16). */
+const SEARCH_EYEBROW = '[data-testid="search-eyebrow"]';
 
 /**
  * The product shot (AC-12): a 1280 by 800 window at device scale 2, and what
@@ -191,6 +211,9 @@ async function readBuildEnv() {
     throw new Error("make-brand found no SOURCE_URL in tests/e2e/build-env.ts.");
   const known = { SOURCE_URL: JSON.parse(source[1]) };
   known.BILLING_ENV = objectNamed(shared, "BILLING_ENV", known);
+  // Pages report to `/api/telemetry`, which forwards nothing off Vercel, as
+  // in the browser tests (spec 0016, AC-9).
+  known.TELEMETRY_ENV = objectNamed(shared, "TELEMETRY_ENV", known);
   const config = withoutComments(await readFile(at("playwright.config.ts"), "utf8"));
   return objectNamed(config, "BUILD_ENV", known);
 }
@@ -354,34 +377,65 @@ async function settle(tab) {
   await tab.evaluate(() => document.fonts.ready.then(() => undefined));
 }
 
-/* Step 4: the social card and the Polar image. */
+/* Step 4: the social cards and the Polar image. */
 
 /**
- * The built home page with its body swapped for the card: the header's own
- * lockup, the home page's own eyebrow and headline, in the site's own Inter
- * and classes, on `canvas`. Nothing is typed here, so the card says what the
- * page says (AC-5).
+ * The search pages in the running build (spec 0024, AC-16): every address in
+ * its sitemap whose page's HTML carries the search eyebrow, in the sitemap's
+ * order. Each card goes in the page's own route folder, beside its
+ * `page.tsx`, so the build serves it as that page's `og:image`.
  */
-async function makeCards(browser, base, tokens) {
+async function searchCards(base) {
+  const sitemap = await (await fetch(`${base}/sitemap.xml`)).text();
+  const paths = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map(
+    ([, address]) => new URL(address).pathname,
+  );
+  const cards = [];
+  for (const path of paths) {
+    if (path === "/") continue;
+    const html = await (await fetch(`${base}${path}`)).text();
+    if (!html.includes('data-testid="search-eyebrow"')) continue;
+    const folder = at("src", "app", ...path.split("/").filter(Boolean));
+    cards.push(
+      Object.freeze({
+        path,
+        eyebrow: SEARCH_EYEBROW,
+        out: join(folder, "opengraph-image.png"),
+        alt: join(folder, "opengraph-image.alt.txt"),
+        polar: false,
+      }),
+    );
+  }
+  return cards;
+}
+
+/**
+ * One built page with its body swapped for the card: the header's own
+ * lockup, the page's own eyebrow and headline, in the site's own Inter and
+ * classes, on `canvas`. Nothing is typed here, so the card says what the
+ * page says (spec 0013, AC-5; spec 0024, AC-16). It fails rather than write
+ * a card whose words run past 1200 by 630 pixels. Returns what it wrote.
+ */
+async function makeCard(browser, base, tokens, card) {
   const context = await browser.newContext({
     viewport: { width: CARD.width, height: CARD.height },
     deviceScaleFactor: 1,
     colorScheme: "light",
   });
   const tab = await context.newPage();
-  await tab.goto(`${base}/`);
+  await tab.goto(`${base}${card.path}`);
   await settle(tab);
 
   const found = await tab.evaluate(
-    ({ width, height, colours }) => {
+    ({ width, height, colours, eyebrowSelector }) => {
       const lockup = document.querySelector('header a[href="/"] > span');
-      const eyebrow = document.querySelector('[data-testid="home-eyebrow"]');
+      const eyebrow = document.querySelector(eyebrowSelector);
       const headline = document.querySelector("main h1");
-      if (!lockup || !eyebrow?.textContent?.trim() || !headline?.textContent?.trim()) {
-        return false;
-      }
-      const card = document.createElement("div");
-      card.style.cssText = `box-sizing:border-box;width:${width}px;height:${height}px;padding:88px 96px;display:flex;flex-direction:column;justify-content:space-between;background:${colours.canvas};border-bottom:12px solid ${colours.accent}`;
+      const eyebrowText = eyebrow?.textContent?.trim();
+      const headlineText = headline?.textContent?.trim();
+      if (!lockup || !eyebrowText || !headlineText) return null;
+      const box = document.createElement("div");
+      box.style.cssText = `box-sizing:border-box;width:${width}px;height:${height}px;padding:88px 96px;display:flex;flex-direction:column;justify-content:space-between;background:${colours.canvas};border-bottom:12px solid ${colours.accent}`;
 
       const brand = lockup.cloneNode(true);
       brand.style.fontSize = "40px";
@@ -395,22 +449,50 @@ async function makeCards(browser, base, tokens) {
       big.style.cssText = "font-size:84px;line-height:1.02;margin:0;max-width:16ch";
       words.append(small, big);
 
-      card.append(brand, words);
-      document.body.replaceChildren(card);
+      box.append(brand, words);
+      document.body.replaceChildren(box);
       document.body.style.margin = "0";
-      return true;
+      return { eyebrow: eyebrowText, headline: headlineText };
     },
-    { width: CARD.width, height: CARD.height, colours: tokens },
+    {
+      width: CARD.width,
+      height: CARD.height,
+      colours: tokens,
+      eyebrowSelector: card.eyebrow,
+    },
   );
-  if (!found)
-    throw new Error("The built home page has no lockup, eyebrow or headline to draw.");
+  if (!found) {
+    throw new Error(`The built page ${card.path} has no lockup, eyebrow or headline.`);
+  }
 
   await tab.evaluate(() => document.fonts.ready.then(() => undefined));
-  const card = await tab.screenshot();
-  await writeFile(OUT.social, card);
-  await mkdir(dirname(OUT.polar), { recursive: true });
-  await writeFile(OUT.polar, card);
+  // The card's content must fit it: nothing wider than 1200 or taller than
+  // 630 pixels, or the picture would cut the headline off (spec 0024, AC-16).
+  const size = await tab.evaluate(() => {
+    const box = document.body.firstElementChild;
+    return box ? { width: box.scrollWidth, height: box.scrollHeight } : null;
+  });
+  if (size === null || size.width > CARD.width || size.height > CARD.height) {
+    throw new Error(
+      `The card for ${card.path} runs past ${CARD.width} by ${CARD.height} pixels.`,
+    );
+  }
+
+  const picture = await tab.screenshot();
+  await mkdir(dirname(card.out), { recursive: true });
+  await writeFile(card.out, picture);
+  const written = [card.out];
+  if (card.alt !== null) {
+    await writeFile(card.alt, `RedactNest. ${found.eyebrow}. ${found.headline}.`);
+    written.push(card.alt);
+  }
+  if (card.polar) {
+    await mkdir(dirname(OUT.polar), { recursive: true });
+    await writeFile(OUT.polar, picture);
+    written.push(OUT.polar);
+  }
   await context.close();
+  return written;
 }
 
 /* Step 5: the product shot. */
@@ -476,8 +558,9 @@ try {
   server = startServer(port, env);
   await waitForServer(base, server);
 
-  await makeCards(browser, base, tokens);
-  written.push(OUT.social, OUT.polar);
+  for (const card of [HOME_CARD, ...(await searchCards(base))]) {
+    written.push(...(await makeCard(browser, base, tokens, card)));
+  }
   await makeShot(browser, base);
   written.push(OUT.shot);
 } finally {

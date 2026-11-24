@@ -2396,8 +2396,237 @@ test.describe("the cursor (spec 0013, AC-33)", () => {
   });
 });
 
-test.describe("every page (spec 0013, AC-26)", () => {
-  const PAGES = ["/", "/pricing", "/privacy", "/terms", "/no-such-page"] as const;
+/**
+ * Spec 0024, AC-14 (feature 29), and spec 0013's AC-26 as it amends it: 320
+ * pixels and 200% text at once, which together are roughly 800% zoom. WCAG
+ * does not ask for that, but a visitor who needs both meets it, and on `/` the
+ * headline's longest word and the band cards' tiles were wider than the window.
+ * `REFLOW_PAGES` holds `/` and each search page.
+ *
+ * It runs at 305 pixels too, which is 320 less a 15 pixel classic scrollbar.
+ * Headless Chromium draws no scrollbar, so at 320 it never sees the window a
+ * person's desktop browser leaves; at 305 the page's percentages, gutters and
+ * rows see what they would there. Spec 0024, *The lockup at narrow widths*.
+ */
+test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
+  const REFLOW_PAGES = [
+    "/",
+    "/redact-pdf",
+    "/remove-text-from-pdf",
+    "/black-box-redaction",
+  ] as const;
+
+  /**
+   * Every box and every run of text in the page ends inside the window, and
+   * no box in `main` holds content wider than itself, so what was too wide
+   * wraps or shrinks rather than spilling past its card or being clipped.
+   * Text runs are read as well as boxes, because a word wider than its box
+   * spills without moving the box.
+   *
+   * At 305 pixels alone, the text loop passes over the skip link's words. The
+   * link is `sr-only` until it takes focus, a 1 pixel clipped box that scrolls
+   * nothing, but a range over its text reports the words unclipped, 309 pixels
+   * at 200% text, past a 305 window. The scroll check and the box loop are the
+   * same at both widths, and at 320 the text loop keeps every node. Spec 0024,
+   * *The lockup at narrow widths*.
+   */
+  async function expectNothingPastTheWindow(page: Page, width: 320 | 305): Promise<void> {
+    await expectNoHorizontalScroll(page);
+    // Passed in, because the callback runs in the browser and sees no test variable.
+    const spills = await page.evaluate((passOverSkipLink) => {
+      const limit = document.documentElement.clientWidth;
+      const found: string[] = [];
+      for (const element of document.querySelectorAll("body *")) {
+        const box = element.getBoundingClientRect();
+        if (box.width > 0 && box.right > limit + 0.5) {
+          found.push(`box past the window: ${element.tagName}`);
+        }
+      }
+      for (const element of document.querySelectorAll("main *")) {
+        // An inline box reports no width of its own to compare.
+        if (element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1) {
+          found.push(`content wider than its box: ${element.tagName}`);
+        }
+      }
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (passOverSkipLink && node.parentElement?.closest('a[href="#main"]')) continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const box = range.getBoundingClientRect();
+        if (box.width > 0 && box.right > limit + 0.5) {
+          found.push(`text past the window: ${node.textContent?.trim().slice(0, 30)}`);
+        }
+      }
+      return found;
+    }, width === 305);
+    expect(spills).toEqual([]);
+  }
+
+  // 305 is 320 less a classic scrollbar. Spec 0024, *The lockup at narrow widths*.
+  for (const width of [320, 305] as const) {
+    for (const path of REFLOW_PAGES) {
+      test(`${path} at ${width} pixels: needs no sideways scroll, with the menu shut and open`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: 640 });
+        await page.goto(path);
+        await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+
+        await expectNothingPastTheWindow(page, width);
+
+        const header = page.getByRole("banner");
+        await header.getByRole("button", { name: "Menu", exact: true }).click();
+        await expect(header.getByRole("link", { name: "Try it free" })).toBeVisible();
+        await expectNothingPastTheWindow(page, width);
+      });
+    }
+  }
+
+  /**
+   * The fix leaves wider screens as they were: `/`'s hero, trio and band at
+   * 1280 pixels, recorded from the build before it as x, y, width and height.
+   * Within a pixel, so a rounding difference between machines is not a change.
+   */
+  test("/: keeps the hero, the trio and the band where they were at 1280 pixels", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+
+    const main = page.getByRole("main");
+    for (const [box, recorded] of [
+      [page.getByTestId("home-hero"), [88, 145, 1104, 460.4]],
+      [main.getByRole("list").first(), [88, 669.4, 1104, 120]],
+      [page.getByTestId("home-band"), [88, 853.4, 1104, 603]],
+    ] as const) {
+      const measured = await box.boundingBox();
+      if (measured === null) throw new Error("a recorded box is not drawn");
+      const [x, y, width, height] = recorded;
+      for (const [value, was] of [
+        [measured.x, x],
+        [measured.y, y],
+        [measured.width, width],
+        [measured.height, height],
+      ] as const) {
+        expect(Math.abs(value - was)).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+});
+
+/**
+ * Spec 0024, AC-17, *The footer at 200% text*. From `md` the footer is two
+ * columns, the brand and the link groups. The Guides group widened the groups'
+ * line, and with the brand column free to shrink to nothing, "RedactNest" lay
+ * under the groups at 200% text. Its floor is now its own content, so the
+ * groups wrap under each other instead.
+ *
+ * Every check compares a box with a box, never a pixel figure, because Linux
+ * draws text about 3 pixels wider than Windows (CI run 45146529620), so both
+ * sides move together. The footer is the root layout's, the same on every
+ * page, so `/` stands for all of them. Nothing reads the page's `scrollWidth`:
+ * `/` at 1024 pixels with 200% text is wider than the window from its main
+ * content (the spec's Follow-up), not from the footer.
+ */
+test.describe("the footer from md (spec 0024, AC-17)", () => {
+  for (const width of [1280, 1024, 768] as const) {
+    for (const large of [true, false] as const) {
+      const title = large
+        ? `keeps the brand clear of the link groups at ${width} pixels with 200% text`
+        : `keeps the brand and the link groups in one row at ${width} pixels with default text`;
+      test(title, async ({ page }) => {
+        await page.setViewportSize({ width, height: 800 });
+        await page.goto("/");
+        if (large) {
+          await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+        }
+        // Measure the words in Inter, never in the fallback face.
+        await page.evaluate(async () => {
+          await document.fonts.ready;
+        });
+
+        const footer = await page.getByRole("contentinfo").evaluate((element) => {
+          /**
+           * The right edge of every line of text inside an element: each text
+           * node's client rects, line by line, so a word that wraps is read on
+           * the line it ends on, never as one bounding box.
+           */
+          function textEdge(root: Element): number {
+            let edge = Number.NEGATIVE_INFINITY;
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+            for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+              if (!node.textContent?.trim()) continue;
+              const range = document.createRange();
+              range.selectNodeContents(node);
+              for (const rect of range.getClientRects()) {
+                if (rect.width > 0) edge = Math.max(edge, rect.right);
+              }
+            }
+            return edge;
+          }
+
+          // The `PageContainer` grid: the brand column, then the groups' column.
+          const grid = element.querySelector(":scope > div");
+          const brand = grid?.children[0];
+          const groupsColumn = grid?.children[1];
+          if (!brand || !groupsColumn) throw new Error("the footer's grid has changed");
+          const brandBox = brand.getBoundingClientRect();
+          return {
+            window: document.documentElement.clientWidth,
+            brand: { top: brandBox.top, bottom: brandBox.bottom, right: brandBox.right },
+            brandText: textEdge(brand),
+            groupsLeft: groupsColumn.getBoundingClientRect().left,
+            groups: [...groupsColumn.querySelectorAll("nav")].map((nav) => {
+              const box = nav.getBoundingClientRect();
+              return { top: box.top, bottom: box.bottom, left: box.left };
+            }),
+            text: textEdge(element),
+          };
+        });
+
+        // Product, Guides and Legal, so no check below passes on an empty list.
+        expect(footer.groups).toHaveLength(3);
+
+        // The check that fails on the bug: the brand column's words end inside
+        // it. One pixel covers subpixel edges only.
+        expect(footer.brandText).toBeLessThanOrEqual(footer.brand.right + 1);
+
+        if (large) {
+          // A sanity check on the layout: a group that shares rows with the
+          // brand column starts right of it. Two grid cells never overlap, so
+          // this alone cannot fail on the bug.
+          for (const group of footer.groups) {
+            if (group.top < footer.brand.bottom && group.bottom > footer.brand.top) {
+              expect(group.left).toBeGreaterThanOrEqual(footer.brand.right);
+            }
+          }
+          // The footer's words end inside the window, with the suite's allowance.
+          expect(footer.text).toBeLessThanOrEqual(footer.window + 0.5);
+        } else {
+          // Default text, as before: the brand and the groups side by side in
+          // one row, and the three groups on one line.
+          expect(footer.groupsLeft).toBeGreaterThanOrEqual(footer.brand.right);
+          for (const group of footer.groups) {
+            expect(Math.abs(group.top - footer.brand.top)).toBeLessThanOrEqual(1);
+          }
+        }
+      });
+    }
+  }
+});
+
+test.describe("every page (spec 0013, AC-26; spec 0024, AC-13)", () => {
+  const PAGES = [
+    "/",
+    "/redact-pdf",
+    "/remove-text-from-pdf",
+    "/black-box-redaction",
+    "/pricing",
+    "/privacy",
+    "/terms",
+    "/no-such-page",
+  ] as const;
 
   /** AC-25: the On this page list stuck beside the text, mid scroll. */
   for (const path of ["/privacy", "/terms"]) {
@@ -2466,6 +2695,50 @@ test.describe("every page (spec 0013, AC-26)", () => {
 
       await expectNoHorizontalScroll(page);
       await expectContained(page.getByRole("main"));
+    });
+  }
+});
+
+/**
+ * Spec 0024, AC-13: every control on a search page keeps the ring as the
+ * keyboard reaches it, in page order, from the skip link to the footer's
+ * last link. Tab moves focus as a visitor's would, so `:focus-visible`
+ * applies, and the walk stops once focus leaves the page or comes round.
+ */
+test.describe("the search pages' focus rings (spec 0024, AC-13)", () => {
+  /** Each page's two buttons into the tool, by their words (spec 0024, *Page frames*). */
+  const PRIMARY = {
+    "/redact-pdf": "Redact a PDF now",
+    "/remove-text-from-pdf": "Remove text from a PDF",
+    "/black-box-redaction": "Redact a PDF properly",
+  } as const;
+
+  for (const [path, primary] of Object.entries(PRIMARY)) {
+    test(`${path}: every control keeps a visible ring`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(path);
+
+      const seen: string[] = [];
+      for (let step = 0; step < 60; step += 1) {
+        await page.keyboard.press("Tab");
+        const focused = page.locator(":focus");
+        if ((await focused.count()) === 0) break;
+        // Each control is marked as it is reached, so two with the same name
+        // (the page's two buttons) are both walked, and coming round stops it.
+        const name = await focused.evaluate((element) => {
+          if (element.hasAttribute("data-walked")) return null;
+          element.setAttribute("data-walked", "");
+          return `${element.tagName} ${element.getAttribute("href") ?? ""} ${element.textContent?.trim() ?? ""}`;
+        });
+        if (name === null) break;
+        seen.push(name);
+        await expectFocusRing(focused);
+      }
+      // The skip link, the header, both buttons into the tool, the look over
+      // link and the footer's links, at the least.
+      expect(seen.length).toBeGreaterThan(8);
+      expect(seen.filter((name) => name === `A /tool ${primary}`)).toHaveLength(2);
+      expect(seen.some((name) => name.includes("/security#what-it-can-miss"))).toBe(true);
     });
   }
 });

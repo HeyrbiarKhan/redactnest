@@ -138,3 +138,40 @@ describe("the home page", () => {
     expect(readFileSync(join(ROOT, file), "utf8")).not.toMatch(USE_CLIENT);
   });
 });
+
+/**
+ * The search pages ship no script of their own either. Spec 0024, AC-1 and
+ * INV-3: each page and everything it renders from are server components, so
+ * the standard policy and the page budget stay as they are.
+ */
+const SEARCH_FILES = [
+  "src/app/search-page.tsx",
+  "src/app/redact-pdf/page.tsx",
+  "src/app/remove-text-from-pdf/page.tsx",
+  "src/app/black-box-redaction/page.tsx",
+  "src/ui/cover-figure.tsx",
+  "src/lib/search-pages.ts",
+  "src/app/site-nav.tsx",
+  "src/ui/feature-list.tsx",
+  "src/ui/step-list.tsx",
+  "src/ui/prose.tsx",
+  "src/ui/page-container.tsx",
+  "src/ui/button.tsx",
+];
+
+describe("the search pages", () => {
+  /** covers: spec 0024, AC-1, INV-3 */
+  it.each(SEARCH_FILES)("%s is not a client component", (file) => {
+    expect(readFileSync(join(ROOT, file), "utf8")).not.toMatch(USE_CLIENT);
+  });
+
+  /** covers: spec 0024, AC-1. No script element, `/`'s JSON-LD block being the one. */
+  it.each(SEARCH_FILES.filter((file) => file.startsWith("src/app/")))(
+    "%s writes no script element",
+    (file) => {
+      expect(readFileSync(join(ROOT, file), "utf8")).not.toMatch(
+        /<script\b|next\/script/,
+      );
+    },
+  );
+});

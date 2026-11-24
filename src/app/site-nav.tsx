@@ -2,6 +2,7 @@ import { config } from "@/config";
 import { cx } from "@/lib/cx";
 import { LEGAL } from "@/lib/legal";
 import { ACCOUNT_PATH, PRICING_PATH, SECURITY_PATH, TOOL_PATH } from "@/lib/routes";
+import { SEARCH_PAGE_TEXT, SEARCH_PAGES } from "@/lib/search-pages";
 import { Button } from "@/ui/button";
 import { LinkGroup } from "@/ui/link-group";
 import { SiteHeader } from "@/ui/site-header";
@@ -169,6 +170,29 @@ export function ProductNav() {
           </a>
         </li>
       )}
+    </LinkGroup>
+  );
+}
+
+/**
+ * The footer's Guides group: the search pages, in `SEARCH_PAGES` order, each
+ * by its `navLabel`. Spec 0024, AC-9, amending spec 0013's AC-8: on every
+ * page, `/tool` included, between Product and Legal. Plain links in the same
+ * tab, underlined and at least 24 pixels tall like every footer link
+ * (`FOOTER_LINK_CLASS`), so on `/tool` following one is a real page load and
+ * spec 0007's leave warning still guards ticked work. A list with no `p`, so
+ * the footer's one paragraph is still the licence notice.
+ */
+export function GuidesNav() {
+  return (
+    <LinkGroup label={LEGAL.guidesNavLabel}>
+      {SEARCH_PAGES.map((kind) => (
+        <li key={kind}>
+          <a href={SEARCH_PAGE_TEXT[kind].path} className={FOOTER_LINK_CLASS}>
+            {SEARCH_PAGE_TEXT[kind].navLabel}
+          </a>
+        </li>
+      ))}
     </LinkGroup>
   );
 }

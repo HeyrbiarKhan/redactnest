@@ -526,23 +526,26 @@ test.describe("the security page's drawing and links", () => {
     await expectNoHorizontalScroll(page);
   });
 
-  test("keeps the box in a colour apart from its page in forced colours", async ({
-    page,
-  }) => {
-    await page.emulateMedia({ forcedColors: "active", colorScheme: "dark" });
-    await page.goto("/security");
+  // `/black-box-redaction` draws the same figure (spec 0024, AC-13).
+  for (const path of ["/security", "/black-box-redaction"]) {
+    test(`keeps the box in a colour apart from its page in forced colours on ${path}`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ forcedColors: "active", colorScheme: "dark" });
+      await page.goto(path);
 
-    const colours = await page
-      .getByTestId("cover-box")
-      .first()
-      .evaluate((box) => ({
-        box: getComputedStyle(box).color,
-        page: getComputedStyle(box.closest("[data-testid='cover-drawing']") ?? box)
-          .backgroundColor,
-      }));
-    expect(colours.box).not.toBe(colours.page);
-    expect(colours.box).not.toBe("rgba(0, 0, 0, 0)");
-  });
+      const colours = await page
+        .getByTestId("cover-box")
+        .first()
+        .evaluate((box) => ({
+          box: getComputedStyle(box).color,
+          page: getComputedStyle(box.closest("[data-testid='cover-drawing']") ?? box)
+            .backgroundColor,
+        }));
+      expect(colours.box).not.toBe(colours.page);
+      expect(colours.box).not.toBe("rgba(0, 0, 0, 0)");
+    });
+  }
 
   test("lands every link to another page's section on a heading there", async ({
     page,

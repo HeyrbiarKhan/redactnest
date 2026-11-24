@@ -13,6 +13,7 @@ import "@/config/billing";
 // without the other, a production deploy with neither, or a preview with
 // either fails the build and every server start here.
 import "@/config/telemetry";
+import { HOME_TEXT } from "@/lib/home-text";
 import { LEGAL } from "@/lib/legal";
 import { BrandLockup } from "@/ui/brand-mark";
 import { SiteFooter } from "@/ui/site-footer";
@@ -20,7 +21,7 @@ import { SkipLink } from "@/ui/skip-link";
 
 import { LegalNav } from "./legal-nav";
 import { LicenceNotice } from "./licence-notice";
-import { ProductNav } from "./site-nav";
+import { GuidesNav, ProductNav } from "./site-nav";
 import { TelemetryReporter } from "./telemetry-reporter";
 
 import "./globals.css";
@@ -38,8 +39,12 @@ export const metadata: Metadata = {
     default: "RedactNest",
     template: "%s · RedactNest",
   },
-  description:
-    "Truly redact PDFs in your own browser. Text is removed from the file, not covered with a black box, and your document is never uploaded.",
+  /*
+   * The site line, every page's fallback (spec 0024, AC-11), held to the
+   * claim register where it lives. No canonical here: a canonical set at the
+   * root would name `/` for every page that sets none of its own.
+   */
+  description: HOME_TEXT.siteLine,
   /*
    * The large card for `opengraph-image.png` beside this file, which every
    * page inherits, absolute on `metadataBase` (spec 0013, AC-5). The icons
@@ -72,6 +77,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           groups={
             <>
               <ProductNav />
+              {/* The search pages, between Product and Legal (spec 0024, AC-9). */}
+              <GuidesNav />
               {/* The privacy policy and the terms, on every page (spec 0011, AC-4). */}
               <LegalNav />
             </>

@@ -53,6 +53,10 @@ const MENU_OPEN = cx(
  * From `sm` everything sits on one row with the account link and the action at
  * the right.
  *
+ * The row is the lockup's container (`@container`), with nothing between, so
+ * the lockup steps down a size when the row is narrower than 10rem. Spec 0024,
+ * AC-14, *The lockup at narrow widths*.
+ *
  * Below `sm`, with a `nav`, the lockup and a menu button share one row, and the
  * nav, the account link and the action move into a menu the button opens, in
  * the same page order (feature 28, amending AC-7). The menu is the browser's
@@ -111,7 +115,7 @@ export function SiteHeader({
     <header className="group border-b border-border bg-surface [anchor-name:--site-header]">
       <PageContainer
         width="wide"
-        className="flex flex-wrap items-center gap-x-8 gap-y-2 py-3"
+        className="@container flex flex-wrap items-center gap-x-8 gap-y-2 py-3"
       >
         <div className={hasMenu ? undefined : "w-full sm:w-auto"}>
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- a real page load, see above */}

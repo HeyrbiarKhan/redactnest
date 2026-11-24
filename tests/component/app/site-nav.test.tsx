@@ -13,8 +13,16 @@
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AccountLink, NAV_TEXT, PageHeader, ProductNav, SiteNav } from "@/app/site-nav";
+import {
+  AccountLink,
+  GuidesNav,
+  NAV_TEXT,
+  PageHeader,
+  ProductNav,
+  SiteNav,
+} from "@/app/site-nav";
 import { ACCOUNT_PATH, PRICING_PATH, SECURITY_PATH, TOOL_PATH } from "@/lib/routes";
+import { SEARCH_PAGE_TEXT, SEARCH_PAGES } from "@/lib/search-pages";
 import { SiteHeader } from "@/ui/site-header";
 
 import { expectNoAxeViolations } from "../../setup/component";
@@ -234,6 +242,40 @@ describe("the footer's Product group (AC-8)", () => {
 
   it("passes axe", async () => {
     const { container } = render(<ProductNav />);
+
+    await expectNoAxeViolations(container);
+  });
+});
+
+/** Spec 0024, AC-9: the search pages, in `SEARCH_PAGES` order, by their `navLabel`. */
+describe("the footer's Guides group (spec 0024, AC-9)", () => {
+  it("is a nav labelled Guides, holding each search page in order", () => {
+    render(<GuidesNav />);
+
+    expect(linksIn(screen.getByRole("navigation", { name: "Guides" }))).toEqual(
+      SEARCH_PAGES.map((kind) => [
+        SEARCH_PAGE_TEXT[kind].navLabel,
+        SEARCH_PAGE_TEXT[kind].path,
+      ]),
+    );
+    expect(linksIn(screen.getByRole("navigation", { name: "Guides" }))).toContainEqual([
+      "Redacting a PDF",
+      "/redact-pdf",
+    ]);
+  });
+
+  it("underlines its links like every footer link, and holds no paragraph", () => {
+    const { container } = render(<GuidesNav />);
+
+    for (const link of screen.getAllByRole("link")) {
+      expect(link).toHaveClass("underline", "min-h-6");
+      expect(link).not.toHaveAttribute("target");
+    }
+    expect(container.querySelector("p")).toBeNull();
+  });
+
+  it("passes axe", async () => {
+    const { container } = render(<GuidesNav />);
 
     await expectNoAxeViolations(container);
   });

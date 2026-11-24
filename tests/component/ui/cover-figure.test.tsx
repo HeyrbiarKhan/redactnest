@@ -126,6 +126,29 @@ describe("CoverFigure", () => {
     expect(figure.firstElementChild).toHaveClass("@min-[40rem]:grid-cols-2");
   });
 
+  /**
+   * At 320 pixels with 200% text the figure stays inside the window. jsdom
+   * computes no layout, so the classes that do it are held here and
+   * `REFLOW_PAGES` holds the result in the browser. Spec 0024, *CoverFigure at
+   * narrow widths*, AC-14.
+   */
+  it("lets its one column shrink and its words break inside themselves", () => {
+    const { container } = render(<Sample />);
+
+    const grid = screen.getByRole("figure").firstElementChild;
+    expect(grid).toHaveClass("grid-cols-1", "@min-[40rem]:grid-cols-2");
+
+    const panels = [...(grid?.children ?? [])];
+    expect(panels).toHaveLength(PANELS.length);
+    for (const panel of panels) {
+      expect(panel).toHaveClass("wrap-anywhere");
+    }
+
+    for (const samp of container.querySelectorAll("samp")) {
+      expect(samp).not.toHaveClass("wrap-break-word");
+    }
+  });
+
   it("passes axe", async () => {
     const { container } = render(<Sample />);
 

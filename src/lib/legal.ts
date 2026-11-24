@@ -122,6 +122,12 @@ export const LEGAL = Object.freeze({
    */
   brandLine: "PDF redaction in your browser.",
   productNavLabel: "Product",
+  /**
+   * The footer's group of search pages, between Product and Legal (spec 0024,
+   * AC-9). Its links' words are each page's `navLabel` in
+   * `src/lib/search-pages.ts`.
+   */
+  guidesNavLabel: "Guides",
   /** The legal pages' list of their own sections (spec 0013, AC-25). */
   onThisPageLabel: "On this page",
   /**

@@ -1,4 +1,5 @@
 import { Check, FileMinus, Info, ScanSearch, type LucideIcon } from "lucide-react";
+import type { Metadata } from "next";
 import Image from "next/image";
 
 import { config } from "@/config";
@@ -9,7 +10,8 @@ import {
   HOME_TEXT,
   strippedItems,
 } from "@/lib/home-text";
-import { PRICING_PATH, TOOL_PATH } from "@/lib/routes";
+import { LEGAL } from "@/lib/legal";
+import { HOME_PATH, PRICING_PATH, TOOL_PATH } from "@/lib/routes";
 import { Button } from "@/ui/button";
 import { Card } from "@/ui/card";
 import { FeatureList } from "@/ui/feature-list";
@@ -20,6 +22,31 @@ import productShot from "./product-review.png";
 import { PageHeader } from "./site-nav";
 
 /**
+ * `/`'s own head (spec 0024, AC-11): the site line as its description, the
+ * same words as the root layout's fallback, and a canonical to the root of
+ * `config.siteUrl` (through the layout's `metadataBase`). The title stays the
+ * layout's default, "RedactNest".
+ */
+export const metadata: Metadata = {
+  description: HOME_TEXT.siteLine,
+  alternates: { canonical: HOME_PATH },
+};
+
+/**
+ * The `WebSite` block for search engines (AC-11): the trading name and the
+ * site's address, through `JSON.stringify` with every `<` escaped, so no
+ * value can close the element. A data block (`application/ld+json`), which
+ * the browser never runs, so the standard policy needs no change; the one
+ * script element any page in spec 0024 adds.
+ */
+const WEBSITE_JSON_LD = JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: LEGAL.tradingName,
+  url: config.siteUrl,
+}).replaceAll("<", "\\u003c");
+
+/**
  * The home page. Spec 0013, AC-10 to AC-13 and AC-30: reference 04's hero
  * with a real picture of the tool, the trio, and in place of 04's "Trusted by"
  * row two cards saying what RedactNest looks for and strips.
@@ -27,7 +54,7 @@ import { PageHeader } from "./site-nav";
  * Every word in the main content comes from `src/lib/home-text.ts`; the caps
  * and whether billing is on come from `config`, read here and passed in. A
  * static server component with no client component of its own, and its
- * metadata is the layout's.
+ * title is the layout's.
  *
  * Both ways into the tool are real page loads (`reload`), never `next/link`
  * (spec 0003, AC-21): a content security policy belongs to the document it
@@ -43,17 +70,31 @@ import { PageHeader } from "./site-nav";
 export default function HomePage() {
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: WEBSITE_JSON_LD }}
+      />
       <PageHeader />
       {/* The skip link's target, allowed to drop its outline (spec 0003, AC-14). */}
       <main id="main" tabIndex={-1} className="flex flex-1 flex-col focus:outline-none">
         <PageContainer width="wide" className="flex flex-col gap-16 py-14 sm:py-20">
-          <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-            <div className="flex flex-col items-start gap-6">
-              <div className="flex flex-col gap-4">
+          <div
+            data-testid="home-hero"
+            className="grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]"
+          >
+            {/*
+              At 320 pixels with 200% text the headline's longest word is wider
+              than the column (spec 0024, AC-14). `min-w-0` and `max-w-full`
+              stop that word setting the column's width, and the headline
+              breaks it only when it cannot fit a line alone, so every wider
+              screen sets the headline as before.
+            */}
+            <div className="flex min-w-0 flex-col items-start gap-6">
+              <div className="flex max-w-full flex-col gap-4">
                 <p data-testid="home-eyebrow" className="eyebrow">
                   {HOME_TEXT.eyebrow}
                 </p>
-                <h1 className="text-display text-balance text-ink">
+                <h1 className="text-display text-balance text-ink wrap-break-word">
                   {HOME_TEXT.headline}
                 </h1>
               </div>
@@ -103,7 +144,8 @@ export default function HomePage() {
             data-testid="home-band"
             className="flex flex-col gap-7"
           >
-            <h2 id={HOME_BAND_ID} className="text-title text-ink">
+            {/* "RedactNest" is wider than a phone at 200% text (spec 0024, AC-14). */}
+            <h2 id={HOME_BAND_ID} className="text-title text-ink wrap-break-word">
               {HOME_TEXT.band.title}
             </h2>
             <div className="grid gap-6 md:grid-cols-2">
@@ -146,6 +188,14 @@ export default function HomePage() {
  * `role="list"` on its `ul` on purpose: Safari drops a list's semantics once
  * its bullets are removed, and the count is part of what the card says
  * (AC-11).
+ *
+ * On a card whose own content is under 12rem the tile sits above the words
+ * instead, here, in each row and in the close (spec 0024, AC-14). The card is
+ * the query container and the 12rem moves with the text size: at the default
+ * size the narrowest card, on a 320 pixel phone, is about 14.4rem, so nothing
+ * stacks at any width, while at 200% text on a phone it is about 4.4rem, too
+ * narrow for a tile, its gap and a word, which used to spill past the card.
+ * Long words break only when they cannot fit a line alone.
  */
 function BandCardHeader({
   icon,
@@ -157,9 +207,9 @@ function BandCardHeader({
   readonly subtitle: string;
 }) {
   return (
-    <div className="flex items-center gap-5">
+    <div className="flex flex-col gap-5 @min-[12rem]:flex-row @min-[12rem]:items-center">
       <IconCircle icon={icon} tone="accent" size="lg" shape="square" />
-      <div className="flex flex-col gap-1">
+      <div className="flex min-w-0 flex-col gap-1 wrap-break-word">
         <h3 className="text-heading text-ink">{title}</h3>
         <p className="text-small text-ink-muted">{subtitle}</p>
       </div>
@@ -199,10 +249,11 @@ function BandRows({
       {items.map(({ icon, label }) => (
         <li
           key={label}
-          className="flex break-inside-avoid items-center gap-5 rounded-xl bg-canvas px-3 py-2.5 font-semibold text-ink @min-[26rem]:not-last:mb-3"
+          className="flex break-inside-avoid flex-col gap-5 rounded-xl bg-canvas px-2 py-2.5 font-semibold text-ink @min-[12rem]:flex-row @min-[12rem]:items-center @min-[12rem]:px-3 @min-[26rem]:not-last:mb-3"
         >
           <IconCircle icon={icon} tone="accent" shape="square" />
-          {label}
+          {/* Its own box, so a word wider than a narrow card can break. */}
+          <span className="min-w-0 wrap-break-word">{label}</span>
         </li>
       ))}
     </ul>
@@ -215,13 +266,13 @@ function BandRows({
  */
 function BandCardClose({ children }: { readonly children: string }) {
   return (
-    <div className="flex items-center gap-3 border-t border-border pt-5">
+    <div className="flex flex-col gap-3 border-t border-border pt-5 @min-[12rem]:flex-row @min-[12rem]:items-center">
       <Info
         aria-hidden="true"
         className="size-7 shrink-0 text-accent"
         strokeWidth={1.75}
       />
-      <p className="text-small text-ink-muted">{children}</p>
+      <p className="min-w-0 text-small text-ink-muted wrap-break-word">{children}</p>
     </div>
   );
 }

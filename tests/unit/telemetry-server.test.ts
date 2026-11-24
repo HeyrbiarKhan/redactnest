@@ -122,6 +122,16 @@ describe("the Umami request", () => {
     });
   });
 
+  /** Spec 0024, AC-12: a search page's view arrives under its own path. */
+  it.each([
+    ["redact-pdf", "/redact-pdf"],
+    ["remove-text", "/remove-text-from-pdf"],
+    ["black-box", "/black-box-redaction"],
+  ] as const)("sends a view of %s under its own path, %s", (page, url) => {
+    const { init } = umamiRequest({ name: "page-view", page }, SINKS.umamiWebsiteId);
+    expect(JSON.parse(init.body)).toMatchObject({ payload: { url } });
+  });
+
   it("sends not-found as /404", () => {
     const { init } = umamiRequest(
       { name: "page-view", page: "not-found" },
@@ -398,7 +408,7 @@ function reportSeams(overrides: Partial<TelemetrySeams> = {}) {
   return { ...recording, clock, memory: freshMemory() };
 }
 
-/** Every page report shape that draws on the day's budget, 23 of them (AC-29). */
+/** Every page report shape that draws on the day's budget, 29 of them (AC-29). */
 const BUDGET_REPORTS: readonly ErrorReport[] = Object.freeze([
   ...PAGE_KINDS.flatMap((page) =>
     CRASH_SOURCES.map((kind): ErrorReport => ({ name: "browser-crash", page, kind })),
@@ -413,7 +423,7 @@ const STILL_WAITING: ErrorReport = {
   outcome: "still-waiting",
 };
 
-/** Every report shape a page can send, 24 of them (AC-28). */
+/** Every report shape a page can send, 30 of them (AC-28). */
 const PAGE_REPORTS: readonly ErrorReport[] = Object.freeze([
   ...BUDGET_REPORTS,
   STILL_WAITING,
@@ -444,8 +454,8 @@ const NO_HEADERS = new Headers();
 
 describe("the report shapes these cases use", () => {
   it("are every page report and twenty server reports, each with a key of its own", () => {
-    expect(PAGE_REPORTS).toHaveLength(24);
-    expect(BUDGET_REPORTS).toHaveLength(23);
+    expect(PAGE_REPORTS).toHaveLength(30);
+    expect(BUDGET_REPORTS).toHaveLength(29);
     expect(PAGE_REPORTS.every(isBrowserEvent)).toBe(true);
     expect(SERVER_REPORTS.some(isBrowserEvent)).toBe(false);
     expect(SERVER_REPORTS.length + SERVER_CRASHES.length).toBe(20);
@@ -694,7 +704,7 @@ describe("the flood, on the server (AC-27, AC-29, INV-10)", () => {
     expect(scheduled).toHaveLength(1);
   });
 
-  it("schedules 20 of the 23 budgeted page report shapes in one UTC day, and drops the rest", () => {
+  it("schedules 20 of the 29 budgeted page report shapes in one UTC day, and drops the rest", () => {
     const { seams, scheduled, memory } = reportSeams();
     for (const report of BUDGET_REPORTS) reportServer(report, NO_HEADERS, seams, memory);
     expect(scheduled).toHaveLength(20);

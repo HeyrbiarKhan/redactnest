@@ -113,6 +113,13 @@ describe("pageKindFor", () => {
     ["/account/billing", "billing"],
     ["/account/welcome", "welcome"],
     ["/account/billing/extra", "account"],
+    // Spec 0024, AC-12: a search page is its own kind, never not-found.
+    ["/redact-pdf", "redact-pdf"],
+    ["/redact-pdf/extra", "not-found"],
+    ["/remove-text-from-pdf", "remove-text"],
+    ["/black-box-redaction", "black-box"],
+    ["/remove-text", "not-found"],
+    ["/black-box", "not-found"],
     ["/nowhere", "not-found"],
     ["/tool/extra", "not-found"],
     ["/Tool", "not-found"],
