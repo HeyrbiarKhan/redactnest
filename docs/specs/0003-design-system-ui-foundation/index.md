@@ -107,8 +107,17 @@ Contrast contract, mirrored as a frozen array in `tests/unit/contrast.test.ts`. 
 | `warning-icon`, `info-icon`, `danger-icon` | their own `-bg` | 3 | 4.93, 5.95, 5.78 |
 | `on-accent` | `danger-ink`, `danger-strong` | 4.5 | 7.19, 9.11 (the `danger` button's words and busy spinner, at rest and on hover; added by spec 0013, AC-35) |
 | `focus` | `surface` | 4.5 | 8.53 (the ring around a danger button, held at 4.5 rather than 3 by your call; added by spec 0013, AC-35) |
+| `ink`, `ink-muted` | `muted`, `accent-faint` | 4.5 | 18.10, 7.03; 19.08, 7.41 (chips, count badges, a ticked row; added by spec 0026, AC-1) |
+| `ink-subtle` | `canvas`, `surface`, `subtle` | 4.5 | 4.83, 4.83, 4.63 (captions; never on `muted`, where it measures 4.40; added by spec 0026) |
+| `accent` | `canvas`, `surface`, `subtle`, `accent-faint` | 4.5 | 5.47, 5.47, 5.24, 5.25 (links as text; added by spec 0026) |
+| `accent` | `muted` | 3 | 4.98 (added by spec 0026) |
+| `accent-strong` | `accent-faint` | 4.5 | 7.27 (added by spec 0026) |
+| `border-strong` | `subtle`, `accent-faint` | 3 | 4.63, 4.63 (checkbox edges on `/tool`'s `subtle` page and a ticked row; added by spec 0026) |
+| `focus` | `subtle`, `muted`, `accent-faint` | 3 | 7.27, 6.90, 7.27 (added by spec 0026) |
+| `warning-ink` | `warning-bg` | 4.5 | 8.75 (a warning callout's words; added by spec 0026) |
+| `night-ink`, `night-muted`, `night-accent` | `night` | 4.5 | 19.06, 7.76, 13.45 (the home page's network band, whose focus ring is `night-accent` because `focus` measures 2.62 on `night`; added by spec 0026, AC-9) |
 
-`focus` measures only 1.68 against `accent`, and about 1.19 against `danger-ink`, which is why the 2px outline offset in AC-6 is mandatory: the offset puts the ring against the page background, never against the button it surrounds. The `danger-secondary` button's words and edge are `danger-ink` on `surface`, and on `danger-bg` under the pointer, both already in the table at 4.5.
+`focus` measures only 1.68 against `accent` (1.39 since spec 0026's palette), and about 1.19 against `danger-ink`, which is why the 2px outline offset in AC-6 is mandatory: the offset puts the ring against the page background, never against the button it surrounds. The `danger-secondary` button's words and edge are `danger-ink` on `surface`, and on `danger-bg` under the pointer, both already in the table at 4.5.
 
 Type, one family (Inter, variable, latin subset, through `next/font/google`, exposed as `--font-inter` and mapped to `--font-sans` in `@theme inline`). Sizes are rem only, so the visitor's own font size setting scales all of them:
 

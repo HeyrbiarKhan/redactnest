@@ -39,7 +39,7 @@ export function Spinner({
       viewBox="0 0 24 24"
       fill="none"
       data-testid="spinner"
-      className={cx("shrink-0 animate-spin motion-reduce:animate-none", SIZE[size])}
+      className={cx("shrink-0 animate-spin", SIZE[size])}
     >
       {tone === "accent" && (
         <circle cx="12" cy="12" r="9" strokeWidth="3" className="stroke-accent-soft" />

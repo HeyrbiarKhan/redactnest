@@ -101,7 +101,7 @@ describe("Chip", () => {
     const item = screen.getByRole("listitem");
     expect(item).toHaveTextContent("Acme Ltd");
     expect(item).toHaveTextContent("3 matches");
-    expect(item).toHaveClass("bg-accent-soft");
+    expect(item).toHaveClass("bg-muted");
 
     await userEvent.click(screen.getByRole("button", { name: "Remove Acme Ltd" }));
     expect(onRemove).toHaveBeenCalledTimes(1);

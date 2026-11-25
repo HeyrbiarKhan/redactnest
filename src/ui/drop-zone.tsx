@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Upload } from "lucide-react";
+import { FileText, FileUp, Upload } from "lucide-react";
 import { useRef, useState, type DragEvent, type ReactNode, type Ref } from "react";
 
 import { cx } from "@/lib/cx";
@@ -130,13 +130,13 @@ export function DropZone(props: DropZoneProps) {
         {...zone}
         data-testid="file-bar"
         className={cx(
-          "flex flex-col gap-3 rounded-xl border-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4",
-          "transition-colors duration-150 motion-reduce:transition-none",
+          "flex flex-col gap-3 rounded-card border-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4",
+          "transition-colors",
           COMPACT_STATE[state],
         )}
       >
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <IconCircle icon={FileText} tone="accent" />
+          <IconCircle icon={FileText} tone="accent" shape="square" />
           <div className="flex min-w-0 flex-col">
             <p className="font-semibold text-ink wrap-anywhere">{props.fileName}</p>
             {props.pageCount !== null && (
@@ -171,12 +171,12 @@ export function DropZone(props: DropZoneProps) {
       {...zone}
       data-testid="drop-area"
       className={cx(
-        "flex flex-col items-center gap-4 rounded-xl border-2 px-6 py-10 text-center sm:px-10 sm:py-12",
-        "transition-colors duration-150 motion-reduce:transition-none",
+        "flex flex-col items-center gap-4 rounded-card border-2 px-6 py-10 text-center sm:px-10 sm:py-12",
+        "transition-colors",
         STATE[state],
       )}
     >
-      <IconCircle icon={FileText} tone="accent" size="lg" />
+      <IconCircle icon={FileUp} tone="accent" size="lg" shape="square" />
 
       <div className="flex flex-col gap-1">
         <p className="text-heading text-ink">{props.title}</p>

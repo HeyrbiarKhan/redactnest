@@ -8,4 +8,4 @@
  * place, so the pieces that sit side by side cannot drift apart.
  */
 export const FOOTER_LINK_CLASS =
-  "inline-flex min-h-6 items-center rounded-sm underline underline-offset-4 hover:text-ink";
+  "inline-flex min-h-6 items-center rounded-item underline underline-offset-4 hover:text-ink";

@@ -93,10 +93,12 @@ export function ChecklistItem({
       <label
         htmlFor={id}
         className={cx(
-          "flex items-start gap-3 rounded-lg px-3 py-3",
+          "flex items-start gap-3 rounded-control px-3 py-3",
           // The cursor comes from the one rule in `globals.css` (spec 0013, AC-33).
-          !inactive &&
-            "transition-colors duration-150 hover:bg-canvas motion-reduce:transition-none",
+          !inactive && "transition-colors",
+          // A ticked row sits on `accent-faint`, which every line in it clears
+          // at 4.5:1 (spec 0026, AC-12 and AC-1); an unticked one fills on hover.
+          !inactive && (checked ? "bg-accent-faint" : "hover:bg-subtle"),
         )}
       >
         <Checkbox
@@ -125,7 +127,7 @@ export function ChecklistItem({
           <span id={contextId} className="text-small text-ink-muted wrap-anywhere">
             {before && `${beforeCut ? "…" : ""}${before}`}
             {/* Semibold as well as tinted, so the highlight is not colour alone (INV-8). */}
-            <mark className="rounded-sm bg-accent-soft px-0.5 font-semibold text-ink">
+            <mark className="rounded-item bg-accent-soft px-0.5 font-semibold text-ink">
               {text}
             </mark>
             {after && `${after}${afterCut ? "…" : ""}`}

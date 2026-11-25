@@ -133,8 +133,9 @@ describe("BrandLockup", () => {
     const lockup = container.firstElementChild;
     expect(lockup).toHaveTextContent(/^RedactNest$/);
     expect(container.querySelector("img")).toBeNull();
-    // The mark comes first, in the accent, and says nothing.
-    expect(lockup?.firstElementChild).toHaveClass("text-accent");
+    // The mark comes first, in `on-accent` on an `accent` tile (spec 0026,
+    // AC-7), and says nothing.
+    expect(lockup?.firstElementChild).toHaveClass("bg-accent", "text-on-accent");
     expect(lockup?.firstElementChild?.querySelector("svg")).toHaveAttribute(
       "aria-hidden",
       "true",
@@ -158,9 +159,11 @@ describe("BrandLockup", () => {
     const { container } = render(<BrandLockup size="lg" />);
 
     expect(container.firstElementChild).toHaveClass("text-title");
+    // The tile and the mark inside it are both in `em` of the word's size.
+    expect(container.firstElementChild?.firstElementChild).toHaveClass("size-[1.65em]");
     const svg = container.querySelector("svg");
-    expect(svg).toHaveAttribute("width", "1.4em");
-    expect(svg).toHaveAttribute("height", "1.4em");
+    expect(svg).toHaveAttribute("width", "1.1em");
+    expect(svg).toHaveAttribute("height", "1.1em");
   });
 
   it("names a link around it RedactNest", () => {

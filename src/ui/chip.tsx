@@ -27,8 +27,8 @@ interface ChipProps {
  * A list item, so the caller's `ul` (with `role="list"`) gives the count. The
  * label is the visitor's own words and renders only as React text (INV-7).
  * The state is words, with an icon beside them, so nothing rests on colour
- * (INV-8). Everything sits on `accent-soft`: `ink` and `ink-muted` hold 4.5:1
- * there, and so does the focus ring around the remove button, which is a
+ * (INV-8). Everything sits on `muted` (spec 0026, AC-1): `ink` and `ink-muted`
+ * hold 4.5:1 there, and so does the focus ring around the remove button, which is a
  * native `button` 32 pixels square, named by `removeLabel` alone because its
  * cross is decoration.
  */
@@ -46,7 +46,7 @@ export function Chip({
   return (
     <li
       data-testid={testId}
-      className="flex max-w-full items-center gap-2 rounded-lg bg-accent-soft py-1 pr-1 pl-3"
+      className="flex max-w-full items-center gap-2 rounded-full bg-muted py-1 pr-1 pl-3.5"
     >
       <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-small">
         <span className="min-w-0 font-semibold text-ink wrap-anywhere">{label}</span>
@@ -73,7 +73,7 @@ export function Chip({
         aria-label={removeLabel}
         disabled={removeDisabled}
         onClick={onRemove}
-        className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-ink transition-[background-color] duration-150 enabled:hover:bg-surface disabled:text-ink-muted motion-reduce:transition-none"
+        className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-ink transition-[background-color] enabled:hover:bg-surface disabled:text-ink-muted"
       >
         <X aria-hidden="true" className="size-5" strokeWidth={1.75} />
       </button>

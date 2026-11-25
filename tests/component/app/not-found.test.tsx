@@ -111,16 +111,16 @@ describe("the 404's header (AC-7)", () => {
     );
   });
 
-  it("holds the lockup and the button only with billing off", () => {
+  /** Spec 0026, AC-5: the nav is on every build; billing off drops Pricing and Sign in. */
+  it("holds the lockup, the nav and the button with billing off", () => {
     mocks.billingEnabled = false;
     render(<NotFound />);
 
     const banner = screen.getByRole("banner");
-    expect(within(banner).queryByRole("navigation")).not.toBeInTheDocument();
     expect(
       within(banner)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["RedactNest", NAV_TEXT.tryFree]);
+    ).toEqual(["RedactNest", NAV_TEXT.howItWorks, NAV_TEXT.security, NAV_TEXT.tryFree]);
   });
 });

@@ -24,6 +24,8 @@
     "@clerk/nextjs": "7.9.10",
     "@clerk/shared": "4.38.0",
     "@polar-sh/sdk": "1.0.2",
+    "@radix-ui/react-dropdown-menu": "2.2.1",
+    "class-variance-authority": "0.7.1",
     "libphonenumber-js": "1.13.14",
     "lucide-react": "^1.47.0",
     "mupdf": "1.28.1",

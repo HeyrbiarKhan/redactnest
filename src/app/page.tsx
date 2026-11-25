@@ -117,7 +117,7 @@ export default function HomePage() {
             </div>
 
             {/* The page's one emphasised card, and the one larger shadow on the site. */}
-            <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
+            <div className="overflow-hidden rounded-card border border-border bg-surface shadow-window">
               <Image
                 src={productShot}
                 alt={HOME_TEXT.shotAlt}
@@ -249,7 +249,7 @@ function BandRows({
       {items.map(({ icon, label }) => (
         <li
           key={label}
-          className="flex break-inside-avoid flex-col gap-5 rounded-xl bg-canvas px-2 py-2.5 font-semibold text-ink @min-[12rem]:flex-row @min-[12rem]:items-center @min-[12rem]:px-3 @min-[26rem]:not-last:mb-3"
+          className="flex break-inside-avoid flex-col gap-5 rounded-card bg-canvas px-2 py-2.5 font-semibold text-ink @min-[12rem]:flex-row @min-[12rem]:items-center @min-[12rem]:px-3 @min-[26rem]:not-last:mb-3"
         >
           <IconCircle icon={icon} tone="accent" shape="square" />
           {/* Its own box, so a word wider than a narrow card can break. */}

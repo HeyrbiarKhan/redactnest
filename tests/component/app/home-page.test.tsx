@@ -222,7 +222,12 @@ describe("the trio and the band (AC-10, AC-11)", () => {
       // The header's tile: the large square, beside the heading's column.
       const tile = heading.parentElement?.previousElementSibling;
       expect(tile).toHaveAttribute("aria-hidden", "true");
-      expect(tile).toHaveClass("size-16", "rounded-xl", "bg-accent-soft", "text-accent");
+      expect(tile).toHaveClass(
+        "size-16",
+        "rounded-control",
+        "bg-accent-soft",
+        "text-accent",
+      );
 
       // The close: a `border` rule above the info icon and the line.
       expect(close).toHaveClass("text-small", "text-ink-muted");
@@ -245,11 +250,11 @@ describe("the trio and the band (AC-10, AC-11)", () => {
     );
     for (const item of items) {
       // `canvas`, not `subtle`, the checklist's hover tint.
-      expect(item).toHaveClass("bg-canvas", "rounded-xl", "text-ink");
+      expect(item).toHaveClass("bg-canvas", "rounded-card", "text-ink");
       expect(item).not.toHaveClass("bg-subtle");
       const tile = item.firstElementChild;
       expect(tile).toHaveAttribute("aria-hidden", "true");
-      expect(tile).toHaveClass("size-12", "rounded-xl", "bg-accent-soft");
+      expect(tile).toHaveClass("size-12", "rounded-control", "bg-accent-soft");
       // One icon, the detector's own, and no chevron after the words.
       expect(item.querySelectorAll("svg")).toHaveLength(1);
     }
@@ -325,7 +330,7 @@ describe("the trio and the band (AC-10, AC-11)", () => {
       screen.getByTestId("home-finds"),
       screen.getByTestId("home-strips"),
     ]) {
-      expect(card).toHaveClass("bg-surface", "border", "border-border", "rounded-xl");
+      expect(card).toHaveClass("bg-surface", "border", "border-border", "rounded-card");
     }
   });
 

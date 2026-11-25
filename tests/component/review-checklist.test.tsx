@@ -309,7 +309,7 @@ describe("the coverage note and the empty state", () => {
 
     const card = screen.getByRole("region", { name: "Found items" });
     const badge = within(card).getByText(/found items?$/);
-    expect(badge).toHaveClass("bg-subtle", "text-ink-muted");
+    expect(badge).toHaveClass("bg-muted", "text-ink-muted");
   });
 
   it("says nothing was found, and that a cleaned copy is still on offer, when there is nothing", () => {

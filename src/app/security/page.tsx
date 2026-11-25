@@ -94,6 +94,7 @@ export default function SecurityPage() {
   return (
     <LegalPage
       title={NAV_TEXT.security}
+      current="security"
       changes={SECURITY_CHANGES}
       sections={SECURITY_SECTIONS}
     >

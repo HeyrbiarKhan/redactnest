@@ -33,7 +33,7 @@ export function ChecklistGroup({
 }: ChecklistGroupProps) {
   return (
     <details open className="group">
-      <summary className="flex min-h-12 list-none items-center gap-3 rounded-lg px-3 py-2 transition-[background-color] duration-150 hover:bg-canvas motion-reduce:transition-none [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-12 list-none items-center gap-3 rounded-control px-3 py-2 transition-[background-color] hover:bg-subtle [&::-webkit-details-marker]:hidden">
         <Icon
           aria-hidden="true"
           className="size-5 shrink-0 text-accent"
@@ -44,7 +44,7 @@ export function ChecklistGroup({
         <ChevronDown
           aria-hidden="true"
           strokeWidth={1.75}
-          className="ml-auto size-5 shrink-0 text-ink-muted transition-transform duration-150 group-open:rotate-180 motion-reduce:transition-none"
+          className="ml-auto size-5 shrink-0 text-ink-muted transition-transform group-open:rotate-180"
         />
       </summary>
       <ul className="flex flex-col">{children}</ul>

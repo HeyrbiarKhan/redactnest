@@ -9,7 +9,7 @@ import { PageContainer } from "@/ui/page-container";
 import { Prose } from "@/ui/prose";
 
 import { FOOTER_LINK_CLASS } from "./footer-link";
-import { PageHeader } from "./site-nav";
+import { type NavItem, PageHeader } from "./site-nav";
 
 /**
  * The frame both legal pages share, and the security page too (spec 0018,
@@ -50,15 +50,19 @@ import { PageHeader } from "./site-nav";
  * A server component with no script of its own, so neither page collects
  * anything (INV-7). The header's button is a real page load (`reload`), never
  * `next/link`, so the tool opens under its own content security policy (spec
- * 0003, INV-10). Nothing in the header is current here (spec 0013, AC-7).
+ * 0003, INV-10). The header marks `current` when the page has a nav item of
+ * its own (Security, spec 0026, AC-5), and nothing on the privacy and terms
+ * pages (spec 0013, AC-7).
  */
 export function LegalPage({
   title,
+  current,
   changes,
   sections,
   children,
 }: {
   readonly title: string;
+  readonly current?: NavItem;
   readonly changes: PolicyChanges;
   /** The page's section record, which its h2s and the list both read. */
   readonly sections: PolicySections;
@@ -66,7 +70,7 @@ export function LegalPage({
 }) {
   return (
     <>
-      <PageHeader />
+      <PageHeader current={current} />
       {/* The skip link's target, allowed to drop its outline (spec 0003, AC-14). */}
       <main
         id="main"

@@ -181,13 +181,25 @@ describe("Button", () => {
   });
 
   it.each([
-    ["md", "min-h-10"],
+    ["default", "min-h-10"],
     ["lg", "min-h-12"],
+    ["icon", "min-h-10"],
   ] as const)("is at least as tall as size %s promises", (size, height) => {
     render(<Button size={size}>Go</Button>);
 
     // A minimum, never a fixed height, so a text spacing override grows it.
     expect(screen.getByRole("button")).toHaveClass(height);
+  });
+
+  /** Spec 0026, child 0001, AC-27: the header's menu button, a 40 pixel square. */
+  it("is at least 40 pixels wide too at size icon, its words still its name", () => {
+    render(
+      <Button size="icon" variant="secondary">
+        <span className="sr-only">Menu</span>
+      </Button>,
+    );
+
+    expect(screen.getByRole("button", { name: "Menu" })).toHaveClass("min-w-10", "p-2");
   });
 
   describe("the danger variants (spec 0013, AC-35)", () => {
@@ -224,7 +236,7 @@ describe("Button", () => {
           .filter((name) =>
             /^(min-h|px|py|text-(small|body)$|font|rounded|disabled:)/.test(name),
           );
-      for (const size of ["md", "lg"] as const) {
+      for (const size of ["default", "lg"] as const) {
         const { unmount } = render(
           <>
             <Button variant={danger} size={size}>

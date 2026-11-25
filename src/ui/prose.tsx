@@ -30,7 +30,7 @@ const PROSE = cx(
   // Margins rather than a flex gap: a list laid out as flex can lose its markers.
   "[&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6",
   "[&_li]:pl-1 [&_li+li]:mt-2",
-  "[&_a]:rounded-sm [&_a]:underline [&_a]:decoration-1 [&_a]:underline-offset-4",
+  "[&_a]:rounded-item [&_a]:underline [&_a]:decoration-1 [&_a]:underline-offset-4",
   "[&_a:hover]:decoration-2 [&_a]:wrap-break-word",
 );
 

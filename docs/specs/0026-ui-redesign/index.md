@@ -1,7 +1,7 @@
 # 0026. UI redesign
 
 **Date**: 2026-11-25
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 

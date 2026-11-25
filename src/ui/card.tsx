@@ -1,3 +1,4 @@
+import { cva } from "class-variance-authority";
 import { useId, type ComponentPropsWithoutRef, type ReactNode, type Ref } from "react";
 
 import { cx } from "@/lib/cx";
@@ -31,6 +32,13 @@ interface CardProps extends Omit<ComponentPropsWithoutRef<"section">, "title"> {
   readonly children: ReactNode;
 }
 
+const panel = cva("flex flex-col rounded-card bg-surface shadow-card", {
+  variants: {
+    spacious: { true: "gap-6 p-7", false: "gap-4 p-5" },
+    accent: { true: "border-2 border-accent", false: "border border-border" },
+  },
+});
+
 /**
  * A white panel with a quiet edge. When it has a title, the section is named
  * by its own heading, so a screen reader lists it as a region with that name.
@@ -56,9 +64,7 @@ export function Card({
       {...section}
       aria-labelledby={titled ? headingId : undefined}
       className={cx(
-        "flex flex-col rounded-xl bg-surface shadow-xs",
-        spacious ? "gap-6 p-7" : "gap-4 p-5",
-        accent ? "border-2 border-accent" : "border border-border",
+        panel({ spacious: spacious ?? false, accent: accent ?? false }),
         className,
       )}
     >

@@ -82,19 +82,30 @@ describe("the red buttons (AC-35, INV-12)", () => {
   });
 });
 
-/** A shadow above Tailwind's quiet `shadow-xs` and `shadow-sm`. */
-const LARGE_SHADOW = /(^|[\s:!"'`])shadow-(md|lg|xl|2xl)\b/g;
+/**
+ * A shadow above a card's quiet `shadow-card`: the product shot's window and
+ * the account menu's popover, the two the redesign draws (spec 0026, AC-2).
+ */
+const LARGE_SHADOW = /(^|[\s:!"'`])shadow-(popover|window)\b/g;
 
-describe("the one larger shadow (AC-12)", () => {
-  it("frames the product shot on the home page, and nothing else on the site", () => {
+const DROPDOWN_MENU = "src/ui/dropdown-menu.tsx";
+
+describe("the larger shadows (spec 0013, AC-12, as spec 0026 amends it)", () => {
+  it("frame the product shot on the home page and the account menu, and nothing else", () => {
     const uses = FILES.flatMap((file) =>
       [...source(file).matchAll(LARGE_SHADOW)].map(([match]) => [file, match.trim()]),
     );
 
-    expect(uses).toEqual([[HOME_PAGE, "shadow-lg"]]);
+    expect(uses).toEqual(
+      expect.arrayContaining([
+        [HOME_PAGE, "shadow-window"],
+        [DROPDOWN_MENU, "shadow-popover"],
+      ]),
+    );
+    expect(uses).toHaveLength(2);
   });
 
-  it.each([['"shadow-md"'], ['"hover:shadow-xl"'], ['"p-4 shadow-2xl"']])(
+  it.each([['"shadow-popover"'], ['"hover:shadow-window"'], ['"p-4 shadow-window"']])(
     "would catch %s",
     (code) => {
       expect(code).toMatch(LARGE_SHADOW);
@@ -102,7 +113,7 @@ describe("the one larger shadow (AC-12)", () => {
   );
 
   it("leaves a card's quiet shadow alone", () => {
-    expect('"rounded-xl shadow-xs"').not.toMatch(LARGE_SHADOW);
+    expect('"rounded-card shadow-card"').not.toMatch(LARGE_SHADOW);
   });
 });
 
@@ -206,5 +217,25 @@ describe("the one cursor rule in globals.css (AC-33, INV-10)", () => {
         );
       }
     }
+  });
+});
+
+describe("the one reduced motion rule in globals.css (spec 0026, AC-2)", () => {
+  const rules = rulesHolding("animation: none");
+
+  it("is one rule, under prefers-reduced-motion and outside every layer", () => {
+    expect(rules).toHaveLength(1);
+    expect(rules[0]?.within).toEqual(["@media (prefers-reduced-motion: reduce)"]);
+  });
+
+  it("stops every transition and animation on every element and pseudo element", () => {
+    expect(selectorList(rules[0]?.selector ?? "")).toEqual(["*", "::before", "::after"]);
+    expect(rulesHolding("transition: none")).toEqual(rules);
+  });
+
+  it("leaves no component opting out on its own", () => {
+    expect(FILES.filter((file) => /motion-(reduce|safe):/.test(source(file)))).toEqual(
+      [],
+    );
   });
 });

@@ -952,7 +952,7 @@ describe("the plan, said out loud (spec 0012, AC-5 and AC-6)", () => {
 
       expect(card).not.toHaveClass("sr-only");
       expect(card).toHaveClass(
-        "rounded-xl",
+        "rounded-card",
         "border",
         "border-info-border",
         "bg-info-bg",

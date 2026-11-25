@@ -521,7 +521,7 @@ A fresh look for the site, next after feature 32 (your call, 2026-11-25). What c
 spec [0026](../specs/0026-ui-redesign/index.md) (2026-11-25: every page in the mockups' look through shadcn's pattern on our own hex tokens, CSS motion, the 14px floor kept; a signed in header on every page from a cookie gated plan check and a Clerk session token claim, with a `/sign-out` page; step progress over today's phases; the preview deferred)
 - [x] Design it (spec): `/architect UI redesign`
 - [ ] Build it: `/develop UI redesign`
-  - [ ] The whole site in the new look: tokens, primitives (`cva`, the Radix menu), mark and lockup, header and footer · AC-1 to AC-7, AC-14, AC-15
+  - [x] The whole site in the new look: tokens, primitives (`cva`, the Radix menu), mark and lockup, header and footer · AC-1 to AC-7, AC-14, AC-15
   - [ ] `/tool` in the new look with step progress · AC-12, AC-31 to AC-36
   - [ ] Home (with the network band and its test, the pricing cards), the guides and every other page · AC-8 to AC-11, AC-13
   - [ ] The signed in header: the email claim, the account slot, `/sign-out`, the privacy entry and the Clerk setup · AC-19 to AC-30

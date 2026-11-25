@@ -25,18 +25,22 @@ const TOKENS = Object.freeze([
   "canvas",
   "surface",
   "subtle",
+  "muted",
   "border",
   "border-strong",
   "ink",
   "ink-muted",
+  "ink-subtle",
   "accent",
   "accent-strong",
   "accent-soft",
+  "accent-faint",
   "on-accent",
   "focus",
   "warning-bg",
   "warning-border",
   "warning-icon",
+  "warning-ink",
   "info-bg",
   "info-border",
   "info-icon",
@@ -45,6 +49,11 @@ const TOKENS = Object.freeze([
   "danger-icon",
   "danger-ink",
   "danger-strong",
+  "night",
+  "night-ink",
+  "night-muted",
+  "night-accent",
+  "night-border",
 ]);
 
 /** 4.5:1 for text, 3:1 for icons, control edges and the focus ring (WCAG 1.4.3, 1.4.11). */
@@ -93,6 +102,21 @@ const CONTRACT: readonly Pairing[] = Object.freeze([
   { foreground: "warning-icon", background: "warning-bg", minimum: GRAPHIC },
   { foreground: "info-icon", background: "info-bg", minimum: GRAPHIC },
   { foreground: "danger-icon", background: "danger-bg", minimum: GRAPHIC },
+  // The redesign's pairings (spec 0026, AC-1). Chips, count badges and hover
+  // fills sit on `muted`; a ticked row on `accent-faint`; captions take
+  // `ink-subtle`, never on `muted`; links take `accent` as text; the tool page
+  // sits on `subtle`, so the ring and the checkbox edge are held there too.
+  ...pairings(["ink", "ink-muted"], ["muted", "accent-faint"], TEXT),
+  ...pairings(["ink-subtle"], ["canvas", "surface", "subtle"], TEXT),
+  ...pairings(["accent"], ["canvas", "surface", "subtle", "accent-faint"], TEXT),
+  ...pairings(["accent"], ["muted"], GRAPHIC),
+  ...pairings(["accent-strong"], ["accent-faint"], TEXT),
+  ...pairings(["border-strong"], ["subtle", "accent-faint"], GRAPHIC),
+  ...pairings(["focus"], ["subtle", "muted", "accent-faint"], GRAPHIC),
+  { foreground: "warning-ink", background: "warning-bg", minimum: TEXT },
+  // The network band on `night` (AC-9): its words, its link and the ring
+  // around that link, which takes `night-accent` there because `focus` fails.
+  ...pairings(["night-ink", "night-muted", "night-accent"], ["night"], TEXT),
 ]);
 
 /**
@@ -144,7 +168,7 @@ describe("the ratio function", () => {
     const ratio = contrast(valueOf("focus"), valueOf("accent"));
 
     expect(ratio).toBeLessThan(GRAPHIC);
-    expect(ratio).toBeCloseTo(1.68, 1);
+    expect(ratio).toBeCloseTo(1.39, 1);
   });
 });
 
@@ -202,4 +226,24 @@ describe("the contrast contract (AC-2)", () => {
       minimum,
     );
   });
+});
+
+/**
+ * Two pairings the spec keeps out of the contract because they fail, so a
+ * component that reaches for one is caught here rather than by eye
+ * (spec 0026, AC-1).
+ */
+describe("the pairings that stay out of the contract", () => {
+  it.each([
+    ["ink-subtle", "muted", TEXT],
+    ["focus", "night", GRAPHIC],
+  ] as const)(
+    "%s on %s falls short of %s:1, and is not in the contract",
+    (fg, bg, min) => {
+      expect(contrast(valueOf(fg), valueOf(bg))).toBeLessThan(min);
+      expect(
+        CONTRACT.some((pair) => pair.foreground === fg && pair.background === bg),
+      ).toBe(false);
+    },
+  );
 });

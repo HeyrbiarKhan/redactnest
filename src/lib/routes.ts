@@ -49,6 +49,13 @@ export const BLACK_BOX_PATH = "/black-box-redaction";
 export const HOME_PATH = "/";
 
 /**
+ * The home page's How it works section: its `id`, and the header's link to it
+ * from every page, a plain `a` (spec 0026, AC-5 and AC-8).
+ */
+export const HOW_IT_WORKS_ID = "how-it-works";
+export const HOW_IT_WORKS_PATH = `${HOME_PATH}#${HOW_IT_WORKS_ID}`;
+
+/**
  * Pricing and the account pages (spec 0012). Every link to one of these is a
  * plain `a` (`Button`'s `reload`), never `next/link`, so nothing prefetches an
  * account page or the one that starts a checkout, and `/tool` sends no request

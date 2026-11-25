@@ -1,7 +1,8 @@
 /**
  * `Spinner`'s tones, spec 0013, AC-34, and its sizes, the large one from
- * feature 28 (AC-16, AC-23). That it is hidden and stops under reduced motion
- * is `layout.test.tsx`'s, beside the other small primitives.
+ * feature 28 (AC-16, AC-23). That it is hidden is `layout.test.tsx`'s, beside
+ * the other small primitives; it stops under reduced motion through the one
+ * rule in `globals.css` (spec 0026, AC-2), which `brand-source.test.ts` holds.
  *
  * jsdom computes no colour, so what is proved is which token each part of
  * the drawing takes; the colours themselves are the contrast test's.
@@ -45,12 +46,12 @@ describe("Spinner", () => {
    * one most likely to be read as content: it stays hidden, keeps the track
    * and the arc, and stops under reduced motion like the others.
    */
-  it("keeps the large one hidden, still under reduced motion, with its track and arc", async () => {
+  it("keeps the large one hidden, turning, with its track and arc", async () => {
     const { container } = render(<Spinner size="lg" />);
 
     const spinner = screen.getByTestId("spinner");
     expect(spinner).toHaveAttribute("aria-hidden", "true");
-    expect(spinner).toHaveClass("animate-spin", "motion-reduce:animate-none");
+    expect(spinner).toHaveClass("animate-spin");
     expect(spinner.querySelector("circle")).toHaveClass("stroke-accent-soft");
     expect(spinner.querySelector("path")).toHaveClass("stroke-accent");
     await expectNoAxeViolations(container);
@@ -73,6 +74,6 @@ describe("Spinner", () => {
     expect(paths).toHaveLength(1);
     expect(paths[0]).toHaveClass("stroke-current");
     expect(paths[0]).not.toHaveClass("stroke-accent");
-    expect(spinner).toHaveClass("size-4", "animate-spin", "motion-reduce:animate-none");
+    expect(spinner).toHaveClass("size-4", "animate-spin");
   });
 });

@@ -109,7 +109,7 @@ describe("Card", () => {
 
     expect(screen.getByTestId("plain")).toHaveClass("p-5", "gap-4");
     expect(screen.getByTestId("plain")).not.toHaveClass("p-7", "gap-6");
-    expect(screen.getByTestId("spacious")).toHaveClass("p-7", "gap-6", "rounded-xl");
+    expect(screen.getByTestId("spacious")).toHaveClass("p-7", "gap-6", "rounded-card");
     expect(screen.getByTestId("spacious")).not.toHaveClass("p-5", "gap-4");
   });
 
@@ -247,11 +247,12 @@ describe("SiteHeader", () => {
   });
 
   /**
-   * Feature 28, amending AC-7: with a nav, the nav, the account link and the
-   * action sit in the browser's own popover, which the menu button opens; from
-   * `sm` the popover has no box, so they sit in the header's row.
+   * Feature 28, as spec 0026 child 0001, AC-27 amends it: with a nav, the nav
+   * and the account part sit in the browser's own popover, which the menu
+   * button opens, while the action stays in the row at every width; from `sm`
+   * the popover has no box, so they sit in the header's row.
    */
-  it("puts the nav, the account link and the action in a menu its button opens", () => {
+  it("puts the nav and the account part in a menu its button opens, the action beside it", () => {
     render(
       <SiteHeader
         nav={
@@ -276,11 +277,19 @@ describe("SiteHeader", () => {
       within(menu as HTMLElement)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["Pricing", "Account", "Try it free"]);
-    // The button comes before the menu, so Tab goes from it into the links.
+    ).toEqual(["Pricing", "Account"]);
+    // The action is outside the menu, between it and the button, so from `sm`
+    // the row reads lockup, nav, account, action in page order. Below `sm` the
+    // browser places an open popover's links right after the button that
+    // opened it in the tab order, whatever their place in the page.
+    const action = screen.getByRole("link", { name: "Try it free" });
+    expect(menu).not.toContainElement(action);
     expect(
-      button.compareDocumentPosition(menu as HTMLElement) &
+      (menu as HTMLElement).compareDocumentPosition(action) &
         Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      action.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
@@ -536,8 +545,8 @@ describe("the decorative pieces", () => {
 
   /** Spec 0013, AC-11: the circles and the square tiles of the home page's cards. */
   it.each([
-    ["md", "size-12", "size-5", "rounded-xl"],
-    ["lg", "size-16", "size-7", "rounded-xl"],
+    ["md", "size-12", "size-5", "rounded-control"],
+    ["lg", "size-16", "size-7", "rounded-control"],
   ] as const)(
     "at %s is %s with a %s icon, and its square shape is %s",
     (size, box, glyph, square) => {
@@ -559,12 +568,14 @@ describe("the decorative pieces", () => {
     },
   );
 
-  it("hides the spinner, and stops it under reduced motion", () => {
+  it("hides the spinner, and turns it", () => {
     const { container } = render(<Spinner />);
 
     const svg = container.querySelector("svg");
     expect(svg).toHaveAttribute("aria-hidden", "true");
-    expect(svg).toHaveClass("animate-spin", "motion-reduce:animate-none");
+    // Reduced motion stops it through the one rule in `globals.css` (spec 0026,
+    // AC-2), held by `brand-source.test.ts`; no component opts out on its own.
+    expect(svg).toHaveClass("animate-spin");
   });
 
   it("gives an empty state a muted icon, a title and one helper line", () => {

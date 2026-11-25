@@ -69,13 +69,13 @@ export function CoverFigure({ panels, caption, className }: CoverFigureProps) {
         {panels.map((panel) => (
           <div
             key={panel.title}
-            className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-xs wrap-anywhere"
+            className="flex flex-col gap-3 rounded-card border border-border bg-surface p-5 shadow-card wrap-anywhere"
           >
             <p className="font-semibold text-ink">{panel.title}</p>
             <div
               aria-hidden="true"
               data-testid="cover-drawing"
-              className="flex flex-col gap-1 rounded-lg border border-border bg-canvas px-4 py-3 text-small text-ink"
+              className="flex flex-col gap-1 rounded-control border border-border bg-canvas px-4 py-3 text-small text-ink"
             >
               {panel.lines.map((line, index) => (
                 <p key={`${index}-${line.text}`}>
@@ -91,7 +91,7 @@ export function CoverFigure({ panels, caption, className }: CoverFigureProps) {
             </div>
             <p className="flex flex-col gap-1 text-small">
               <span className="text-ink-muted">{panel.readsLabel}</span>
-              <samp className="block rounded-lg border border-transparent bg-subtle px-3 py-2 font-sans text-ink">
+              <samp className="block rounded-control border border-transparent bg-subtle px-3 py-2 font-sans text-ink">
                 {panel.reads}
               </samp>
             </p>

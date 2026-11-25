@@ -43,10 +43,10 @@ export function TextField({ id, label, action, className, ...input }: TextFieldP
           id={id}
           type="text"
           className={cx(
-            "min-h-10 w-full min-w-0 rounded-lg border border-border-strong bg-surface px-3 py-2 text-body text-ink",
+            "min-h-10 w-full min-w-0 rounded-control border border-border-strong bg-surface px-3 py-2 text-body text-ink",
             "read-only:bg-subtle",
             "disabled:border-border disabled:bg-subtle disabled:text-ink-muted",
-            "transition-[background-color,border-color] duration-150 motion-reduce:transition-none",
+            "transition-[background-color,border-color]",
             "sm:flex-1",
           )}
         />

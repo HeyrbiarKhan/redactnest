@@ -1,8 +1,7 @@
+import { cva } from "class-variance-authority";
 import type { LucideIcon } from "lucide-react";
 
-import { cx } from "@/lib/cx";
-
-export type IconCircleTone = "accent" | "neutral";
+export type IconCircleTone = "accent" | "neutral" | "solid";
 export type IconCircleSize = "md" | "lg";
 export type IconCircleShape = "circle" | "square";
 
@@ -10,32 +9,30 @@ interface IconCircleProps {
   readonly icon: LucideIcon;
   readonly tone: IconCircleTone;
   readonly size?: IconCircleSize;
-  /** `circle` by default; `square` is the rounded tile of the home page's cards (spec 0013, AC-11). */
+  /** `circle` by default; `square` is the rounded tile of the cards (spec 0013, AC-11; spec 0026). */
   readonly shape?: IconCircleShape;
 }
 
-/** `accent` on `accent-soft` is 4.18:1 and `ink-muted` on `subtle` 5.51:1, both past 3:1. */
-const TONE: Readonly<Record<IconCircleTone, string>> = Object.freeze({
-  accent: "bg-accent-soft text-accent",
-  neutral: "bg-subtle text-ink-muted",
-});
-
-const CIRCLE: Readonly<Record<IconCircleSize, string>> = Object.freeze({
-  md: "size-12",
-  lg: "size-16",
+/**
+ * `accent` on `accent-soft` is 4.86:1, `ink-muted` on `muted` 7.03:1 and
+ * `on-accent` on `accent` 5.47:1, all past the 3:1 an icon needs. `solid` is
+ * the guide pages' filled step tile (spec 0026, AC-11).
+ */
+const tile = cva("inline-flex shrink-0 items-center justify-center", {
+  variants: {
+    tone: {
+      accent: "bg-accent-soft text-accent",
+      neutral: "bg-muted text-ink-muted",
+      solid: "bg-accent text-on-accent",
+    },
+    size: { md: "size-12", lg: "size-16" },
+    // The square's corners stay no rounder than the card it sits in.
+    shape: { circle: "rounded-full", square: "rounded-control" },
+  },
 });
 
 /** `md` keeps the site's 20 pixel icon (design.md). */
-const GLYPH: Readonly<Record<IconCircleSize, string>> = Object.freeze({
-  md: "size-5",
-  lg: "size-7",
-});
-
-/** The square's corners, no rounder than the `rounded-xl` card it sits in. */
-const SQUARE: Readonly<Record<IconCircleSize, string>> = Object.freeze({
-  md: "rounded-xl",
-  lg: "rounded-xl",
-});
+const glyph = cva("", { variants: { size: { md: "size-5", lg: "size-7" } } });
 
 /**
  * An icon in a soft circle, or a soft rounded square. Decoration only:
@@ -49,16 +46,8 @@ export function IconCircle({
   shape = "circle",
 }: IconCircleProps) {
   return (
-    <span
-      aria-hidden="true"
-      className={cx(
-        "inline-flex shrink-0 items-center justify-center",
-        shape === "square" ? SQUARE[size] : "rounded-full",
-        TONE[tone],
-        CIRCLE[size],
-      )}
-    >
-      <Icon className={GLYPH[size]} strokeWidth={1.75} />
+    <span aria-hidden="true" className={tile({ tone, size, shape })}>
+      <Icon className={glyph({ size })} strokeWidth={1.75} />
     </span>
   );
 }

@@ -19,7 +19,7 @@ import PricingPage, { metadata } from "@/app/pricing/page";
 import { config } from "@/config";
 import { LEGAL } from "@/lib/legal";
 import { PRO_PLAN } from "@/lib/plans";
-import { ACCOUNT_PATH, PRICING_PATH, TERMS_PATH, TOOL_PATH } from "@/lib/routes";
+import { PRICING_PATH, SIGN_IN_PATH, TERMS_PATH, TOOL_PATH } from "@/lib/routes";
 
 import { expectNoAxeViolations } from "../../setup/component";
 
@@ -229,7 +229,7 @@ describe("Subscribe and the lines under it (AC-13)", () => {
 });
 
 describe("the header", () => {
-  it("links Pricing, Account and the tool as plain page loads", () => {
+  it("links Pricing, Sign in and the tool as plain page loads", () => {
     render(<PricingPage />);
     const header = within(screen.getByRole("banner"));
 
@@ -237,9 +237,9 @@ describe("the header", () => {
       "href",
       PRICING_PATH,
     );
-    expect(header.getByRole("link", { name: "Account" })).toHaveAttribute(
+    expect(header.getByRole("link", { name: "Sign in" })).toHaveAttribute(
       "href",
-      ACCOUNT_PATH,
+      SIGN_IN_PATH,
     );
     expect(header.getByRole("link", { name: "Try it free" })).toHaveAttribute(
       "href",

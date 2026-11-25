@@ -16,34 +16,101 @@
 @theme {
   --color-*: initial;
 
-  --color-canvas: #f8f7f4;
+  /*
+   * White and grey surfaces, the teal accent kept (spec 0026, AC-1). `muted`
+   * holds chips, count badges and hover fills; `ink-subtle` is a caption on
+   * `canvas`, `surface` and `subtle` only, because on `muted` it measures 4.4.
+   */
+  --color-canvas: #ffffff;
   --color-surface: #ffffff;
-  --color-subtle: #f1efea;
-  --color-border: #e3e0d8;
-  --color-border-strong: #7d848b;
+  --color-subtle: #fafafa;
+  --color-muted: #f4f4f5;
+  --color-border: #e4e4e7;
+  --color-border-strong: #71717a;
 
-  --color-ink: #16232b;
-  --color-ink-muted: #56616b;
+  --color-ink: #09090b;
+  --color-ink-muted: #52525b;
+  --color-ink-subtle: #71717a;
 
-  --color-accent: #1f7a7a;
-  --color-accent-strong: #176465;
-  --color-accent-soft: #d5eeea;
+  --color-accent: #0f766e;
+  --color-accent-strong: #115e59;
+  --color-accent-soft: #ccfbf1;
+  --color-accent-faint: #f0fdfa;
   --color-on-accent: #ffffff;
-  --color-focus: #135556;
+  --color-focus: #115e59;
 
-  --color-warning-bg: #fdf3e2;
-  --color-warning-border: #efcf95;
-  --color-warning-icon: #a8520a;
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+  --color-warning-icon: #b45309;
+  --color-warning-ink: #78350f;
 
   --color-info-bg: #eaf3fb;
   --color-info-border: #c5dbef;
   --color-info-icon: #1c5e9e;
 
-  --color-danger-bg: #fceeec;
-  --color-danger-border: #f0c3bd;
-  --color-danger-icon: #b3261e;
-  --color-danger-ink: #a8231c;
-  --color-danger-strong: #8c1d18;
+  --color-danger-bg: #fef2f2;
+  --color-danger-border: #fecaca;
+  --color-danger-icon: #b91c1c;
+  --color-danger-ink: #b91c1c;
+  --color-danger-strong: #991b1b;
+
+  /*
+   * The home page's dark band (AC-9). `night-accent` is also the focus ring
+   * there, because `focus` measures 2.62 on `night`, under the 3:1 a ring needs.
+   */
+  --color-night: #09090b;
+  --color-night-ink: #fafafa;
+  --color-night-muted: #a1a1aa;
+  --color-night-accent: #5eead4;
+  --color-night-border: #27272a;
+
+  /*
+   * Radii, from the mockups (AC-2): a menu item, a control, a card. `rounded-full`
+   * is Tailwind's own and stays for pills. The defaults go, so a pasted
+   * `rounded-lg` makes no corner nobody chose.
+   */
+  --radius-*: initial;
+  --radius-item: 0.5rem;
+  --radius-control: 0.625rem;
+  --radius-card: 0.875rem;
+
+  /*
+   * Shadows are depth, never a colour role and never behind text, so they are
+   * the one place a colour carries alpha (AC-2). Black only.
+   */
+  --shadow-*: initial;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-popover: 0 12px 30px -10px rgb(0 0 0 / 0.18);
+  --shadow-window:
+    0 30px 60px -20px rgb(0 0 0 / 0.18), 0 12px 24px -12px rgb(0 0 0 / 0.12);
+
+  /*
+   * One ease out curve. Every transition without a duration of its own takes
+   * `fast`; `duration-base` and `duration-slow` below are the other two.
+   */
+  --ease-*: initial;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --default-transition-duration: 120ms;
+  --default-transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* A menu or popover opening: a fade with a 4px rise (AC-2). */
+  --animate-rise-in: rise-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  /* A progress step's tick appearing (spec 0026, child 0003). */
+  --animate-tick-in: tick-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+
+  @keyframes tick-in {
+    from {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+  }
 
   /*
    * Nothing renders below 14px (INV-6), so the one size under it goes. Sizes
@@ -74,6 +141,31 @@
 }
 
 /*
+ * The three motion durations (AC-2), static so they reach `:root` whether or
+ * not a utility names them.
+ */
+@theme static {
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+}
+
+@utility duration-fast {
+  --tw-duration: var(--duration-fast);
+  transition-duration: var(--duration-fast);
+}
+
+@utility duration-base {
+  --tw-duration: var(--duration-base);
+  transition-duration: var(--duration-base);
+}
+
+@utility duration-slow {
+  --tw-duration: var(--duration-slow);
+  transition-duration: var(--duration-slow);
+}
+
+/*
  * One family (INV-6). `next/font` self hosts Inter and names it `--font-inter`
  * on `<html>`, so the browser never asks another origin for it (AC-4, AC-20).
  * Inline, so utilities resolve the variable where it is actually defined.
@@ -83,18 +175,34 @@
 }
 
 /*
- * The home headline. A utility rather than a theme size because it steps up at
- * `md`, and a size in viewport units would stop the visitor's own zoom from
- * scaling it (WCAG 1.4.4).
+ * The two large heading sizes (spec 0026, AC-3): `display` for the hero `h1`,
+ * `headline` for a section `h2`. Each is `title` below `sm` and steps up there
+ * through a breakpoint, never viewport units, so the visitor's own zoom still
+ * scales it (WCAG 1.4.4).
  */
 @utility text-display {
-  font-size: 2.5rem;
-  line-height: 1.05;
-  font-weight: 800;
-  letter-spacing: -0.025em;
+  font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+  font-weight: 700;
+  letter-spacing: -0.02em;
 
-  @variant md {
-    font-size: 3.5rem;
+  @variant sm {
+    font-size: 3.25rem;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+  }
+}
+
+@utility text-headline {
+  font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+
+  @variant sm {
+    font-size: 2.25rem;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
   }
 }
 
@@ -159,9 +267,27 @@
 }
 
 /*
+ * Reduced motion, for every transition and animation on the site from one
+ * rule (spec 0026, AC-2; spec 0003, AC-16): each becomes an instant change and
+ * the spinner stops turning. No component opts out or needs its own
+ * `motion-reduce:` class. Outside every layer, so it beats every utility
+ * without an `!important`, which stays the cursor rule's alone.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation: none;
+    transition: none;
+    scroll-behavior: auto;
+  }
+}
+
+/*
  * Every cursor on the site, from one rule (spec 0013, AC-33 and INV-10). The
  * pointer on whatever can be clicked: links, buttons, a disclosure's summary,
- * a select, a checkbox or radio, and a label wrapping one, which is how every
+ * a menu item (the account menu's, spec 0026, AC-15), a select, a checkbox or
+ * radio, and a label wrapping one, which is how every
  * checklist row and select all row takes its whole width as the target.
  * `not-allowed` on whatever is disabled, a blocked row's label included. Each
  * pointer selector leaves out what the second set matches, so the two never
@@ -180,6 +306,7 @@ summary:not([aria-disabled="true"]),
 select:enabled:not([aria-disabled="true"]),
 input:is([type="checkbox"], [type="radio"]):enabled:not([aria-disabled="true"]),
 [role="button"]:not(:disabled):not([aria-disabled="true"]),
+[role="menuitem"]:not([aria-disabled="true"]),
 label:has(input:is([type="checkbox"], [type="radio"]):enabled):not(
     :has(input:is([type="checkbox"], [type="radio"]):disabled)
   ):not([aria-disabled="true"]) {

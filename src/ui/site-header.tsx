@@ -36,8 +36,9 @@ const MENU_OPEN = cx(
 );
 
 /**
- * The bar across the top of every page: the lockup home, then the caller's
- * nav, Account link and one action, in that page order. Spec 0013, AC-7.
+ * The bar across the top of every page: the lockup home, the caller's nav,
+ * then at the right the account part (Sign in, or the account slot) and one
+ * action. Spec 0026, AC-5, after `07-header.png`; spec 0013, AC-7.
  *
  * Static, never sticky (spec 0003, AC-14). A sticky bar covers whatever a
  * keyboard visitor just tabbed to when the page scrolls it under the header,
@@ -50,32 +51,29 @@ const MENU_OPEN = cx(
  * It also keeps the tool route from prefetching `/`, which spec 0002's request
  * test rightly counts as a request the tool page did not need.
  *
- * From `sm` everything sits on one row with the account link and the action at
- * the right.
- *
  * The row is the lockup's container (`@container`), with nothing between, so
  * the lockup steps down a size when the row is narrower than 10rem. Spec 0024,
  * AC-14, *The lockup at narrow widths*.
  *
- * Below `sm`, with a `nav`, the lockup and a menu button share one row, and the
- * nav, the account link and the action move into a menu the button opens, in
- * the same page order (feature 28, amending AC-7). The menu is the browser's
- * own popover, not a script of ours, because Pricing and the home page carry
- * no client component (spec 0012, AC-13; spec 0013, AC-13). So the browser
+ * Below `sm`, with a `nav`, the row holds the lockup, the action and a menu
+ * button, and the nav and the account part move into a menu the button opens
+ * (spec 0026, child 0001, AC-27; feature 28). The menu is the browser's own
+ * popover, not a script of ours, because the static pages carry no client
+ * component of their own (spec 0012, AC-13; spec 0013, AC-13). So the browser
  * gives the button its expanded state, closes the menu on Escape or a press
- * outside it, and puts focus back on the button when Escape closes it with
- * focus inside. It never moves focus by itself: Tab goes from the button into
- * the links. From `sm` the menu has no box of its own (`display: contents`),
- * so the same links sit in the header's row as before; and if it is still open
- * when the window widens (a phone turned sideways), the button stays until it
- * is closed.
+ * outside it, puts focus back on the button when Escape closes it with focus
+ * inside, and places the menu's links right after the button in the tab
+ * order. It never moves focus by itself. From `sm` the menu has no box of its
+ * own (`display: contents`), so the same links sit in the header's row; and
+ * if it is still open when the window widens (a phone turned sideways), the
+ * button stays until it is closed.
  *
- * Without a `nav` (billing off) there is no menu: the lockup takes the first
- * row alone and the rest wraps beneath it in page order, with no script.
+ * Without a `nav` there is no menu: everything sits in the row and wraps
+ * beneath the lockup when it must, with no script.
  *
- * `nav`, `account` and `action` are the caller's, because whether Pricing and
- * Account exist depends on the build's config, which a primitive never reads
- * (spec 0003, INV-7). So are the menu button's words, `menuLabel`.
+ * `nav`, `account` and `action` are the caller's, because what they hold
+ * depends on the build's config and on who is signed in, which a primitive
+ * never reads (spec 0003, INV-7). So are the menu button's words, `menuLabel`.
  */
 export function SiteHeader({
   nav,
@@ -88,25 +86,38 @@ export function SiteHeader({
 } & (
   | {
       readonly nav: ReactNode;
-      /** The menu button's name, which it also shows beside its icon. */
+      /** The menu button's name; the button shows its icon alone. */
       readonly menuLabel: string;
     }
   | { readonly nav?: undefined; readonly menuLabel?: undefined }
 )) {
-  const hasEnd = (account ?? null) !== null || (action ?? null) !== null;
+  const hasAccount = (account ?? null) !== null;
+  const hasAction = (action ?? null) !== null;
   const hasMenu = (nav ?? null) !== null;
 
-  const end = hasEnd && (
+  const accountPart = hasAccount && (
     <div
       className={cx(
-        "flex gap-x-6 sm:ml-auto sm:flex-row sm:flex-wrap sm:items-center",
-        // Stacked in the menu below `sm`; wrapping beneath the lockup otherwise.
-        hasMenu
-          ? "flex-col items-start gap-y-1 sm:gap-y-2"
-          : "flex-wrap items-center gap-y-2",
+        "flex items-center gap-x-2 sm:ml-auto",
+        // Stacked in the menu below `sm`.
+        hasMenu ? "flex-col items-start sm:flex-row sm:items-center" : "flex-wrap",
       )}
     >
       {account}
+    </div>
+  );
+
+  const actionPart = hasAction && (
+    <div
+      className={cx(
+        "flex items-center",
+        // Pushed right: below `sm` always (the menu holds the rest), and from
+        // `sm` only when no account part sits before it.
+        hasMenu && "ms-auto",
+        hasAccount && "sm:ms-0",
+        !hasMenu && !hasAccount && "sm:ms-auto",
+      )}
+    >
       {action}
     </div>
   );
@@ -115,43 +126,61 @@ export function SiteHeader({
     <header className="group border-b border-border bg-surface [anchor-name:--site-header]">
       <PageContainer
         width="wide"
-        className="@container flex flex-wrap items-center gap-x-8 gap-y-2 py-3"
+        className="@container flex flex-wrap items-center gap-x-3 gap-y-2 py-3 sm:gap-x-8"
       >
         <div className={hasMenu ? undefined : "w-full sm:w-auto"}>
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- a real page load, see above */}
-          <a href="/" className="inline-flex min-h-10 items-center rounded-md">
+          <a href="/" className="inline-flex min-h-10 items-center rounded-item">
             <BrandLockup />
           </a>
         </div>
         {hasMenu ? (
           <>
+            <div
+              id={SITE_MENU_ID}
+              popover="auto"
+              className={cx(
+                // No box of its own from `sm` while shut: the browser's popover
+                // box (fixed, bordered, padded) would otherwise apply.
+                "w-full sm:not-open:contents",
+                MENU_OPEN,
+              )}
+            >
+              {nav}
+              {accountPart}
+            </div>
+            {actionPart}
             {/*
               Shown only where popovers work, so no browser offers a button that
               does nothing; hidden from `sm` unless the menu is still open.
             */}
             <div
               className={cx(
-                "ms-auto hidden supports-[selector(:popover-open)]:flex",
+                "hidden supports-[selector(:popover-open)]:flex",
+                !hasAction && "ms-auto",
                 "sm:hidden sm:group-has-[:popover-open]:flex",
               )}
             >
-              <Button variant="secondary" icon={Menu} popoverTarget={SITE_MENU_ID}>
-                {menuLabel}
+              {/*
+                Icon only, as the mockup's phone header draws it, so the
+                lockup, the action and the button share one row at 320
+                pixels; the caller's words stay its name (spec 0026, AC-27).
+              */}
+              <Button
+                variant="secondary"
+                size="icon"
+                icon={Menu}
+                popoverTarget={SITE_MENU_ID}
+              >
+                <span className="sr-only">{menuLabel}</span>
               </Button>
-            </div>
-            <div
-              id={SITE_MENU_ID}
-              popover="auto"
-              className={cx("w-full sm:not-open:contents", MENU_OPEN)}
-            >
-              {nav}
-              {end}
             </div>
           </>
         ) : (
           <>
             {nav}
-            {end}
+            {accountPart}
+            {actionPart}
           </>
         )}
       </PageContainer>

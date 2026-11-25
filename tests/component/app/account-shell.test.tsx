@@ -24,14 +24,18 @@ function current() {
 }
 
 describe("Account and the pages under it", () => {
-  it("mark Account current, in the narrow column, with the header's button", () => {
+  /**
+   * The Account link moved from the header into the account menu (spec 0026,
+   * child 0001, AC-23), so no header item names these pages.
+   */
+  it("mark nothing current, in the narrow column, with the header's button", () => {
     render(
       <AccountPagesLayout params={Promise.resolve({})}>
         <h1>Account</h1>
       </AccountPagesLayout>,
     );
 
-    expect(current()).toEqual(["Account"]);
+    expect(current()).toEqual([]);
     expect(
       within(screen.getByRole("banner")).getByRole("link", { name: "Try it free" }),
     ).toHaveAttribute("href", "/tool");

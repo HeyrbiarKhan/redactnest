@@ -63,7 +63,12 @@ const LOCKUP_SIZE: Readonly<Record<LockupSize, string>> = Object.freeze({
 });
 
 /**
- * The mark and the wordmark together. Spec 0013, AC-2.
+ * The mark and the wordmark together. Spec 0013, AC-2, as spec 0026, AC-7
+ * amends it: the mark sits in `on-accent` inside a rounded `accent` tile
+ * (5.47:1), as the mockups draw it. The tile is sized in `em` like the mark,
+ * so the two keep their proportion at every size. In forced colours the
+ * tile's fill is dropped and the mark takes the system's text colour, so it
+ * stays as visible as the word beside it.
  *
  * The wordmark is live text in Inter 700 with tight tracking, never an image,
  * so it scales with the visitor's font size and is read as the word it is.
@@ -82,12 +87,12 @@ export function BrandLockup({ size = "md" }: { readonly size?: LockupSize }) {
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-[0.3em] font-bold tracking-[-0.02em] text-ink",
+        "inline-flex items-center gap-[0.45em] font-bold tracking-[-0.02em] text-ink",
         LOCKUP_SIZE[size],
       )}
     >
-      <span className="text-accent">
-        <BrandMark size="1.4em" className="block" />
+      <span className="inline-flex size-[1.65em] shrink-0 items-center justify-center rounded-item bg-accent text-on-accent">
+        <BrandMark size="1.1em" className="block" />
       </span>
       RedactNest
     </span>

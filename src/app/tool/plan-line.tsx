@@ -76,7 +76,9 @@ export function PlanLine({ answer, checking, onTryAgain, lineRef }: PlanLineProp
       data-testid="plan-card"
       className={cx(
         "flex flex-wrap items-center gap-x-3 gap-y-1",
-        line === null ? "sr-only" : "rounded-xl border border-info-border bg-info-bg p-5",
+        line === null
+          ? "sr-only"
+          : "rounded-card border border-info-border bg-info-bg p-5",
       )}
     >
       <p

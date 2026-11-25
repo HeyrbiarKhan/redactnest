@@ -1,5 +1,6 @@
+import { cva } from "class-variance-authority";
+
 import { countText } from "@/lib/count-text";
-import { cx } from "@/lib/cx";
 
 export type CountBadgeTone = "accent" | "neutral";
 
@@ -17,11 +18,18 @@ interface CountBadgeProps {
   readonly compact?: boolean;
 }
 
-/** `accent-strong` on `accent-soft` is 5.66:1 and `ink-muted` on `subtle` 5.51:1. */
-const TONE: Readonly<Record<CountBadgeTone, string>> = Object.freeze({
-  accent: "bg-accent-soft text-accent-strong",
-  neutral: "bg-subtle text-ink-muted",
-});
+/** `accent-strong` on `accent-soft` is 6.73:1 and `ink-muted` on `muted` 7.03:1. */
+const badge = cva(
+  "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-small font-medium",
+  {
+    variants: {
+      tone: {
+        accent: "bg-accent-soft text-accent-strong",
+        neutral: "bg-muted text-ink-muted",
+      },
+    },
+  },
+);
 
 /**
  * A count in a pill. Always announced with its noun, "2 items", never as a bare
@@ -32,12 +40,7 @@ export function CountBadge({ count, noun, tone, compact = false }: CountBadgePro
   const word = count === 1 ? noun.one : noun.other;
 
   return (
-    <span
-      className={cx(
-        "inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-small font-medium",
-        TONE[tone],
-      )}
-    >
+    <span className={badge({ tone })}>
       {countText(count)}
       {compact ? <span className="sr-only">{` ${word}`}</span> : ` ${word}`}
     </span>

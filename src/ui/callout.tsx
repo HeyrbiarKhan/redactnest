@@ -1,3 +1,4 @@
+import { cva } from "class-variance-authority";
 import { CircleAlert, Info, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { AriaRole, ReactNode, Ref } from "react";
 
@@ -37,29 +38,57 @@ interface ToneStyle {
   readonly icon: LucideIcon;
   /** Read first, so the tone is never carried by colour alone (INV-8). */
   readonly word: string;
-  readonly box: string;
-  readonly glyph: string;
 }
 
 const TONE: Readonly<Record<CalloutTone, ToneStyle>> = Object.freeze({
-  warning: Object.freeze({
-    icon: TriangleAlert,
-    word: "Warning",
-    box: "border-warning-border bg-warning-bg",
-    glyph: "text-warning-icon",
-  }),
-  info: Object.freeze({
-    icon: Info,
-    word: "Note",
-    box: "border-info-border bg-info-bg",
-    glyph: "text-info-icon",
-  }),
-  danger: Object.freeze({
-    icon: CircleAlert,
-    word: "Error",
-    box: "border-danger-border bg-danger-bg",
-    glyph: "text-danger-icon",
-  }),
+  warning: Object.freeze({ icon: TriangleAlert, word: "Warning" }),
+  info: Object.freeze({ icon: Info, word: "Note" }),
+  danger: Object.freeze({ icon: CircleAlert, word: "Error" }),
+});
+
+const box = cva(
+  "flex flex-col gap-3 rounded-card border p-4 sm:flex-row sm:items-start",
+  {
+    variants: {
+      tone: {
+        warning: "border-warning-border bg-warning-bg",
+        info: "border-info-border bg-info-bg",
+        danger: "border-danger-border bg-danger-bg",
+      },
+    },
+  },
+);
+
+const glyph = cva("mt-0.5 size-5 shrink-0", {
+  variants: {
+    tone: {
+      warning: "text-warning-icon",
+      info: "text-info-icon",
+      danger: "text-danger-icon",
+    },
+  },
+});
+
+/**
+ * A warning callout's words are `warning-ink` throughout (8.75:1 on
+ * `warning-bg`), as the mockups draw them; the other tones keep `ink` for the
+ * title and `ink-muted` under it (spec 0026, AC-1).
+ */
+const titleInk = cva("text-body font-semibold", {
+  variants: {
+    tone: { warning: "text-warning-ink", info: "text-ink", danger: "text-ink" },
+  },
+});
+
+const bodyInk = cva("flex flex-col gap-1 wrap-break-word", {
+  variants: {
+    tone: { warning: "text-warning-ink", info: "", danger: "" },
+    titled: { true: "text-small", false: "text-body" },
+  },
+  compoundVariants: [
+    { tone: ["info", "danger"], titled: true, class: "text-ink-muted" },
+    { tone: ["info", "danger"], titled: false, class: "text-ink" },
+  ],
 });
 
 /**
@@ -81,7 +110,7 @@ export function Callout({
   const style = TONE[tone];
   const Icon = style.icon;
   const titled = title !== undefined && title !== null;
-  const titleClass = "text-body font-semibold text-ink";
+  const titleClass = titleInk({ tone });
   const focusable = titleRef ? { ref: titleRef, tabIndex: -1 } : {};
   const heading =
     headingLevel === 3 ? (
@@ -97,35 +126,24 @@ export function Callout({
     );
 
   return (
-    <div
-      role={role}
-      data-testid={testId}
-      className={cx(
-        "flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-start",
-        style.box,
-      )}
-    >
+    <div role={role} data-testid={testId} className={box({ tone })}>
       <div className="flex min-w-0 flex-1 gap-3">
-        <Icon
-          aria-hidden="true"
-          className={cx("mt-0.5 size-5 shrink-0", style.glyph)}
-          strokeWidth={1.75}
-        />
+        <Icon aria-hidden="true" className={glyph({ tone })} strokeWidth={1.75} />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="sr-only">{`${style.word}: `}</span>
           {lead !== undefined && (
-            <p className="text-small font-medium text-ink-muted">{lead}</p>
+            <p
+              className={cx(
+                "text-small font-medium",
+                tone === "warning" ? "text-warning-ink" : "text-ink-muted",
+              )}
+            >
+              {lead}
+            </p>
           )}
           {titled && heading}
           {children !== undefined && children !== null && (
-            <div
-              className={cx(
-                "flex flex-col gap-1 wrap-break-word",
-                titled ? "text-small text-ink-muted" : "text-body text-ink",
-              )}
-            >
-              {children}
-            </div>
+            <div className={bodyInk({ tone, titled })}>{children}</div>
           )}
         </div>
       </div>
