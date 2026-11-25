@@ -43,7 +43,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 30 | Engine and code follow ups | Release 5 | done |
 | 31 | Leaks through kept objects | Release 5 | done |
 | 32 | Details inside pictures | Release 5 | done |
-| 33 | UI redesign | Release 5 | planned |
+| 33 | UI redesign | Release 5 | in-progress |
 
 ## Foundations
 
@@ -514,10 +514,20 @@ spec [0025](../specs/0025-picture-details/index.md) · code in `src/engine` (`pi
 - [x] Test it: `/test details inside pictures`
 - [x] Review it (fresh model): `/check review details inside pictures` ([2026-11-25](../reviews/2026-11-25-feat-picture-details.md))
 
-### 33. UI redesign · needs a decision
+### 33. UI redesign · in-progress
 A fresh look for the site, next after feature 32 (your call, 2026-11-25). What changes and how far it reaches are decided in its own design session, not here.
 **Done when:** the redesign its spec records is built on every page it names, the core path still meets WCAG 2.2 AA (keyboard, visible focus, the contrast contract), and the brand's raster files are rebuilt by `scripts/make-brand.mjs` wherever the look they picture changed.
-- [ ] Design it (spec): `/architect UI redesign`
+**Also owed here:** the page preview and thumbnails in the mockups are not built here (spec 0026, child 0002, your call, 2026-11-25); they stay with feature 14, which already owes them, and child 0002 records the leanings for that design.
+spec [0026](../specs/0026-ui-redesign/index.md) (2026-11-25: every page in the mockups' look through shadcn's pattern on our own hex tokens, CSS motion, the 14px floor kept; a signed in header on every page from a cookie gated plan check and a Clerk session token claim, with a `/sign-out` page; step progress over today's phases; the preview deferred)
+- [x] Design it (spec): `/architect UI redesign`
+- [ ] Build it: `/develop UI redesign`
+  - [ ] The whole site in the new look: tokens, primitives (`cva`, the Radix menu), mark and lockup, header and footer · AC-1 to AC-7, AC-14, AC-15
+  - [ ] `/tool` in the new look with step progress · AC-12, AC-31 to AC-36
+  - [ ] Home (with the network band and its test, the pricing cards), the guides and every other page · AC-8 to AC-11, AC-13
+  - [ ] The signed in header: the email claim, the account slot, `/sign-out`, the privacy entry and the Clerk setup · AC-19 to AC-30
+  - [ ] Proof and records: accessibility sweep, brand rerun, `design.md` and the amendment lines · AC-16 to AC-18
+- [ ] Verify it: `/check verify UI redesign`
+- [ ] Test it: `/test UI redesign`
 
 ### 23. Legal review · needs a decision · Alpha · from spec 0011
 The lawyer questions launch left open, asked once RedactNest has 100+ users, on a tech lawyer's advice (2026-10-03). PECA section 32, Pakistani law and courts, and a full review of both pages (spec 0011 steps 3 and 4), plus two from spec 0012: does Polar's own use of billing details as merchant of record (fraud, security, tax records) make it a controller for that part, and does every cookie claim C6 calls strictly necessary meet that exemption, given Clerk's `__refresh_<suffix>` stays after sign out on production. It sits before feature 17 because the Polar answer can change what the DPA says.
