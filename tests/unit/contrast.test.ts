@@ -60,6 +60,9 @@ const TOKENS = Object.freeze([
   "accent-bright",
   "border-soft",
   "border-mid",
+  "accent-edge",
+  "night-raised",
+  "night-faint",
 ]);
 
 /** 4.5:1 for text, 3:1 for icons, control edges and the focus ring (WCAG 1.4.3, 1.4.11). */
@@ -132,6 +135,18 @@ const CONTRACT: readonly Pairing[] = Object.freeze([
   { foreground: "focus", background: "glow", minimum: GRAPHIC },
   ...pairings(["ink-soft"], ["canvas", "surface", "subtle", "glow"], TEXT),
   { foreground: "ink-subtle", background: "accent-faint", minimum: TEXT },
+  // The black box section's tinted look: the box laid over text in red, its
+  // chip and its copy (`CoverFigure`'s `tinted`).
+  { foreground: "danger-strong", background: "danger-bg", minimum: TEXT },
+  // The network band's table on its raised fill: its rows, the visitor's
+  // file in the accent, and the column heads in `night-faint`.
+  ...pairings(["night-muted", "night-accent", "night-faint"], ["night-raised"], TEXT),
+  // The closing card on `accent`: its line in `accent-soft`, its heading in
+  // `on-accent` (held above), its button's words in `accent` on `surface`
+  // (held above), and the ring around that button in `ink`, on `accent` and
+  // on the `accent-bright` wash behind it.
+  { foreground: "accent-soft", background: "accent", minimum: TEXT },
+  ...pairings(["ink"], ["accent", "accent-bright"], GRAPHIC),
 ]);
 
 /**

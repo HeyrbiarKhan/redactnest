@@ -1,20 +1,13 @@
-import {
-  ArrowRight,
-  Check,
-  FileMinus,
-  FileUp,
-  Info,
-  ScanSearch,
-  ShieldCheck,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowRight, Check, FileUp, ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
+import { Fragment } from "react";
 
 import { config } from "@/config";
 import { cx } from "@/lib/cx";
 import { DROP_TEXT } from "@/lib/flow-text";
 import {
   capLine,
+  closingLine,
   findsItems,
   HOME_BAND_ID,
   HOME_TEXT,
@@ -25,9 +18,7 @@ import { LEGAL } from "@/lib/legal";
 import { sectionId } from "@/lib/policy-sections";
 import { HOME_PATH, HOW_IT_WORKS_ID, SECURITY_PATH, TOOL_PATH } from "@/lib/routes";
 import { Button } from "@/ui/button";
-import { Card } from "@/ui/card";
 import { CoverFigure } from "@/ui/cover-figure";
-import { IconCircle } from "@/ui/icon-circle";
 import { PageContainer } from "@/ui/page-container";
 
 import { HomeWindow } from "./home-window";
@@ -275,31 +266,36 @@ export default function HomePage() {
           </PageContainer>
         </section>
 
+        {/*
+          The black box comparison (spec 0026, AC-8, as the owner's port of
+          `Main.dc.html` amends it): the words on the left, 16 pixels apart,
+          and the two panels in `CoverFigure`'s `tinted` look on the right
+          from `lg`, on `subtle` between quiet rules.
+        */}
         <section
           aria-labelledby="home-black-box"
           data-testid="home-black-box"
-          className="border-y border-border bg-subtle"
+          className="border-y border-muted bg-subtle"
         >
           <PageContainer
             width="wide"
-            className="grid grid-cols-1 items-center gap-10 py-16 sm:py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]"
+            className="grid grid-cols-1 items-center gap-10 py-16 sm:py-20 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-16 lg:py-26"
           >
-            <div className="flex min-w-0 flex-col gap-5">
-              <SectionHead
+            <div className="flex min-w-0 flex-col items-start gap-4">
+              <p className="text-small leading-tight font-semibold tracking-[0.02em] text-accent">
+                {HOME_TEXT.blackBox.eyebrow}
+              </p>
+              <h2
                 id="home-black-box"
-                eyebrow={HOME_TEXT.blackBox.eyebrow}
-                title={HOME_TEXT.blackBox.title}
-              />
-              <p className="max-w-xl text-ink-muted">{HOME_TEXT.blackBox.body}</p>
-              <a
-                href={CHECK_HREF}
-                className="inline-flex min-h-6 items-center gap-1 self-start rounded-item font-medium text-accent-strong underline decoration-1 underline-offset-4"
+                className="max-w-full text-headline text-ink wrap-break-word"
               >
-                {HOME_TEXT.blackBox.link}
-                <ArrowRight aria-hidden="true" className="size-4" strokeWidth={1.75} />
-              </a>
+                {HOME_TEXT.blackBox.title}
+              </h2>
+              <p className="text-lede text-ink-muted">{HOME_TEXT.blackBox.body}</p>
+              <SectionLink href={CHECK_HREF}>{HOME_TEXT.blackBox.link}</SectionLink>
             </div>
             <CoverFigure
+              look="tinted"
               panels={HOME_TEXT.blackBox.panels}
               caption={HOME_TEXT.blackBox.caption}
               className="min-w-0"
@@ -307,56 +303,57 @@ export default function HomePage() {
           </PageContainer>
         </section>
 
-        <PageContainer width="wide" className="flex flex-col gap-16 py-16 sm:py-20">
-          {/*
-            On the page's own canvas, inside the container, rather than a full
-            width white strip: the two cards are the white (AC-11). Side by side
-            and equal height from `md`, Looks for first when stacked. Their
-            proportion and spacing follow your mockup,
-            `docs/design/references/05-finds-and-strips.png`, read at its true
-            scale (it is this page at 1280 pixels, drawn at 1.5x).
-          */}
+        {/*
+          What RedactNest looks for and strips (spec 0013, AC-11, as the
+          owner's port of `Main.dc.html` amends it): the head, then two cards
+          side by side from `md`, each a title and subtitle over its items as
+          chips, closed by a note. The lists still come from `findsItems()` and
+          `strippedItems()`, so they name exactly what exists. With billing on,
+          the Looks for card ends with Pro's own terms, in the accent.
+        */}
+        <PageContainer width="wide" className="py-16 sm:py-20 lg:py-28">
           <section
             aria-labelledby={HOME_BAND_ID}
             data-testid="home-band"
-            className="flex flex-col gap-7"
+            className="flex flex-col gap-12"
           >
-            {/* "RedactNest" is wider than a phone at 200% text (spec 0024, AC-14). */}
-            <h2 id={HOME_BAND_ID} className="text-headline text-ink wrap-break-word">
-              {HOME_TEXT.band.title}
-            </h2>
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* The query container for the Looks for columns below. */}
-              <Card data-testid="home-finds" spacious className="@container">
-                <BandCardHeader
-                  icon={ScanSearch}
-                  title={HOME_TEXT.band.finds.title}
-                  subtitle={HOME_TEXT.band.finds.subtitle}
-                />
-                <BandRows items={findsItems()} />
-                <BandCardClose>{HOME_TEXT.band.finds.line}</BandCardClose>
-              </Card>
-
-              {/* The query container for the Strips columns below. */}
-              <Card data-testid="home-strips" spacious className="@container">
-                <BandCardHeader
-                  icon={FileMinus}
-                  title={HOME_TEXT.band.strips.title}
-                  subtitle={HOME_TEXT.band.strips.subtitle}
-                />
-                {/* Each stripped kind on the same row as a detector, a check on its tile. */}
-                <BandRows
-                  items={strippedItems().map((label) => ({ icon: Check, label }))}
-                />
-                <BandCardClose>{HOME_TEXT.band.strips.note}</BandCardClose>
-              </Card>
+            <div className="flex max-w-160 flex-col gap-3.5">
+              <p className="text-small leading-tight font-semibold tracking-[0.02em] text-accent">
+                {HOME_TEXT.band.eyebrow}
+              </p>
+              {/* "RedactNest" is wider than a phone at 200% text (spec 0024, AC-14). */}
+              <h2 id={HOME_BAND_ID} className="text-headline text-ink wrap-break-word">
+                {HOME_TEXT.band.title}
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <BandCard
+                testId="home-finds"
+                title={HOME_TEXT.band.finds.title}
+                subtitle={HOME_TEXT.band.finds.subtitle}
+                items={findsItems().map(({ label }) => label)}
+                extra={config.billingEnabled ? HOME_TEXT.band.finds.termsChip : undefined}
+                note={HOME_TEXT.band.finds.line}
+              />
+              <BandCard
+                testId="home-strips"
+                title={HOME_TEXT.band.strips.title}
+                subtitle={HOME_TEXT.band.strips.subtitle}
+                items={strippedItems()}
+                note={HOME_TEXT.band.strips.note}
+              />
             </div>
           </section>
         </PageContainer>
 
         {/*
-          The network band (spec 0026, AC-9): a full width `night` section
-          listing what `/tool` fetches, each row with the paths it stands for.
+          The network band (spec 0026, AC-9, as the owner's port of
+          `Main.dc.html` amends it): a full width `night` section, the words on
+          the left and on the right a table of what `/tool` fetches, set in
+          the monospace stack the owner allowed here (`data-mono`), each row
+          its name and the paths on our own origin it stands for. A path breaks
+          only at a slash, never inside a word, unless one segment alone is
+          wider than the table (320 pixels at 200% text).
           `tests/e2e/network-list.spec.ts` reads those paths from this list
           and holds a full run's every request to them, so the list cannot
           drift from what the page does. `data-band` scopes the one rule in
@@ -371,57 +368,52 @@ export default function HomePage() {
         >
           <PageContainer
             width="wide"
-            className="grid grid-cols-1 items-start gap-10 py-16 sm:py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]"
+            className="grid grid-cols-1 items-center gap-10 py-16 sm:py-20 lg:grid-cols-2 lg:gap-16 lg:py-24"
           >
-            <div className="flex min-w-0 flex-col items-start gap-5">
-              <div className="flex flex-col gap-3">
-                <p className="text-small font-semibold text-night-accent">
-                  {HOME_TEXT.network.eyebrow}
-                </p>
-                <h2
-                  id="home-network"
-                  className="text-headline text-balance text-night-ink wrap-break-word"
-                >
-                  {HOME_TEXT.network.title}
-                </h2>
-              </div>
-              <p className="max-w-xl text-night-muted">{HOME_TEXT.network.body}</p>
-              <a
-                href={CHECK_IT_HREF}
-                className="inline-flex min-h-6 items-center gap-1 rounded-item font-medium text-night-accent underline decoration-1 underline-offset-4"
-              >
-                {HOME_TEXT.network.link}
-                <ArrowRight aria-hidden="true" className="size-4" strokeWidth={1.75} />
-              </a>
-            </div>
-            <div className="min-w-0 rounded-card border border-night-border p-5">
-              <p
-                id="home-network-list"
-                className="text-small font-semibold text-night-muted"
-              >
-                {HOME_TEXT.network.listLabel}
+            <div className="flex min-w-0 flex-col items-start gap-4">
+              <p className="text-small leading-tight font-semibold tracking-[0.02em] text-night-accent">
+                {HOME_TEXT.network.eyebrow}
               </p>
-              <ul
-                role="list"
-                aria-labelledby="home-network-list"
-                className="mt-2 flex flex-col divide-y divide-night-border wrap-break-word"
+              <h2
+                id="home-network"
+                className="max-w-full text-headline text-night-ink wrap-break-word"
               >
+                {HOME_TEXT.network.title}
+              </h2>
+              <p className="text-lede text-night-muted">{HOME_TEXT.network.body}</p>
+              <SectionLink href={CHECK_IT_HREF} night>
+                {HOME_TEXT.network.link}
+              </SectionLink>
+            </div>
+            <div
+              data-mono=""
+              className="min-w-0 rounded-card border border-night-border bg-night-raised p-4.5 font-mono text-small leading-loose text-night-muted"
+            >
+              {/* The column heads, which the rows' own words already carry. */}
+              <div
+                aria-hidden="true"
+                className="mb-1.5 flex flex-wrap justify-between gap-x-6 border-b border-night-border pb-2 text-night-faint"
+              >
+                <span>{HOME_TEXT.network.columns.name}</span>
+                <span>{HOME_TEXT.network.columns.path}</span>
+              </div>
+              <ul role="list" aria-label={HOME_TEXT.network.listLabel}>
                 {NETWORK_ROWS.map((row) => (
                   <li
                     key={row.label}
                     data-testid="network-row"
                     data-paths={row.paths.join(" ")}
-                    className="flex flex-col gap-1 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6"
-                  >
-                    <span className="flex min-w-0 flex-col">
-                      <span className="font-semibold text-night-ink">{row.label}</span>
-                      <span className="text-small text-night-muted">{row.what}</span>
-                    </span>
-                    {row.paths.length > 0 && (
-                      <span className="text-small text-night-accent wrap-anywhere sm:text-right">
-                        {row.paths.join(", ")}
-                      </span>
+                    className={cx(
+                      "flex flex-wrap justify-between gap-x-6",
+                      row.paths.length === 0 && "text-night-accent",
                     )}
+                  >
+                    <span className="min-w-0">
+                      <span>{row.label}</span>
+                    </span>
+                    <span className="ms-auto min-w-0 text-right wrap-break-word">
+                      {row.paths.length > 0 ? <Paths paths={row.paths} /> : row.what}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -430,15 +422,16 @@ export default function HomePage() {
         </section>
 
         {/*
-          The two plans (spec 0026, AC-10), the same cards as `/pricing`,
-          only on a build that sells Pro.
+          The two plans (spec 0026, AC-10, as the owner's port of
+          `Main.dc.html` amends it): `PricingCards`' summary form, two equal
+          cards, Pro's button to Pricing. Only on a build that sells Pro.
         */}
         {config.billingEnabled && (
-          <PageContainer width="wide" className="py-16 sm:py-20">
+          <PageContainer width="wide" className="pt-16 pb-12 sm:pt-20 lg:pt-28">
             <section
               aria-labelledby="home-pricing"
               data-testid="home-pricing"
-              className="flex flex-col gap-10"
+              className="flex flex-col gap-12"
             >
               <SectionHead
                 id="home-pricing"
@@ -446,38 +439,89 @@ export default function HomePage() {
                 title={HOME_TEXT.pricing.title}
                 centred
               />
-              <div className="mx-auto w-full max-w-3xl">
-                <PricingCards headingLevel={3} />
+              <div className="mx-auto w-full max-w-205">
+                <PricingCards
+                  headingLevel={3}
+                  summary
+                  getPro={HOME_TEXT.pricing.getPro}
+                />
               </div>
             </section>
           </PageContainer>
         )}
 
         {/*
-          The closing band (spec 0026, AC-8): one heading and the hero's own
-          way into the tool, across the page with the page's own gutters, so
-          at 320 pixels with 200% text the button has the hero's width.
-          `accent-faint` rather than the mockup's filled accent, because the
-          focus ring sits on the band and `focus` on `accent` is 1.68:1, under
-          the 3:1 a ring needs (WCAG 1.4.11).
+          The questions (the owner's port of `Main.dc.html`, 2026-11-25): the
+          browser's own disclosures, no script, the first open, each answer in
+          today's words. 820 pixels across, as drawn.
         */}
-        <section
-          aria-labelledby="home-closing"
-          data-testid="home-closing"
-          className="border-t border-border bg-accent-faint"
-        >
-          <PageContainer
-            width="wide"
-            className="flex flex-col gap-6 py-14 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <h2 id="home-closing" className="text-headline text-ink wrap-break-word">
-              {HOME_TEXT.closing}
+        <div className="mx-auto w-full max-w-205 px-4 pt-16 pb-16 sm:px-6 sm:pt-20 lg:px-8 lg:pb-28">
+          <section aria-labelledby="home-questions" data-testid="home-questions">
+            <h2
+              id="home-questions"
+              className="mb-6 text-[2rem] leading-[1.1] font-bold tracking-[-0.025em] text-ink wrap-break-word"
+            >
+              {HOME_TEXT.questions.title}
             </h2>
-            <Button href={TOOL_PATH} reload size="lg" className="self-start sm:self-auto">
+            <div className="border-t border-border">
+              {HOME_TEXT.questions.items.map(({ question, answer, withPro }, index) => (
+                <details
+                  key={question}
+                  open={index === 0}
+                  className="border-b border-border py-4.5 wrap-break-word"
+                >
+                  <summary className="rounded-item text-body leading-6 font-semibold text-ink">
+                    {question}
+                  </summary>
+                  <p className="mt-2.5 text-copy leading-[1.6] text-ink-muted">
+                    {answer}
+                    {withPro !== undefined && config.billingEnabled && ` ${withPro}`}
+                  </p>
+                </details>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        {/*
+          The closing card (the owner's port of `Main.dc.html`, 2026-11-25): a
+          rounded `accent` card, its wash brightening to `accent-bright` at the
+          top right, the heading and the caps line in light ink, and the
+          hero's own way into the tool as a white button. `data-band` scopes
+          the rule that rings focus in `ink` here (WCAG 1.4.11). The words
+          stay on the plain `accent`: the wash is gone by 70% of its reach,
+          short of them.
+        */}
+        <PageContainer width="wide" className="pb-16 lg:pb-24">
+          <section
+            aria-labelledby="home-closing"
+            data-testid="home-closing"
+            data-band="accent"
+            className="flex flex-col items-start gap-8 rounded-band bg-accent bg-radial-[600px_240px_at_85%_0%] from-accent-bright to-transparent to-70% p-6 text-on-accent sm:flex-row sm:items-center sm:justify-between sm:p-8 lg:p-14"
+          >
+            <div className="max-w-full min-w-0">
+              <h2
+                id="home-closing"
+                className="text-[2.125rem] leading-[1.1] font-bold tracking-[-0.025em] text-on-accent wrap-break-word"
+              >
+                {HOME_TEXT.closing}
+              </h2>
+              <p className="mt-2.5 text-body leading-tight text-accent-soft">
+                {closingLine(config.billingEnabled, config.freePageCap)}
+              </p>
+            </div>
+            <Button
+              href={TOOL_PATH}
+              reload
+              variant="inverse"
+              size="xl"
+              // A word may break only where none fits (320 pixels, 200% text).
+              className="max-w-full shrink-0 wrap-anywhere"
+            >
               {HOME_TEXT.primary}
             </Button>
-          </PageContainer>
-        </section>
+          </section>
+        </PageContainer>
       </main>
     </>
   );
@@ -511,11 +555,10 @@ function SectionHead({
           : "flex flex-col gap-3.5"
       }
     >
-      <p className="text-small font-semibold tracking-[0.02em] text-accent">{eyebrow}</p>
-      <h2
-        id={id}
-        className="max-w-full text-headline text-balance text-ink wrap-break-word"
-      >
+      <p className="text-small leading-tight font-semibold tracking-[0.02em] text-accent">
+        {eyebrow}
+      </p>
+      <h2 id={id} className="max-w-full text-headline text-ink wrap-break-word">
         {title}
       </h2>
       {lead !== undefined && <p className="max-w-140 text-lede text-ink-muted">{lead}</p>}
@@ -587,97 +630,106 @@ function StepDrawing({ index }: { readonly index: number }) {
 }
 
 /**
- * A band card's opening: the icon on its soft square tile beside the card's
- * `h3` and, under it, the subtitle. The tile is decoration (`IconCircle` hides
- * it), so the heading is the words alone. Each card's list keeps
- * `role="list"` on its `ul` on purpose: Safari drops a list's semantics once
- * its bullets are removed, and the count is part of what the card says
- * (AC-11).
- *
- * On a card whose own content is under 12rem the tile sits above the words
- * instead, here, in each row and in the close (spec 0024, AC-14). The card is
- * the query container and the 12rem moves with the text size: at the default
- * size the narrowest card, on a 320 pixel phone, is about 14.4rem, so nothing
- * stacks at any width, while at 200% text on a phone it is about 4.4rem, too
- * narrow for a tile, its gap and a word, which used to spill past the card.
- * Long words break only when they cannot fit a line alone.
+ * A section's link onward, as `Main.dc.html` draws it: 15 pixels, semibold,
+ * in the accent and underlined like every link outside the header's nav
+ * (spec 0003, INV-8), with an arrow after it that assistive technology
+ * skips. `night` on the network band, where it takes `night-accent`.
  */
-function BandCardHeader({
-  icon,
+function SectionLink({
+  href,
+  night = false,
+  children,
+}: {
+  readonly href: string;
+  readonly night?: boolean;
+  readonly children: string;
+}) {
+  return (
+    <a
+      href={href}
+      className={cx(
+        "mt-1 inline-flex min-h-6 items-center gap-1 rounded-item text-copy font-semibold underline decoration-1 underline-offset-[0.2em]",
+        night ? "text-night-accent" : "text-accent",
+      )}
+    >
+      {children}
+      <ArrowRight aria-hidden="true" className="size-4 shrink-0" strokeWidth={2} />
+    </a>
+  );
+}
+
+/**
+ * A band card (spec 0013, AC-11, as `Main.dc.html` draws it): 16 pixel
+ * corners, 28 in from the edge, its title and subtitle, then its items as
+ * chips on `muted`, the optional `extra` chip in the accent, and the note
+ * that closes it. A chip is words, never a control, so nothing here acts.
+ */
+function BandCard({
+  testId,
   title,
   subtitle,
+  items,
+  extra,
+  note,
 }: {
-  readonly icon: LucideIcon;
+  readonly testId: string;
   readonly title: string;
   readonly subtitle: string;
+  readonly items: readonly string[];
+  readonly extra?: string;
+  readonly note: string;
 }) {
+  const headingId = `${testId}-title`;
   return (
-    <div className="flex flex-col gap-5 @min-[12rem]:flex-row @min-[12rem]:items-center">
-      <IconCircle icon={icon} tone="accent" size="lg" shape="square" />
-      <div className="flex min-w-0 flex-col gap-1 wrap-break-word">
-        <h3 className="text-heading text-ink">{title}</h3>
-        <p className="text-small text-ink-muted">{subtitle}</p>
-      </div>
-    </div>
-  );
-}
-
-/**
- * A band card's list: each item in its own soft row, its icon on a square
- * tile beside its words. Looks for and Strips draw the same row (feature 26),
- * so the two cards read as one pair, and the grid stands them the same height
- * whatever each list holds (seven detectors; six stripped kinds while XMP
- * metadata waits on feature 32, spec 0019, AC-12). Nothing here acts: no
- * chevron, no link, no tab stop and no hover
- * change, so the cursor rule leaves it the arrow (AC-33). A `border` edge on
- * `surface`, not `subtle`, which is the checklist's hover tint and would make
- * a row look pressable (spec 0026, AC-1 made the card and the page both white).
- *
- * One list, so a screen reader hears its items together. Once the card's own
- * content is 26rem wide the rows take two columns 12 pixels apart, the rows'
- * own spacing, read down the first, then the second. The card is the query
- * container, never the window, because from `md` to about 1020 pixels it sits
- * beside the other card and is too narrow for two. The two cards are always
- * the same width, so both lists fold together. A row never splits across the
- * columns, and in rem, so at 200% text the list stays one column.
- */
-function BandRows({
-  items,
-}: {
-  readonly items: readonly { readonly icon: LucideIcon; readonly label: string }[];
-}) {
-  return (
-    <ul
-      role="list"
-      className="flex flex-col gap-3 @min-[26rem]:block @min-[26rem]:columns-2 @min-[26rem]:gap-x-3"
+    <section
+      aria-labelledby={headingId}
+      data-testid={testId}
+      className="flex flex-col gap-4.5 rounded-panel border border-border bg-surface p-7 shadow-card wrap-break-word"
     >
-      {items.map(({ icon, label }) => (
-        <li
-          key={label}
-          className="flex break-inside-avoid flex-col gap-5 rounded-card border border-border bg-surface px-2 py-2.5 font-semibold text-ink @min-[12rem]:flex-row @min-[12rem]:items-center @min-[12rem]:px-3 @min-[26rem]:not-last:mb-3"
-        >
-          <IconCircle icon={icon} tone="accent" shape="square" />
-          {/* Its own box, so a word wider than a narrow card can break. */}
-          <span className="min-w-0 wrap-break-word">{label}</span>
-        </li>
-      ))}
-    </ul>
+      <div>
+        <h3 id={headingId} className="text-lg font-semibold text-ink">
+          {title}
+        </h3>
+        <p className="mt-1.5 text-small text-ink-subtle">{subtitle}</p>
+      </div>
+      <ul role="list" className="flex flex-wrap gap-2">
+        {items.map((item) => (
+          <li
+            key={item}
+            className="flex min-h-9 max-w-full items-center rounded-full bg-muted px-3.5 text-small font-medium text-ink wrap-anywhere"
+          >
+            {item}
+          </li>
+        ))}
+        {extra !== undefined && (
+          <li className="flex min-h-9 max-w-full items-center rounded-full bg-accent-faint px-3.5 text-small font-medium text-accent-strong wrap-anywhere">
+            {extra}
+          </li>
+        )}
+      </ul>
+      <p className="text-small leading-normal text-ink-subtle">{note}</p>
+    </section>
   );
 }
 
 /**
- * A band card's close: a `border` rule across the card, then an `accent` info
- * icon, hidden from assistive technology, beside the card's closing line.
+ * The paths a network row stands for, joined by commas, each free to break
+ * after a slash and nowhere else (`wbr`), so no path splits inside a word.
  */
-function BandCardClose({ children }: { readonly children: string }) {
-  return (
-    <div className="flex flex-col gap-3 border-t border-border pt-5 @min-[12rem]:flex-row @min-[12rem]:items-center">
-      <Info
-        aria-hidden="true"
-        className="size-7 shrink-0 text-accent"
-        strokeWidth={1.75}
-      />
-      <p className="min-w-0 text-small text-ink-muted wrap-break-word">{children}</p>
-    </div>
-  );
+function Paths({ paths }: { readonly paths: readonly string[] }) {
+  return paths.map((path, index) => (
+    <Fragment key={path}>
+      {index > 0 && ", "}
+      {path.split("/").map((part, at) => (
+        <Fragment key={at}>
+          {at > 0 && (
+            <>
+              /<wbr />
+            </>
+          )}
+          {part}
+        </Fragment>
+      ))}
+    </Fragment>
+  ));
 }

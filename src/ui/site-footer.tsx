@@ -23,6 +23,13 @@ import { PageContainer } from "./page-container";
  * `minmax(0,1fr)` reads as the change it is. Spec 0024, AC-17, *The footer at
  * 200% text*.
  *
+ * From `xl` it follows `Main.dc.html` (the owner's port, 2026-11-25): the
+ * brand and three 204 pixel groups, 32 pixels apart, the mockup's `2fr 1fr
+ * 1fr 1fr` at 1440 pixels. The groups are basis 12.75rem and grow, so where
+ * the text is larger they wrap under each other rather than squeeze. Below
+ * `xl` the groups keep their own widths, so from `md` they share the brand's
+ * row (spec 0024, AC-17). Its rules are the mockup's lighter `muted`.
+ *
  * It reads nothing itself. The layout passes in the brand, the groups (spec
  * 0011, AC-4) and the notice with its source link (spec 0009, INV-8), because
  * `src/ui` may not import the config those come from (spec 0003, AC-19).
@@ -38,14 +45,18 @@ export function SiteFooter({
   readonly notice: ReactNode;
 }) {
   return (
-    <footer className="border-t border-border bg-canvas">
+    <footer className="border-t border-muted bg-canvas">
       <PageContainer
         width="wide"
-        className="@container grid gap-8 py-10 text-small text-ink-muted md:grid-cols-[minmax(min-content,1fr)_auto]"
+        className="@container grid gap-x-8 gap-y-10 pt-14 pb-10 text-small text-ink-muted md:grid-cols-[minmax(min-content,1fr)_auto] xl:grid-cols-[minmax(min-content,1fr)_minmax(0,1.657fr)]"
       >
-        <div className="flex flex-col gap-3">{brand}</div>
-        <div className="flex flex-wrap gap-x-16 gap-y-6">{groups}</div>
-        <div className="border-t border-border pt-6 md:col-span-2">{notice}</div>
+        <div className="flex flex-col gap-2.5">{brand}</div>
+        <div className="flex flex-wrap gap-x-8 gap-y-6 xl:[&>*]:grow xl:[&>*]:basis-51">
+          {groups}
+        </div>
+        <div className="border-t border-muted pt-5 text-ink-subtle md:col-span-2">
+          {notice}
+        </div>
       </PageContainer>
     </footer>
   );

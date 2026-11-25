@@ -27,11 +27,12 @@ export function LinkGroup({
   readonly children: ReactNode;
 }) {
   return (
-    <nav aria-label={label} className={cx("flex flex-col gap-2", className)}>
+    <nav aria-label={label} className={cx("flex flex-col gap-1", className)}>
       <div aria-hidden="true" className="font-semibold text-ink">
         {label}
       </div>
-      <ul role="list" className="flex flex-col gap-1">
+      {/* 27 pixels from line to line, `Main.dc.html`'s footer rhythm. */}
+      <ul role="list" className="flex flex-col gap-0.75">
         {children}
       </ul>
     </nav>

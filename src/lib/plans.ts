@@ -10,12 +10,19 @@
  * written here: they come from `config` (INV-8).
  */
 
-export const FREE_PLAN = Object.freeze({ name: "Free" });
+/**
+ * `price` is the home page's large figure on each plan card, and `per` the
+ * small words beside Pro's (`Main.dc.html`, the owner's port, 2026-11-25);
+ * `priceLine` stays Pricing's own. Checked with the price at each go live.
+ */
+export const FREE_PLAN = Object.freeze({ name: "Free", price: "$0" });
 
 export const PRO_PLAN = Object.freeze({
   name: "Pro",
   /** Polar's "RedactNest Pro" product, $19 monthly. */
   priceLine: "$19 a month",
+  price: "$19",
+  per: "/ month",
 });
 
 /**

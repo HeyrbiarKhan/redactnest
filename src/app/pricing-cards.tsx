@@ -3,7 +3,7 @@ import { Check } from "lucide-react";
 import { config } from "@/config";
 import { LEGAL } from "@/lib/legal";
 import { FREE_PLAN, PLAN_BADGE, PRO_PLAN } from "@/lib/plans";
-import { SUBSCRIBE_PATH, TERMS_PATH, TOOL_PATH } from "@/lib/routes";
+import { PRICING_PATH, SUBSCRIBE_PATH, TERMS_PATH, TOOL_PATH } from "@/lib/routes";
 import { Button } from "@/ui/button";
 import { Card } from "@/ui/card";
 
@@ -13,9 +13,16 @@ import { NAV_TEXT } from "./site-nav";
  * Each plan's lines, every cap from `config` (spec 0012, INV-9). Exported so
  * the home page's words test can read them as the cards say them.
  */
-export function planLines(): { readonly free: string[]; readonly pro: string[] } {
+export function planLines(): {
+  readonly free: string[];
+  readonly pro: string[];
+  readonly proSummary: string;
+} {
   return {
     free: [`Up to ${config.freePageCap} pages a document`],
+    // The home page's one line for Pro (`Main.dc.html`): its two caps, the
+    // pages and the terms, each from config.
+    proSummary: `Up to ${config.maxPages} pages, plus up to ${config.maxCustomTerms} custom terms`,
     pro: [
       `Up to ${config.maxPages} pages a document`,
       // Spec 0017, AC-26: Pro does this now, its cap from config.
@@ -38,9 +45,27 @@ export function planLines(): { readonly free: string[]; readonly pro: string[] }
  * `src/lib/plans.ts`, and every seller and agreement word from
  * `src/lib/legal.ts`, so no number is written here. The caller shows it only
  * with billing on.
+ *
+ * `summary` is the home page's form (the owner's port of `Main.dc.html`,
+ * 2026-11-25): two equal cards, each its name, its price large and one line,
+ * then a full width button. Free's opens the tool; Pro's reads "Get Pro" and
+ * opens Pricing, a plain link, so the seller, tax and terms lines stay on
+ * Pricing beside Subscribe (spec 0012, AC-13).
  */
-export function PricingCards({ headingLevel }: { readonly headingLevel: 2 | 3 }) {
+export function PricingCards({
+  headingLevel,
+  summary = false,
+  getPro,
+}: {
+  readonly headingLevel: 2 | 3;
+  readonly summary?: boolean;
+  /** The summary Pro card's button, the caller's words. */
+  readonly getPro?: string;
+}) {
   const lines = planLines();
+  if (summary) {
+    return <SummaryCards headingLevel={headingLevel} getPro={getPro ?? PRO_PLAN.name} />;
+  }
   return (
     // `grid-cols-1` (a `minmax(0, 1fr)` column), never the implicit `auto`
     // one, which grows to the widest card's content and scrolled `/pricing`
@@ -103,5 +128,65 @@ function PlanFeatures({ items }: { readonly items: readonly string[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * The home page's two plan cards (`Main.dc.html`): 16 pixel corners, 28 in
+ * from the edge, 16 between parts, side by side and equal from `md`. Pro's
+ * accent edge and teal shadow only mark it, as its heading names it.
+ */
+function SummaryCards({
+  headingLevel,
+  getPro,
+}: {
+  readonly headingLevel: 2 | 3;
+  readonly getPro: string;
+}) {
+  const Heading = headingLevel === 2 ? "h2" : "h3";
+  const lines = planLines();
+  const card = "flex flex-col gap-4 rounded-panel bg-surface p-7";
+  return (
+    <div
+      data-testid="pricing-cards"
+      className="grid grid-cols-1 gap-6 wrap-break-word md:grid-cols-2"
+    >
+      <section className={`${card} border border-border shadow-card`}>
+        <Heading className="text-copy font-semibold text-ink">{FREE_PLAN.name}</Heading>
+        <p className="text-price text-ink">{FREE_PLAN.price}</p>
+        {/* It takes any spare height, so both buttons rest at the foot. */}
+        <p className="grow text-copy text-ink-muted">{lines.free[0]}</p>
+        <Button
+          href={TOOL_PATH}
+          reload
+          variant="secondary"
+          size="md"
+          fullWidth
+          className="mt-2"
+        >
+          {NAV_TEXT.tryFree}
+        </Button>
+      </section>
+      <section className={`${card} border-[1.5px] border-accent shadow-plan`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Heading className="text-copy font-semibold text-ink">{PRO_PLAN.name}</Heading>
+          <span className="rounded-full bg-accent-faint px-2.5 py-0.75 text-small font-semibold text-accent-strong">
+            {PLAN_BADGE}
+          </span>
+        </div>
+        <p className="text-price text-ink">
+          {PRO_PLAN.price}
+          <span className="text-copy font-medium tracking-normal text-ink-subtle">
+            {" "}
+            {PRO_PLAN.per}
+          </span>
+        </p>
+        <p className="grow text-copy text-ink-muted">{lines.proSummary}</p>
+        {/* A plain link, so nothing prefetches Pricing (spec 0012, INV-13). */}
+        <Button href={PRICING_PATH} reload size="md" fullWidth className="mt-2">
+          {getPro}
+        </Button>
+      </section>
+    </div>
   );
 }

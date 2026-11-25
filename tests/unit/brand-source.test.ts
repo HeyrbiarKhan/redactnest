@@ -91,9 +91,10 @@ const LARGE_SHADOW = /(^|[\s:!"'`])shadow-(popover|window|plan)\b/g;
 
 const DROPDOWN_MENU = "src/ui/dropdown-menu.tsx";
 const HOME_WINDOW = "src/app/home-window.tsx";
+const PRICING_CARDS = "src/app/pricing-cards.tsx";
 
 describe("the larger shadows (spec 0013, AC-12, as spec 0026 amends it)", () => {
-  it("frame the home page's window and its card, and the account menu, and nothing else", () => {
+  it("frame the home page's window, its card and its Pro card, and the account menu, and nothing else", () => {
     const uses = FILES.flatMap((file) =>
       [...source(file).matchAll(LARGE_SHADOW)].map(([match]) => [file, match.trim()]),
     );
@@ -102,10 +103,11 @@ describe("the larger shadows (spec 0013, AC-12, as spec 0026 amends it)", () => 
       expect.arrayContaining([
         [HOME_WINDOW, "shadow-window"],
         [HOME_PAGE, "shadow-popover"],
+        [PRICING_CARDS, "shadow-plan"],
         [DROPDOWN_MENU, "shadow-popover"],
       ]),
     );
-    expect(uses).toHaveLength(3);
+    expect(uses).toHaveLength(4);
   });
 
   it.each([['"shadow-popover"'], ['"hover:shadow-window"'], ['"p-4 shadow-window"']])(

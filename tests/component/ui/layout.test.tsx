@@ -448,12 +448,15 @@ describe("SiteFooter", () => {
     const grid = screen.getByText("PDF redaction in your browser.").parentElement
       ?.parentElement;
     expect(grid?.parentElement).toBe(footer);
+    // The mockup's 2fr 1fr 1fr 1fr at 1440 pixels (`Main.dc.html`): the brand
+    // to the groups' 676 pixels, the brand still floored at its content.
     expect(grid).toHaveClass(
       "@container",
       "grid",
       "md:grid-cols-[minmax(min-content,1fr)_auto]",
+      "xl:grid-cols-[minmax(min-content,1fr)_minmax(0,1.657fr)]",
     );
-    expect(grid).not.toHaveClass("md:grid-cols-[minmax(0,1fr)_auto]");
+    expect(grid?.className).not.toMatch(/md:grid-cols-\[minmax\(0,1fr\)/);
     expect(footer).not.toHaveClass("@container");
   });
 

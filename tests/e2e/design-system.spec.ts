@@ -276,20 +276,6 @@ async function expectNoHorizontalScroll(page: Page): Promise<void> {
   expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
 }
 
-/** A list's CSS columns as the browser computes them (spec 0013, AC-11). */
-async function columnsOf(
-  list: Locator,
-): Promise<{ count: string; gap: string; rule: string }> {
-  return list.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return {
-      count: style.columnCount,
-      gap: style.columnGap,
-      rule: style.columnRuleStyle,
-    };
-  });
-}
-
 /** A box whose content spills past it, which is what clipping looks like. */
 async function expectContained(box: Locator): Promise<void> {
   const size = await box.evaluate((element) => ({
@@ -1818,21 +1804,64 @@ test.describe("the checklist on the tool page (spec 0005, AC-13)", () => {
 });
 
 test.describe("the fonts the page uses (AC-4)", () => {
+  /**
+   * Inter everywhere (spec 0003, INV-6), except the places the owner's port
+   * of `Main.dc.html` sets in the monospace stack (2026-11-25): the black
+   * box section's two copies of the page's text, then the network band's
+   * table. Each carries `data-mono`, and the list of them is exact, so a
+   * new monospace place fails here until it is named.
+   */
+  const MONO_PLACES: Readonly<Record<string, readonly string[]>> = {
+    "/": ["home-black-box", "home-black-box", "home-network"],
+    "/tool": [],
+  };
+
   for (const path of ["/", "/tool"]) {
-    test(`renders every piece of text on ${path} in Inter`, async ({ page }) => {
+    test(`renders every piece of text on ${path} in Inter, but the named monospace places`, async ({
+      page,
+    }) => {
       await page.goto(path);
 
-      const families = await page.evaluate(() => [
-        ...new Set(
-          [...document.querySelectorAll("body *")].map((element) =>
-            getComputedStyle(element).fontFamily.split(",")[0]?.trim(),
-          ),
-        ),
-      ]);
+      const families = await page.evaluate(() => {
+        const inter = new Set<string>();
+        const mono = new Set<string>();
+        for (const element of document.querySelectorAll("body *")) {
+          const first = getComputedStyle(element).fontFamily.split(",")[0]?.trim() ?? "";
+          (element.closest("[data-mono]") ? mono : inter).add(first);
+        }
+        const places = [...document.querySelectorAll("[data-mono]")].map((element) =>
+          element.closest("[data-testid^='home-']")?.getAttribute("data-testid"),
+        );
+        return { inter: [...inter], mono: [...mono], places };
+      });
       // `next/font` names the self hosted face after the family it wraps.
-      expect(families.every((family) => family?.includes("Inter"))).toBe(true);
+      expect(families.inter.every((family) => family.includes("Inter"))).toBe(true);
+      expect(families.mono.every((family) => family === "ui-monospace")).toBe(true);
+      expect(families.places).toEqual(MONO_PLACES[path]);
     });
   }
+
+  /**
+   * The home page too, its drawings included: they are hidden from assistive
+   * technology but seen, and the brief sets the mockup's 9 to 13 pixel words
+   * at 14 (the owner's port of `Main.dc.html`, 2026-11-25).
+   */
+  test("renders nothing smaller than 14px on the home page, drawings included", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+
+    const smallest = await page.evaluate(() =>
+      Math.min(
+        ...[...document.querySelectorAll("body *")]
+          .filter((element) => element.textContent?.trim())
+          .filter((element) => !element.closest(".sr-only"))
+          .map((element) => Number.parseFloat(getComputedStyle(element).fontSize)),
+      ),
+    );
+    expect(smallest).toBeGreaterThanOrEqual(14);
+  });
 
   test("renders nothing smaller than 14px", async ({ page }) => {
     await page.goto("/tool");
@@ -1866,13 +1895,25 @@ test.describe("the page skeleton (AC-14)", () => {
       await expect(page.locator("main")).toHaveAttribute("tabindex", "-1");
     });
 
-    test(`${path} keeps the header static, so it scrolls away`, async ({ page }) => {
+    /**
+     * Every page's header scrolls away, but the home page's from `lg`, which
+     * the owner's port of `Main.dc.html` keeps at the window's top (spec
+     * 0003, AC-14, as it amends it); the home page's own test walks the
+     * focus clear of it.
+     */
+    test(`${path} keeps the header static, so it scrolls away${path === "/" ? ", below lg" : ""}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1000, height: 800 });
       await page.goto(path);
 
-      const position = await page
-        .getByRole("banner")
-        .evaluate((element) => getComputedStyle(element).position);
-      expect(position).toBe("static");
+      const position = () =>
+        page
+          .getByRole("banner")
+          .evaluate((element) => getComputedStyle(element).position);
+      expect(await position()).toBe("static");
+      await page.setViewportSize({ width: 1280, height: 800 });
+      expect(await position()).toBe(path === "/" ? "sticky" : "static");
     });
   }
 });
@@ -1922,6 +1963,7 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       "What RedactNest looks for and strips",
       "Watch your network tab while you redact",
       "Free to start, Pro for longer files",
+      "Questions",
       "Redact your next PDF",
     ]);
     await expect(main.getByRole("heading", { level: 3 })).toHaveText([
@@ -2014,21 +2056,22 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
   });
 
   /**
-   * Spec 0013, AC-11. Two white cards on the page's canvas, after your mockup
-   * (`docs/design/references/05-finds-and-strips.png`): each a tile beside its
-   * heading and subtitle, a list, then a rule and its closing line. Side by
-   * side and equal height from `md`, Looks for first when stacked. Spec 0019,
-   * AC-12, gives the heading, the first card's title and the closing lines.
+   * Spec 0013, AC-11, as the owner's port of `Main.dc.html` amends it
+   * (2026-11-25): two white cards on the page's canvas, each its title and
+   * subtitle, its items as chips in place of the tiles, then its note. Side
+   * by side and equal height from `md`, Looks for first when stacked. Spec
+   * 0019, AC-12, gives the heading, the first card's title and the notes.
    */
-  test("shows what it looks for and strips as two cards, side by side from md", async ({
+  test("shows what it looks for and strips as two cards of chips, side by side from md", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/");
 
     const band = page.getByTestId("home-band");
     const finds = page.getByTestId("home-finds");
     const strips = page.getByTestId("home-strips");
+    // With billing on (`playwright.config.ts`), Pro's own terms close the list.
     await expect(finds.getByRole("listitem")).toHaveText([
       "Email addresses",
       "Phone numbers",
@@ -2037,12 +2080,13 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       "Bank account numbers (IBAN)",
       "US Social Security numbers",
       "UK National Insurance numbers",
+      "+ Your own terms with Pro",
     ]);
     await expect(finds).toContainText("Sensitive details we can detect in your files.");
     await expect(finds).toContainText(
       "No selectable text wholly inside a page's visible area is removed unless you tick it.",
     );
-    await expect(strips).toContainText("Whenever a file carries them:");
+    await expect(strips).toContainText("Whenever a file carries them");
     // Spec 0019, AC-12: no XMP metadata while a picture can carry it.
     await expect(strips.getByRole("listitem")).toHaveText([
       "Document info",
@@ -2055,133 +2099,47 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     await expect(strips).toContainText(
       "Comments and form fields are flattened into the page: what showed stays, and the comments and fields themselves are removed, with a note's hidden text and any attached file.",
     );
-    // Every item carries its icon on a tile hidden from assistive technology,
-    // and nothing in the band acts: no chevron, link, button or tab stop.
+    // Each item a pill of words, no icon; nothing in the band acts.
     for (const card of [finds, strips]) {
       for (const item of await card.getByRole("listitem").all()) {
-        await expect(item.locator('[aria-hidden="true"] svg')).toHaveCount(1);
-        await expect(item.locator("svg")).toHaveCount(1);
+        await expect(item.locator("svg")).toHaveCount(0);
+        // `rounded-full`, a radius far past the pill's own height.
+        const radius = await item.evaluate((element) =>
+          Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
+        );
+        expect(radius).toBeGreaterThan(1000);
       }
     }
     await expect(band.locator("a, button, [tabindex]")).toHaveCount(0);
 
-    // No full width strip: the section shows the canvas. The cards are white
-    // on white since spec 0026 AC-1, so a `border` edge tells them apart.
+    // No full width strip: the section shows the canvas, and a `border` edge
+    // tells the white cards from it.
     const background = (locator: typeof band) =>
       locator.evaluate((element) => getComputedStyle(element).backgroundColor);
     expect(await background(band)).toBe("rgba(0, 0, 0, 0)");
     expect(
       await finds.evaluate((element) => getComputedStyle(element).borderTopColor),
     ).toBe("rgb(228, 228, 231)");
-    const [bandBox, findsBox, stripsBox] = [
-      await band.boundingBox(),
-      await finds.boundingBox(),
-      await strips.boundingBox(),
-    ];
-    expect(bandBox?.width ?? 0).toBeLessThan(1280);
-
-    expect(findsBox?.y).toBe(stripsBox?.y);
-    expect(findsBox?.height).toBe(stripsBox?.height);
-    expect((findsBox?.x ?? 0) + (findsBox?.width ?? 0)).toBeLessThan(stripsBox?.x ?? 0);
-
-    // Feature 12: seven finds in two columns, so the cards stay close in
-    // height. Read down the first column, then the second: Email addresses to
-    // Card numbers, then the IBAN row to UK National Insurance numbers. The
-    // rows are soft tiles, so the columns sit 12 pixels apart with no rule
-    // between them (spec 0014, AC-12, the pin spec 0013's AC-11 owed).
-    // Feature 26: the strips sit on the same rows in the same columns. Six
-    // while XMP metadata waits on feature 32 (spec 0019, AC-12): Document info
-    // to Bookmarks, then JavaScript to Page thumbnails. The first column holds
-    // the larger half, so the split is read from each list's own count.
-    for (const card of [finds, strips]) {
-      expect(await columnsOf(card.getByRole("list"))).toEqual({
-        count: "2",
-        gap: "12px",
-        rule: "none",
-      });
-      const rows = card.getByRole("listitem");
-      const firstColumn = Math.ceil((await rows.count()) / 2);
-      const [firstRow, lastOfFirst, firstOfSecond] = [
-        await rows.nth(0).boundingBox(),
-        await rows.nth(firstColumn - 1).boundingBox(),
-        await rows.nth(firstColumn).boundingBox(),
-      ];
-      expect(firstOfSecond?.y).toBe(firstRow?.y);
-      expect((lastOfFirst?.x ?? 0) + (lastOfFirst?.width ?? 0)).toBeLessThan(
-        firstOfSecond?.x ?? 0,
-      );
-    }
-    // A strip's row is a find's row: the same height, fill and type.
-    const look = (row: Locator) =>
-      row.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return {
-          height: element.getBoundingClientRect().height,
-          fill: style.backgroundColor,
-          size: style.fontSize,
-          weight: style.fontWeight,
-        };
-      });
-    expect(await look(strips.getByRole("listitem").first())).toEqual(
-      await look(finds.getByRole("listitem").first()),
-    );
+    const [findsBox, stripsBox] = [await rectOf(finds), await rectOf(strips)];
+    expectNear(findsBox.top, stripsBox.top);
+    expectNear(findsBox.bottom, stripsBox.bottom);
+    expect(findsBox.right).toBeLessThan(stripsBox.left);
   });
 
-  /**
-   * The card's own width decides the columns (AC-11), so the list folds as
-   * the cards meet: two while they are stacked, one once they sit side by
-   * side, then two again. Each probe sits at least 20 pixels from a threshold
-   * with or without a classic scrollbar, because headless Chromium hides the
-   * scrollbar a person's browser draws, and a scrollbar moves every threshold
-   * by its width (spec 0013, *The Strips columns*, task 43).
-   */
-  test("sets the Strips columns by the card's own width, probing clear of every threshold", async ({
-    page,
-  }) => {
-    const finds = page.getByTestId("home-finds");
-    const strips = page.getByTestId("home-strips");
-    const list = strips.getByRole("list");
-    // Both lists draw the same rows (feature 26) and fold at the same content
-    // width, and the cards are always the same width, so the two lists are
-    // always one column or two together, 12 pixels apart with no rule
-    // wherever they have two (spec 0014, AC-12).
-    const findsColumns = () => columnsOf(finds.getByRole("list"));
-    const findsCount = async () => (await findsColumns()).count;
-    const TWO = { count: "2", gap: "12px", rule: "none" };
-
-    // Side by side, with room for two columns.
-    await page.setViewportSize({ width: 1080, height: 800 });
+  /** At 200% text the chips wrap inside their cards, none past its edge. */
+  test("keeps every chip inside its card at 200% text", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/");
-    expect(await columnsOf(list)).toEqual(TWO);
-    expect(await findsColumns()).toEqual(TWO);
-    // No strip wraps past two lines in the narrower columns, so every row
-    // keeps the 70 pixels of a find whose label fits on two (68, and the
-    // row's 1 pixel edge above and below since spec 0026, AC-1).
-    for (const item of await list.getByRole("listitem").all()) {
-      expect((await item.boundingBox())?.height).toBe(70);
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+
+    for (const id of ["home-finds", "home-strips"]) {
+      const card = await rectOf(page.getByTestId(id));
+      for (const item of await page.getByTestId(id).getByRole("listitem").all()) {
+        const chip = await rectOf(item);
+        expect(chip.left).toBeGreaterThanOrEqual(card.left);
+        expect(chip.right).toBeLessThanOrEqual(card.right);
+      }
     }
-
-    // Side by side and too narrow for two: one column, with no rule.
-    await page.setViewportSize({ width: 960, height: 800 });
-    expect(await columnsOf(list)).toMatchObject({ count: "auto", rule: "none" });
-    expect(await findsCount()).toBe("auto");
-    const [left, right] = [await finds.boundingBox(), await strips.boundingBox()];
-    expect(left?.y).toBe(right?.y);
-    expect(left?.height).toBe(right?.height);
-    expect((left?.x ?? 0) + (left?.width ?? 0)).toBeLessThan(right?.x ?? 0);
-
-    // Stacked, so the card is wide again: two columns.
-    await page.setViewportSize({ width: 600, height: 900 });
-    expect(await columnsOf(list)).toEqual(TWO);
-    expect(await findsColumns()).toEqual(TWO);
-    const [above, below] = [await finds.boundingBox(), await strips.boundingBox()];
-    expect((above?.y ?? 0) + (above?.height ?? 0)).toBeLessThanOrEqual(below?.y ?? 0);
-
-    // A phone: one column, and nothing scrolls sideways.
-    await page.setViewportSize({ width: 320, height: 640 });
-    expect((await columnsOf(list)).count).toBe("auto");
-    expect(await findsCount()).toBe("auto");
-    await expectNoHorizontalScroll(page);
   });
 
   test("stacks the two cards below md, Looks for first", async ({ page }) => {
@@ -2191,28 +2149,6 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     const finds = await page.getByTestId("home-finds").boundingBox();
     const strips = await page.getByTestId("home-strips").boundingBox();
     expect((finds?.y ?? 0) + (finds?.height ?? 0)).toBeLessThanOrEqual(strips?.y ?? 0);
-  });
-
-  /**
-   * AC-11: both thresholds are in rem, so doubled text needs a card twice as
-   * wide for two columns, and the list stays one column at every width,
-   * the two that show two columns at normal size included.
-   */
-  test("keeps the Strips and Finds lists one column at 200% text", async ({ page }) => {
-    const list = page.getByTestId("home-strips").getByRole("list");
-    const findsList = page.getByTestId("home-finds").getByRole("list");
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("/");
-    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
-
-    for (const width of [1280, 600]) {
-      await page.setViewportSize({ width, height: 900 });
-      expect(await columnsOf(list), `${width}px`).toMatchObject({
-        count: "auto",
-        rule: "none",
-      });
-      expect((await columnsOf(findsList)).count, `${width}px`).toBe("auto");
-    }
   });
 
   /**
@@ -2680,8 +2616,8 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
       // Recorded again for the owner's port of `Main.dc.html` (2026-11-25):
       // the hero, the How it works cards and the band.
       [page.getByTestId("home-hero"), [82, 153, 1116, 505.1]],
-      [page.getByTestId("home-steps").getByRole("list"), [82, 1134.3, 1116, 357]],
-      [page.getByTestId("home-band"), [82, 2385.3, 1116, 619]],
+      [page.getByTestId("home-steps").getByRole("list"), [82, 1131.8, 1116, 357]],
+      [page.getByTestId("home-band"), [82, 2213.1, 1116, 481.5]],
     ] as const) {
       const measured = await box.boundingBox();
       if (measured === null) throw new Error("a recorded box is not drawn");

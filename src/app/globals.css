@@ -63,6 +63,12 @@
   --color-night-muted: #a1a1aa;
   --color-night-accent: #5eead4;
   --color-night-border: #27272a;
+  /*
+   * The band's table (`Main.dc.html`): its raised fill, and its column heads
+   * in `night-faint`, the nearest grey to the mockup's that clears 4.5:1 there.
+   */
+  --color-night-raised: #18181b;
+  --color-night-faint: #808089;
 
   /*
    * The home page's port of `Main.dc.html`. `glow` is the hero's radial wash
@@ -70,7 +76,8 @@
    * dark ink for chips, the trust strip and drawn page text, on light fills
    * only; `accent-bright` the drawn highlight's edge; `border-soft` an unticked
    * box in a drawing and `border-mid` a drawn drop zone's dashed edge, both
-   * decoration that joins no pairing.
+   * decoration that joins no pairing, as is `accent-edge`, the black box
+   * section's removal panel's rim.
    */
   --color-glow: #ecfdf5;
   --color-glow-edge: #d1fae5;
@@ -78,6 +85,7 @@
   --color-accent-bright: #14b8a6;
   --color-border-soft: #d4d4d8;
   --color-border-mid: #a1a1aa;
+  --color-accent-edge: #99f6e4;
 
   /*
    * Radii, from the mockups (AC-2): a menu item, a control, a card, and the
@@ -92,6 +100,8 @@
   --radius-card: 0.875rem;
   --radius-panel: 1rem;
   --radius-window: 1.125rem;
+  /* The home page's closing card. */
+  --radius-band: 1.5rem;
 
   /*
    * Shadows are depth, never a colour role and never behind text, so they are
@@ -105,6 +115,7 @@
   --shadow-popover: 0 12px 30px -10px rgb(0 0 0 / 0.18);
   --shadow-window:
     0 30px 60px -20px rgb(15 118 110 / 0.25), 0 12px 24px -12px rgb(0 0 0 / 0.12);
+  --shadow-plan: 0 20px 40px -20px rgb(15 118 110 / 0.35);
 
   /*
    * One ease out curve. Every transition without a duration of its own takes
@@ -165,6 +176,12 @@
   --text-subhead--letter-spacing: -0.01em;
   --text-copy: 0.9375rem;
   --text-copy--line-height: 1.55;
+
+  /* A plan card's price on the home page (`Main.dc.html`). */
+  --text-price: 2.5rem;
+  --text-price--line-height: 1.1;
+  --text-price--font-weight: 700;
+  --text-price--letter-spacing: -0.03em;
 
   --text-body: 1rem;
   --text-body--line-height: 1.5rem;
@@ -341,6 +358,16 @@
   }
 
   /*
+   * On the home page's closing card the ring takes `ink`: `focus` measures
+   * 1.39:1 on `accent`, and the card's wash brightens to `accent-bright`
+   * behind its button, where `on-accent` measures 2.49:1. `ink` clears 3:1 on
+   * both (WCAG 1.4.11). Scoped by the card's own `data-band`.
+   */
+  [data-band="accent"] :focus-visible {
+    outline-color: var(--color-ink);
+  }
+
+  /*
    * A sticky header never covers what has focus (WCAG 2.4.11, technique C43).
    * From `lg`, where `SiteHeader`'s `sticky` holds, the page keeps the bar's
    * height clear at its top: 4rem and its 1 pixel edge, plus half a rem so a
@@ -386,11 +413,13 @@
  * AC-9 and AC-16).
  */
 @media (forced-colors: active) {
-  [data-band="night"] * {
+  [data-band="night"] *,
+  [data-band="accent"] * {
     color: CanvasText;
   }
 
-  [data-band="night"] a {
+  [data-band="night"] a,
+  [data-band="accent"] a {
     color: LinkText;
   }
 }

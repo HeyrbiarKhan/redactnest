@@ -21,8 +21,8 @@ import { Spinner } from "./spinner";
  * `link` is an action drawn as an underlined link (spec 0026, AC-4).
  */
 export type ButtonVariant =
-  "primary" | "secondary" | "ghost" | "link" | "danger" | "danger-secondary";
-export type ButtonSize = "default" | "lg" | "xl" | "icon";
+  "primary" | "secondary" | "ghost" | "link" | "danger" | "danger-secondary" | "inverse";
+export type ButtonSize = "default" | "md" | "lg" | "xl" | "icon";
 
 interface ButtonOwnProps {
   readonly variant?: ButtonVariant;
@@ -103,6 +103,9 @@ const buttonClasses = cva("transition-[background-color,border-color,color]", {
       primary: "border-transparent bg-accent text-on-accent shadow-card",
       secondary: "border-border bg-surface text-ink shadow-card",
       ghost: "border-transparent bg-transparent text-ink",
+      // White on an `accent` fill: the home page's closing card. Its words are
+      // `accent` on `surface` (5.47:1); the card rings it in `ink`.
+      inverse: "border-transparent bg-surface text-accent",
       // Always underlined, so a link is never told apart by colour alone (INV-8).
       link: "text-accent-strong underline decoration-1 underline-offset-4 disabled:text-ink-muted",
       // `danger-ink` for the fill, the edge and the words, the one danger
@@ -126,6 +129,8 @@ const buttonClasses = cva("transition-[background-color,border-color,color]", {
      */
     size: {
       default: "min-h-10 text-small",
+      // The home page's 44 pixel plan buttons, 15 pixel words (`Main.dc.html`).
+      md: "min-h-11 text-copy",
       lg: "min-h-12 text-body",
       // The home page's 50 pixel buttons, 22 pixels in from each side
       // (`Main.dc.html`): the hero's two and the closing card's.
@@ -142,16 +147,18 @@ const buttonClasses = cva("transition-[background-color,border-color,color]", {
     // One disabled look for every boxed variant, the danger ones included (spec 0013, AC-35).
     {
       shape: "box",
-      look: ["primary", "secondary", "ghost", "danger", "danger-secondary"],
+      look: ["primary", "secondary", "ghost", "danger", "danger-secondary", "inverse"],
       class:
         "disabled:border-border disabled:bg-subtle disabled:text-ink-muted disabled:shadow-none",
     },
     { shape: "box", size: "default", class: "px-4 py-2" },
+    { shape: "box", size: "md", class: "px-4.5 py-2" },
     { shape: "box", size: "lg", class: "px-6 py-2.5" },
     { shape: "box", size: "xl", class: "px-5.5 py-2.5" },
     { shape: "box", size: "icon", class: "p-2" },
     { hover: true, look: "primary", class: "hover:bg-accent-strong" },
     { hover: true, look: ["secondary", "ghost"], class: "hover:bg-muted" },
+    { hover: true, look: "inverse", class: "hover:bg-accent-faint" },
     { hover: true, look: "link", class: "hover:decoration-2" },
     { hover: true, look: "danger", class: "hover:bg-danger-strong" },
     { hover: true, look: "danger-secondary", class: "hover:bg-danger-bg" },

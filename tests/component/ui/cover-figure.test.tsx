@@ -155,3 +155,73 @@ describe("CoverFigure", () => {
     await expectNoAxeViolations(container);
   });
 });
+
+/**
+ * The home page's `tinted` look (the owner's port of `Main.dc.html`,
+ * 2026-11-25): each side tinted by its `tone`, the copy in the monospace
+ * stack the owner allowed here alone (`data-mono`), the caption kept for
+ * assistive technology only, and the panels paired from a narrower figure.
+ */
+describe("CoverFigure's tinted look", () => {
+  const TONED: readonly CoverPanel[] = [
+    { ...PANELS[0]!, tone: "covered" },
+    { ...PANELS[1]!, tone: "removed" },
+  ];
+
+  function Tinted() {
+    return <CoverFigure look="tinted" panels={TONED} caption={CAPTION} />;
+  }
+
+  it("tints the box laid over red and the removal teal, each in words too", () => {
+    render(<Tinted />);
+
+    const [covered, removed] = TONED.map(({ title }) => screen.getByText(title));
+    expect(covered).toHaveClass("bg-danger-bg", "text-danger-strong");
+    expect(removed).toHaveClass("bg-accent-faint", "text-accent-strong");
+    expect(removed?.parentElement).toHaveClass("border-accent-edge");
+    expect(covered?.parentElement).toHaveClass("border-border");
+  });
+
+  it("sets each copy in the monospace stack, marked for the fonts test", () => {
+    const { container } = render(<Tinted />);
+
+    const copies = [...container.querySelectorAll("samp")];
+    expect(copies).toHaveLength(2);
+    for (const samp of copies) {
+      expect(samp).toHaveClass("font-mono");
+      expect(samp).toHaveAttribute("data-mono");
+    }
+  });
+
+  it("names the figure by its caption, with no caption drawn and no hidden text", () => {
+    const { container } = render(<Tinted />);
+
+    expect(screen.getByRole("figure", { name: CAPTION })).toBeInTheDocument();
+    expect(container.querySelector("figcaption")).toBeNull();
+    expect(container.querySelector(".sr-only")).toBeNull();
+  });
+
+  it("pairs the panels from 32rem of the figure's own width", () => {
+    render(<Tinted />);
+
+    const grid = screen.getByRole("figure").firstElementChild;
+    expect(grid).toHaveClass("grid-cols-1", "@min-[32rem]:grid-cols-2");
+  });
+
+  it("leaves the framed look in Inter, its caption drawn", () => {
+    const { container } = render(<Sample />);
+
+    for (const samp of container.querySelectorAll("samp")) {
+      expect(samp).toHaveClass("font-sans");
+      expect(samp).not.toHaveAttribute("data-mono");
+    }
+    expect(screen.getByRole("figure").querySelector("figcaption")).toBeVisible();
+    expect(screen.getByRole("figure")).not.toHaveAttribute("aria-label");
+  });
+
+  it("passes axe", async () => {
+    const { container } = render(<Tinted />);
+
+    await expectNoAxeViolations(container);
+  });
+});

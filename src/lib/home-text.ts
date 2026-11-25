@@ -29,6 +29,7 @@ import { Code, Monitor, Shield, Trash2, type LucideIcon } from "lucide-react";
 import { DETECTOR_LABELS, lookedFor } from "@/lib/detectors";
 import { SANITIZED_TEXT } from "@/lib/flow-text";
 import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
+import { removeTextTermsLine } from "@/lib/search-pages";
 import {
   ENGINE_PREFIX,
   ENTITLEMENT_PATH,
@@ -126,6 +127,32 @@ export function capLine(billingEnabled: boolean, free: number, paid: number): st
   return billingEnabled
     ? `${FREE_PLAN.name} up to ${free} pages a document. ${PRO_PLAN.name} goes up to ${paid}.`
     : `Up to ${free} pages a document.`;
+}
+
+/**
+ * The closing card's line (the owner's port of `Main.dc.html`, 2026-11-25):
+ * the free cap, then "Nothing to install". The cap comes from `config`
+ * through the caller. "Nothing to install" is row M1's other side: the tool
+ * runs in the page, in the browser the visitor already has (spec 0001), with
+ * no download, extension or account to set up first. With billing off there
+ * is no plan to name, so the line names only the cap.
+ */
+export function closingLine(billingEnabled: boolean, free: number): string {
+  return billingEnabled
+    ? `${FREE_PLAN.name} up to ${free} pages. Nothing to install.`
+    : `Up to ${free} pages a document. Nothing to install.`;
+}
+
+/**
+ * One of the home page's questions (the owner's port of `Main.dc.html`,
+ * 2026-11-25): a question, and its answer in today's words from the security
+ * page and the guides. `withPro`, when set, follows the answer only on a build
+ * that sells Pro.
+ */
+export interface HomeQuestion {
+  readonly question: string;
+  readonly answer: string;
+  readonly withPro?: string;
 }
 
 /**
@@ -381,12 +408,14 @@ export const HOME_TEXT = Object.freeze({
     panels: Object.freeze<readonly CoverPanel[]>([
       Object.freeze({
         title: "A box drawn over the text",
+        tone: "covered",
         lines: COVER_LINES,
         readsLabel: "A copy of the text gives",
         reads: "Contact: jane.doe@example.com",
       }),
       Object.freeze({
         title: "RedactNest: removed, then marked",
+        tone: "removed",
         lines: COVER_LINES,
         readsLabel: "A copy of the text gives",
         reads: "Contact:",
@@ -397,11 +426,63 @@ export const HOME_TEXT = Object.freeze({
   /**
    * The pricing section's heading over `PricingCards` (spec 0026, AC-10),
    * shown only with billing on. The cards' own words come from `plans.ts`,
-   * `legal.ts` and `config`.
+   * `legal.ts` and `config`. `getPro` is the home Pro card's button, which
+   * opens Pricing, where the seller, tax and terms lines sit beside
+   * Subscribe (the owner's call, 2026-11-25; spec 0012, AC-13).
    */
   pricing: Object.freeze({
     eyebrow: "Pricing",
     title: "Free to start, Pro for longer files",
+    getPro: "Get Pro",
+  }),
+
+  /**
+   * The questions (the owner's port of `Main.dc.html`, 2026-11-25), each a
+   * disclosure, the first open. Every answer is today's words, so none says
+   * more than the page it comes from; the first repeats the eyebrow chip's
+   * claim by the owner's read, places AC-30's test names.
+   */
+  questions: Object.freeze({
+    title: "Questions",
+    items: Object.freeze<readonly HomeQuestion[]>([
+      /**
+       * Row M1: privacy claim C1 (`/tool`'s `connect-src 'self'`, spec 0011,
+       * INV-1 and INV-2). The security page's description, word for word.
+       */
+      Object.freeze({
+        question: "Is my PDF uploaded anywhere?",
+        answer: "No. Your PDF is processed in your browser and never uploaded.",
+      }),
+      /**
+       * "Look for", never "find" (spec 0018, AC-5). Spec 0005, AC-14: no
+       * detector for names or postal addresses, the security page's words.
+       * With Pro, row M6, the guides' own line (`removeTextTermsLine`).
+       */
+      Object.freeze({
+        question: "Does it look for names and addresses?",
+        answer: "No. It does not look for names or postal addresses.",
+        withPro: removeTextTermsLine(PRO_PLAN.name),
+      }),
+      /**
+       * The guides' line on scans (`/remove-text-from-pdf`): the self check's
+       * text part reads only selectable text (spec 0004, AC-13), so words that
+       * are a picture can stay.
+       */
+      Object.freeze({
+        question: "What about scanned pages?",
+        answer:
+          "Words that exist only as a picture, such as in a scan with no selectable text, are not read, so they can stay in the new file.",
+      }),
+      /**
+       * Row M3 (spec 0004, INV-2): no file leaves unless the self check
+       * passed. The security page's When it stops, word for word.
+       */
+      Object.freeze({
+        question: "What if it can't vouch for the file?",
+        answer:
+          "You get no file, only a plain reason. RedactNest stops rather than hand you a file the check could not vouch for.",
+      }),
+    ]),
   }),
 
   /**
@@ -416,6 +497,12 @@ export const HOME_TEXT = Object.freeze({
     body: "The tool page runs under a strict content security policy, and its code is public. Open the developer tools and see for yourself what the page asks for.",
     link: "How to check it yourself",
     listLabel: "What the tool page fetches",
+    /**
+     * The table's column heads, as the mockup draws a network panel: each
+     * row's name, then the paths on our own origin it stands for. "Path",
+     * not the mockup's draft "Size": the table holds no sizes.
+     */
+    columns: Object.freeze({ name: "Name", path: "Path" }),
   }),
 
   /** The closing band (spec 0026, AC-8), its button the hero's own. */
@@ -433,10 +520,18 @@ export const HOME_TEXT = Object.freeze({
    * list, each kind held by the self check's structure part.
    */
   band: Object.freeze({
+    /** The mockup's eyebrow, which claims nothing. */
+    eyebrow: "What it covers",
     title: "What RedactNest looks for and strips",
     finds: Object.freeze({
       title: "Looks for",
       subtitle: "Sensitive details we can detect in your files.",
+      /**
+       * The owner's line (2026-11-25), shown only with billing on: row M6,
+       * a Pro visitor's own words, which RedactNest looks for beside the
+       * detectors (spec 0017, AC-1; spec 0012, INV-8).
+       */
+      termsChip: `+ Your own terms with ${PRO_PLAN.name}`,
       /**
        * The self check's text part, which every file passes: for each page's
        * visible area, every character wholly inside it is still there unless
@@ -469,7 +564,7 @@ export const HOME_TEXT = Object.freeze({
     }),
     strips: Object.freeze({
       title: "Strips",
-      subtitle: "Whenever a file carries them:",
+      subtitle: "Whenever a file carries them",
       /**
        * "What showed stays" is the flattening every copy goes through (spec
        * 0004, AC-22). "Themselves are removed" sits behind the self check's

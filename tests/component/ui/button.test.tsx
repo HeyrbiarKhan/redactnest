@@ -182,6 +182,7 @@ describe("Button", () => {
 
   it.each([
     ["default", "min-h-10"],
+    ["md", "min-h-11"],
     ["lg", "min-h-12"],
     ["xl", "min-h-12.5"],
     ["icon", "min-h-10"],

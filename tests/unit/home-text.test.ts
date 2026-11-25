@@ -199,15 +199,18 @@ describe("the finds and strips cards (AC-11)", () => {
    */
   it("holds the words around the two lists", () => {
     expect(HOME_TEXT.band).toEqual({
+      eyebrow: "What it covers",
       title: "What RedactNest looks for and strips",
       finds: {
         title: "Looks for",
         subtitle: "Sensitive details we can detect in your files.",
+        // The owner's line (2026-11-25), shown only with billing on, row M6.
+        termsChip: "+ Your own terms with Pro",
         line: "No selectable text wholly inside a page's visible area is removed unless you tick it.",
       },
       strips: {
         title: "Strips",
-        subtitle: "Whenever a file carries them:",
+        subtitle: "Whenever a file carries them",
         note: "Comments and form fields are flattened into the page: what showed stays, and the comments and fields themselves are removed, with a note's hidden text and any attached file.",
       },
     });
@@ -301,8 +304,16 @@ describe("AC-30: each claim said only in its named places", () => {
     MAIN.flatMap(([path, text]) => (text.match(pattern) ?? []).map(() => path)).sort();
 
   it.each([
-    ["in your browser", /browser/gi, ["eyebrow", "trust.0.text"]],
-    ["never uploaded", /upload/gi, ["eyebrow", "steps.lead"]],
+    [
+      "in your browser",
+      /browser/gi,
+      ["eyebrow", "questions.items.0.answer", "trust.0.text"],
+    ],
+    [
+      "never uploaded",
+      /upload/gi,
+      ["eyebrow", "questions.items.0.answer", "questions.items.0.question", "steps.lead"],
+    ],
     ["removed, not covered", /not covered/gi, ["trust.1.text"]],
     [
       "checked before you download",
