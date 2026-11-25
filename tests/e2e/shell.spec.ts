@@ -24,7 +24,10 @@ test.describe("getting to the tool", () => {
     await page.goto("/");
 
     await expect(
-      page.getByRole("main").getByRole("link", { name: "Remove text from a PDF" }),
+      page
+        .getByRole("main")
+        .getByRole("link", { name: "Remove text from a PDF" })
+        .first(),
     ).toBeVisible();
   });
 
@@ -35,6 +38,7 @@ test.describe("getting to the tool", () => {
     await page
       .getByRole("main")
       .getByRole("link", { name: "Remove text from a PDF" })
+      .first()
       .focus();
     await page.keyboard.press("Enter");
 
@@ -66,7 +70,8 @@ test.describe("every way into the tool is a real page load", () => {
         }
       });
 
-      await page.getByRole(landmark).getByRole("link", { name }).click();
+      // The hero's, the first of the main content's two (spec 0026, AC-8).
+      await page.getByRole(landmark).getByRole("link", { name }).first().click();
       await expect(page).toHaveURL(/\/tool$/);
 
       expect(documentLoads).toContain("/tool");
@@ -164,7 +169,8 @@ test.describe("every way into the tool is a real page load", () => {
       ["banner", "Try it free"],
       ["main", "Remove text from a PDF"],
     ] as const) {
-      await page.getByRole(landmark).getByRole("link", { name }).hover();
+      for (const link of await page.getByRole(landmark).getByRole("link", { name }).all())
+        await link.hover();
     }
     await page.waitForLoadState("networkidle");
 
@@ -173,12 +179,12 @@ test.describe("every way into the tool is a real page load", () => {
 });
 
 /**
- * Spec 0012, AC-9 and INV-10. Every page's header links to Pricing and Account
- * as plain links, so nothing prefetches Pricing, an account page or the page
+ * Spec 0012, AC-9 and INV-10. Every page's header links to Pricing and, for a
+ * visitor not signed in, Sign in (spec 0026, AC-5) as plain links, so nothing prefetches Pricing, an account page or the page
  * that starts a checkout. `next/link` prefetches on sight and again on hover,
  * so both get their chance before the count is read, as for the tool above.
  */
-test.describe("the header's Pricing and Account links", () => {
+test.describe("the header's Pricing and Sign in links", () => {
   for (const path of ["/", "/tool", "/pricing", "/privacy", "/terms"]) {
     test(`are plain links on ${path} that prefetch nothing`, async ({ page }) => {
       const prefetched: string[] = [];
@@ -196,7 +202,7 @@ test.describe("the header's Pricing and Account links", () => {
       const header = page.getByRole("banner");
       for (const [name, href] of [
         ["Pricing", "/pricing"],
-        ["Account", "/account"],
+        ["Sign in", "/sign-in"],
       ] as const) {
         const link = header.getByRole("link", { name, exact: true });
         await expect(link).toHaveAttribute("href", href);
@@ -348,7 +354,7 @@ test.describe("the header", () => {
     await page.goto("/");
     const header = page.getByRole("banner");
 
-    for (const name of ["Pricing", "Account"]) {
+    for (const name of ["How it works", "Security", "Pricing", "Sign in"]) {
       const box = await header.getByRole("link", { name, exact: true }).boundingBox();
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(40);
     }
@@ -378,8 +384,8 @@ test.describe("the header", () => {
     await page.setViewportSize({ width: 320, height: 640 });
     await page.goto("/");
     const header = page.getByRole("banner");
-    const links = ["Pricing", "Account", "Try it free"].map((name) =>
-      header.getByRole("link", { name, exact: true }),
+    const links = ["How it works", "Security", "Pricing", "Sign in", "Try it free"].map(
+      (name) => header.getByRole("link", { name, exact: true }),
     );
 
     const lockup = await header
@@ -417,7 +423,7 @@ test.describe("the header", () => {
     expect(scroll.width).toBeLessThanOrEqual(scroll.viewport);
   });
 
-  /** From `sm`, the lockup, the nav, Account and the button on one row, the button last. */
+  /** From `sm`, the lockup, the nav, Sign in and the button on one row, the button last. */
   for (const width of [640, 1280]) {
     test(`sits on one row with the button at the right at ${width} pixels`, async ({
       page,
@@ -427,7 +433,14 @@ test.describe("the header", () => {
       const header = page.getByRole("banner");
 
       const boxes = [];
-      for (const name of ["RedactNest", "Pricing", "Account", "Try it free"]) {
+      for (const name of [
+        "RedactNest",
+        "How it works",
+        "Security",
+        "Pricing",
+        "Sign in",
+        "Try it free",
+      ]) {
         const box = await header.getByRole("link", { name, exact: true }).boundingBox();
         if (box === null) throw new Error(`${name} has no box`);
         boxes.push(box);
@@ -445,8 +458,8 @@ test.describe("the header", () => {
 
   /**
    * Feature 28, amending AC-7: the open menu marks the current page as the
-   * row does, and on `/tool`, which offers no Try it free, holds Pricing and
-   * Account only.
+   * row does, and on `/tool`, which offers no Try it free and no How it works
+   * (spec 0026, child 0001, AC-30), holds Security, Pricing and Sign in only.
    */
   test("marks the current page in the open menu, and holds no Try it free on the tool", async ({
     page,
@@ -468,7 +481,7 @@ test.describe("the header", () => {
 
     await page.goto("/tool");
     await header.getByRole("button", { name: "Menu", exact: true }).click();
-    await expect(menu.getByRole("link")).toHaveText(["Pricing", "Account"]);
+    await expect(menu.getByRole("link")).toHaveText(["Security", "Pricing", "Sign in"]);
     for (const link of await menu.getByRole("link").all())
       await expect(link).toBeVisible();
     await expect(menu.locator('[aria-current="page"]')).toHaveCount(0);
@@ -488,8 +501,8 @@ test.describe("the header", () => {
     const header = page.getByRole("banner");
     const button = header.getByRole("button", { name: "Menu", exact: true });
     const lockup = header.getByRole("link", { name: "RedactNest", exact: true });
-    const links = ["Pricing", "Account", "Try it free"].map((name) =>
-      header.getByRole("link", { name, exact: true }),
+    const links = ["How it works", "Security", "Pricing", "Sign in", "Try it free"].map(
+      (name) => header.getByRole("link", { name, exact: true }),
     );
     const middles = async () => {
       const found: number[] = [];
@@ -535,7 +548,7 @@ test.describe("the header", () => {
     await page.goto("/pricing");
     const header = page.getByRole("banner");
     const current = header.getByRole("link", { name: "Pricing", exact: true });
-    const other = header.getByRole("link", { name: "Account", exact: true });
+    const other = header.getByRole("link", { name: "Security", exact: true });
     const token = (role: string) =>
       page.evaluate((name) => {
         const probe = document.createElement("span");

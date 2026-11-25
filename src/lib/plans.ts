@@ -19,6 +19,12 @@ export const PRO_PLAN = Object.freeze({
 });
 
 /**
+ * The badge on Pro's pricing card (spec 0026, AC-10). A mark beside Pro's
+ * name, which the heading already says, so nothing rests on it.
+ */
+export const PLAN_BADGE = "Most useful";
+
+/**
  * The panel beside Clerk's card on sign in and sign up (spec 0013, AC-23).
  * Pro's cap arrives from `config` as an argument, never written here (INV-8).
  */

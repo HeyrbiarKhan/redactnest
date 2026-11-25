@@ -1888,7 +1888,7 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       "Redaction that actually removes the text",
     );
     await expect(page.getByTestId("home-eyebrow")).toHaveText(
-      "PDF redaction in your browser",
+      "Runs in your browser. Never uploaded.",
     );
     const main = page.getByRole("main");
     await expect(main).toContainText(
@@ -1905,21 +1905,30 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       [page.getByRole("banner"), "Try it free"],
       [main, "Remove text from a PDF"],
     ] as const) {
-      await expect(region.getByRole("link", { name })).toHaveAttribute("href", "/tool");
+      for (const link of await region.getByRole("link", { name }).all())
+        await expect(link).toHaveAttribute("href", "/tool");
     }
-    await expect(main.getByRole("link", { name: "See pricing" })).toHaveAttribute(
+    await expect(main.getByRole("link", { name: "See how it works" })).toHaveAttribute(
       "href",
-      "/pricing",
+      "#how-it-works",
     );
+    // Spec 0026, AC-8: the sections in order, the pricing cards with billing on.
     await expect(main.getByRole("heading", { level: 2 })).toHaveText([
-      "Stays on your device",
-      "Removed, not covered",
-      "Checked before you download",
+      "Three steps to a redacted PDF",
+      "A black box is not redaction",
       "What RedactNest looks for and strips",
+      "Watch your network tab while you redact",
+      "Free to start, Pro for longer files",
+      "Redact your next PDF",
     ]);
     await expect(main.getByRole("heading", { level: 3 })).toHaveText([
+      "Open a PDF",
+      "Tick what to remove",
+      "Download your new file",
       "Looks for",
       "Strips",
+      "Free",
+      "Pro",
     ]);
   });
 
@@ -1975,11 +1984,14 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     }
     await expect(band.locator("a, button, [tabindex]")).toHaveCount(0);
 
-    // No full width strip: the section shows the canvas, the cards are white.
+    // No full width strip: the section shows the canvas. The cards are white
+    // on white since spec 0026 AC-1, so a `border` edge tells them apart.
     const background = (locator: typeof band) =>
       locator.evaluate((element) => getComputedStyle(element).backgroundColor);
     expect(await background(band)).toBe("rgba(0, 0, 0, 0)");
-    expect(await background(finds)).not.toBe(await background(page.locator("body")));
+    expect(
+      await finds.evaluate((element) => getComputedStyle(element).borderTopColor),
+    ).toBe("rgb(228, 228, 231)");
     const [bandBox, findsBox, stripsBox] = [
       await band.boundingBox(),
       await finds.boundingBox(),
@@ -2062,9 +2074,10 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     expect(await columnsOf(list)).toEqual(TWO);
     expect(await findsColumns()).toEqual(TWO);
     // No strip wraps past two lines in the narrower columns, so every row
-    // keeps the 68 pixels of a find whose label fits on two.
+    // keeps the 70 pixels of a find whose label fits on two (68, and the
+    // row's 1 pixel edge above and below since spec 0026, AC-1).
     for (const item of await list.getByRole("listitem").all()) {
-      expect((await item.boundingBox())?.height).toBe(68);
+      expect((await item.boundingBox())?.height).toBe(70);
     }
 
     // Side by side and too narrow for two: one column, with no rule.
@@ -2178,85 +2191,36 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
   });
 
   /**
-   * Spec 0013, AC-10, as feature 28 builds it. Each point's icon circle, and
-   * its title and line as the text itself (a range over the words, since the
-   * heading's own box is as wide as its column whatever the alignment).
-   */
-  const points = (page: Page) =>
-    page
-      .getByRole("main")
-      .getByRole("list")
-      .filter({ has: page.getByRole("heading", { name: "Stays on your device" }) })
-      .evaluate((list) => {
-        const box = (rect: DOMRect) => ({
-          left: rect.left,
-          right: rect.right,
-          top: rect.top,
-          bottom: rect.bottom,
-        });
-        const words = (element: Element | null) => {
-          if (element === null) throw new Error("a point has lost its words");
-          const range = document.createRange();
-          range.selectNodeContents(element);
-          return box(range.getBoundingClientRect());
-        };
-        return [...list.children].map((item) => ({
-          item: box(item.getBoundingClientRect()),
-          icon: box((item.firstElementChild as Element).getBoundingClientRect()),
-          title: words(item.querySelector("h2")),
-          line: words(item.querySelector("p")),
-        }));
-      });
-
-  /** Where they stack (below `md`), each point centred, its icon above its words. */
-  for (const width of [390, 700]) {
-    test(`centres each of the three points where they stack, at ${width} pixels`, async ({
-      page,
-    }) => {
-      await page.setViewportSize({ width, height: 900 });
-      await page.goto("/");
-
-      const trio = await points(page);
-      expect(trio).toHaveLength(3);
-      for (const [index, { item, icon, title, line }] of trio.entries()) {
-        if (index > 0)
-          expect(item.top).toBeGreaterThanOrEqual(trio[index - 1]?.item.bottom ?? 0);
-        expect(icon.bottom).toBeLessThanOrEqual(title.top);
-        expectNear(middle(icon).x, middle(item).x);
-        expectNear(middle(title).x, middle(item).x);
-        expectNear(middle(line).x, middle(item).x);
-      }
-    });
-  }
-
-  /**
-   * Side by side (from `md`) the three line up at the start again: the icon
-   * above the words until `lg`, and beside them from it.
+   * Spec 0026, AC-8: How it works, three cards one under another below `md`
+   * and side by side from it, in the tool's order.
    */
   for (const [width, beside] of [
-    [800, false],
+    [390, false],
     [1280, true],
   ] as const) {
-    test(`sets the three points side by side at the start, at ${width} pixels`, async ({
+    test(`sets the three How it works cards ${beside ? "side by side" : "one under another"} at ${width} pixels`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/");
 
-      const trio = await points(page);
-      expect(trio).toHaveLength(3);
-      for (const [index, { item, icon, title, line }] of trio.entries()) {
-        expectNear(item.top, trio[0]?.item.top ?? 0);
-        if (index > 0)
-          expect(item.left).toBeGreaterThanOrEqual(trio[index - 1]?.item.right ?? 0);
-        expectNear(icon.left, item.left);
-        expectNear(line.left, title.left);
+      const cards = page.getByTestId("home-steps").getByRole("listitem");
+      await expect(cards.getByRole("heading", { level: 3 })).toHaveText([
+        "Open a PDF",
+        "Tick what to remove",
+        "Download your new file",
+      ]);
+      const boxes = [];
+      for (const card of await cards.all()) boxes.push(await rectOf(card));
+      for (const [index, box] of boxes.entries()) {
+        if (index === 0) continue;
+        const before = boxes[index - 1] as (typeof boxes)[number];
         if (beside) {
-          expect(title.left).toBeGreaterThanOrEqual(icon.right);
-          expect(title.top).toBeLessThan(icon.bottom);
+          expectNear(box.top, before.top);
+          expect(box.left).toBeGreaterThanOrEqual(before.right);
         } else {
-          expect(icon.bottom).toBeLessThanOrEqual(title.top);
-          expectNear(title.left, item.left);
+          expectNear(box.left, before.left);
+          expect(box.top).toBeGreaterThanOrEqual(before.bottom);
         }
       }
     });
@@ -2273,7 +2237,8 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     expect((caps?.y ?? 0) + (caps?.height ?? 0)).toBeLessThanOrEqual(picture?.y ?? 0);
   });
 
-  test("steps the display headline up from 40px to 56px at md", async ({ page }) => {
+  // Spec 0026, AC-3: `display` is `title` below `sm`, 3.25rem from there.
+  test("steps the display headline up from 30px to 52px at sm", async ({ page }) => {
     const size = () =>
       page
         .getByRole("heading", { level: 1 })
@@ -2281,10 +2246,10 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
 
     await page.setViewportSize({ width: 375, height: 800 });
     await page.goto("/");
-    expect(await size()).toBe("40px");
+    expect(await size()).toBe("30px");
 
     await page.setViewportSize({ width: 1280, height: 800 });
-    expect(await size()).toBe("56px");
+    expect(await size()).toBe("52px");
   });
 
   test("walks from the skip link to the wordmark, the header's links and both buttons", async ({
@@ -2296,15 +2261,13 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     await expect(page.getByRole("link", { name: "Skip to main content" })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "RedactNest" })).toBeFocused();
-    // Spec 0013, AC-7: Pricing and Account, before the header's button.
-    await page.keyboard.press("Tab");
-    await expect(
-      page.getByRole("banner").getByRole("link", { name: "Pricing" }),
-    ).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(
-      page.getByRole("banner").getByRole("link", { name: "Account" }),
-    ).toBeFocused();
+    // Spec 0026, AC-5: the nav, then Sign in, before the header's button.
+    for (const name of ["How it works", "Security", "Pricing", "Sign in"]) {
+      await page.keyboard.press("Tab");
+      await expect(
+        page.getByRole("banner").getByRole("link", { name, exact: true }),
+      ).toBeFocused();
+    }
     await page.keyboard.press("Tab");
     await expect(
       page.getByRole("banner").getByRole("link", { name: "Try it free" }),
@@ -2312,14 +2275,15 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     await page.keyboard.press("Tab");
     const main = page
       .getByRole("main")
-      .getByRole("link", { name: "Remove text from a PDF" });
+      .getByRole("link", { name: "Remove text from a PDF" })
+      .first();
     await expect(main).toBeFocused();
     await expectFocusRing(main);
-    // Spec 0013, AC-10: See pricing beside it, with billing on.
+    // Spec 0026, AC-8: See how it works beside it.
     await page.keyboard.press("Tab");
-    const pricing = page.getByRole("main").getByRole("link", { name: "See pricing" });
-    await expect(pricing).toBeFocused();
-    await expectFocusRing(pricing);
+    const how = page.getByRole("main").getByRole("link", { name: "See how it works" });
+    await expect(how).toBeFocused();
+    await expectFocusRing(how);
   });
 
   test("the skip link lands on main, so the next Tab is the main button", async ({
@@ -2333,7 +2297,10 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
 
     await page.keyboard.press("Tab");
     await expect(
-      page.getByRole("main").getByRole("link", { name: "Remove text from a PDF" }),
+      page
+        .getByRole("main")
+        .getByRole("link", { name: "Remove text from a PDF" })
+        .first(),
     ).toBeFocused();
   });
 
@@ -2349,6 +2316,7 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     const main = await page
       .getByRole("main")
       .getByRole("link", { name: "Remove text from a PDF" })
+      .first()
       .boundingBox();
     // Exact, not a floor: a minimum passed while `lg` padding pushed it to 50px.
     expect(header?.height).toBe(40);
@@ -2424,11 +2392,12 @@ test.describe("the cursor (spec 0013, AC-33)", () => {
 
     for (const target of [
       header.getByRole("link", { name: "RedactNest" }),
+      header.getByRole("link", { name: "How it works" }),
       header.getByRole("link", { name: "Pricing" }),
-      header.getByRole("link", { name: "Account" }),
+      header.getByRole("link", { name: "Sign in" }),
       header.getByRole("link", { name: "Try it free" }),
-      main.getByRole("link", { name: "Remove text from a PDF" }),
-      main.getByRole("link", { name: "See pricing" }),
+      main.getByRole("link", { name: "Remove text from a PDF" }).first(),
+      main.getByRole("link", { name: "See how it works" }),
       page.getByRole("contentinfo").getByRole("link", { name: "Privacy policy" }),
     ]) {
       expect(await cursorOf(target)).toBe("pointer");
@@ -2566,6 +2535,9 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
         }
       }
       for (const element of document.querySelectorAll("main *")) {
+        // A visually hidden word (a callout's tone, spec 0003, INV-8) is a 1
+        // pixel clipped box that scrolls nothing and shows nothing.
+        if (element.closest(".sr-only") !== null) continue;
         // An inline box reports no width of its own to compare.
         if (element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1) {
           found.push(`content wider than its box: ${element.tagName}`);
@@ -2619,9 +2591,11 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
 
     const main = page.getByRole("main");
     for (const [box, recorded] of [
-      [page.getByTestId("home-hero"), [88, 145, 1104, 460.4]],
-      [main.getByRole("list").first(), [88, 669.4, 1104, 120]],
-      [page.getByTestId("home-band"), [88, 853.4, 1104, 603]],
+      // Recorded again for spec 0026's page (AC-8): the hero, the How it
+      // works cards and the band.
+      [page.getByTestId("home-hero"), [88, 145, 1104, 465.8]],
+      [main.getByRole("list").first(), [88, 883.4, 1104, 354]],
+      [page.getByTestId("home-band"), [88, 2099.4, 1104, 614.6]],
     ] as const) {
       const measured = await box.boundingBox();
       if (measured === null) throw new Error("a recorded box is not drawn");

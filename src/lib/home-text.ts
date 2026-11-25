@@ -1,6 +1,6 @@
 /**
  * Every word in the home page's main content, in one place. Spec 0013, AC-10
- * to AC-13 and AC-30.
+ * to AC-13 and AC-30, laid out as spec 0026 AC-8 has the page.
  *
  * Nothing here names a detector, a cap, a customer, a team or a capability
  * RedactNest does not have today (INV-1). The detectors come from `lookedFor`
@@ -10,9 +10,12 @@
  * arguments, because the page reads them from `config` and this module never
  * does.
  *
- * Each thing is said once (AC-30, INV-11): the document's privacy is "in your
- * browser" in the eyebrow and "never uploaded" in the first trio card, and
- * nowhere else in the main content. `tests/unit/home-text.test.ts` holds that.
+ * Each thing is said once (AC-30, INV-11, as spec 0026 AC-8 places them):
+ * the document's privacy is "in your browser" and "never uploaded" in the
+ * hero's eyebrow chip only, "removed, not covered" is the black box section's
+ * eyebrow only, and "checked before you download" is the third step card's
+ * only. `tests/unit/home-text.test.ts` holds that. Lines that repeat an idea
+ * already on the page wait for the owner's read before merge (INV-11).
  *
  * The social card and the Polar image carry the eyebrow and the headline:
  * `scripts/make-brand.mjs` reads both from the built home page
@@ -21,17 +24,26 @@
  * (`tests/unit/brand-files.test.ts`).
  */
 
-import { Eraser, Laptop, ShieldCheck, type LucideIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { DETECTOR_LABELS, lookedFor } from "@/lib/detectors";
 import { SANITIZED_TEXT } from "@/lib/flow-text";
 import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
+import {
+  ENGINE_PREFIX,
+  ENTITLEMENT_PATH,
+  ICON_PATHS,
+  NEXT_FILES_PREFIX,
+  TELEMETRY_PATH,
+  TOOL_PATH,
+} from "@/lib/routes";
+import type { CoverPanel } from "@/ui/cover-figure";
 import { DETECTOR_KINDS, SANITIZED_KINDS, type SanitizedKind } from "@/worker/protocol";
 
 const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
-export interface HomeFeature {
-  readonly icon: LucideIcon;
+/** One How it works card: its title and its line, under a small drawing. */
+export interface HomeStep {
   readonly title: string;
   readonly body: string;
 }
@@ -111,6 +123,73 @@ export function capLine(billingEnabled: boolean, free: number, paid: number): st
 }
 
 /**
+ * One row of the network band (spec 0026, AC-9): what `/tool` fetches, what
+ * it is, and the paths on our own origin it stands for, shown on the page.
+ * `tests/e2e/network-list.spec.ts` reads these paths from the page and fails
+ * when a full run makes a request no row covers, or a row is never seen. The
+ * last row, the visitor's file, has no path: no request carries it.
+ */
+export interface NetworkRow {
+  readonly label: string;
+  readonly what: string;
+  readonly paths: readonly string[];
+}
+
+export const NETWORK_ROWS: readonly NetworkRow[] = Object.freeze([
+  Object.freeze({
+    label: "The tool page",
+    what: "The page itself, and its updates as you move through it",
+    paths: Object.freeze([TOOL_PATH]),
+  }),
+  Object.freeze({
+    label: "The page's files",
+    what: "Its scripts, styles, font and icons",
+    paths: Object.freeze([NEXT_FILES_PREFIX, ...ICON_PATHS]),
+  }),
+  Object.freeze({
+    label: "The PDF engine",
+    what: "MuPDF, compiled to WebAssembly, which reads and rewrites your PDF in the tab",
+    paths: Object.freeze([ENGINE_PREFIX]),
+  }),
+  /**
+   * The plan check: a `GET` with no body, answered with the plan alone
+   * (spec 0012, AC-1; privacy claim C5).
+   */
+  Object.freeze({
+    label: "The plan check",
+    what: "Whether you are on Pro, asked with no document data",
+    paths: Object.freeze([ENTITLEMENT_PATH]),
+  }),
+  /**
+   * The counts: closed kinds and ranges only, never a free string (spec 0016,
+   * INV-4; privacy claim C14), and the test checks no fixture text is in one.
+   */
+  Object.freeze({
+    label: "Counts",
+    what: "Which steps happened and how long they took, as kinds and ranges",
+    paths: Object.freeze([TELEMETRY_PATH]),
+  }),
+  /**
+   * Row M1: no endpoint of ours takes document data, and `/tool`'s
+   * `connect-src 'self'` lets the page reach nothing else (spec 0011, INV-1
+   * and INV-2; privacy claim C1), which the test holds request by request.
+   * Owner's read: it says the eyebrow chip's "never uploaded" another way.
+   */
+  Object.freeze({
+    label: "Your PDF",
+    what: "Not among them: no request carries it",
+    paths: Object.freeze([]),
+  }),
+]);
+
+/** The black box comparison's drawing: one made up page, the same in both panels. */
+const COVER_LINES = Object.freeze([
+  Object.freeze({ text: "Offer of employment" }),
+  Object.freeze({ text: "Contact:", boxed: true as const }),
+  Object.freeze({ text: "Role: Office manager" }),
+]);
+
+/**
  * The `id` of the band's heading, which the band's section is labelled by and
  * the security page links to, so its list of what RedactNest looks for and
  * strips is said here once and pointed at there (spec 0018, AC-6). It stays
@@ -119,8 +198,13 @@ export function capLine(billingEnabled: boolean, free: number, paid: number): st
 export const HOME_BAND_ID = "home-band";
 
 export const HOME_TEXT = Object.freeze({
-  /** A true one, above the headline (AC-10), and the page's one "in your browser". */
-  eyebrow: "PDF redaction in your browser",
+  /**
+   * The hero's eyebrow chip (spec 0026, AC-8): the page's one "in your
+   * browser" and its one "never uploaded". Spec 0024's claim register, row
+   * M1: privacy claim C1, held by `/tool`'s `connect-src 'self'` (spec 0011,
+   * INV-1 and INV-2) and no endpoint of ours that takes document data.
+   */
+  eyebrow: "Runs in your browser. Never uploaded.",
   headline: "Redaction that actually removes the text",
   /**
    * "Looks for" says what RedactNest does and claims nothing about what it
@@ -133,45 +217,121 @@ export const HOME_TEXT = Object.freeze({
   lead: `RedactNest looks for ${lookedFor("conjunction")} in your PDF and lets you tick what to remove.`,
   /** The hero's way into the tool, named for what it does (AC-30). */
   primary: "Remove text from a PDF",
-  pricing: "See pricing",
+  /** The hero's second button, to the How it works section on this page. */
+  howItWorks: "See how it works",
+  /**
+   * The small card beside the product shot (spec 0026, AC-8), naming the
+   * self check by its result. Row M3: no file leaves unless the self check
+   * passed on its bytes (spec 0004, INV-2). Owner's read: it sits beside the
+   * third step card's "checked before you download".
+   */
+  shotCard: "No pass, no file",
 
-  /** The trio under the hero (AC-10), each a line icon, a title and a line. */
-  features: Object.freeze<readonly HomeFeature[]>([
-    Object.freeze({
-      icon: Laptop,
-      title: "Stays on your device",
-      body: "Never uploaded to us or to anyone else, and nothing is stored.",
+  /**
+   * How it works (spec 0026, AC-8): three cards, each a small drawing on
+   * made up values, a number, a title and a line.
+   */
+  steps: Object.freeze({
+    eyebrow: "How it works",
+    title: "Three steps to a redacted PDF",
+    /** The drawings' made up values, hidden from assistive technology. */
+    drawing: Object.freeze({
+      rows: Object.freeze([
+        Object.freeze({ value: "jane.doe@example.com", ticked: true }),
+        Object.freeze({ value: "020 7946 0958", ticked: true }),
+        Object.freeze({ value: "12 March 2026", ticked: false }),
+      ]),
+      file: "agreement-redacted.pdf",
     }),
+    items: Object.freeze<readonly HomeStep[]>([
+      Object.freeze({
+        title: "Open a PDF",
+        body: "Drop it on the page, or choose it from your files.",
+      }),
+      /**
+       * "Each item found" is the checklist, which lists every match the
+       * detectors and your terms return; "only a suggestion" is the seeded
+       * tick, which any row that can be ticked can lose (spec 0007, AC-7).
+       * It names no detector, so it claims nothing about what is found.
+       */
+      Object.freeze({
+        title: "Tick what to remove",
+        body: "Each item found is listed with the words around it. A tick at the start is only a suggestion.",
+      }),
+      /**
+       * The page's one "checked before you download" (spec 0026, AC-8).
+       * Row M3: the self check, which no file leaves without passing (spec
+       * 0004, INV-2). "Every page" is its text part, which reads each page
+       * of the new file (AC-13), as the old trio card said it.
+       */
+      Object.freeze({
+        title: "Download your new file",
+        body: "Checked before you download: every page of the new file is checked, and if RedactNest can't vouch for it, you get no file.",
+      }),
+    ]),
+  }),
+
+  /**
+   * The black box comparison (spec 0026, AC-8), drawn with `CoverFigure` on
+   * a made up page. The page's one "removed, not covered", in its eyebrow.
+   */
+  blackBox: Object.freeze({
+    eyebrow: "Removed, not covered",
+    title: "A black box is not redaction",
     /**
-     * Each absolute sits behind a gate every file passes (spec 0019, AC-12).
-     * Ticked text: the self check's text part, which reads what each page
-     * draws, so "the page", never "the file" (spec 0004, AC-13 and INV-2).
-     * That part reads the text a page holds as text, so "selectable": a
-     * scan's words are a picture, blanked only over the padded area, and ink
-     * lying further out stays (spec 0004's *Security model* bullet "Scan ink
-     * further from the OCR text"). Measured 2026-11-15 on the fixture
-     * script's Tesseract style scan (`ocrPage` in
-     * `scripts/lib/redaction-fixtures.mjs`) with its text layer 0.6 em low:
-     * the ticked word's text went, the run passed, and the tops of its ink
-     * stayed. The security page's blanking line says so. Document info: no
-     * `/Info` and no trailer key outside `TRAILER_KEYS`. Attachments: no
-     * embedded file stream or file specification anywhere, reached or not
-     * (spec 0019, AC-5 and AC-8). It names those two kinds and never hidden
-     * data as a whole, because descriptions written into a page (spec 0019,
-     * AC-9) and a picture's own details (spec 0006, AC-29) can stay. The
-     * Strips card lists the other kinds. Spec 0019, AC-12, as built.
+     * Row M2: "the selectable text you tick is taken out of the page, then
+     * marked" is the self check's text part, which reads what each page
+     * draws, so "selectable" and "the page", never "the file" (spec 0004,
+     * AC-13 and INV-2; spec 0019, AC-12), with the box drawn after the
+     * removal (spec 0004's *Decision* bullet "Box pass"). What a drawn box
+     * leaves is a fact about other tools, which the security page shows.
      */
-    Object.freeze({
-      icon: Eraser,
-      title: "Removed, not covered",
-      body: "Selectable text you tick is taken out of the page, and document info and attachments are stripped.",
-    }),
-    Object.freeze({
-      icon: ShieldCheck,
-      title: "Checked before you download",
-      body: "Every page of the new file is checked. If RedactNest can't vouch for it, you get no file.",
-    }),
-  ]),
+    body: "A box drawn over words hides them from your eyes, not from the file: copy the page's text and they come back. RedactNest takes the selectable text you tick out of the page first, then marks where it was.",
+    link: "How the check works",
+    caption:
+      "Both pages look the same. Only the second leaves the address out of a copy of its text.",
+    panels: Object.freeze<readonly CoverPanel[]>([
+      Object.freeze({
+        title: "A box drawn over the text",
+        lines: COVER_LINES,
+        readsLabel: "A copy of the text gives",
+        reads: "Contact: jane.doe@example.com",
+      }),
+      Object.freeze({
+        title: "RedactNest: removed, then marked",
+        lines: COVER_LINES,
+        readsLabel: "A copy of the text gives",
+        reads: "Contact:",
+      }),
+    ]),
+  }),
+
+  /**
+   * The pricing section's heading over `PricingCards` (spec 0026, AC-10),
+   * shown only with billing on. The cards' own words come from `plans.ts`,
+   * `legal.ts` and `config`.
+   */
+  pricing: Object.freeze({
+    eyebrow: "Pricing",
+    title: "Free to start, Pro for longer files",
+  }),
+
+  /**
+   * The network band (spec 0026, AC-9), on `night`. "A strict content
+   * security policy" is `/tool`'s (spec 0011, INV-1 and INV-2); "the code is
+   * public" is the AGPL source link every page's footer carries (spec 0009,
+   * AC-1). The link goes to the security page's own way to check.
+   */
+  network: Object.freeze({
+    eyebrow: "Don't take our word for it",
+    title: "Watch your network tab while you redact",
+    body: "The tool page runs under a strict content security policy, and its code is public. Open the developer tools and see for yourself what the page asks for.",
+    link: "How to check it yourself",
+    listLabel: "What the tool page fetches",
+  }),
+
+  /** The closing band (spec 0026, AC-8), its button the hero's own. */
+  closing: "Redact your next PDF",
 
   /**
    * The two cards in place of "Trusted by" (AC-11). The lists themselves come
@@ -263,5 +423,5 @@ export const HOME_TEXT = Object.freeze({
    * true when feature 12 adds detectors.
    */
   socialAlt:
-    "RedactNest. PDF redaction in your browser. Redaction that actually removes the text.",
+    "RedactNest. Runs in your browser. Never uploaded. Redaction that actually removes the text.",
 });

@@ -57,6 +57,7 @@ vi.mock("@/config", async (importOriginal) => {
 vi.mock("@/lib/plans", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/plans")>();
   return {
+    PLAN_BADGE: actual.PLAN_BADGE,
     FREE_PLAN: {
       get name() {
         return mocks.plans?.free ?? actual.FREE_PLAN.name;

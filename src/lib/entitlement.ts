@@ -22,10 +22,11 @@
  */
 
 import { config } from "@/config";
+import { ENTITLEMENT_PATH } from "@/lib/routes";
 import { ENTITLEMENT_ACCOUNTS, type EntitlementSnapshot } from "@/worker/protocol";
 
 /** Same origin, and the only request the tool route makes (spec 0002, AC-3). */
-const ENTITLEMENT_URL = "/api/entitlement";
+const ENTITLEMENT_URL = ENTITLEMENT_PATH;
 
 /**
  * How long anything waits for an ask to land.

@@ -254,12 +254,18 @@ describe.each(SEARCH_PAGES)("%s", (kind) => {
       .getByRole("heading", { level: 2, name: text.answerTitle })
       .closest("section");
     if (section === null) throw new Error("The answer sits in no section");
-    // The answer's own column: its parts, the figure where there is one, then the line.
+    // The answer's own column: its parts and the figure where there is one;
+    // then, after it, the look over line in its warning callout (spec 0026,
+    // AC-11).
     const column = section.querySelector("section");
     if (column === null) throw new Error("The answer has no column");
     const children = [...column.children];
-    const last = children[children.length - 1];
-    expect(last.tagName).toBe("P");
+    const callout = within(section as HTMLElement).getByTestId("look-over");
+    expect(
+      column.compareDocumentPosition(callout) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const last = callout.querySelector("p");
+    if (last === null) throw new Error("The callout holds no line");
     expect(last.textContent).toBe(`${LOOK_OVER_LINE} ${LOOK_OVER_LINK_TEXT}.`);
     const link = within(last as HTMLElement).getByRole("link", {
       name: LOOK_OVER_LINK_TEXT,
@@ -267,7 +273,7 @@ describe.each(SEARCH_PAGES)("%s", (kind) => {
     expect(link).toHaveAttribute("href", "/security#what-it-can-miss");
     expect(link).not.toHaveAttribute("target");
     // Every answer part, in order, before it, then the figure on its page alone.
-    const parts = children.filter((child) => child.tagName !== "FIGURE").slice(0, -1);
+    const parts = children.filter((child) => child.tagName !== "FIGURE");
     expect(
       parts.map((part) =>
         part.tagName === "OL"
@@ -278,7 +284,7 @@ describe.each(SEARCH_PAGES)("%s", (kind) => {
     const figures = children.filter((child) => child.tagName === "FIGURE");
     expect(figures).toHaveLength(text.figure === null ? 0 : 1);
     if (text.figure !== null) {
-      expect(children.indexOf(figures[0])).toBe(children.length - 2);
+      expect(children.indexOf(figures[0])).toBe(children.length - 1);
     }
   });
 

@@ -263,6 +263,15 @@
   }
 
   /*
+   * On the home page's `night` band the ring takes `night-accent`: `focus`
+   * measures 2.62:1 on `night`, under the 3:1 a ring needs (spec 0026, AC-9;
+   * WCAG 1.4.11). Scoped by the band's own `data-band`, so no other ring moves.
+   */
+  [data-band="night"] :focus-visible {
+    outline-color: var(--color-night-accent);
+  }
+
+  /*
    * The legal pages' On this page links glide to their heading (spec 0013,
    * AC-25), and the security page's, in the same frame (spec 0018, AC-3). Only
    * where `main` carries `data-smooth-scroll`, which that frame alone sets, so
@@ -287,6 +296,23 @@
  * lost and `forced-color-adjust: none` kept the tint. An unlayered rule beats
  * every layered one.
  */
+/*
+ * The home page's `night` band in forced colours: the band's fill is dropped
+ * for the system's Canvas, so its light inks would sit on it unreadable to
+ * anything that reads the authored colour. Its words take the system's text
+ * and link colours instead, as forced colours would paint them (spec 0026,
+ * AC-9 and AC-16).
+ */
+@media (forced-colors: active) {
+  [data-band="night"] * {
+    color: CanvasText;
+  }
+
+  [data-band="night"] a {
+    color: LinkText;
+  }
+}
+
 @media (forced-colors: active) {
   mark {
     forced-color-adjust: none;

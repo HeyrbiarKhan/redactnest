@@ -523,7 +523,7 @@ spec [0026](../specs/0026-ui-redesign/index.md) (2026-11-25: every page in the m
 - [ ] Build it: `/develop UI redesign`
   - [x] The whole site in the new look: tokens, primitives (`cva`, the Radix menu), mark and lockup, header and footer · AC-1 to AC-7, AC-14, AC-15
   - [x] `/tool` in the new look with step progress · AC-12, AC-31 to AC-36
-  - [ ] Home (with the network band and its test, the pricing cards), the guides and every other page · AC-8 to AC-11, AC-13
+  - [x] Home (with the network band and its test, the pricing cards), the guides and every other page · AC-8 to AC-11, AC-13
   - [ ] The signed in header: the email claim, the account slot, `/sign-out`, the privacy entry and the Clerk setup · AC-19 to AC-30
   - [ ] Proof and records: accessibility sweep, brand rerun, `design.md` and the amendment lines · AC-16 to AC-18
 - [ ] Verify it: `/check verify UI redesign`

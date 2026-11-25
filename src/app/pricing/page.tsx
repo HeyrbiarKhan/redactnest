@@ -1,16 +1,12 @@
-import { Check } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { config } from "@/config";
-import { LEGAL } from "@/lib/legal";
-import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
-import { SUBSCRIBE_PATH, TERMS_PATH, TOOL_PATH } from "@/lib/routes";
-import { Button } from "@/ui/button";
-import { Card } from "@/ui/card";
+import { PRO_PLAN } from "@/lib/plans";
 import { PageContainer } from "@/ui/page-container";
 
-import { NAV_TEXT, PageHeader } from "../site-nav";
+import { PricingCards } from "../pricing-cards";
+import { PageHeader } from "../site-nav";
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -19,10 +15,8 @@ export const metadata: Metadata = {
 
 /**
  * Pricing. Spec 0012, AC-13 and INV-8, laid out as spec 0013 amends it
- * (AC-22): today's title and lead, then the two plans as cards, side by side
- * from `md`. Pro's card has the accent edge, which only marks it: Pro is named
- * in its heading, so nothing rests on the colour. Free's card offers the tool,
- * a real page load (`reload`, spec 0003, INV-10).
+ * (AC-22): today's title and lead, then the two plans as `PricingCards`, the
+ * same cards the home page shows (spec 0026, AC-10).
  *
  * A prerendered static page under the standard policy, with no client
  * component and no outside script. It promises only what Pro does today, and
@@ -50,60 +44,9 @@ export default function PricingPage() {
             </p>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2 md:items-start">
-            <Card title={FREE_PLAN.name} headingLevel={2}>
-              <PlanFeatures items={[`Up to ${config.freePageCap} pages a document`]} />
-              <Button href={TOOL_PATH} reload variant="secondary" className="self-start">
-                {NAV_TEXT.tryFree}
-              </Button>
-            </Card>
-
-            <Card title={PRO_PLAN.name} headingLevel={2} accent>
-              <p className="text-heading font-semibold text-ink">{PRO_PLAN.priceLine}</p>
-              <PlanFeatures
-                items={[
-                  `Up to ${config.maxPages} pages a document`,
-                  // Spec 0017, AC-26: Pro does this now, its cap from config.
-                  `Custom terms: up to ${config.maxCustomTerms} names, numbers or phrases, found wherever they appear`,
-                  `Everything in ${FREE_PLAN.name}`,
-                ]}
-              />
-              <Button href={SUBSCRIBE_PATH} reload className="self-start">
-                Subscribe
-              </Button>
-              <div className="flex flex-col gap-2 text-ink-muted">
-                <p>{LEGAL.merchantLine}</p>
-                <p>{LEGAL.taxLine}</p>
-                <p>
-                  {LEGAL.subscribeNotice.beforeTerms}
-                  <a href={TERMS_PATH} className="underline underline-offset-4">
-                    {LEGAL.termsLabel}
-                  </a>
-                  {LEGAL.subscribeNotice.afterTerms}
-                </p>
-              </div>
-            </Card>
-          </div>
+          <PricingCards headingLevel={2} />
         </PageContainer>
       </main>
     </>
-  );
-}
-
-/** A plan's lines, each with a check mark that assistive technology skips. */
-function PlanFeatures({ items }: { readonly items: readonly string[] }) {
-  return (
-    <ul className="flex flex-col gap-2">
-      {items.map((item) => (
-        <li key={item} className="flex items-start gap-2 text-ink">
-          <Check
-            aria-hidden="true"
-            className="mt-0.5 size-5 shrink-0 text-accent"
-            strokeWidth={1.75}
-          />
-          {item}
-        </li>
-      ))}
-    </ul>
   );
 }

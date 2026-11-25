@@ -13,9 +13,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as homePage from "@/app/page";
 import HomePage from "@/app/page";
+import { planLines } from "@/app/pricing-cards";
+import { NAV_TEXT } from "@/app/site-nav";
 import { config } from "@/config";
-import { capLine, findsItems, HOME_TEXT, strippedItems } from "@/lib/home-text";
-import { PRICING_PATH, TOOL_PATH } from "@/lib/routes";
+import {
+  capLine,
+  findsItems,
+  HOME_TEXT,
+  NETWORK_ROWS,
+  strippedItems,
+} from "@/lib/home-text";
+import { LEGAL } from "@/lib/legal";
+import { FREE_PLAN, PLAN_BADGE, PRO_PLAN } from "@/lib/plans";
+import { SUBSCRIBE_PATH, TOOL_PATH } from "@/lib/routes";
 
 import { expectNoAxeViolations } from "../../setup/component";
 
@@ -67,7 +77,6 @@ describe("the hero (AC-10)", () => {
     const eyebrow = screen.getByTestId("home-eyebrow");
     const headline = screen.getByRole("heading", { level: 1 });
     expect(eyebrow).toHaveTextContent(HOME_TEXT.eyebrow);
-    expect(eyebrow).toHaveClass("eyebrow");
     expect(headline).toHaveTextContent(HOME_TEXT.headline);
     expect(headline).toHaveClass("text-display");
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
@@ -77,26 +86,37 @@ describe("the hero (AC-10)", () => {
     expect(main().getByText(HOME_TEXT.lead)).toHaveClass("text-lead", "text-ink-muted");
   });
 
-  it("offers the tool as a real page load, and pricing beside it with billing on", () => {
+  /**
+   * Spec 0026, AC-8: the hero's way into the tool and its way to How it
+   * works, both plain links; the closing band repeats the hero's own button.
+   */
+  it("offers the tool as a real page load, and How it works beside it", () => {
     render(<HomePage />);
 
-    const primary = main().getByRole("link", { name: "Remove text from a PDF" });
-    expect(primary).toHaveAttribute("href", TOOL_PATH);
-    expect(primary.tagName).toBe("A");
-    // The header's button names it another way, so the page says it once (AC-30).
-    expect(main().queryByRole("link", { name: "Try it free" })).not.toBeInTheDocument();
-    const pricing = main().getByRole("link", { name: "See pricing" });
-    expect(pricing).toHaveAttribute("href", PRICING_PATH);
+    const primaries = main().getAllByRole("link", { name: "Remove text from a PDF" });
+    expect(primaries).toHaveLength(2);
+    for (const primary of primaries) {
+      expect(primary).toHaveAttribute("href", TOOL_PATH);
+      expect(primary.tagName).toBe("A");
+    }
+    // The header's button names it another way, so the page says it once
+    // (AC-30), apart from the Free card's own (spec 0026, AC-10).
+    const tryFree = main().getAllByRole("link", { name: "Try it free" });
+    expect(tryFree).toHaveLength(1);
+    expect(screen.getByTestId("pricing-cards")).toContainElement(tryFree[0] ?? null);
+    const how = main().getByRole("link", { name: "See how it works" });
+    expect(how).toHaveAttribute("href", "#how-it-works");
+    expect(screen.getByTestId("home-steps")).toHaveAttribute("id", "how-it-works");
+    expect(main().queryByRole("link", { name: "See pricing" })).not.toBeInTheDocument();
     expect(screen.getByTestId("home-caps")).toHaveTextContent(
       capLine(true, config.freePageCap, config.maxPages),
     );
   });
 
-  it("drops See pricing and names one cap with billing off", () => {
+  it("names one cap with billing off", () => {
     mocks.billingEnabled = false;
     render(<HomePage />);
 
-    expect(main().queryByRole("link", { name: "See pricing" })).not.toBeInTheDocument();
     expect(screen.getByTestId("home-caps")).toHaveTextContent(
       `Up to ${config.freePageCap} pages a document.`,
     );
@@ -139,19 +159,82 @@ describe("the product shot (AC-12)", () => {
   });
 });
 
-describe("the trio and the band (AC-10, AC-11)", () => {
-  it("lists the three features, each a heading and its line", () => {
+describe("the sections and the band (spec 0026, AC-8; spec 0013, AC-11)", () => {
+  it("heads each section in AC-8's order, and lists How it works as three steps", () => {
     render(<HomePage />);
 
     expect(
       screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent),
     ).toEqual([
-      ...HOME_TEXT.features.map((feature) => feature.title),
+      HOME_TEXT.steps.title,
+      HOME_TEXT.blackBox.title,
       HOME_TEXT.band.title,
+      HOME_TEXT.network.title,
+      HOME_TEXT.pricing.title,
+      HOME_TEXT.closing,
     ]);
-    for (const feature of HOME_TEXT.features) {
-      expect(main().getByText(feature.body)).toBeInTheDocument();
+    const steps = within(screen.getByTestId("home-steps")).getAllByRole("listitem");
+    expect(steps).toHaveLength(3);
+    for (const [index, step] of HOME_TEXT.steps.items.entries()) {
+      expect(
+        within(steps[index] as HTMLElement).getByRole("heading", { level: 3 }),
+      ).toHaveTextContent(step.title);
+      expect(main().getByText(step.body)).toBeInTheDocument();
     }
+  });
+
+  /** Spec 0026, AC-10: the same cards as `/pricing`, only with billing on. */
+  it("shows the two plans with billing on, Subscribe a plain link, and none with billing off", () => {
+    const { unmount } = render(<HomePage />);
+
+    const pricing = within(screen.getByTestId("home-pricing"));
+    expect(
+      pricing.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent),
+    ).toEqual([FREE_PLAN.name, PRO_PLAN.name]);
+    expect(pricing.getByText(PLAN_BADGE)).toBeInTheDocument();
+    expect(pricing.getByText(PRO_PLAN.priceLine)).toBeInTheDocument();
+    const subscribe = pricing.getByRole("link", { name: "Subscribe" });
+    expect(subscribe).toHaveAttribute("href", SUBSCRIBE_PATH);
+    expect(subscribe.tagName).toBe("A");
+    unmount();
+
+    mocks.billingEnabled = false;
+    render(<HomePage />);
+    expect(screen.queryByTestId("home-pricing")).not.toBeInTheDocument();
+  });
+
+  /**
+   * Spec 0026, AC-9: the network band lists every row with the paths it
+   * stands for, the last row the visitor's file with none, and links to the
+   * security page's way to check. `network-list.spec.ts` holds the paths.
+   */
+  it("lists what the tool page fetches on the night band, each row with its paths", () => {
+    render(<HomePage />);
+
+    const band = screen.getByTestId("home-network");
+    expect(band).toHaveAttribute("data-band", "night");
+    expect(band).toHaveClass("bg-night");
+    const rows = within(band).getAllByTestId("network-row");
+    expect(rows.map((row) => row.getAttribute("data-paths"))).toEqual(
+      NETWORK_ROWS.map(({ paths }) => paths.join(" ")),
+    );
+    expect(rows.at(-1)).toHaveAttribute("data-paths", "");
+    expect(rows.at(-1)).toHaveTextContent("Your PDF");
+    expect(
+      within(band).getByRole("link", { name: HOME_TEXT.network.link }),
+    ).toHaveAttribute("href", "/security#check-it");
+  });
+
+  it("compares a drawn box with RedactNest's removal, and links to how the check works", () => {
+    render(<HomePage />);
+
+    const section = within(screen.getByTestId("home-black-box"));
+    expect(section.getByText(HOME_TEXT.blackBox.eyebrow)).toBeInTheDocument();
+    expect(section.getByText("Contact: jane.doe@example.com")).toBeInTheDocument();
+    expect(section.getByRole("link", { name: HOME_TEXT.blackBox.link })).toHaveAttribute(
+      "href",
+      "/security#the-check",
+    );
   });
 
   /**
@@ -250,7 +333,7 @@ describe("the trio and the band (AC-10, AC-11)", () => {
     );
     for (const item of items) {
       // `canvas`, not `subtle`, the checklist's hover tint.
-      expect(item).toHaveClass("bg-canvas", "rounded-card", "text-ink");
+      expect(item).toHaveClass("border-border", "bg-surface", "rounded-card", "text-ink");
       expect(item).not.toHaveClass("bg-subtle");
       const tile = item.firstElementChild;
       expect(tile).toHaveAttribute("aria-hidden", "true");
@@ -386,15 +469,65 @@ describe("the trio and the band (AC-10, AC-11)", () => {
 describe("the main content's words (AC-13)", () => {
   /** Every word `home-text.ts` gives the page, for the build's billing state. */
   function homeWords(billingEnabled: boolean): string[] {
-    const { features, band } = HOME_TEXT;
+    const { steps, blackBox, band } = HOME_TEXT;
     return [
       HOME_TEXT.eyebrow,
       HOME_TEXT.headline,
       HOME_TEXT.lead,
       HOME_TEXT.primary,
-      ...(billingEnabled ? [HOME_TEXT.pricing] : []),
+      HOME_TEXT.howItWorks,
       capLine(billingEnabled, config.freePageCap, config.maxPages),
-      ...features.flatMap(({ title, body }) => [title, body]),
+      HOME_TEXT.shotCard,
+      steps.eyebrow,
+      steps.title,
+      ...steps.drawing.rows.map(({ value }) => value),
+      steps.drawing.file,
+      ...steps.items.flatMap(({ title, body }, index) => [
+        String(index + 1).padStart(2, "0"),
+        title,
+        body,
+      ]),
+      blackBox.eyebrow,
+      blackBox.title,
+      blackBox.body,
+      blackBox.link,
+      blackBox.caption,
+      ...blackBox.panels.flatMap(({ title, lines, readsLabel, reads }) => [
+        title,
+        ...lines.map(({ text }) => text),
+        readsLabel,
+        reads,
+      ]),
+      HOME_TEXT.closing,
+      HOME_TEXT.network.eyebrow,
+      HOME_TEXT.network.title,
+      HOME_TEXT.network.body,
+      HOME_TEXT.network.link,
+      HOME_TEXT.network.listLabel,
+      ...NETWORK_ROWS.flatMap(({ label, what, paths }) => [
+        label,
+        what,
+        paths.join(", "),
+      ]),
+      ...(billingEnabled
+        ? [
+            HOME_TEXT.pricing.eyebrow,
+            HOME_TEXT.pricing.title,
+            FREE_PLAN.name,
+            PRO_PLAN.name,
+            PLAN_BADGE,
+            PRO_PLAN.priceLine,
+            ...planLines().free,
+            ...planLines().pro,
+            NAV_TEXT.tryFree,
+            "Subscribe",
+            LEGAL.merchantLine,
+            LEGAL.taxLine,
+            LEGAL.subscribeNotice.beforeTerms,
+            LEGAL.termsLabel,
+            LEGAL.subscribeNotice.afterTerms,
+          ]
+        : []),
       band.title,
       band.finds.title,
       band.finds.subtitle,

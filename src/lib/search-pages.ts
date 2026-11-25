@@ -1,3 +1,4 @@
+import type { LucideIcon } from "lucide-react";
 /**
  * Every word on the search pages, in one place. Spec 0024, *Feature design*,
  * INV-2: one typed, frozen record per page over a closed set, like
@@ -37,7 +38,16 @@ import { lookedFor } from "@/lib/detectors";
 import { BLACK_BOX_PATH, REDACT_PDF_PATH, REMOVE_TEXT_PATH } from "@/lib/routes";
 import type { PageKind } from "@/telemetry/events";
 import type { CoverFigureProps, CoverPanel } from "@/ui/cover-figure";
-import type { FeatureItem } from "@/ui/feature-list";
+
+/**
+ * One of a search page's three cards (spec 0024, AC-3): an icon on its filled
+ * tile, a title and one line (spec 0026, AC-11).
+ */
+export interface FeatureItem {
+  readonly icon: LucideIcon;
+  readonly title: string;
+  readonly body: string;
+}
 
 /**
  * The search pages, a closed set whose order is the footer's and the

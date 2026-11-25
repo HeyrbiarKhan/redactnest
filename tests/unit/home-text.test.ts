@@ -20,10 +20,12 @@ import { DETECTOR_KINDS, SANITIZED_KINDS } from "@/worker/protocol";
 
 describe("the hero (AC-10)", () => {
   it("says what the spec settled, word for word", () => {
-    expect(HOME_TEXT.eyebrow).toBe("PDF redaction in your browser");
+    expect(HOME_TEXT.eyebrow).toBe("Runs in your browser. Never uploaded.");
     expect(HOME_TEXT.headline).toBe("Redaction that actually removes the text");
     expect(HOME_TEXT.primary).toBe("Remove text from a PDF");
-    expect(HOME_TEXT.pricing).toBe("See pricing");
+    expect(HOME_TEXT.howItWorks).toBe("See how it works");
+    // Spec 0026, AC-8: the self check named by its result, row M3.
+    expect(HOME_TEXT.shotCard).toBe("No pass, no file");
   });
 
   /**
@@ -41,28 +43,37 @@ describe("the hero (AC-10)", () => {
     expect(HOME_TEXT.lead).not.toMatch(/\bfinds\b/i);
   });
 
-  it("gives the trio its three icons, titles and lines, in order", () => {
-    expect(
-      HOME_TEXT.features.map(({ icon, title, body }) => [icon.displayName, title, body]),
-    ).toEqual([
+  /** Spec 0026, AC-8: How it works, three cards in the order of the tool. */
+  it("gives How it works its three titles and lines, in order", () => {
+    expect(HOME_TEXT.steps.eyebrow).toBe("How it works");
+    expect(HOME_TEXT.steps.title).toBe("Three steps to a redacted PDF");
+    expect(HOME_TEXT.steps.items.map(({ title, body }) => [title, body])).toEqual([
+      ["Open a PDF", "Drop it on the page, or choose it from your files."],
       [
-        "Laptop",
-        "Stays on your device",
-        "Never uploaded to us or to anyone else, and nothing is stored.",
-      ],
-      // Spec 0019, AC-12: two kinds, each held by the structure check, never
-      // hidden data as a whole. As built: "selectable", since a ticked word's
-      // scan ink further out than the padded area stays.
-      [
-        "Eraser",
-        "Removed, not covered",
-        "Selectable text you tick is taken out of the page, and document info and attachments are stripped.",
+        "Tick what to remove",
+        "Each item found is listed with the words around it. A tick at the start is only a suggestion.",
       ],
       [
-        "ShieldCheck",
-        "Checked before you download",
-        "Every page of the new file is checked. If RedactNest can't vouch for it, you get no file.",
+        "Download your new file",
+        "Checked before you download: every page of the new file is checked, and if RedactNest can't vouch for it, you get no file.",
       ],
+    ]);
+  });
+
+  /**
+   * Spec 0026, AC-8, row M2: "selectable" and "the page", never "the file",
+   * and removed first, then marked.
+   */
+  it("says the black box section's claim behind the self check's text part", () => {
+    expect(HOME_TEXT.blackBox.eyebrow).toBe("Removed, not covered");
+    expect(HOME_TEXT.blackBox.title).toBe("A black box is not redaction");
+    expect(HOME_TEXT.blackBox.body).toContain(
+      "RedactNest takes the selectable text you tick out of the page first, then marks where it was.",
+    );
+    expect(HOME_TEXT.blackBox.body).not.toMatch(/out of the file|from the file\b(?!:)/);
+    expect(HOME_TEXT.blackBox.panels.map(({ reads }) => reads)).toEqual([
+      "Contact: jane.doe@example.com",
+      "Contact:",
     ]);
   });
 });
@@ -217,7 +228,7 @@ describe("the pictures' words (AC-5, AC-12)", () => {
 
   it("describes the social card without naming a detector", () => {
     expect(HOME_TEXT.socialAlt).toBe(
-      `RedactNest. ${HOME_TEXT.eyebrow}. ${HOME_TEXT.headline}.`,
+      `RedactNest. ${HOME_TEXT.eyebrow} ${HOME_TEXT.headline}.`,
     );
     expect(HOME_TEXT.socialAlt).not.toMatch(/email|phone/i);
   });
@@ -245,13 +256,30 @@ describe("AC-30: each thing said once", () => {
     }
   });
 
-  it("says never uploaded only in the first trio card", () => {
-    const [first] = HOME_TEXT.features;
+  /**
+   * Spec 0026, AC-8: each of the trio's claims lands in exactly one place,
+   * "never uploaded" in the eyebrow chip, "removed, not covered" in the black
+   * box section's eyebrow and "checked before you download" in the third
+   * step card. The site line is the head's and the social card's alt text
+   * describes the eyebrow, both outside the main content (spec 0024, AC-11).
+   */
+  const MAIN = JSON.stringify(
+    Object.entries(HOME_TEXT).filter(([key]) => !["siteLine", "socialAlt"].includes(key)),
+  );
 
-    expect(first?.body).toMatch(/never uploaded/i);
-    // The site line is the head's, outside the main content (spec 0024, AC-11).
-    const main = Object.entries(HOME_TEXT).filter(([key]) => key !== "siteLine");
-    expect(JSON.stringify(main).match(/uploaded/gi)).toHaveLength(1);
+  it("says never uploaded only in the eyebrow chip", () => {
+    expect(HOME_TEXT.eyebrow).toMatch(/never uploaded/i);
+    expect(MAIN.match(/uploaded/gi)).toHaveLength(1);
+  });
+
+  it("says removed, not covered only in the black box section's eyebrow", () => {
+    expect(HOME_TEXT.blackBox.eyebrow).toBe("Removed, not covered");
+    expect(MAIN.match(/not covered/gi)).toHaveLength(1);
+  });
+
+  it("says checked before you download only in the third step card", () => {
+    expect(HOME_TEXT.steps.items[2]?.body).toMatch(/^Checked before you download/);
+    expect(MAIN.match(/checked before you download/gi)).toHaveLength(1);
   });
 });
 

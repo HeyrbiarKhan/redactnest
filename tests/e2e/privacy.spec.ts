@@ -483,16 +483,16 @@ test("the tool route asks its own server only for the entitlement, and posts onl
   await page.goto("/tool");
   await openDocument(page);
 
-  // Spec 0012, AC-9: the header now links to Pricing and Account. They are
-  // plain links, so hovering them prefetches neither, and the route's requests
-  // stay as they were.
+  // Spec 0012, AC-9, with spec 0026 AC-5's signed out header: Pricing and
+  // Sign in are plain links, so hovering them prefetches neither, and the
+  // route's requests stay as they were.
   const header = page.getByRole("banner");
   await expect(
     header.getByRole("link", { name: "Pricing", exact: true }),
   ).toHaveAttribute("href", "/pricing");
   await expect(
-    header.getByRole("link", { name: "Account", exact: true }),
-  ).toHaveAttribute("href", "/account");
+    header.getByRole("link", { name: "Sign in", exact: true }),
+  ).toHaveAttribute("href", "/sign-in");
   await hoverHeaderLinks(page);
 
   // AC-3. Everything else the route fetches is its own code and the engine, both

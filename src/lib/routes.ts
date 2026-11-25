@@ -76,3 +76,18 @@ export const WELCOME_PATH = "/account/welcome";
  * route passes each event on server to server.
  */
 export const TELEMETRY_PATH = "/api/telemetry";
+
+/** The plan check the tool asks of its own server (spec 0012, AC-1). */
+export const ENTITLEMENT_PATH = "/api/entitlement";
+
+/**
+ * What else `/tool` fetches from its own origin, named for the home page's
+ * network band (spec 0026, AC-9), which `tests/e2e/network-list.spec.ts`
+ * holds to every request a full run makes: the engine, served from
+ * `public/engine` (`scripts/sync-engine.mjs`); Next's own built files, the
+ * page's scripts, styles and self hosted font; and the icons `src/app`'s icon
+ * files serve.
+ */
+export const ENGINE_PREFIX = "/engine/";
+export const NEXT_FILES_PREFIX = "/_next/";
+export const ICON_PATHS = Object.freeze(["/favicon.ico", "/icon.svg", "/apple-icon.png"]);
