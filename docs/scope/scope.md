@@ -528,6 +528,7 @@ spec [0026](../specs/0026-ui-redesign/index.md) (2026-11-25: every page in the m
   - [ ] Proof and records: accessibility sweep, brand rerun, `design.md` and the amendment lines · AC-16 to AC-18
 - [ ] Verify it: `/check verify UI redesign`
 - [ ] Test it: `/test UI redesign`
+- [ ] Review it (fresh model): `/check review UI redesign`
 
 ### 23. Legal review · needs a decision · Alpha · from spec 0011
 The lawyer questions launch left open, asked once RedactNest has 100+ users, on a tech lawyer's advice (2026-10-03). PECA section 32, Pakistani law and courts, and a full review of both pages (spec 0011 steps 3 and 4), plus two from spec 0012: does Polar's own use of billing details as merchant of record (fraud, security, tax records) make it a controller for that part, and does every cookie claim C6 calls strictly necessary meet that exemption, given Clerk's `__refresh_<suffix>` stays after sign out on production. It sits before feature 17 because the Polar answer can change what the DPA says.
