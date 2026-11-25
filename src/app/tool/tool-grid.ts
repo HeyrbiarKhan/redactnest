@@ -1,0 +1,64 @@
+/**
+ * The tool grid's template from `lg` (spec 0026, AC-12, as spec 0013 AC-14
+ * and AC-15 still have it while nothing is open).
+ *
+ * Returned as values, not class names, because the rows depend on which areas
+ * hold something and a class built at run time is one Tailwind never sees.
+ * The grid sets them as `--tool-columns`, `--tool-rows` and `--tool-areas`,
+ * read by static classes under the grid's own `lg` container query.
+ */
+
+/** Which of the tool's areas hold something right now. */
+export interface ToolAreas {
+  /** A: the file bar, or the full drop zone. */
+  readonly document: boolean;
+  /** L: the polite region, unless it is quiet (visually hidden). */
+  readonly live: boolean;
+  /** B's head: the plan card, a callout, the result card or the lock line. */
+  readonly head: boolean;
+  /** C: the found items, from `reviewing` on. */
+  readonly found: boolean;
+}
+
+export interface ToolGridTemplate {
+  readonly columns: string;
+  readonly rows: string;
+  readonly areas: string;
+}
+
+/** The two columns while nothing is open: A beside the rail (spec 0013, AC-15). */
+const IDLE_COLUMNS = "minmax(0, 1fr) minmax(20rem, 24rem)";
+
+/**
+ * One column with a document on the page, at the `max-w-narrow` measure, so
+ * no block needs its own width; the grid centres it (AC-12, *One column*).
+ */
+const COLUMN = "minmax(0, 44rem)";
+
+/**
+ * While nothing is open, A sits beside B, with L over B only while it has
+ * something to say; B's row takes the rest, so no space opens between them.
+ *
+ * With a document on the page, the areas that hold something stack in page
+ * order, A, L, B's head (`h`), then C, and nothing else: an empty area is
+ * hidden and out of the flow, so a row for it would only open a doubled gap
+ * (AC-12, *Rows*). The action panel has no row of its own; it sits in C's.
+ */
+export function toolGridAreas(compact: boolean, holds: ToolAreas): ToolGridTemplate {
+  if (!compact) {
+    return holds.live
+      ? { columns: IDLE_COLUMNS, rows: "auto 1fr", areas: "'a l' 'a b'" }
+      : { columns: IDLE_COLUMNS, rows: "none", areas: "'a b'" };
+  }
+  const rows = [
+    holds.document && "a",
+    holds.live && "l",
+    holds.head && "h",
+    holds.found && "c",
+  ].filter((area): area is string => area !== false);
+  return {
+    columns: COLUMN,
+    rows: "none",
+    areas: rows.map((area) => `'${area}'`).join(" "),
+  };
+}

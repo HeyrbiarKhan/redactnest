@@ -206,6 +206,35 @@
   }
 }
 
+/*
+ * A window at least 36rem tall (spec 0026, AC-12, *Sticky foot*). `/tool`'s
+ * action panel sticks to the window's foot only here, so a short window, or a
+ * page zoomed until the window is short in `rem`, gets a static panel that
+ * can never sit over a block it would hide.
+ */
+@custom-variant tall (@media (min-height: 36rem));
+
+/*
+ * Focus never hidden when it moves (spec 0026, AC-12; WCAG 2.2, 2.4.11).
+ * Wherever `/tool`'s action panel floats at the window's foot (the tool's own
+ * `lg`, a tall window, a panel on the page), every focusable control in the
+ * column, a heading focus moves to by script included, keeps the panel's room
+ * below it, so focus by keyboard or by script scrolls it clear above the
+ * panel. The panel's own controls are left out: they are what floats. The
+ * tool grid's `focusin` fallback holds the same line in an engine that ignores
+ * the margin.
+ */
+@container tool (min-width: 61rem) {
+  @media (min-height: 36rem) {
+    [data-testid="tool-grid"][data-panel]
+      :is(a[href], button, input, select, textarea, summary, [tabindex]):not(
+        [data-testid="action-panel"] *
+      ) {
+      scroll-margin-bottom: var(--tool-panel-room);
+    }
+  }
+}
+
 /* Built and tested now, first placed by feature 15. */
 @utility eyebrow {
   font-size: var(--text-small);

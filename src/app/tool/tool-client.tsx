@@ -9,6 +9,8 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
+  type FocusEvent,
   type RefObject,
 } from "react";
 
@@ -26,18 +28,24 @@ import {
   subscribeEntitlement,
 } from "@/lib/entitlement";
 import {
+  DROP_TEXT,
   dropZoneHelper,
   failureText,
   IDLE_STEPS,
   isTickCaused,
   LOST_TEXT,
   makeWaitsLine,
+  OPEN_STEPS,
   PHASE_TEXT,
   phaseLine,
+  PROGRESS_TITLE,
   redactLabel,
   refusalLines,
   RUN_REFUSAL_LEAD,
+  RUN_STEPS,
   runRefusalText,
+  SHOWS_WHY,
+  STEP_STATE_TEXT,
   TERMS_LOCKED_TEXT,
   TERMS_TEXT,
   termsFailedLine,
@@ -55,6 +63,7 @@ import {
   showsAdvice,
   warningLines,
 } from "@/lib/page-findings";
+import { stepStates } from "@/lib/progress";
 import { TOOL_PATH } from "@/lib/routes";
 import {
   canMake,
@@ -93,17 +102,20 @@ import { Button } from "@/ui/button";
 import { Callout } from "@/ui/callout";
 import { Card } from "@/ui/card";
 import { DropZone } from "@/ui/drop-zone";
+import { ProgressSteps } from "@/ui/progress-steps";
 import { Spinner } from "@/ui/spinner";
 import { StepList } from "@/ui/step-list";
 
 import { ActionPanel } from "./action-panel";
 import { FailureCallout } from "./failure-callout";
 import { LockLine } from "./lock-line";
+import { coversFocus, PANEL_ROOM } from "./panel-room";
 import { NewTabLink, PlanLine } from "./plan-line";
 import { ResultCard } from "./result-card";
 import { ReviewChecklist, type TermGroupTerm } from "./review-checklist";
 import { TermsNotice } from "./terms-notice";
 import { TermsPanel, type TermChip, type TermFocus } from "./terms-panel";
+import { toolGridAreas } from "./tool-grid";
 
 /**
  * Did this session lose its worker before the engine had finished loading?
@@ -744,6 +756,41 @@ export function ToolClient() {
   }, []);
 
   /**
+   * The action panel's Untick all (spec 0026, AC-12): every row that can be
+   * ticked, unticked as one action and one render, by the same rule as a
+   * group's select all. Focus stays on the button.
+   */
+  const handleUntickAll = useCallback(() => {
+    const live = sessionRef.current;
+    if (live.state === "idle") return;
+    const ids = live.matches.filter((m) => m.blocked === null).map((m) => m.id);
+    dispatch({ type: "ticks-set", ids, on: false });
+  }, []);
+
+  /**
+   * Focus never hidden when it moves (spec 0026, AC-12; WCAG 2.2, 2.4.11), for
+   * an engine that ignores the column's scroll margin. The browser scrolls a
+   * newly focused control into view after `focusin` fires, so the check waits
+   * a frame and reads the boxes where they ended up. Only while the action
+   * panel floats (its computed `position`), and only when its box covers the
+   * focused control's (`coversFocus`); `scrollIntoView` with `nearest` then
+   * honours the scroll margin and lifts the control clear. It moves no focus.
+   */
+  const handleColumnFocus = useCallback((event: FocusEvent<HTMLDivElement>) => {
+    const grid = event.currentTarget;
+    const control = event.target;
+    requestAnimationFrame(() => {
+      const panel = grid.querySelector<HTMLElement>('[data-testid="action-panel"]');
+      if (panel === null || panel.contains(control)) return;
+      if (document.activeElement !== control) return;
+      if (getComputedStyle(panel).position !== "sticky") return;
+      if (coversFocus(control.getBoundingClientRect(), panel.getBoundingClientRect())) {
+        control.scrollIntoView({ block: "nearest", behavior: "instant" });
+      }
+    });
+  }, []);
+
+  /**
    * Search the open document for one batch of terms (spec 0017, AC-9, AC-19,
    * AC-20): one Add, one paste or one Try again, on Pro only, one at a time.
    * The session hears the batch is searching, the polite line says what, and
@@ -1191,34 +1238,73 @@ export function ToolClient() {
       : null;
   // Nothing worth hearing yet, so the polite region is hidden and takes no room.
   const quiet = !reviewable && phaseText === null;
-  // The polite region sits in the left column, where the list will be, while a
-  // document opens or the worker is lost (`toolGridAreas`), so the phase line
-  // holds that column rather than heading it (feature 28).
-  const holdsColumn = compact && !reviewable;
+  // Spec 0026, child 0003: while a document opens or a run works, the steps
+  // over the phases the worker already sends, from the latest phase alone.
+  // The plan wait inside an open counts as the open's first step (AC-33).
+  const tickedCount = live === null ? 0 : live.ticked.size;
+  const progress =
+    phaseText === null
+      ? null
+      : session.state === "opening"
+        ? {
+            title: PROGRESS_TITLE.open,
+            ...stepStates(
+              checkingEntitlement ? "checking-entitlement" : session.phase,
+              OPEN_STEPS,
+            ),
+          }
+        : session.state === "redacting"
+          ? { title: PROGRESS_TITLE.run, ...stepStates(session.phase, RUN_STEPS) }
+          : null;
+  const runRefused = session.state === "reviewing" && session.runFailure !== null;
+  // B's head holds something in every step but one: reviewing with billing
+  // off and no refusal, when the action panel is all B shows (AC-12, *Rows*).
+  const headHolds = config.billingEnabled || !acting || runRefused;
+  const template = toolGridAreas(compact, {
+    document: true,
+    live: !quiet,
+    head: headHolds,
+    found: reviewable,
+  });
+  const gridStyle = {
+    "--tool-columns": template.columns,
+    "--tool-rows": template.rows,
+    "--tool-areas": template.areas,
+    ...(compact && { "--tool-panel-room": PANEL_ROOM }),
+  } as CSSProperties;
 
   /*
-   * Spec 0013, AC-14 to AC-17, with feature 26's move of the phase line. One
-   * grid of four areas, always rendered in the same order with the same keys,
-   * so no live region remounts when a file is chosen and a phone reads them
-   * top to bottom: A, the document (the full drop zone, or the file bar); L,
-   * the polite region; B, the rail; C, the found items, from `reviewing` on.
-   * Only the area template changes from `lg` (`toolGridAreas`).
+   * Spec 0013, AC-14 and AC-15, laid out as spec 0026 AC-12 has it. One grid
+   * of four areas, always rendered in the same order with the same keys, so
+   * no live region remounts when a file is chosen and a phone reads them top
+   * to bottom: A, the document (the full drop zone, or the file bar); L, the
+   * polite region; B, its head and then the action panel; C, the found items,
+   * from `reviewing` on. Only the template changes from `lg`
+   * (`toolGridAreas`): A beside B while nothing is open, and one centred
+   * column once a document is on the page, with B's head between L and C and
+   * the action panel floating at C's foot.
    *
    * `lg` here is a container query, 61rem of this column, which is a 1024
    * pixel window less the page's gutters at the default text size. A media
-   * query reads `rem` as the browser's default size, so it would keep two
-   * columns and a sticky panel at 200% text; a container query reads the
-   * page's own root size, so enlarged text gets one column and nothing sticky
-   * (AC-17, INV-6; WCAG 1.4.4 and 1.4.10).
+   * query reads `rem` as the browser's default size, so it would keep the
+   * wide layout and a sticky panel at 200% text; a container query reads the
+   * page's own root size, so enlarged text gets the stacked page and nothing
+   * sticky (WCAG 1.4.4 and 1.4.10). The container is named `tool` for the
+   * column's scroll margin rule in `globals.css`.
    */
   return (
-    <div className="@container">
+    <div className="@container/tool">
       <div
         data-testid="tool-grid"
-        className={cx(
-          "grid gap-6 @min-[61rem]:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]",
-          toolGridAreas(compact, reviewable, quiet),
-        )}
+        data-panel={acting ? "" : undefined}
+        style={gridStyle}
+        onFocus={handleColumnFocus}
+        className={
+          "grid gap-6 @min-[61rem]:justify-center " +
+          "@min-[61rem]:[grid-template-columns:var(--tool-columns)] " +
+          "@min-[61rem]:[grid-template-rows:var(--tool-rows)] " +
+          "@min-[61rem]:[grid-template-areas:var(--tool-areas)]"
+        }
       >
         <div
           key="a"
@@ -1257,8 +1343,10 @@ export function ToolClient() {
           ) : (
             <div className="flex flex-col gap-3">
               <DropZone
-                title="Drop a PDF here, or choose one"
+                title={DROP_TEXT.title}
+                or={DROP_TEXT.or}
                 helper={dropZoneHelper(planAnswer)}
+                note={DROP_TEXT.device}
                 buttonLabel="Choose a PDF"
                 accept="application/pdf"
                 onFile={(file) => void handleFile(file)}
@@ -1311,13 +1399,13 @@ export function ToolClient() {
           the head of the rail once it holds the document card, without ever
           remounting it or moving focus (feature 26).
 
-          While it holds the left column, its line sits in the middle of the
-          room beside the rail, which the grid stretches it to fill from `lg`
-          (feature 28). Only classes change on the region, so it keeps its
-          node as the area moves. Its line does not keep its node: a file
-          chosen while Checking your plan shows replaces that line, the region
-          is empty and hidden for a moment, and the first phase arrives in a
-          new node. Each line is heard once (spec 0013, AC-16).
+          With a document on the page it sits under the file bar, sized to
+          what it holds (spec 0026, AC-12). Only classes change on the region,
+          so it keeps its node as the area moves. Its line does not keep its
+          node: a file chosen while Checking your plan shows replaces that
+          line, the region is empty and hidden for a moment, and the first
+          phase arrives in a new node. Each line is heard once (spec 0013,
+          AC-16).
         */}
         <div
           key="l"
@@ -1325,95 +1413,171 @@ export function ToolClient() {
           aria-live="polite"
           className={cx(
             "flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:l]",
-            holdsColumn && "justify-center",
             quiet && "sr-only",
           )}
         >
           {reviewable && <OpenedDocument session={session} />}
-          {phaseText !== null && <StatusLine text={phaseText} stacked={holdsColumn} />}
+          {phaseText !== null && (
+            <StatusLine text={phaseText} visuallyHidden={progress !== null} />
+          )}
+          {/*
+            Child 0003, AC-31: the progress card, inside the polite region's
+            area but `aria-live="off"`, so a step's tick is never announced on
+            top of the phase line, which the region still says exactly as
+            before. The card shows the same line, so the region's own copy is
+            visually hidden while it does.
+          */}
+          {progress !== null && phaseText !== null && (
+            <Card data-testid="progress-card" aria-live="off">
+              <ProgressSteps
+                data-testid="progress-steps"
+                title={progress.title}
+                line={phaseText}
+                steps={progress.steps.map(({ phase, state }) => ({
+                  label: phaseLine(phase, tickedCount),
+                  state,
+                }))}
+                fraction={progress.fraction}
+                stateText={STEP_STATE_TEXT}
+              />
+            </Card>
+          )}
         </div>
 
+        {/*
+          B, in two parts (spec 0026, AC-12): its head, rendered from the first
+          render in every step so neither it nor the plan card's region inside
+          it ever remounts, then the action panel while acting. From `lg` with
+          a document on the page B is `display: contents`, so the grid places
+          the two apart: the head in its own area between L and C, the panel
+          at C's foot. Otherwise B is a column, as the rail always was. B has
+          no role, name or landmark and must gain none, because some browsers
+          drop the role of an element shown as `contents`.
+        */}
         <div
           key="b"
           data-testid="area-rail"
-          className="flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:b]"
+          className={cx(
+            "flex min-w-0 flex-col gap-6",
+            compact ? "@min-[61rem]:contents" : "@min-[61rem]:[grid-area:b]",
+          )}
         >
-          {/*
+          <div
+            data-testid="area-rail-head"
+            hidden={!headHolds}
+            className="flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:h]"
+          >
+            {/*
           Spec 0012, AC-5, as spec 0013 places it (AC-18): the plan card, after
           the drop zone and after the document card, and only on a build that
           sells Pro.
         */}
-          {config.billingEnabled && (
-            <PlanLine
-              answer={planAnswer}
-              checking={planChecking}
-              onTryAgain={() => void handleTryAgain()}
-              lineRef={planLineRef}
-            />
-          )}
+            {config.billingEnabled && (
+              <PlanLine
+                answer={planAnswer}
+                checking={planChecking}
+                onTryAgain={() => void handleTryAgain()}
+                lineRef={planLineRef}
+              />
+            )}
 
-          {/*
+            {/*
           AC-15: while nothing is open, what happens next, in three steps.
           Where the areas stack the list is centred as a block, so its circles
           stay in one line with the joins between them; beside the drop zone
           it fills the rail as before (feature 28).
         */}
-          {!compact && (
-            <StepList
-              steps={IDLE_STEPS}
-              className="mx-auto w-fit @min-[61rem]:mx-0 @min-[61rem]:w-auto"
-            />
-          )}
+            {!compact && (
+              <StepList
+                steps={IDLE_STEPS}
+                className="mx-auto w-fit @min-[61rem]:mx-0 @min-[61rem]:w-auto"
+              />
+            )}
 
-          {session.state === "lost" && (
-            <FailureCallout
-              data-testid="lost"
-              title={LOST_TEXT.title}
-              body={LOST_TEXT.body}
-              action={
-                <Button
-                  ref={retryRef}
-                  variant="secondary"
-                  data-testid="retry"
-                  onClick={handleRetry}
-                >
-                  Try again
-                </Button>
-              }
-            />
-          )}
+            {session.state === "lost" && (
+              <FailureCallout
+                data-testid="lost"
+                title={LOST_TEXT.title}
+                body={LOST_TEXT.body}
+                action={
+                  <Button
+                    ref={retryRef}
+                    variant="secondary"
+                    data-testid="retry"
+                    onClick={handleRetry}
+                  >
+                    Try again
+                  </Button>
+                }
+              />
+            )}
 
-          {/*
+            {/*
           Spec 0007, AC-14. A refused run keeps the review, so the refusal sits
           before the action it asks to change, and stays through tick changes.
         */}
-          {session.state === "reviewing" && session.runFailure !== null && (
-            <FailureCallout
-              data-testid="run-refusal"
-              lead={RUN_REFUSAL_LEAD}
-              titleRef={refusalRef}
-              {...runRefusalText(
-                session.runFailure,
-                session.entitlement,
-                session.ticked.size,
-              )}
-              action={
-                isTickCaused(session.runFailure) ? undefined : (
-                  <Button
-                    variant="secondary"
-                    data-testid="refusal-choose"
-                    onClick={() => chooseRef.current?.click()}
-                  >
-                    Choose another PDF
-                  </Button>
-                )
-              }
-            />
-          )}
+            {session.state === "reviewing" && session.runFailure !== null && (
+              <FailureCallout
+                data-testid="run-refusal"
+                why={SHOWS_WHY[session.runFailure]}
+                lead={RUN_REFUSAL_LEAD}
+                titleRef={refusalRef}
+                {...runRefusalText(
+                  session.runFailure,
+                  session.entitlement,
+                  session.ticked.size,
+                )}
+                action={
+                  isTickCaused(session.runFailure) ? undefined : (
+                    <Button
+                      variant="secondary"
+                      data-testid="refusal-choose"
+                      onClick={() => chooseRef.current?.click()}
+                    >
+                      Choose another PDF
+                    </Button>
+                  )
+                }
+              />
+            )}
+
+            {session.state === "complete" && counts !== null && outputForm !== null && (
+              <ResultCard
+                counts={counts}
+                terms={termView?.results}
+                setAside={termView?.setAside}
+                summary={session.summary}
+                outputForm={outputForm}
+                downloaded={session.downloaded}
+                onDownload={handleDownload}
+                onRedactAnother={handleStartOver}
+                onMakeAgain={() => void runRedaction("rerun")}
+                outputName={session.outputName}
+                headingRef={resultRef}
+                redactAnotherRef={redactAnotherRef}
+              />
+            )}
+
+            {/*
+          Inside the action panel while it shows; at the rail's foot otherwise.
+          In the idle rail it is centred under the steps where the areas stack,
+          and only there: once a document is open it stays as it was (feature
+          28).
+        */}
+            {!acting && (
+              <LockLine
+                className={
+                  compact ? undefined : "justify-center @min-[61rem]:justify-start"
+                }
+              />
+            )}
+          </div>
 
           {/*
-          AC-16 and AC-17: the rail's last block, carrying the lock line, and
-          sticky from `lg` so it stays in reach beside a long list.
+          The action panel, after the head: B's last block, carrying the lock
+          line. In the page it comes before the list, so it is reached first
+          at every width; from `lg` it is drawn at the list's foot and floats
+          at the window's foot over a long list (spec 0026, AC-12).
         */}
           {acting && (
             <ActionPanel
@@ -1433,40 +1597,12 @@ export function ToolClient() {
                       TERMS_LOCKED_TEXT[session.entitlement.account].recheck !== null,
                     )
               }
+              anyTicked={session.ticked.size > 0}
               onRedact={() => void runRedaction("redact-started")}
               onCancel={handleCancel}
+              onUntickAll={handleUntickAll}
               redactRef={redactRef}
               cancelRef={cancelRef}
-            />
-          )}
-
-          {session.state === "complete" && counts !== null && outputForm !== null && (
-            <ResultCard
-              counts={counts}
-              terms={termView?.results}
-              setAside={termView?.setAside}
-              summary={session.summary}
-              outputForm={outputForm}
-              downloaded={session.downloaded}
-              onDownload={handleDownload}
-              onRedactAnother={handleStartOver}
-              onMakeAgain={() => void runRedaction("rerun")}
-              headingRef={resultRef}
-              redactAnotherRef={redactAnotherRef}
-            />
-          )}
-
-          {/*
-          Inside the action panel while it shows; at the rail's foot otherwise.
-          In the idle rail it is centred under the steps where the areas stack,
-          and only there: once a document is open it stays as it was (feature
-          28).
-        */}
-          {!acting && (
-            <LockLine
-              className={
-                compact ? undefined : "justify-center @min-[61rem]:justify-start"
-              }
             />
           )}
         </div>
@@ -1481,7 +1617,11 @@ export function ToolClient() {
           <div
             key="c"
             data-testid="area-found"
-            className="min-w-0 @min-[61rem]:[grid-area:c]"
+            className={cx(
+              "min-w-0 @min-[61rem]:[grid-area:c]",
+              // The panel's room at the list's end, where it rests (AC-12).
+              acting && "@min-[61rem]:pb-[var(--tool-panel-room)]",
+            )}
           >
             <ReviewChecklist
               matches={session.matches}
@@ -1537,32 +1677,6 @@ export function ToolClient() {
 }
 
 /**
- * The tool grid's areas from `lg` (spec 0013, AC-14 to AC-16). While nothing
- * is open, A sits beside B, with L over B only while it has something to say.
- * With a document on the page, A runs across the top. Until there is a list
- * to review (a file opening, or a lost worker), L takes the list's place left
- * of B, so the spinner and the phase line fill the column the drop zone held
- * rather than leaving it empty (feature 26). From `reviewing` on, C takes the
- * left and L heads the rail column over B.
- *
- * A row L shares with A or C is sized to L alone (`auto`), and B's row takes
- * the rest (`1fr`), so no space opens between L and B, and B still spans the
- * full height beside the list for the sticky action panel (AC-17). A hidden L
- * is out of the flow, so the template leaves it out rather than keep an empty
- * row and its gap.
- */
-function toolGridAreas(compact: boolean, reviewable: boolean, quiet: boolean): string {
-  if (!compact) {
-    return quiet
-      ? "@min-[61rem]:[grid-template-areas:'a_b']"
-      : "@min-[61rem]:grid-rows-[auto_1fr] @min-[61rem]:[grid-template-areas:'a_l'_'a_b']";
-  }
-  return reviewable
-    ? "@min-[61rem]:grid-rows-[auto_auto_1fr] @min-[61rem]:[grid-template-areas:'a_a'_'c_l'_'c_b']"
-    : "@min-[61rem]:[grid-template-areas:'a_a'_'l_b']";
-}
-
-/**
  * An open that failed (spec 0007, AC-15), in its kind's words for the job's
  * frozen snapshot. A free cap with billing on also carries its way forward
  * (spec 0012, AC-6): the account's new tab link, and "Check my plan and open
@@ -1585,6 +1699,7 @@ function OpenFailure({
   return (
     <FailureCallout
       data-testid="error"
+      why={SHOWS_WHY[session.failure ?? "unsupported"]}
       titleRef={titleRef}
       {...text}
       actions={
@@ -1606,23 +1721,27 @@ function OpenFailure({
 }
 
 /**
- * The phase text, with a spinner that carries no meaning of its own.
+ * The phase text, with a spinner that carries no meaning of its own: what the
+ * polite region says as each phase arrives (spec 0013, AC-16 and AC-20).
  *
- * `stacked` while it holds the left column as a document opens: the large
- * spinner centred, the line centred under it (spec 0013, AC-16, feature 28).
- * Otherwise the small spinner beside the line, at the head of the rail. The
- * same three nodes either way, so a change of form is never news.
+ * `visuallyHidden` while the progress card shows the same line, so the eye
+ * reads it once and a screen reader still hears it from the region (spec
+ * 0026, child 0003, AC-31). The same three nodes either way, so a change of
+ * form is never news.
  */
-function StatusLine({ text, stacked = false }: { text: string; stacked?: boolean }) {
+function StatusLine({
+  text,
+  visuallyHidden = false,
+}: {
+  text: string;
+  visuallyHidden?: boolean;
+}) {
   return (
     <p
       data-testid="progress"
-      className={cx(
-        "flex text-ink",
-        stacked ? "flex-col items-center gap-4 py-10 text-center" : "items-center gap-3",
-      )}
+      className={cx("flex items-center gap-3 text-ink", visuallyHidden && "sr-only")}
     >
-      <Spinner size={stacked ? "lg" : "md"} />
+      <Spinner size="md" />
       <span>{text}…</span>
     </p>
   );

@@ -26,7 +26,12 @@ interface DropZoneCommon {
 interface FullDropZone extends DropZoneCommon {
   readonly compact?: false;
   readonly title: string;
+  /** The caps line, under the button. */
   readonly helper: string;
+  /** A word between the title and the button, such as "or". */
+  readonly or?: string;
+  /** A second fact on the caps line, after a separator. */
+  readonly note?: string;
 }
 
 /**
@@ -178,9 +183,9 @@ export function DropZone(props: DropZoneProps) {
     >
       <IconCircle icon={FileUp} tone="accent" size="lg" shape="square" />
 
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-2">
         <p className="text-heading text-ink">{props.title}</p>
-        <p className="text-small text-ink-muted">{props.helper}</p>
+        {props.or !== undefined && <p className="text-ink-muted">{props.or}</p>}
       </div>
 
       {input}
@@ -195,6 +200,19 @@ export function DropZone(props: DropZoneProps) {
       >
         {buttonLabel}
       </Button>
+
+      {/* The caps line after the button, as the mockup draws it (spec 0026, AC-12). */}
+      <p className="text-small text-ink-muted">
+        <span>{props.helper}</span>
+        {props.note !== undefined && (
+          <>
+            {/* A pause for a screen reader, a dot for the eye. */}
+            <span aria-hidden="true"> · </span>
+            <span className="sr-only">, </span>
+            <span>{props.note}</span>
+          </>
+        )}
+      </p>
     </div>
   );
 }

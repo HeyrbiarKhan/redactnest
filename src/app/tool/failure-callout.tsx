@@ -1,6 +1,12 @@
 import type { ReactNode, Ref } from "react";
 
+import { REFUSAL_WHY } from "@/lib/flow-text";
+import { sectionId } from "@/lib/policy-sections";
+import { SECURITY_PATH } from "@/lib/routes";
 import { Callout } from "@/ui/callout";
+
+/** The security page's own account of when RedactNest stops (spec 0018). */
+const WHY_HREF = `${SECURITY_PATH}#${sectionId("whenItStops")}`;
 
 interface FailureCalloutProps {
   /** What happened and what to do, from `failureText`, `runRefusalText` or `LOST_TEXT`. */
@@ -19,6 +25,12 @@ interface FailureCalloutProps {
    * copy they follow.
    */
   readonly actions?: ReactNode;
+  /**
+   * A refusal, an open or a run RedactNest stopped on purpose, ends with a
+   * link to why it stops (spec 0026, AC-12), by `SHOWS_WHY`. A cap or a lost
+   * worker is not a refusal, so it has none.
+   */
+  readonly why?: boolean;
   readonly "data-testid": string;
 }
 
@@ -40,6 +52,7 @@ export function FailureCallout({
   titleRef,
   action,
   actions,
+  why,
   "data-testid": testId,
 }: FailureCalloutProps) {
   return (
@@ -57,6 +70,23 @@ export function FailureCallout({
       {next !== undefined && <p className="font-medium text-ink">{next}</p>}
       {actions !== undefined && (
         <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2">{actions}</div>
+      )}
+      {/*
+        A plain link: it leaves `/tool` for a page with its own policy, and
+        ink rather than the accent, a pairing the contrast contract already
+        holds on the danger tint (spec 0003, INV-1 to INV-3). On a line of
+        its own, so it keeps a 24 pixel target (WCAG 2.5.8).
+      */}
+      {why && (
+        <p>
+          <a
+            href={WHY_HREF}
+            data-testid="refusal-why"
+            className="inline-flex min-h-6 items-center rounded-item font-medium text-ink underline decoration-1 underline-offset-4"
+          >
+            {REFUSAL_WHY}
+          </a>
+        </p>
       )}
     </Callout>
   );

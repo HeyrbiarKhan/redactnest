@@ -17,8 +17,10 @@ import {
   leftLine,
   LOST_TEXT,
   makeWaitsLine,
+  OPEN_STEPS,
   PHASE_TEXT,
   phaseLine,
+  PROGRESS_TITLE,
   redactLabel,
   refusalLines,
   removedLine,
@@ -26,8 +28,10 @@ import {
   setAsideLine,
   resultTitle,
   RUN_REFUSAL_LEAD,
+  RUN_STEPS,
   runRefusalText,
   SANITIZED_TEXT,
+  STEP_STATE_TEXT,
   strippedLine,
   TERMS_TEXT,
   termsFoundLine,
@@ -389,11 +393,21 @@ describe("phase copy (AC-4)", () => {
     );
   });
 
-  it("says a run with nothing ticked only strips hidden content", () => {
-    expect(phaseLine("redacting", 0)).toBe("Stripping hidden content");
+  // Spec 0026, child 0003, AC-32: each step says only what its phase does.
+  it("says a run with nothing ticked strips document info and attachments", () => {
+    expect(phaseLine("redacting", 0)).toBe("Stripping document info and attachments");
     expect(phaseLine("redacting", 3)).toBe("Removing what you ticked");
-    expect(phaseLine("writing", 0)).toBe("Writing your clean file");
-    expect(phaseLine("verifying", 2)).toBe("Checking every page of your clean file");
+    expect(phaseLine("writing", 0)).toBe("Writing your new file");
+    expect(phaseLine("verifying", 2)).toBe("Checking every page");
+  });
+
+  it("lists the run's and the open's steps in the order the worker sends them", () => {
+    expect(RUN_STEPS).toEqual(["redacting", "writing", "verifying"]);
+    expect(OPEN_STEPS).toEqual(["loading-engine", "opening", "inspecting", "detecting"]);
+    // The plan wait is never a step of its own (AC-33).
+    expect(OPEN_STEPS).not.toContain("checking-entitlement");
+    expect(PROGRESS_TITLE).toEqual({ open: "Opening…", run: "Redacting…" });
+    expect(Object.values(STEP_STATE_TEXT).every((words) => words.length > 0)).toBe(true);
   });
 });
 

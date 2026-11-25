@@ -34,7 +34,11 @@ export default function ToolPage() {
         move focus here, and the one element allowed to drop its outline,
         because it is a place focus lands rather than a control.
       */}
-      <main id="main" tabIndex={-1} className="flex-1 py-10 focus:outline-none sm:py-14">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="flex-1 bg-subtle py-10 focus:outline-none sm:py-14"
+      >
         {/*
           Wide, for the three area grid (spec 0013, AC-14). The lock line that
           sat under the title now ends the rail, beside the drop zone or inside

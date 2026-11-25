@@ -538,14 +538,15 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "RedactNest" })).toBeFocused();
 
-    // Spec 0013, AC-7 and AC-20: Pricing and Account sit in the header on
-    // every page, /tool included, because the test build has billing on. No
-    // item names the tool, and /tool shows no Try it free button.
+    // Spec 0026, AC-5: Security and Pricing in the header's nav, then Sign
+    // in, because the test build has billing on and nobody is signed in. On
+    // /tool no item names the tool, How it works is left out (child 0001,
+    // AC-30), and there is no Try it free button.
     const header = page.getByRole("banner");
-    await page.keyboard.press("Tab");
-    await expect(header.getByRole("link", { name: "Pricing" })).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(header.getByRole("link", { name: "Account" })).toBeFocused();
+    for (const name of ["Security", "Pricing", "Sign in"]) {
+      await page.keyboard.press("Tab");
+      await expect(header.getByRole("link", { name })).toBeFocused();
+    }
 
     // Spec 0013, AC-15 and AC-20: the drop zone's button, the terms notice's
     // two links under it, then the plan card in the rail beside it.
@@ -587,9 +588,9 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     ).toBeFocused();
   });
 
-  // Spec 0007, AC-5, as spec 0013 AC-16 amends it: the file bar's two buttons
-  // first, then the rail (the plan card, then the action panel's main action),
-  // then the found items' group summary and each row.
+  // Spec 0007, AC-5, as spec 0026 AC-12 amends it: the file bar's two buttons
+  // first, then B (the plan card, then the action panel's Untick all and main
+  // action), then the found items' group summary and each row.
   test("Start over, Redact and the checklist are reached and ringed like every other control", async ({
     page,
   }) => {
@@ -603,6 +604,10 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await expectFocusRing(page.getByTestId("start-over"));
 
     await tabPastThePlanCard(page);
+    // Spec 0026, AC-12: Untick all beside the count, then Redact.
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("untick-all")).toBeFocused();
+    await expectFocusRing(page.getByTestId("untick-all"));
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("redact")).toBeFocused();
     await expectFocusRing(page.getByTestId("redact"));
@@ -646,6 +651,10 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("start-over")).toBeFocused();
     await tabPastThePlanCard(page);
+    // Spec 0026, AC-12: Untick all beside the count, then Redact.
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("untick-all")).toBeFocused();
+    await expectFocusRing(page.getByTestId("untick-all"));
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("redact")).toBeFocused();
     await expectFocusRing(page.getByTestId("redact"));
@@ -748,8 +757,10 @@ test.describe("target sizes on the tool page (AC-7)", () => {
 });
 
 /**
- * Spec 0013, AC-14 to AC-17. The areas as a wide window draws them, and the
- * action panel sticky beside the list only there.
+ * Spec 0013, AC-14 and AC-15, and spec 0026, AC-12. The areas as a wide
+ * window draws them: A beside B while nothing is open, one centred column
+ * with a document on the page, and the action panel floating at the window's
+ * foot only there.
  */
 test.describe("the tool page's layout (spec 0013)", () => {
   const box = (page: Page, testId: string) =>
@@ -827,8 +838,10 @@ test.describe("the tool page's layout (spec 0013)", () => {
         const { left, right, top, bottom } = element.getBoundingClientRect();
         return { left, right, top, bottom };
       };
-      const list = rail.querySelector(":scope > ol");
-      const lock = rail.querySelector(':scope > [data-testid="lock-line"]');
+      // The steps and the lock line live in B's head (spec 0026, AC-12).
+      const head = rail.querySelector(':scope > [data-testid="area-rail-head"]');
+      const list = head?.querySelector(":scope > ol") ?? null;
+      const lock = head?.querySelector(':scope > [data-testid="lock-line"]') ?? null;
       if (list === null || lock === null) throw new Error("the rail is not idle");
       const drawn = [...lock.children].map(rect);
       return {
@@ -891,8 +904,8 @@ test.describe("the tool page's layout (spec 0013)", () => {
     await page.goto("/tool");
     await planAnswered(page);
     const [first] = await expectJoined();
-    // `border-strong`, #7D848B.
-    expect(first?.colour).toBe("rgb(125, 132, 139)");
+    // `border-strong`, #71717A (spec 0026, AC-1).
+    expect(first?.colour).toBe("rgb(113, 113, 122)");
 
     await page.emulateMedia({ forcedColors: "active" });
     await expectJoined();
@@ -1027,16 +1040,47 @@ test.describe("the tool page's layout (spec 0013)", () => {
     expect(await lockIndent(lockLine)).toBeLessThanOrEqual(1);
   });
 
-  test("draws the found items left of the rail, while the rail comes first in the page", async ({
+  /**
+   * Spec 0026, AC-12, *One column*: from `lg` while reviewing, each block that
+   * holds something (A, L, B's head, C) stacks top to bottom in that order,
+   * centred and no wider than 44rem, with the plan card below the document
+   * card and above the Found items card. In the page, B still comes before C.
+   */
+  test("stacks the file bar, the document card, B's head and the list in one centred column", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/tool");
+    await planAnswered(page);
     await reviewBothGroups(page);
 
-    const list = await box(page, "area-found");
-    const rail = await box(page, "area-rail");
-    expect(list.right).toBeLessThanOrEqual(rail.left);
+    const grid = await box(page, "tool-grid");
+    const blocks = [
+      await box(page, "area-document"),
+      await box(page, "area-live"),
+      await box(page, "area-rail-head"),
+      await box(page, "area-found"),
+    ];
+    const rem = await page.evaluate(() =>
+      parseFloat(getComputedStyle(document.documentElement).fontSize),
+    );
+    for (const block of blocks) {
+      expect(block.right - block.left).toBeLessThanOrEqual(44 * rem + 0.5);
+      expectNear(middle(block).x, middle(grid).x);
+      expectNear(block.left, blocks[0]?.left ?? 0);
+    }
+    for (let at = 1; at < blocks.length; at += 1) {
+      expect(blocks[at]?.top ?? 0).toBeGreaterThanOrEqual(blocks[at - 1]?.bottom ?? 0);
+    }
+
+    const [documentCard, plan, list] = [
+      await rectOf(page.getByRole("region", { name: "Document opened" })),
+      await rectOf(page.getByTestId("plan-card")),
+      await rectOf(page.getByTestId("checklist")),
+    ];
+    expect(plan.top).toBeGreaterThanOrEqual(documentCard.bottom);
+    expect(list.top).toBeGreaterThanOrEqual(plan.bottom);
+
     const railFirst = await page.evaluate(() => {
       const rail = document.querySelector('[data-testid="area-rail"]');
       const list = document.querySelector('[data-testid="area-found"]');
@@ -1049,78 +1093,24 @@ test.describe("the tool page's layout (spec 0013)", () => {
     expect(railFirst).toBe(true);
   });
 
-  test("keeps the action panel sticky at 1280 pixels, and static at 900 and at 200% text", async ({
+  /** AC-12, *The plan card*: at `complete` the result card sits above the list. */
+  test("puts the result card above the list at complete, never sticky", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("/tool");
-    await openDocument(page);
-    expect(await position(page, "action-panel")).toBe("sticky");
-    expect(
-      await page
-        .getByTestId("action-panel")
-        .evaluate((element) => getComputedStyle(element).top),
-    ).toBe("24px");
-
-    await page.setViewportSize({ width: 900, height: 800 });
-    expect(await position(page, "action-panel")).toBe("static");
-
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
-    expect(await position(page, "action-panel")).toBe("static");
-  });
-
-  test("keeps Redact in view beside a long list as the page scrolls", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto("/tool");
-    await reviewManyRows(page);
-
-    await page.getByTestId("area-found").evaluate((element) => {
-      element.scrollIntoView({ block: "end" });
-    });
-    await expect(page.getByTestId("redact")).toBeInViewport();
-  });
-
-  test("never makes the result card sticky", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/tool");
     await completeARun(page);
 
     expect(await position(page, "result")).toBe("static");
-  });
-
-  /** AC-16: from lg, with a document open, A runs across both columns. */
-  test("runs the file bar across both columns above the list and the rail", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("/tool");
-    await reviewBothGroups(page);
-
-    const [document, list, live, rail] = [
-      await box(page, "area-document"),
-      await box(page, "area-found"),
-      await box(page, "area-live"),
-      await box(page, "area-rail"),
-    ];
-    expect(document.left).toBe(list.left);
-    expect(document.right).toBe(rail.right);
-    expect(document.top).toBeLessThan(Math.min(list.top, rail.top));
-    // The polite region, holding the document card, heads the rail column.
-    expect(live.left).toBe(rail.left);
-    expect(live.right).toBe(rail.right);
-    expect(live.top).toBe(list.top);
-    expect(live.top).toBeLessThan(rail.top);
+    const [result, list] = [await box(page, "result"), await box(page, "area-found")];
+    expect(result.bottom).toBeLessThanOrEqual(list.top);
   });
 
   /**
-   * AC-16, as feature 26 changes it: while a file opens, the spinner and the
-   * phase line sit in the left column under the file bar, where the list will
-   * be, beside the rail rather than in it over an empty column.
+   * AC-12: while a document opens, L sits under the file bar, sized to what
+   * it holds, and B's head (the plan card and the lock line) follows it.
    */
-  test("draws the phase line left of the rail while a document opens", async ({
+  test("draws the phase line under the file bar while a document opens, with no stretch", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -1128,27 +1118,28 @@ test.describe("the tool page's layout (spec 0013)", () => {
     await planAnswered(page);
     await openingHeld(page);
 
-    const [document, live, rail] = [
+    const live = page.getByTestId("area-live");
+    const [document, area, line, head] = [
       await box(page, "area-document"),
-      await box(page, "area-live"),
-      await box(page, "area-rail"),
+      await rectOf(live),
+      await rectOf(live.getByTestId("progress-card")),
+      await box(page, "area-rail-head"),
     ];
-    await expect(page.getByTestId("area-live").getByTestId("progress")).toBeVisible();
-    expect(live.left).toBe(document.left);
-    expect(live.right).toBeLessThanOrEqual(rail.left);
-    expect(live.top).toBe(rail.top);
-    expect(document.top).toBeLessThan(live.top);
+    expect(area.top).toBeGreaterThanOrEqual(document.bottom);
+    expectNear(area.left, document.left);
+    // L is sized to the progress card it holds (child 0003).
+    expectNear(area.bottom - area.top, line.bottom - line.top);
+    expect(head.top).toBeGreaterThanOrEqual(area.bottom);
   });
 
   /**
-   * AC-14 and AC-16, feature 28: the *Opening layout* scenario. While a
-   * document opens, the polite region holds the left column, so a 40 pixel
-   * spinner is centred across it with the line centred under it: beside the
-   * rail at 1280, and between the file bar and the rail at 900, where the
-   * areas stack.
+   * Child 0003, AC-31 and AC-33: while a document opens, the progress card
+   * sits between the file bar and B's head, the full column's width, with the
+   * open's four steps, and the polite region's own copy of the line hidden
+   * from the eye. At 1280 and at 900.
    */
   for (const width of [1280, 900] as const) {
-    test(`centres a 40 pixel spinner across the left column, the line under it, while a document opens at ${width} pixels`, async ({
+    test(`shows the open's steps in a card under the file bar while a document opens at ${width} pixels`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height: 800 });
@@ -1157,58 +1148,28 @@ test.describe("the tool page's layout (spec 0013)", () => {
       await openingHeld(page);
 
       const live = page.getByTestId("area-live");
-      const progress = live.getByTestId("progress");
-      const spinner = progress.getByTestId("spinner");
-      const [area, turning, words, fileBar, rail] = [
+      const card = live.getByTestId("progress-card");
+      await expect(card).toHaveAttribute("aria-live", "off");
+      await expect(card).toContainText("Opening…");
+      await expect(card.getByRole("listitem")).toHaveCount(4);
+      await expect(card.getByRole("listitem").first()).toContainText(
+        "Loading the PDF engine, in progress",
+      );
+      const [area, panel, fileBar, head] = [
         await rectOf(live),
-        await rectOf(spinner),
-        await rectOf(progress.locator("span")),
+        await rectOf(card),
         await rectOf(page.getByTestId("file-bar")),
-        await rectOf(page.getByTestId("area-rail")),
+        await rectOf(page.getByTestId("area-rail-head")),
       ];
-      expect(await cssSize(spinner)).toEqual({ width: "40px", height: "40px" });
-      expectNear(middle(turning).x, middle(area).x);
-      expectNear(middle(words).x, middle(area).x);
-      // The line under the spinner: below its centre by at least half its size.
-      expect(words.top).toBeGreaterThanOrEqual(middle(turning).y + 20);
+      expectNear(panel.left, fileBar.left);
+      expectNear(panel.right, fileBar.right);
       expect(fileBar.bottom).toBeLessThanOrEqual(area.top);
-      if (width === 1280) {
-        expect(area.right).toBeLessThanOrEqual(rail.left);
-      } else {
-        expect(area.bottom).toBeLessThanOrEqual(rail.top);
-      }
+      expect(area.bottom).toBeLessThanOrEqual(head.top);
+      // The line is still in the polite region, for a screen reader only.
+      const line = await rectOf(live.getByTestId("progress"));
+      expect(line.bottom - line.top).toBeLessThanOrEqual(1);
     });
   }
-
-  /**
-   * AC-16, feature 28: from `lg` the grid stretches the region to the rail's
-   * height, and the region centres its line in that room. The rail is made
-   * taller than the line here, as verify's walk did, so the centring has room
-   * to show; at its own height the rail can be about the line's.
-   */
-  test("centres the opening line down the room beside a rail taller than it", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("/tool");
-    await planAnswered(page);
-    await page.addStyleTag({
-      content: '[data-testid="area-rail"] { min-height: 40rem; }',
-    });
-    await openingHeld(page);
-
-    const live = page.getByTestId("area-live");
-    const [area, line, rail] = [
-      await rectOf(live),
-      await rectOf(live.getByTestId("progress")),
-      await rectOf(page.getByTestId("area-rail")),
-    ];
-    // The rail really is the taller, or the centring proves nothing.
-    expect(rail.bottom - rail.top).toBeGreaterThan(line.bottom - line.top + 100);
-    expect(area.top).toBe(rail.top);
-    expect(area.bottom).toBe(rail.bottom);
-    expectNear(middle(line).y, middle(area).y);
-  });
 
   /**
    * AC-15 and AC-16, as feature 26 lays them out: while a chosen file waits
@@ -1245,35 +1206,197 @@ test.describe("the tool page's layout (spec 0013)", () => {
   });
 
   /**
-   * AC-16 and AC-17, as feature 26 lays them out: beside a list taller than
-   * the window, the document card's row is its own height and the rail's row
-   * takes the rest, so the rail starts one grid gap under the card rather than
-   * where a share of the list's height would push it, and still runs down
-   * beside the whole list for the sticky action panel.
+   * AC-12, *Sticky foot*: over a long list at 1280 by 720, the action panel
+   * floats at the window's foot with Redact in view; scrolled to the list's
+   * end it rests under the last row, covering none.
    */
-  test("starts the rail one gap under the document card beside a long list", async ({
+  test("floats the action panel at the window's foot over a long list, and rests it under the last row", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto("/tool");
     await reviewManyRows(page);
 
-    const [list, live, rail] = [
-      await box(page, "area-found"),
-      await box(page, "area-live"),
-      await box(page, "area-rail"),
-    ];
+    const panel = page.getByTestId("action-panel");
+    const list = await box(page, "area-found");
     expect(list.bottom - list.top).toBeGreaterThan(720);
-    expect(live.top).toBe(list.top);
-    expect(rail.top - ((await contentBottom(page, "area-live")) ?? 0)).toBe(
-      await rowGap(page),
+
+    // The list's middle in the middle of the window.
+    await page.evaluate(
+      (y) => window.scrollTo(0, y),
+      list.top + (list.bottom - list.top) / 2 - 360,
     );
-    expect(rail.bottom).toBe(list.bottom);
+    expect(await position(page, "action-panel")).toBe("sticky");
+    expect(await panel.evaluate((element) => getComputedStyle(element).bottom)).toBe(
+      "0px",
+    );
+    expectNear((await rectOf(panel)).bottom, 720);
+    await expect(page.getByTestId("redact")).toBeInViewport();
+
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const lastRow = await rectOf(page.getByTestId("checklist").locator("label").last());
+    expect((await rectOf(panel)).top).toBeGreaterThanOrEqual(lastRow.bottom);
+  });
+
+  test("keeps Redact in view beside a long list as the page scrolls", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/tool");
+    await reviewManyRows(page);
+
+    await page.getByTestId("area-found").evaluate((element) => {
+      element.scrollIntoView({ block: "end" });
+    });
+    await expect(page.getByTestId("redact")).toBeInViewport();
   });
 
   /**
-   * AC-14 and AC-16: below lg, and at 200% text in a wide window, one column
-   * in page order, so a phone reads the file bar, then the rail, then the list.
+   * AC-12: sticky only from `lg` in a window at least 36rem tall, so a short
+   * window, a narrower one and 200% text each get a static panel, and nothing
+   * on the page is sticky.
+   */
+  for (const [label, width, height, doubled] of [
+    ["at 1280 by 500 pixels", 1280, 500, false],
+    ["at 900 pixels", 900, 800, false],
+    ["at 1280 pixels with 200% text", 1280, 800, true],
+  ] as const) {
+    test(`keeps the action panel static and nothing sticky ${label}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height });
+      await page.goto("/tool");
+      if (doubled) {
+        await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+      }
+      await openDocument(page);
+
+      expect(await position(page, "action-panel")).toBe("static");
+      const sticky = await page.evaluate(
+        () =>
+          [...document.querySelectorAll("body *")].filter(
+            (element) => getComputedStyle(element).position === "sticky",
+          ).length,
+      );
+      expect(sticky).toBe(0);
+    });
+  }
+
+  /**
+   * AC-12, *The panel's room*: in the tallest form this test can hold (a
+   * paid answer, the count line with Untick all, the waits line wrapped, the
+   * `lg` button and the lock line), the panel fits in `--tool-panel-room`, so
+   * C's padding and the scroll margins always clear it. A custom term search
+   * runs in the worker and cannot be held from here, so the waits line is
+   * added as the page would draw it, in `makeWaitsLine`'s searching words,
+   * its one fixed sentence.
+   */
+  test("fits the action panel's tallest form in its room", async ({ page }) => {
+    await page.route("**/api/entitlement", (route) =>
+      route.fulfill({
+        json: {
+          tier: "paid",
+          pageCap: 50,
+          maxFileBytes: 26_214_400,
+          account: "signed-in",
+        },
+      }),
+    );
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/tool");
+    await reviewManyRows(page);
+
+    const panel = page.getByTestId("action-panel");
+    await expect(panel.getByTestId("untick-all")).toBeVisible();
+    await panel.evaluate((element) => {
+      const waits = document.createElement("p");
+      waits.className = "text-small text-ink";
+      waits.textContent = "Your custom terms are still being searched, so the run waits.";
+      element.insertBefore(waits, element.querySelector('[data-testid="redact"]'));
+    });
+    const [height, room] = await panel.evaluate((element) => {
+      const grid = element.closest('[data-testid="tool-grid"]') as HTMLElement;
+      const probe = document.createElement("div");
+      probe.style.height = getComputedStyle(grid).getPropertyValue("--tool-panel-room");
+      grid.append(probe);
+      const measured = probe.getBoundingClientRect().height;
+      probe.remove();
+      return [element.getBoundingClientRect().height, measured];
+    });
+    expect(room).toBeGreaterThan(0);
+    expect(height).toBeLessThanOrEqual(room);
+  });
+
+  /**
+   * AC-12, *Focus never hidden when it moves* (WCAG 2.2, 2.4.11): at 1280 by
+   * 720 with a long list, Tab from the file bar, across the plan card, through more than two
+   * windows of rows, and each focused control in the column stays clear
+   * above the floating panel.
+   */
+  test("never lets the floating panel cover a control focus moves to", async ({
+    page,
+  }) => {
+    test.setTimeout(ENGINE_TIMEOUT + 120_000);
+    await page.route("**/api/entitlement", (route) =>
+      route.fulfill({
+        json: {
+          tier: "paid",
+          pageCap: 50,
+          maxFileBytes: 26_214_400,
+          account: "signed-in",
+        },
+      }),
+    );
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/tool");
+    await page
+      .getByTestId("file-input")
+      .setInputFiles(resolve("tests/fixtures/detect-dense.pdf"));
+    await expect(
+      page.getByRole("checkbox", { name: "staff.0000@example.com", exact: true }),
+    ).toBeVisible({ timeout: ENGINE_TIMEOUT + 60_000 });
+    expect(await position(page, "action-panel")).toBe("sticky");
+
+    // From the file bar, so the walk crosses the plan card and the panel first.
+    await page.getByTestId("start-over").focus();
+    let travelled = 0;
+    let start: number | null = null;
+    for (let step = 0; step < 80; step += 1) {
+      await page.keyboard.press("Tab");
+      const seen = await page.evaluate(
+        () =>
+          new Promise<{ inPanel: boolean; bottom: number; panelTop: number; y: number }>(
+            (done) =>
+              // Two frames: the browser's own focus scroll, then the fallback.
+              requestAnimationFrame(() =>
+                requestAnimationFrame(() => {
+                  const active = document.activeElement as HTMLElement;
+                  const panel = document.querySelector(
+                    '[data-testid="action-panel"]',
+                  ) as HTMLElement;
+                  done({
+                    inPanel: panel.contains(active),
+                    bottom: active.getBoundingClientRect().bottom,
+                    panelTop: panel.getBoundingClientRect().top,
+                    y: window.scrollY,
+                  });
+                }),
+              ),
+          ),
+      );
+      if (!seen.inPanel) {
+        expect(seen.bottom).toBeLessThanOrEqual(seen.panelTop);
+        start ??= seen.y;
+        travelled = seen.y - start;
+      }
+    }
+    // More than two windows' worth of rows walked.
+    expect(travelled).toBeGreaterThan(2 * 720);
+  });
+
+  /**
+   * AC-14, below `lg`, and at 200% text in a wide window: one column in page
+   * order, so a phone reads the file bar, then B, then the list.
    */
   for (const [label, width, doubled] of [
     ["at 900 pixels", 900, false],
@@ -1663,8 +1786,8 @@ test.describe("the checklist on the tool page (spec 0005, AC-13)", () => {
 
     // The control: the system highlight is not the tint, so a mark that kept
     // `accent-soft` cannot pass by the two happening to match.
-    expect(colours.tint.trim()).toBe("#d5eeea");
-    expect(colours.expected.background).not.toBe("rgb(213, 238, 234)");
+    expect(colours.tint.trim()).toBe("#ccfbf1");
+    expect(colours.expected.background).not.toBe("rgb(204, 251, 241)");
     expect(colours.actual).toEqual(colours.expected);
   });
 
