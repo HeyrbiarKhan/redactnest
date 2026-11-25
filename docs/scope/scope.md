@@ -42,7 +42,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 29 | Home page reflow | Release 5 | done |
 | 30 | Engine and code follow ups | Release 5 | done |
 | 31 | Leaks through kept objects | Release 5 | done |
-| 32 | Details inside pictures | Release 5 | in-progress |
+| 32 | Details inside pictures | Release 5 | done |
 
 ## Foundations
 
@@ -498,7 +498,7 @@ spec [0024](../specs/0024-search-pages/index.md) (its AC-14 and build tasks 1 an
 
 Merged with feature 15 on 2026-11-24 (PR #37, 91cb119, tag `prod-2026-11-24-91cb119`), with the live check passed, which closes this row.
 
-### 32. Details inside pictures · in-progress · from spec 0019
+### 32. Details inside pictures · done · from spec 0019
 A picture under no removed item leaves with the bytes the source stored (spec 0006, AC-29), so a photo's own details written inside its data (EXIF camera details, sometimes a location, XMP, IPTC) stay in the cleaned copy. Split out of feature 31 (your call, 2026-11-15), because it is stream data rather than a pointer from a kept object, never holds a ticked value, and needs its own proof. It follows the search pages (your call, 2026-11-18), which closed on 2026-11-24, so it is next.
 **Done when:** the metadata segments inside a DCT picture (APP1 for EXIF and XMP, APP13 for IPTC, comments) and the matching JPEG 2000 boxes are removed without decoding the picture, decoded pixels are shown unchanged, spec 0006's AC-29 says what a kept picture's bytes may lose, and the security page's picture "can" line names only the cases that can still keep a picture's details. The home page's Strips card keeps XMP metadata and picture details off, since those cases would break its "Whenever a file carries them" (your call, 2026-11-24; spec 0025, AC-11).
 **Also owed here:** no fixture holds a JPEG today, so the fixture script needs one built from code, with no real photo committed. Spec 0024 left a "remove metadata from a PDF" search page waiting on this feature; whether to write it is a call for after this ships, with the search pages' counts in hand (see Deferred).
@@ -512,8 +512,6 @@ spec [0025](../specs/0025-picture-details/index.md) · code in `src/engine` (`pi
 - [x] Verify it: `/check verify details inside pictures`, with repo fixtures and documents built in tests only, never a PDF from outside the repository
 - [x] Test it: `/test details inside pictures`
 - [x] Review it (fresh model): `/check review details inside pictures` ([2026-11-25](../reviews/2026-11-25-feat-picture-details.md))
-- [ ] Owed from the review: a run can't be cancelled while it reads pictures it leaves unchanged, since only a rewritten picture gets a checkpoint ([2026-11-25](../reviews/2026-11-25-feat-picture-details.md))
-- [ ] Owed from the review: no fixture has a JPEG with an EXIF orientation tag; `rationale.md` says PDF viewers ignore it, and a fixture would prove it ([2026-11-25](../reviews/2026-11-25-feat-picture-details.md))
 
 ### 23. Legal review · needs a decision · Alpha · from spec 0011
 The lawyer questions launch left open, asked once RedactNest has 100+ users, on a tech lawyer's advice (2026-10-03). PECA section 32, Pakistani law and courts, and a full review of both pages (spec 0011 steps 3 and 4), plus two from spec 0012: does Polar's own use of billing details as merchant of record (fraud, security, tax records) make it a controller for that part, and does every cookie claim C6 calls strictly necessary meet that exemption, given Clerk's `__refresh_<suffix>` stays after sign out on production. It sits before feature 17 because the Polar answer can change what the DPA says.
@@ -554,6 +552,7 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **Page preview in review**: page images on the main thread are a new kind of document data (spec 0002, INV-1). Spec 0013 left it with feature 14, which renders pages for rectangles, and feature 14 now carries it · needs a decision · from spec 0007
 - **The crooked scan line on a straight scan**: spec 0006's line (AC-25) shows whenever a match is blocked `slanted-text` on a machine read page, and says the scan is slightly crooked. On a straight scan with a picture pasted before OCR, OCR's lines beside the picture can come out slanted, so the line shows and its advice to straighten the scan may not help (4 matches on the local `scan-dense-photo-before.pdf`). It fails safe: the matches stay blocked and shown. Decide what the line says, or when it shows, measured first · needs a decision · from spec 0010
 - **Details inside an inline picture**: an inline JPEG written inside a page's drawing instructions keeps its own details, a recorded limit (spec 0025, AC-4), since stripping it would mean editing those instructions. If such pictures turn up in practice, weigh refusing them through spec 0022's scan · needs a decision · from spec 0025
+- **Picture strip follow-ups from feature 32's review**: two minors from the [2026-11-25 review](../reviews/2026-11-25-feat-picture-details.md), tracked in spec 0025's [Follow-up](../specs/0025-picture-details/index.md#follow-up). A run can't be cancelled while it reads pictures it leaves unchanged, since only a rewritten picture gets a checkpoint, so a file of many clean pictures reads them all before a cancel lands. And no fixture has a JPEG with an EXIF orientation tag: `rationale.md` says PDF viewers ignore it, and an orientation value in a fixture picture's EXIF, under the existing render equality test, would prove it · from spec 0025
 - **Refresh the home page's product shot**: `src/app/product-review.png` was captured before `/tool`'s Custom terms section, so the picture of `/tool` on `/` is out of date. Older than feature 15's branch and not refreshed there: rerun `scripts/make-brand.mjs` in its own change and commit what it rewrites · from spec 0024
 - **Host MuPDF's source ourselves**: attach each shipped version's source archive as a release asset on our own repository, if Artifex ever stop serving one we still ship. AGPL section 6(d) keeps its availability our duty (spec 0009, Option 4) · from spec 0009
 - **Open outside contributions**: choose a CLA or DCO, and look again at who can get a commit deployed before approving any fork deployment, since the tag workflow's copy that runs may be the contributor's (spec 0009, INV-3) · needs a decision · from spec 0009

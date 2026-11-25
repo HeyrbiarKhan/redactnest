@@ -1,7 +1,7 @@
 # 0025. Strip the details stored inside a kept picture
 
 **Date**: 2026-11-24
-**Status**: In Progress
+**Status**: Accepted
 **Updated**: 2026-11-24, wording only: AC-11's security page line and the two Consequences bullets on which pictures lose their details now state the limit by kind (spec 0018, AC-5), so they hold for every case AC-1 and AC-4 leave as stored. No design change. Later the same day, as built (your calls, 2026-11-24): the kind's words are lowercase "picture details", shown as "Picture details" when it leads the line (AC-9); AC-12's 5% peak is the run's live heap, collected and sampled at every checkpoint, with the 1 second CPU budget and the 5% bound unchanged (AC-12); the browser test answers the plan check as Pro, since the fixture has 7 pages (AC-14). No design change.
 
 ## Summary
