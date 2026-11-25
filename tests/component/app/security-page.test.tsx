@@ -675,7 +675,7 @@ describe("the security page", () => {
     const hidden = sectionText(SECURITY_SECTIONS.hiddenData);
     expect(hidden).not.toContain("such as a photo’s camera details, can stay.");
     expect(hidden.split("can take apart").length - 1).toBe(1);
-    expect(SECURITY_CHANGES[0].date).toBe("2026-11-24");
+    expect(SECURITY_CHANGES[0].date).toBe("2026-11-25");
     expect(SECURITY_CHANGES[0].summary).toContain(
       "the check fails any file in which such a picture still holds a part it would drop",
     );
