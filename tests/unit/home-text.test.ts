@@ -105,13 +105,16 @@ describe("what the home page says is stripped (AC-11)", () => {
   });
 
   /**
-   * Spec 0019, AC-12: XMP written inside a picture's own data leaves with the
-   * picture's stored bytes (spec 0006, AC-29), so the card does not claim XMP
-   * metadata until feature 32 strips it there too.
+   * Spec 0025, AC-11, as it amends spec 0019's AC-12: a picture RedactNest
+   * leaves as stored (written inline, under a chain of filters, or any other
+   * it does not take apart) keeps its own XMP and details, so "whenever a file
+   * carries them" would hold for neither, and the card claims neither.
    */
-  it("does not claim XMP metadata while a picture can carry it", () => {
+  it("claims neither XMP metadata nor picture details while a picture left as stored can carry them", () => {
     expect(HOME_STRIPPED["xmp-metadata"]).toBe(false);
+    expect(HOME_STRIPPED["picture-details"]).toBe(false);
     expect(strippedItems()).not.toContain("XMP metadata");
+    expect(strippedItems().join(" ").toLowerCase()).not.toContain("picture details");
   });
 
   it("claims the rest, in SANITIZED_KINDS order, each capitalised", () => {

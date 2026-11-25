@@ -66,6 +66,7 @@ import {
   inlineIndexedPattern,
 } from "./lib/inline-fixtures.mjs";
 import { encryptObjects } from "./lib/pdf-encrypt.mjs";
+import { pictureJpeg, pictureJpx, pictureKept } from "./lib/picture-fixtures.mjs";
 import { termsDense, termsPdf } from "./lib/terms-fixtures.mjs";
 import { appendRevision, stream, writePdf } from "./lib/pdf-writer.mjs";
 import {
@@ -759,6 +760,23 @@ const FIXTURES = [
     "inline-indexed-glyph.pdf",
     inlineIndexedGlyph(),
     "the same picture as a coloured Type 3 glyph, shown once",
+  ],
+  // Spec 0025: details stored inside a picture's own data, every picture
+  // written from code (AC-13, INV-8).
+  [
+    "picture-jpeg.pdf",
+    pictureJpeg(),
+    "JPEG pictures holding EXIF, XMP, IPTC, comments, thumbnails and a tail",
+  ],
+  [
+    "picture-kept.pdf",
+    pictureKept(),
+    "pictures the reader leaves as stored: a chain, two Adobe headers, inline, a tile note",
+  ],
+  [
+    "picture-jpx.pdf",
+    pictureJpx(),
+    "JPEG 2000 pictures holding boxes, comments and a tail around their tile parts",
   ],
 ];
 

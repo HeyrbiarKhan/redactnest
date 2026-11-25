@@ -15,6 +15,7 @@ import {
 import type { EngineErrorKind, SanitizedKind } from "@/worker/protocol";
 
 import { GLYPH_TEXT } from "../../scripts/lib/glyph-fixtures.mjs";
+import { PICTURE_TICKED } from "../../scripts/lib/picture-fixtures.mjs";
 import {
   COLOUR_TEXT,
   KEPT_TEXT,
@@ -70,6 +71,15 @@ import { findTargets } from "./targets";
  *    `RUN_NOW` row. The refusals of `marked-ticked.pdf`'s other pages are
  *    spec 0023's own, held in `tests/unit/redaction-kept.test.ts`: `MAIN`
  *    swaps the structure check out, which is where that comparison runs.
+ *    Spec 0025's `picture-jpeg.pdf`, `picture-jpx.pdf` and `picture-kept.pdf`
+ *    were read from that commit's code on 2026-11-24, after confirming no
+ *    fixture before them holds a DCT or JPX picture (so no other row's
+ *    `sanitized` changes): main opened all three and made a file from each
+ *    with nothing ticked, reporting nothing, and from `picture-jpeg.pdf` with
+ *    page 6's address ticked, so none has a main refusal or `sanitized` row.
+ *    The first two strip details now, so `SANITIZED_NOW` names both kinds for
+ *    them; `picture-kept.pdf`'s pictures are all left as stored, so it reports
+ *    nothing still.
  *  - Against the same run with the pipeline's prune and structure check both
  *    swapped out, which writes main's output byte for byte (`MAIN`): the same
  *    outcome, the same `removedByType`, and every page rendered pixel for pixel
@@ -114,12 +124,15 @@ import { findTargets } from "./targets";
 
 /**
  * Main's pipeline: the prune and the structure check both swapped out (AC-7),
- * and spec 0020's glyph rule too (its AC-10).
+ * spec 0020's glyph rule too (its AC-10), and spec 0025's picture strip, so
+ * every fixture renders pixel for pixel the same with and without it (its
+ * AC-10).
  */
 const MAIN: Pipeline = Object.freeze({
   ...PIPELINE,
   judgeGlyphs: () => "clean" as const,
   pruneToRoles: () => {},
+  stripPictureDetails: async () => Object.freeze({ xmp: false, details: false }),
   checkStructure: () => "clean" as const,
 });
 
@@ -202,6 +215,9 @@ const MAIN_FIXTURES: readonly string[] = [
   "owner-aes128.pdf",
   "owner-aes256.pdf",
   "owner-rc4.pdf",
+  "picture-jpeg.pdf",
+  "picture-jpx.pdf",
+  "picture-kept.pdf",
   "reach.pdf",
   "read-blank.pdf",
   "read-concealed.pdf",
@@ -328,6 +344,9 @@ const NEEDLES: Readonly<Record<string, readonly Ticked[]>> = {
   "colour-icc-alternate.pdf": [everyLine(COLOUR_TEXT.iccAlternate)],
   "colour-icc-bare.pdf": [everyLine(COLOUR_TEXT.iccBare)],
   "colour-inline.pdf": [everyLine(COLOUR_TEXT.inline)],
+  // Spec 0025 (AC-7): the address over page 6's picture, which the padded
+  // pass blanks.
+  "picture-jpeg.pdf": [[[5, PICTURE_TICKED]]],
   "colour-loaded.pdf": [everyLine(COLOUR_TEXT.loaded)],
   "combining.pdf": [[[0, "Rene\u0301e"]], [[0, "Jose\u0301"]]],
   "detect-blocked.pdf": [[[0, "slanted@example.com"]], [[0, "image@example.com"]]],
@@ -529,9 +548,14 @@ const DETECTED: Readonly<Record<string, "each" | "all" | "each and all">> = {
   "trim-text.pdf": "each",
 };
 
-/** Where this spec changes `sanitized` on purpose (AC-4, AC-8). */
+/**
+ * Where this spec changes `sanitized` on purpose (AC-4, AC-8), and where spec
+ * 0025 does (its AC-9): a picture's own XMP and details, stripped.
+ */
 const SANITIZED_NOW: Readonly<Record<string, readonly SanitizedKind[]>> = {
   "kept-embedded.pdf": ["attachments"],
+  "picture-jpeg.pdf": ["xmp-metadata", "picture-details"],
+  "picture-jpx.pdf": ["xmp-metadata", "picture-details"],
 };
 
 /**

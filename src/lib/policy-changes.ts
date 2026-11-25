@@ -50,6 +50,18 @@ export const TERMS_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
  * so a change to what it says adds an entry here the same way.
  */
 export const SECURITY_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
+  // Spec 0025, AC-11: dated the day it merges, a literal. 2026-11-18 holds
+  // spec 0020's entry and the list runs strictly newest first; written on
+  // 2026-11-24 and moved to 2026-11-25, so move it to the merge day if that is
+  // later. "No longer stay there" covers only pictures RedactNest takes apart,
+  // and rests on the check failing any output where such a picture still holds
+  // a part it would drop (AC-8), a gate every file passes; the "can" line keeps
+  // the limit by kind.
+  Object.freeze({
+    date: "2026-11-25",
+    summary:
+      "Details stored inside a JPEG or JPEG 2000 picture RedactNest can take apart, such as a photo’s camera details, location, captions and comments, no longer stay there: it keeps only the parts on a fixed list chosen for drawing the picture, and the check fails any file in which such a picture still holds a part it would drop. They can still stay in a picture it leaves as stored.",
+  }),
   // Spec 0020, AC-11: dated the day it merges, a literal. 2026-11-17 holds
   // spec 0019's entry and the list runs strictly newest first, so 2026-11-18
   // is the earliest day it can merge; move it to the merge day if that is

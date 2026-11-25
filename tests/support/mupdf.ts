@@ -427,6 +427,29 @@ export function filledPaths(bytes: ArrayBuffer, index: number): FilledPath[] {
   return found;
 }
 
+/**
+ * Every stream object in the file as stored, read raw with `readRawStream()`
+ * through its reference, never decoded, one byte per character, so a marker
+ * string inside a picture's own data can be searched for (spec 0025, AC-10).
+ * A picture's details live in its stored bytes, which decoding would hide.
+ */
+export function storedStreams(bytes: ArrayBuffer): string[] {
+  return inspect(bytes, (doc) => {
+    const found: string[] = [];
+    for (let num = 1; num < doc.countObjects(); num += 1) {
+      const ref = doc.newIndirect(num);
+      if (!ref.isStream()) continue;
+      const raw = ref.readRawStream();
+      try {
+        found.push(Buffer.from(raw.asUint8Array()).toString("latin1"));
+      } finally {
+        raw.destroy();
+      }
+    }
+    return found;
+  });
+}
+
 /** An image stream as the file stores it: its filters, and a digest of its raw bytes. */
 export interface StoredImage {
   readonly filter: string;

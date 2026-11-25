@@ -51,6 +51,18 @@ Note, older than this branch: with a classic (non overlay) scrollbar, as in a he
 6. **PageSpeed Insights** on each live search page, mobile. Record the lab figures, and the field figures once Google has them (AC-15).
 7. **Search Console.** Submit `https://redactnest.com/sitemap.xml` and confirm it reads without errors.
 
+### Done 2026-11-24 (after PR #37, 91cb119, tag `prod-2026-11-24-91cb119`, live check passed)
+
+- [x] 6. PageSpeed Insights, mobile, on the live pages (Lighthouse 13.6.0, Moto G Power, Slow 4G). Lab figures below; field figures wait until Google has them.
+
+| Page | LCP | CLS | TBT | Scores | Pass |
+|---|---|---|---|---|---|
+| `/redact-pdf` | 0.9 s | 0 | 10 ms | all 100 | yes |
+| `/remove-text-from-pdf` | 0.9 s | 0 | 20 ms | all 100 | yes |
+| `/black-box-redaction` | 0.9 s | 0 | 0 ms | all 100 | yes |
+
+- [x] 7. `redactnest.com` added to Search Console as a Domain property (verified by a DNS TXT record through Cloudflare), and `https://redactnest.com/sitemap.xml` submitted. Its status read "Couldn't fetch" at first, normal for a new property; recheck in a few days that it reads without errors.
+
 ## Feature 29, as built (2026-11-23, tasks 1 and 2)
 
 What step 3 looks at, made concrete by the build. The wide pieces were the headline's longest word ("Redaction", 381 pixels in a 256 pixel column), the band's heading ("RedactNest"), and each band card's tile, gap and padding, wider than the card.

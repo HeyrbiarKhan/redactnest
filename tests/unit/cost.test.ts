@@ -1,3 +1,6 @@
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
+
 import type { PDFDocument } from "mupdf";
 import { beforeAll, describe, expect, it } from "vitest";
 
@@ -8,6 +11,7 @@ import {
   prepareDocument,
   pruneToRoles,
   readDrawing,
+  readJpeg,
   redactDocumentWith,
   RunCancelled,
   scanContent,
@@ -20,6 +24,7 @@ import {
   type Pipeline,
 } from "@/engine";
 
+import { bytes, segment } from "../../scripts/lib/jpeg-writer.mjs";
 import { stream, writePdf } from "../../scripts/lib/pdf-writer.mjs";
 import { scanPages } from "../../scripts/lib/reading-fixtures.mjs";
 import { IDENTITY_UNICODE } from "../../scripts/lib/redaction-fixtures.mjs";
@@ -64,6 +69,18 @@ import { documentImages, LIMITS, mupdf } from "../support/mupdf";
  * with the square of the length (10 KB took 393 ms, so 1 MB about an hour);
  * with at most `INLINE_END_RETRIES` retries it answers `"unsure"` in at most
  * 2 seconds.
+ *
+ * Spec 0025, AC-12 adds the picture strip's work: the cropped scan with an
+ * `APP1` of about 64 KB spliced into every page's JPEG, each different, so
+ * every picture is read, rewritten, read again by the guard and read by the
+ * check. Against the same run with the strip and the structure check swapped
+ * out (the check fails every picture the strip leaves, so it cannot stay in
+ * the baseline), it adds at most 1 second of CPU, an overcount since the rest
+ * of the structure part is counted too, and the run's peak live heap stays
+ * within 5%.
+ * The scan's own MuPDF made JPEGs hold nothing to drop, so the run that
+ * leaves every page image as stored is spec 0006's AC-29 as spec 0025 amends
+ * it (AC-5).
  */
 
 const PAGES = 50;
@@ -400,6 +417,91 @@ const MAIN: Pipeline = {
   checkStructure: () => "clean",
 };
 
+/**
+ * Spec 0025, AC-12: the strip and the structure check both swapped out, the
+ * baseline the strip's cost is measured against.
+ */
+const NO_STRIP: Pipeline = {
+  ...PIPELINE,
+  stripPictureDetails: async () => ({ xmp: false, details: false }),
+  checkStructure: () => "clean",
+};
+
+/**
+ * Spec 0025, AC-12. The cropped scan, one JPEG a page, each with an `APP1` of
+ * about 64 KB spliced in after its start marker and holding its page number,
+ * so no two pictures are alike and the write merges none of them.
+ */
+function scanWithDetails(): ArrayBuffer {
+  const { jpeg, columns, rows } = scanJpeg();
+  const jpegs = Array.from({ length: PAGES }, (_, page) => {
+    const filler = new Uint8Array(65_000).fill(0x41 + (page % 26));
+    const detail = segment(0xe1, bytes("Exif\0\0", `camera page ${page} `, filler));
+    return bytes(jpeg.subarray(0, 2), detail, jpeg.subarray(2));
+  });
+  return toBuffer(scanPages({ jpegs, columns, rows, pages: PAGES, cropped: true }));
+}
+
+/** One run's CPU in milliseconds. */
+async function runCpu(source: ArrayBuffer, pipeline: Pipeline): Promise<number> {
+  const start = process.cpuUsage();
+  await redactDocumentWith(mupdf, source, [], {}, pipeline);
+  const used = process.cpuUsage(start);
+  return (used.user + used.system) / 1000;
+}
+
+/**
+ * V8's collector, asked for by name, so a sample counts what a run holds
+ * rather than garbage waiting to be collected.
+ */
+function collector(): () => void {
+  setFlagsFromString("--expose-gc");
+  return runInNewContext("gc") as () => void;
+}
+
+/** Macrotask yields, each followed by a collection, before a live peak run starts. */
+const SETTLE_YIELDS = 5;
+
+/**
+ * One run's peak live JavaScript heap plus array buffers, in bytes: collected
+ * and sampled at every checkpoint (the run asks `isCancelled` there, after each
+ * page and each picture written). The peak of what the run keeps, which is
+ * what letting each picture's buffers go before the next decides (AC-12). Not
+ * timed: a collection at every checkpoint slows the run, so the CPU budget is
+ * read from runs of its own. Measured (2026-11-24), a run with garbage
+ * included peaked anywhere from 210 to 395 MB on the same input, as the
+ * collector's timing moved, while these live peaks agreed between the strip
+ * and the baseline to within 0.1 MB.
+ *
+ * The previous run's garbage goes before this one starts. MuPDF.js registers
+ * every wrapper it makes with a `FinalizationRegistry`, and V8 keeps each dead
+ * wrapper's cell (about 70 bytes, some 230,000 a run here) until its cleanup
+ * task runs, which no collection in the same task can do. Measured
+ * (2026-11-24), a run that started before that task had run peaked about 9 MB
+ * higher at its first checkpoint, whichever pipeline it was, so the test failed
+ * about 2 runs in 3 on which pipeline the task happened to come before. Node
+ * runs V8's task in its loop's poll phase, so a timer can fire a turn ahead of
+ * it: the cells went at the first or second yield in every one of 12 runs, and
+ * `SETTLE_YIELDS` leaves room over that.
+ */
+async function livePeak(source: ArrayBuffer, pipeline: Pipeline): Promise<number> {
+  const collect = collector();
+  let peak = 0;
+  const sample = (): boolean => {
+    collect();
+    const { heapUsed, arrayBuffers } = process.memoryUsage();
+    peak = Math.max(peak, heapUsed + arrayBuffers);
+    return false;
+  };
+  collect();
+  for (let turn = 0; turn < SETTLE_YIELDS; turn += 1) {
+    await new Promise((settled) => setTimeout(settled, 0));
+    collect();
+  }
+  await redactDocumentWith(mupdf, source, [], { isCancelled: sample }, pipeline);
+  return peak;
+}
+
 /** A second write that must never run: its throw would fail the run with `redaction-incomplete`. */
 const NO_REWRITE: Pipeline = {
   ...PIPELINE,
@@ -510,6 +612,9 @@ describe("the cost of reading every page", () => {
 
   it("leaves every page image of a cropped 300 ppi scan as the source stored it", async () => {
     const { jpeg, columns, rows } = scanJpeg();
+    // Spec 0025, AC-5 and AC-12: MuPDF's own JPEG holds nothing to drop, so
+    // the strip never writes it and every byte stays.
+    expect(readJpeg(jpeg, true).kind).toBe("clean");
     const source = toBuffer(
       scanPages({ jpegs: [jpeg], columns, rows, pages: PAGES, cropped: true }),
     );
@@ -537,6 +642,37 @@ describe("the cost of reading every page", () => {
       expect(page).toEqual([expect.objectContaining({ filter: "DCTDecode" })]);
     expect(documentImages(output)).toEqual(before);
   }, 120_000);
+
+  it("adds at most 1 second of CPU and 5% to the peak for stripping every picture of a 50 page scan", async () => {
+    const source = scanWithDetails();
+    // A warm up of each, so neither first use is what is counted, then the
+    // least of three, as the other budgets take theirs.
+    await runCpu(source, PIPELINE);
+    await runCpu(source, NO_STRIP);
+    const strip: number[] = [];
+    const base: number[] = [];
+    for (let pass = 0; pass < 3; pass += 1) {
+      strip.push(await runCpu(source, PIPELINE));
+      base.push(await runCpu(source, NO_STRIP));
+    }
+    expect(
+      Math.min(...strip) - Math.min(...base),
+      `CPU with the strip ${strip.map(Math.round).join(", ")} ms; ` +
+        `without ${base.map(Math.round).join(", ")} ms`,
+    ).toBeLessThan(1000);
+
+    // The live peak, each pipeline warmed first: the process's own footprint
+    // drifts between the first runs and settles, for both alike.
+    await livePeak(source, NO_STRIP);
+    await livePeak(source, PIPELINE);
+    const without = await livePeak(source, NO_STRIP);
+    const withStrip = await livePeak(source, PIPELINE);
+    expect(
+      withStrip,
+      `live peak with the strip ${Math.round(withStrip / 2 ** 20)} MB; ` +
+        `without ${Math.round(without / 2 ** 20)} MB`,
+    ).toBeLessThan(1.05 * without);
+  }, 600_000);
 
   it("adds at most 200 ms of CPU for the allowlist's work on a 50 page text heavy document", async () => {
     const { least, passes } = await allowlistCpu(densePdf());

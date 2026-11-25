@@ -221,8 +221,8 @@ describe("the Umami request", () => {
   it("fits the worst case event under Umami's property limit, so nothing is split", () => {
     const data = umamiData(WORST_CASE);
     // 38 before spec 0017: a `term` key in three by kind fields, `terms`
-    // and `termsSetAside` make 43.
-    expect(Object.keys(data)).toHaveLength(43);
+    // and `termsSetAside` make 43; spec 0025's `picture-details` makes 44.
+    expect(Object.keys(data)).toHaveLength(44);
     expect(Object.keys(data).length).toBeLessThanOrEqual(UMAMI_MAX_PROPERTIES);
   });
 });

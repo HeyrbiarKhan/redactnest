@@ -3,6 +3,12 @@ import { deflateSync } from "node:zlib";
 
 import { expect, test } from "@playwright/test";
 
+import {
+  PICTURE_LINES,
+  PICTURE_MARKERS,
+  PICTURE_TICKED,
+} from "../../scripts/lib/picture-fixtures.mjs";
+
 import { inspectInNode } from "./node-inspect";
 
 /**
@@ -405,6 +411,53 @@ test("a redaction in the real worker hands over a file that is really clean", as
   expect(cleaned.text).not.toContain("jane.doe@example.com");
   expect(cleaned.text).not.toContain("7946 0958");
   expect(cleaned.text).toContain("Keep this sentence exactly as it is");
+});
+
+/**
+ * Spec 0025, AC-14. The details stored inside a picture, in the real worker:
+ * `picture-jpeg.pdf` opens with page 6's address found and ticked, the run
+ * strips every picture's details, and Node reads the downloaded file's raw
+ * streams to find none of the fixture's marker strings. The result card names
+ * picture details among what else was stripped.
+ */
+test("a redaction strips the details stored inside the pictures", async ({ page }) => {
+  test.setTimeout(2 * ENGINE_TIMEOUT + 30_000);
+  // The fixture has seven pages, past the free plan's cap, so the plan check
+  // answers Pro, as `cancel.spec.ts` does for its long document.
+  await page.route("**/api/entitlement", (route) =>
+    route.fulfill({
+      json: {
+        tier: "paid",
+        pageCap: PICTURE_LINES["picture-jpeg.pdf"].length,
+        maxFileBytes: 26_214_400,
+        account: "signed-in",
+      },
+    }),
+  );
+  await page.goto("/tool");
+  await page
+    .getByTestId("file-input")
+    .setInputFiles(resolve("tests/fixtures/picture-jpeg.pdf"));
+  await page.getByTestId("redact").click({ timeout: ENGINE_TIMEOUT });
+
+  const outcome = page.getByTestId("outcome");
+  await expect(outcome).toBeVisible({ timeout: ENGINE_TIMEOUT });
+  await expect(outcome).toContainText("1 email address");
+  await expect(outcome).toContainText("XMP metadata and picture details");
+
+  const downloading = page.waitForEvent("download");
+  await page.getByTestId("download").click();
+  const cleaned = inspectInNode(await (await downloading).path());
+
+  expect(cleaned.pages).toBe(PICTURE_LINES["picture-jpeg.pdf"].length);
+  const markers = Object.values(
+    PICTURE_MARKERS["picture-jpeg.pdf"] as Record<string, readonly string[]>,
+  ).flat();
+  expect(markers.length).toBeGreaterThan(0);
+  for (const marker of markers) {
+    expect(cleaned.streams, `"${marker}" survived`).not.toContain(marker);
+  }
+  expect(cleaned.text).not.toContain(PICTURE_TICKED);
 });
 
 /**

@@ -195,7 +195,7 @@ describe("the things a redaction strips besides the targeted text", () => {
    * Feature 5's contract from the scope, in the order the scope states it. An
    * entry disappearing from here is a promise quietly dropped.
    */
-  it("is exactly the nine things the scope promises, and the two spec 0004 adds", () => {
+  it("is exactly the nine things the scope promises, the two spec 0004 adds, and spec 0025's last", () => {
     expect([...SANITIZED_KINDS]).toEqual([
       "document-info",
       "xmp-metadata",
@@ -208,6 +208,7 @@ describe("the things a redaction strips besides the targeted text", () => {
       "incremental-versions",
       "page-thumbnails",
       "accessibility-tags",
+      "picture-details",
     ]);
   });
 

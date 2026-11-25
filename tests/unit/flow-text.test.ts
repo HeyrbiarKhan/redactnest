@@ -469,6 +469,18 @@ describe("the result card (AC-11, AC-12)", () => {
     );
   });
 
+  /**
+   * Spec 0025, AC-9: from its kind alone, lower case like every other kind,
+   * so it reads "Picture details" first in the line and in place after.
+   */
+  it("names a picture's own details, by kind alone", () => {
+    expect(SANITIZED_TEXT["picture-details"]).toBe("picture details");
+    expect(strippedLine(["picture-details"])).toBe("Picture details");
+    expect(strippedLine(["xmp-metadata", "picture-details"])).toBe(
+      "XMP metadata and picture details",
+    );
+  });
+
   it("says the browser has the file once it is handed over (AC-13)", () => {
     expect(DOWNLOADED_LINE).toBe("Your browser has the file.");
   });

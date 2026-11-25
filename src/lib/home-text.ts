@@ -47,12 +47,14 @@ export interface HomeFind {
  * every kind, so a kind added to `SANITIZED_KINDS` fails `pnpm typecheck` here
  * until someone decides whether the page claims it.
  *
- * False for five on purpose: comments and form fields are flattened, so what
+ * False for six on purpose: comments and form fields are flattened, so what
  * showed stays (spec 0004, AC-22); a file with hidden layers is refused, never
  * stripped; losing accessibility tags is a cost, not a benefit; and XMP
- * written inside a picture's own data leaves with the picture's stored bytes
- * (spec 0006, AC-29), so "whenever a file carries them" would not hold for XMP
- * metadata until feature 32 strips it there too (spec 0019, AC-12).
+ * metadata and picture details stay in a picture RedactNest leaves as stored
+ * (one written inside a page's drawing instructions, one under more than one
+ * kind of compression, or any other it does not safely take apart), so
+ * "whenever a file carries them" would hold for neither (spec 0025, AC-11, as
+ * it amends spec 0019's AC-12).
  */
 export const HOME_STRIPPED: Readonly<Record<SanitizedKind, boolean>> = Object.freeze({
   "document-info": true,
@@ -66,6 +68,7 @@ export const HOME_STRIPPED: Readonly<Record<SanitizedKind, boolean>> = Object.fr
   "incremental-versions": true,
   "page-thumbnails": true,
   "accessibility-tags": false,
+  "picture-details": false,
 });
 
 /**

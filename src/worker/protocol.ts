@@ -238,6 +238,10 @@ export const SANITIZED_KINDS = [
   "incremental-versions",
   "page-thumbnails",
   "accessibility-tags",
+  // Spec 0025, AC-9: details stored inside a picture's own data (EXIF, IPTC,
+  // comments, thumbnails, a tail after the end marker), appended last so every
+  // earlier kind keeps its place and telemetry's other values are unchanged.
+  "picture-details",
 ] as const;
 
 export type SanitizedKind = (typeof SANITIZED_KINDS)[number];
