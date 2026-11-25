@@ -40,9 +40,18 @@ const MENU_OPEN = cx(
  * then at the right the account part (Sign in, or the account slot) and one
  * action. Spec 0026, AC-5, after `07-header.png`; spec 0013, AC-7.
  *
- * Static, never sticky (spec 0003, AC-14). A sticky bar covers whatever a
+ * Static unless the page asks for `sticky` (spec 0003, AC-14, as the home
+ * page's port of `Main.dc.html` amends it). A sticky bar can cover whatever a
  * keyboard visitor just tabbed to when the page scrolls it under the header,
- * which WCAG 2.4.11 counts as hiding the focus.
+ * which WCAG 2.4.11 counts as hiding the focus. So `sticky` holds only from
+ * `lg`, where the row is always one 4rem line (the media query is in rem, so
+ * a larger text setting or zoom drops below it and the bar scrolls away), and
+ * `globals.css` gives the page a top scroll padding of that height whenever a
+ * sticky header is on it (WCAG technique C43): focus by keyboard, by script or
+ * by an in page link stops below the bar. The sticky bar is the mockup's
+ * white at 85% over an 8 pixel backdrop blur, the white a layer at 85%
+ * opacity rather than an alpha colour (spec 0003, INV-3), on the mockup's
+ * lighter `muted` edge.
  *
  * The lockup is a plain link, not `next/link`, on purpose. Leaving the tool
  * page has to be a real page load, because `pagehide` is what ends the session
@@ -80,9 +89,12 @@ export function SiteHeader({
   menuLabel,
   account,
   action,
+  sticky = false,
 }: {
   readonly account?: ReactNode;
   readonly action?: ReactNode;
+  /** Sticky to the window's top from `lg`, over a blur (see above). */
+  readonly sticky?: boolean;
 } & (
   | {
       readonly nav: ReactNode;
@@ -123,12 +135,27 @@ export function SiteHeader({
   );
 
   return (
-    <header className="group border-b border-border bg-surface [anchor-name:--site-header]">
+    <header
+      data-sticky={sticky ? "" : undefined}
+      className={cx(
+        "group border-b bg-surface [anchor-name:--site-header]",
+        sticky
+          ? cx(
+              "border-muted lg:sticky lg:top-0 lg:z-20 lg:bg-transparent lg:backdrop-blur-sm",
+              "lg:before:absolute lg:before:inset-0 lg:before:-z-10 lg:before:bg-surface lg:before:opacity-85",
+            )
+          : "border-border",
+      )}
+    >
+      {/*
+        10 pixels between the parts, Sign in to the action included, and 40
+        from the lockup to the nav, as `Main.dc.html` spaces them.
+      */}
       <PageContainer
         width="wide"
-        className="@container flex flex-wrap items-center gap-x-3 gap-y-2 py-3 sm:gap-x-8"
+        className="@container flex flex-wrap items-center gap-x-3 gap-y-2 py-3 sm:gap-x-2.5"
       >
-        <div className={hasMenu ? undefined : "w-full sm:w-auto"}>
+        <div className={hasMenu ? "sm:me-7.5" : "w-full sm:me-7.5 sm:w-auto"}>
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- a real page load, see above */}
           <a href="/" className="inline-flex min-h-10 items-center rounded-item">
             <BrandLockup />

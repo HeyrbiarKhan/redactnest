@@ -14,7 +14,8 @@ interface PageContainerProps {
 
 const WIDTH: Readonly<Record<PageWidth, string>> = Object.freeze({
   narrow: "max-w-narrow",
-  wide: "max-w-wide",
+  // The mockups' 32 pixel gutters from `lg` (spec 0026, `Main.dc.html`).
+  wide: "max-w-wide lg:px-8",
 });
 
 /** Gutters and a maximum width, and nothing else. */

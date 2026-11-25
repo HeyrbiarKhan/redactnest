@@ -349,10 +349,36 @@ describe("SiteHeader", () => {
     );
   });
 
-  it("is never sticky, so it can never cover what has focus", () => {
+  /**
+   * By default the bar is static, so it can never cover what has focus (spec
+   * 0003, AC-14). The regex's word edges are written as escapes: the line
+   * this replaces held two literal backspace characters, so it matched
+   * nothing and held nothing.
+   */
+  it("is static unless the page asks, so by default it can never cover what has focus", () => {
     render(<SiteHeader />);
 
-    expect(screen.getByRole("banner").className).not.toMatch(/(sticky|fixed)/);
+    expect(screen.getByRole("banner").className).not.toMatch(/\b(sticky|fixed)\b/);
+    expect(screen.getByRole("banner")).not.toHaveAttribute("data-sticky");
+  });
+
+  /**
+   * The home page's sticky bar (spec 0003, AC-14, as the port of
+   * `Main.dc.html` amends it): sticky only from `lg`, where the row is one
+   * 4rem line, and marked `data-sticky`, which the scroll padding rule in
+   * `globals.css` keys on, so focus always stops below it (WCAG 2.4.11,
+   * technique C43). `tests/e2e/design-system.spec.ts` walks the focus.
+   */
+  it("sticks only from lg when asked, marked for the scroll padding that keeps focus clear", () => {
+    render(<SiteHeader sticky />);
+    const banner = screen.getByRole("banner");
+
+    expect(banner).toHaveAttribute("data-sticky");
+    const positioned = banner.className
+      .split(/\s+/)
+      .filter((name) => /(^|:)(sticky|fixed)$/.test(name));
+    expect(positioned).toEqual(["lg:sticky"]);
+    // The scroll padding rule itself is read in `tests/unit/brand-source.test.ts`.
   });
 
   it("passes axe", async () => {

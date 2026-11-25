@@ -1933,6 +1933,84 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
   });
 
   /**
+   * The home page's sticky header (spec 0003, AC-14, as the port of
+   * `Main.dc.html` amends it; WCAG 2.4.11, technique C43). From `lg` the bar
+   * stays at the window's top, and no focus stop below it ever lands under
+   * it, walking forward and back, nor does the How it works heading after
+   * its in page link. Below `lg` it scrolls away as every other header does.
+   */
+  test("keeps the header at the top from lg, and never over what has focus", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+    const header = page.getByRole("banner");
+
+    await page.mouse.wheel(0, 2400);
+    await expect
+      .poll(() => header.evaluate((el) => el.getBoundingClientRect().top))
+      .toBe(0);
+    const bar = await header.evaluate((el) => el.getBoundingClientRect().bottom);
+
+    /**
+     * Each focus stop below the bar, in page order: everything a Tab reaches
+     * outside the header, the skip link aside (it floats above the bar).
+     * Before each Shift+Tab the page is scrolled so the stop it moves to sits
+     * under the bar, the one case where a browser that thinks the stop is in
+     * view would not scroll at all. Without the scroll padding, measured on
+     * this page, five stops stayed under the bar.
+     */
+    const STOPS = 'a[href], button:not([disabled]), summary, [tabindex="0"]';
+    const count = await page.evaluate(
+      (selector) =>
+        [...document.querySelectorAll(selector)].filter(
+          (el) =>
+            !el.closest("header") &&
+            el.getAttribute("href") !== "#main" &&
+            el.getClientRects().length > 0,
+        ).length,
+      STOPS,
+    );
+    expect(count).toBeGreaterThan(15);
+    for (let index = 1; index < count; index += 1) {
+      await page.evaluate(
+        ([selector, at]) => {
+          const stops = [...document.querySelectorAll<HTMLElement>(selector)].filter(
+            (el) =>
+              !el.closest("header") &&
+              el.getAttribute("href") !== "#main" &&
+              el.getClientRects().length > 0,
+          );
+          const [target, next] = [stops[at - 1], stops[at]];
+          if (!target || !next) throw new Error(`no stop ${at}`);
+          window.scrollBy(0, target.getBoundingClientRect().top - 10);
+          next.focus({ preventScroll: true });
+        },
+        [STOPS, index] as const,
+      );
+      await page.keyboard.press("Shift+Tab");
+      const top = await page.evaluate(
+        () => document.activeElement?.getBoundingClientRect().top ?? 0,
+      );
+      // The ring is drawn 4 pixels outside the box, and stays clear too.
+      expect(top - 4, `stop ${index}`).toBeGreaterThanOrEqual(bar);
+    }
+
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.getByRole("main").getByRole("link", { name: "See how it works" }).click();
+    const heading = page.getByRole("heading", { level: 2 }).first();
+    await expect
+      .poll(() => heading.evaluate((el) => el.getBoundingClientRect().top))
+      .toBeGreaterThanOrEqual(bar);
+
+    await page.setViewportSize({ width: 1000, height: 900 });
+    await page.evaluate(() => window.scrollTo(0, 1200));
+    await expect
+      .poll(() => header.evaluate((el) => el.getBoundingClientRect().bottom))
+      .toBeLessThan(0);
+  });
+
+  /**
    * Spec 0013, AC-11. Two white cards on the page's canvas, after your mockup
    * (`docs/design/references/05-finds-and-strips.png`): each a tile beside its
    * heading and subtitle, a list, then a rule and its closing line. Side by

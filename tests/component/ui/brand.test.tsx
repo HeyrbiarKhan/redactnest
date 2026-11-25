@@ -147,9 +147,10 @@ describe("BrandLockup", () => {
 
     expect(container.firstElementChild).toHaveClass(
       "font-bold",
-      "tracking-[-0.02em]",
+      // The mockups' 17 pixel word, tracked -0.01em (spec 0026, `Main.dc.html`).
+      "tracking-[-0.01em]",
       "text-ink",
-      "text-heading",
+      "text-[1.0625rem]",
       // A size down in a row under 10rem. Spec 0024, *The lockup at narrow widths*.
       "@max-[10rem]:text-body",
     );
@@ -160,7 +161,7 @@ describe("BrandLockup", () => {
 
     expect(container.firstElementChild).toHaveClass("text-title");
     // The tile and the mark inside it are both in `em` of the word's size.
-    expect(container.firstElementChild?.firstElementChild).toHaveClass("size-[1.65em]");
+    expect(container.firstElementChild?.firstElementChild).toHaveClass("size-[1.765em]");
     const svg = container.querySelector("svg");
     expect(svg).toHaveAttribute("width", "1.1em");
     expect(svg).toHaveAttribute("height", "1.1em");

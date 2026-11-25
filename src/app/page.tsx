@@ -92,7 +92,7 @@ export default function HomePage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: WEBSITE_JSON_LD }}
       />
-      <PageHeader />
+      <PageHeader sticky />
       {/* The skip link's target, allowed to drop its outline (spec 0003, AC-14). */}
       <main id="main" tabIndex={-1} className="flex flex-1 flex-col focus:outline-none">
         <PageContainer width="wide" className="py-14 sm:py-20">

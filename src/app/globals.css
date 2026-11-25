@@ -137,7 +137,12 @@
   --text-small--line-height: 1.25rem;
 
   --container-narrow: 44rem;
-  --container-wide: 72rem;
+  /*
+   * 1180 pixels with 32 pixel gutters from `lg`, the `.wrap` of the home and
+   * guide mockups (`Main.dc.html`, `Guide.dc.html`), so content runs 1116
+   * pixels wide at 1440.
+   */
+  --container-wide: 73.75rem;
 }
 
 /*
@@ -269,6 +274,19 @@
    */
   [data-band="night"] :focus-visible {
     outline-color: var(--color-night-accent);
+  }
+
+  /*
+   * A sticky header never covers what has focus (WCAG 2.4.11, technique C43).
+   * From `lg`, where `SiteHeader`'s `sticky` holds, the page keeps the bar's
+   * height clear at its top: 4rem and its 1 pixel edge, plus half a rem so a
+   * focus ring and its offset clear the edge too. Focus moved by keyboard or
+   * by script, and an in page link such as How it works, all stop below it.
+   */
+  @media (width >= 64rem) {
+    :root:has(header[data-sticky]) {
+      scroll-padding-top: calc(4.5rem + 1px);
+    }
   }
 
   /*

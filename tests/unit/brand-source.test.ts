@@ -220,6 +220,35 @@ describe("the one cursor rule in globals.css (AC-33, INV-10)", () => {
   });
 });
 
+/**
+ * The home page's sticky header never covers what has focus (WCAG 2.4.11,
+ * technique C43; spec 0003, AC-14, as the port of `Main.dc.html` amends it).
+ * `SiteHeader`'s `sticky` holds from `lg` (64rem) and marks the bar
+ * `data-sticky`; from the same width the page keeps the bar's height, 4rem
+ * and its edge plus room for a focus ring, clear at its top.
+ */
+describe("the sticky header's scroll padding", () => {
+  it("keeps the bar's height clear from lg whenever a sticky header is on the page", () => {
+    const rules = rulesHolding("scroll-padding-top");
+
+    expect(rules).toEqual([
+      {
+        selector: ":root:has(header[data-sticky])",
+        within: ["@layer base", "@media (width >= 64rem)"],
+      },
+    ]);
+    expect(CSS).toMatch(/scroll-padding-top:\s*calc\(4\.5rem \+ 1px\);/);
+  });
+
+  it("is keyed to the same width the header sticks from", () => {
+    const header = source("src/ui/site-header.tsx");
+
+    // The rendered class list holds `lg:sticky` and no other position
+    // (`tests/component/ui/layout.test.tsx`); here, the same breakpoint.
+    expect(header).toContain('"border-muted lg:sticky lg:top-0');
+  });
+});
+
 describe("the one reduced motion rule in globals.css (spec 0026, AC-2)", () => {
   const rules = rulesHolding("animation: none");
 

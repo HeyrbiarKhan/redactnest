@@ -153,8 +153,19 @@ export function SignInLink() {
  * The nav is on every build, so on a small screen the header always folds it
  * into a menu (feature 28), with Sign in beside it there when billing is on
  * (spec 0026, child 0001, AC-27).
+ *
+ * `sticky` is the home page's: the bar stays at the window's top from `lg`,
+ * as `Main.dc.html` draws it (`SiteHeader` says how focus stays clear of it).
+ * Never on `/tool`, where nothing but the action panel is sticky (spec 0026,
+ * AC-12).
  */
-export function PageHeader({ current }: { readonly current?: NavItem }) {
+export function PageHeader({
+  current,
+  sticky = false,
+}: {
+  readonly current?: NavItem;
+  readonly sticky?: boolean;
+}) {
   const action =
     current === "tool" ? undefined : (
       <Button href={TOOL_PATH} reload>
@@ -168,6 +179,7 @@ export function PageHeader({ current }: { readonly current?: NavItem }) {
       menuLabel={NAV_TEXT.menu}
       account={config.billingEnabled ? <SignInLink /> : undefined}
       action={action}
+      sticky={sticky}
     />
   );
 }
