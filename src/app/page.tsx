@@ -10,7 +10,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Metadata } from "next";
-import Image from "next/image";
 
 import { config } from "@/config";
 import {
@@ -30,7 +29,7 @@ import { CoverFigure } from "@/ui/cover-figure";
 import { IconCircle } from "@/ui/icon-circle";
 import { PageContainer } from "@/ui/page-container";
 
-import productShot from "./product-review.png";
+import { HomeWindow } from "./home-window";
 import { PricingCards } from "./pricing-cards";
 import { PageHeader } from "./site-nav";
 
@@ -66,8 +65,8 @@ const CHECK_HREF = `${SECURITY_PATH}#${sectionId("theCheck")}`;
 const CHECK_IT_HREF = `${SECURITY_PATH}#${sectionId("checkIt")}`;
 
 /**
- * The home page, in spec 0026 AC-8's order: the hero with a real picture of
- * the tool, How it works, the black box comparison, what RedactNest looks for
+ * The home page, in spec 0026 AC-8's order: the hero with a drawing of the
+ * tool, How it works, the black box comparison, what RedactNest looks for
  * and strips, then a closing band.
  *
  * Every word in the main content comes from `src/lib/home-text.ts`; the caps
@@ -80,10 +79,9 @@ const CHECK_IT_HREF = `${SECURITY_PATH}#${sectionId("checkIt")}`;
  * arrived with, so a client side navigation would open the tool under this
  * page's policy (INV-10). It also stops `/` prefetching `/tool`.
  *
- * The product shot is `scripts/make-brand.mjs`'s capture of the real tool on a
- * fictional document (spec 0013, AC-12, INV-2), served through `next/image`
- * from our own origin. A static import, so its size is known and nothing
- * shifts as it loads; eager and high priority, because it is the hero.
+ * The hero's product window is drawn in HTML (`HomeWindow`), in place of the
+ * screenshot `scripts/make-brand.mjs` captures, by the owner's port of
+ * `Main.dc.html` (2026-11-25). The sticky header is this page's alone.
  */
 export default function HomePage() {
   return (
@@ -95,93 +93,104 @@ export default function HomePage() {
       <PageHeader sticky />
       {/* The skip link's target, allowed to drop its outline (spec 0003, AC-14). */}
       <main id="main" tabIndex={-1} className="flex flex-1 flex-col focus:outline-none">
-        <PageContainer width="wide" className="py-14 sm:py-20">
-          <div
-            data-testid="home-hero"
-            className="grid grid-cols-1 items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]"
-          >
-            {/*
-              At 320 pixels with 200% text the headline's longest word is wider
-              than the column (spec 0024, AC-14). `min-w-0` and `max-w-full`
-              stop that word setting the column's width, and the headline
-              breaks it only when it cannot fit a line alone, so every wider
-              screen sets the headline as before.
-            */}
-            <div className="flex min-w-0 flex-col items-start gap-6">
-              <div className="flex max-w-full flex-col gap-5">
+        {/*
+          The hero (spec 0026, AC-8, as the owner's port of `Main.dc.html`
+          amends it, 2026-11-25): the words, then from `lg` the drawn product
+          window on the right, over the mockup's radial `glow`. The wash is
+          centred over the window and gone by 70% of its reach, so the words
+          sit on white or the palest edge of it. Full width, so it spans the
+          window.
+        */}
+        <div className="relative overflow-hidden bg-radial-[1000px_500px_at_75%_0%] from-glow to-transparent to-70%">
+          <PageContainer width="wide" className="py-14 sm:py-20 lg:pt-22 lg:pb-24">
+            <div
+              data-testid="home-hero"
+              className="grid grid-cols-1 items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.08fr)] lg:gap-16"
+            >
+              {/*
+                At 320 pixels with 200% text the headline's longest word is
+                wider than the column (spec 0024, AC-14). `min-w-0` and
+                `max-w-full` stop that word setting the column's width, and the
+                headline breaks it only when it cannot fit a line alone, so
+                every wider screen sets the headline as before.
+              */}
+              <div className="flex min-w-0 flex-col items-start gap-6">
                 {/* The eyebrow chip (spec 0026, AC-8): a check on its tile, then the words. */}
                 <p
                   data-testid="home-eyebrow"
-                  className="inline-flex max-w-full items-center gap-2 self-start rounded-full border border-border bg-surface py-1 pr-3 pl-1 text-small font-medium text-ink-muted"
+                  className="inline-flex max-w-full items-center gap-2 self-start rounded-full border border-glow-edge bg-surface py-1.5 pr-3 pl-2 text-small font-medium text-ink-soft"
                 >
                   <span
                     aria-hidden="true"
-                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent"
+                    className="inline-flex size-4.5 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent"
                   >
-                    <Check className="size-4" strokeWidth={2.25} />
+                    <Check className="size-2.75" strokeWidth={3} />
                   </span>
                   <span className="min-w-0 wrap-break-word">{HOME_TEXT.eyebrow}</span>
                 </p>
-                <h1 className="text-display text-balance text-ink wrap-break-word">
+                <h1 className="max-w-full text-hero text-ink wrap-break-word">
                   {HOME_TEXT.headline}
                 </h1>
-              </div>
-              <p className="max-w-2xl text-lead text-ink-muted">{HOME_TEXT.lead}</p>
-              <div className="flex flex-col items-start gap-3">
-                <div className="mt-2 flex flex-wrap gap-3">
-                  <Button href={TOOL_PATH} reload size="lg">
-                    {HOME_TEXT.primary}
+                <p className="max-w-130 text-intro text-ink-muted">{HOME_TEXT.lead}</p>
+                <div className="flex max-w-full flex-wrap gap-3">
+                  <Button href={TOOL_PATH} reload size="xl">
+                    {/*
+                      The arrow inline after the last word, so at 320 pixels
+                      with 200% text it wraps with "PDF" rather than widening
+                      the button past the column (spec 0024, AC-14).
+                    */}
+                    <span>
+                      {HOME_TEXT.primary}
+                      <ArrowRight
+                        aria-hidden="true"
+                        className="ms-2 inline size-4 align-[-0.1875em]"
+                        strokeWidth={2}
+                      />
+                    </span>
                   </Button>
                   {/* An anchor on this page, so a plain link. */}
                   <Button
                     href={`#${HOW_IT_WORKS_ID}`}
                     reload
                     variant="secondary"
-                    size="lg"
+                    size="xl"
                   >
                     {HOME_TEXT.howItWorks}
                   </Button>
                 </div>
-                <p data-testid="home-caps" className="text-small text-ink-muted">
+                <p data-testid="home-caps" className="text-small text-ink-subtle">
                   {capLine(config.billingEnabled, config.freePageCap, config.maxPages)}
                 </p>
               </div>
-            </div>
 
-            {/*
-              The product shot in a window frame, the page's one larger shadow,
-              with the small card beside it from `lg` (spec 0026, AC-8). Below
-              `lg` the card sits under the frame, in the flow.
-            */}
-            <div className="relative flex flex-col gap-4 lg:pb-8">
-              <div className="overflow-hidden rounded-card border border-border bg-surface shadow-window">
+              {/*
+                The drawn window, then the small card that hangs off its lower
+                left corner from `lg` (36 pixels out, 28 down). Below `lg` the
+                card sits under the window, in the flow.
+              */}
+              <div className="relative flex min-w-0 flex-col gap-4">
+                <HomeWindow />
                 <div
-                  aria-hidden="true"
-                  className="flex items-center gap-1.5 border-b border-border bg-subtle px-4 py-3"
+                  data-testid="home-shot-card"
+                  className="flex max-w-full items-center gap-3 self-start rounded-card border border-border bg-surface px-4 py-3 shadow-popover lg:absolute lg:-bottom-7 lg:-left-9"
                 >
-                  {[0, 1, 2].map((dot) => (
-                    <span key={dot} className="size-2.5 rounded-full bg-border" />
-                  ))}
+                  <span
+                    aria-hidden="true"
+                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent"
+                  >
+                    <ShieldCheck className="size-4" strokeWidth={2.5} />
+                  </span>
+                  <p className="flex min-w-0 flex-col text-small wrap-break-word">
+                    <span className="font-semibold text-ink">
+                      {HOME_TEXT.shotCard.title}
+                    </span>
+                    <span className="text-ink-subtle">{HOME_TEXT.shotCard.line}</span>
+                  </p>
                 </div>
-                <Image
-                  src={productShot}
-                  alt={HOME_TEXT.shotAlt}
-                  sizes="(min-width: 64rem) 40rem, calc(100vw - 2rem)"
-                  loading="eager"
-                  fetchPriority="high"
-                  className="block h-auto w-full"
-                />
               </div>
-              <p
-                data-testid="home-shot-card"
-                className="flex max-w-full items-center gap-3 self-start rounded-card border border-border bg-surface px-4 py-3 font-semibold text-ink shadow-card lg:absolute lg:bottom-0 lg:-left-6"
-              >
-                <IconCircle icon={ShieldCheck} tone="accent" />
-                <span className="min-w-0 wrap-break-word">{HOME_TEXT.shotCard}</span>
-              </p>
             </div>
-          </div>
-        </PageContainer>
+          </PageContainer>
+        </div>
 
         <section
           id={HOW_IT_WORKS_ID}

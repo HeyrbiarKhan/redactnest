@@ -24,8 +24,12 @@ describe("the hero (AC-10)", () => {
     expect(HOME_TEXT.headline).toBe("Redaction that actually removes the text");
     expect(HOME_TEXT.primary).toBe("Remove text from a PDF");
     expect(HOME_TEXT.howItWorks).toBe("See how it works");
-    // Spec 0026, AC-8: the self check named by its result, row M3.
-    expect(HOME_TEXT.shotCard).toBe("No pass, no file");
+    // Spec 0026, AC-8, as the port amends it: the mockup's title, then the
+    // self check named by its result, row M3.
+    expect(HOME_TEXT.shotCard).toEqual({
+      title: "Checked before you download",
+      line: "No pass, no file",
+    });
   });
 
   /**
@@ -255,31 +259,59 @@ describe("AC-30: each thing said once", () => {
       expect(item).not.toMatch(/browser/i);
     }
   });
+});
 
-  /**
-   * Spec 0026, AC-8: each of the trio's claims lands in exactly one place,
-   * "never uploaded" in the eyebrow chip, "removed, not covered" in the black
-   * box section's eyebrow and "checked before you download" in the third
-   * step card. The site line is the head's and the social card's alt text
-   * describes the eyebrow, both outside the main content (spec 0024, AC-11).
-   */
-  const MAIN = JSON.stringify(
-    Object.entries(HOME_TEXT).filter(([key]) => !["siteLine", "socialAlt"].includes(key)),
+/**
+ * AC-30, as the owner's port of `Main.dc.html` amends it (2026-11-25): each
+ * of the page's claims is said in the places the owner read and named, and
+ * nowhere else. Spec 0013, INV-11 asks the owner's read for a line that
+ * repeats an idea, so a new repeat fails here until this table names it.
+ * Each list holds every place in `HOME_TEXT` (by its path) that says the
+ * idea, once per time it is said there. The site line is the head's and the
+ * social card's alt text describes the eyebrow, both outside the main
+ * content (spec 0024, AC-11). The drawn window's lock line is the tool's own
+ * `LOCK_LINE`, which the page's test counts.
+ */
+describe("AC-30: each claim said only in its named places", () => {
+  /** Every string in the main content's words, with the path it sits at. */
+  function places(value: unknown, path: string): [string, string][] {
+    if (typeof value === "string") return [[path, value]];
+    if (typeof value === "object" && value !== null) {
+      return Object.entries(value).flatMap(([key, inner]) =>
+        places(inner, path === "" ? key : `${path}.${key}`),
+      );
+    }
+    return [];
+  }
+  const MAIN = places(HOME_TEXT, "").filter(
+    ([path]) => !["siteLine", "socialAlt"].includes(path),
   );
 
-  it("says never uploaded only in the eyebrow chip", () => {
-    expect(HOME_TEXT.eyebrow).toMatch(/never uploaded/i);
-    expect(MAIN.match(/uploaded/gi)).toHaveLength(1);
+  /** Each place a pattern is said, once per time it is said there. */
+  const saidAt = (pattern: RegExp) =>
+    MAIN.flatMap(([path, text]) => (text.match(pattern) ?? []).map(() => path)).sort();
+
+  it.each([
+    ["in your browser", /browser/gi, ["eyebrow"]],
+    ["never uploaded", /upload/gi, ["eyebrow"]],
+    ["removed, not covered", /not covered/gi, ["blackBox.eyebrow"]],
+    [
+      "checked before you download",
+      /checked before (you )?download/gi,
+      ["shotCard.title", "steps.items.2.body"],
+    ],
+  ] as const)("says %s only in its named places", (_claim, pattern, named) => {
+    expect(saidAt(pattern)).toEqual([...named].sort());
   });
 
-  it("says removed, not covered only in the black box section's eyebrow", () => {
-    expect(HOME_TEXT.blackBox.eyebrow).toBe("Removed, not covered");
-    expect(MAIN.match(/not covered/gi)).toHaveLength(1);
-  });
-
-  it("says checked before you download only in the third step card", () => {
-    expect(HOME_TEXT.steps.items[2]?.body).toMatch(/^Checked before you download/);
-    expect(MAIN.match(/checked before you download/gi)).toHaveLength(1);
+  it("would catch a repeat the table does not name", () => {
+    const extra = [...MAIN, ["band.extra", "Checked before you download, again"]];
+    const said = extra
+      .flatMap(([path, text]) =>
+        (text?.match(/checked before (you )?download/gi) ?? []).map(() => path),
+      )
+      .sort();
+    expect(said).not.toEqual(["shotCard.title", "steps.items.2.body"]);
   });
 });
 

@@ -1894,8 +1894,11 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     await expect(main).toContainText(
       "RedactNest looks for email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers in your PDF and lets you tick what to remove.",
     );
-    // Spec 0013, AC-30: said once. "in your browser" is the eyebrow's alone.
-    await expect(main).not.toContainText("Your file never leaves your browser.");
+    // Spec 0013, AC-30, as the port of `Main.dc.html` amends it: the tool's
+    // own lock line shows only inside the drawn window, as the tool draws it.
+    const lock = "Your file never leaves your browser.";
+    expect((await main.textContent())?.split(lock)).toHaveLength(2);
+    await expect(page.getByTestId("home-window")).toContainText(lock);
     // The build's own caps, with billing on (`playwright.config.ts`).
     await expect(page.getByTestId("home-caps")).toHaveText(
       "Free up to 3 pages a document. Pro goes up to 50.",
@@ -2236,36 +2239,35 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
   });
 
   /**
-   * Spec 0013, AC-12. The real capture, through `next/image` from our own
-   * origin, sized before it loads so nothing shifts, and loaded first.
+   * Spec 0013, AC-12, as the owner's port of `Main.dc.html` amends it: the
+   * product window drawn in HTML, one picture named by its alt text, loading
+   * no image, with the card hanging off its lower left corner from `lg`.
    */
-  test("shows the product shot from our own origin, sized and loaded first", async ({
+  test("draws the product window in HTML, on the right from lg, its card on its corner", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    const images: string[] = [];
+    page.on("request", (request) => {
+      if (request.resourceType() === "image") images.push(request.url());
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/");
 
     const shot = page.getByRole("img", {
       name: "RedactNest reviewing a sample employment agreement: email addresses and phone numbers found and ticked, with a Redact button beside them.",
     });
-    await expect(shot).toHaveAttribute("width", "2560");
-    await expect(shot).toHaveAttribute("height", "1600");
-    await expect(shot).toHaveAttribute("loading", "eager");
-    await expect(shot).toHaveAttribute("fetchpriority", "high");
-    await expect(shot).toHaveAttribute(
-      "sizes",
-      "(min-width: 64rem) 40rem, calc(100vw - 2rem)",
-    );
-    const loaded = await shot.evaluate((image: HTMLImageElement) => ({
-      origin: new URL(image.currentSrc).origin,
-      complete: image.complete && image.naturalWidth > 0,
-    }));
-    expect(loaded).toEqual({ origin: new URL(page.url()).origin, complete: true });
+    await expect(shot).toHaveAttribute("data-testid", "home-window");
+    expect(await page.getByRole("main").locator("img").count()).toBe(0);
+    expect(images.filter((url) => url.includes("product-review"))).toEqual([]);
 
-    // From `lg`, text on the left and the shot on the right.
-    const text = await page.getByRole("heading", { level: 1 }).boundingBox();
-    const picture = await shot.boundingBox();
-    expect((text?.x ?? 0) + (text?.width ?? 0)).toBeLessThanOrEqual(picture?.x ?? 0);
+    // From `lg`, text on the left and the window on the right.
+    const text = await rectOf(page.getByRole("heading", { level: 1 }));
+    const picture = await rectOf(shot);
+    expect(text.right).toBeLessThanOrEqual(picture.left);
+    // The card, 36 pixels out from the window's left edge and 28 below it.
+    const card = await rectOf(page.getByTestId("home-shot-card"));
+    expectNear(card.left, picture.left - 36);
+    expectNear(card.bottom, picture.bottom + 28);
   });
 
   /**
@@ -2315,8 +2317,11 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     expect((caps?.y ?? 0) + (caps?.height ?? 0)).toBeLessThanOrEqual(picture?.y ?? 0);
   });
 
-  // Spec 0026, AC-3: `display` is `title` below `sm`, 3.25rem from there.
-  test("steps the display headline up from 30px to 52px at sm", async ({ page }) => {
+  // Spec 0026, AC-3: `title` below `sm`, 3.25rem from there, and the home
+  // page's own 3.75rem from `lg` (`text-hero`, `Main.dc.html`).
+  test("steps the headline up from 30px to 52px at sm and 60px at lg", async ({
+    page,
+  }) => {
     const size = () =>
       page
         .getByRole("heading", { level: 1 })
@@ -2326,8 +2331,11 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     await page.goto("/");
     expect(await size()).toBe("30px");
 
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize({ width: 800, height: 800 });
     expect(await size()).toBe("52px");
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    expect(await size()).toBe("60px");
   });
 
   test("walks from the skip link to the wordmark, the header's links and both buttons", async ({
@@ -2382,7 +2390,8 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     ).toBeFocused();
   });
 
-  test("its button links are button sized: 40px in the header, 48px below", async ({
+  // The hero's are `xl`, the mockup's 50 pixels (`Main.dc.html`).
+  test("its button links are button sized: 40px in the header, 50px below", async ({
     page,
   }) => {
     await page.goto("/");
@@ -2396,9 +2405,9 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       .getByRole("link", { name: "Remove text from a PDF" })
       .first()
       .boundingBox();
-    // Exact, not a floor: a minimum passed while `lg` padding pushed it to 50px.
+    // Exact, not a floor: a minimum once passed while padding pushed a button past its size.
     expect(header?.height).toBe(40);
-    expect(main?.height).toBe(48);
+    expect(main?.height).toBe(50);
 
     await expectTargetSizes(page, ["#main", "Menu"]);
   });
@@ -2667,13 +2676,12 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/");
 
-    const main = page.getByRole("main");
     for (const [box, recorded] of [
-      // Recorded again for spec 0026's page (AC-8): the hero, the How it
-      // works cards and the band.
-      [page.getByTestId("home-hero"), [88, 145, 1104, 465.8]],
-      [main.getByRole("list").first(), [88, 883.4, 1104, 354]],
-      [page.getByTestId("home-band"), [88, 2099.4, 1104, 614.6]],
+      // Recorded again for the owner's port of `Main.dc.html` (2026-11-25):
+      // the hero, the How it works cards and the band.
+      [page.getByTestId("home-hero"), [82, 153, 1116, 505.1]],
+      [page.getByTestId("home-steps").getByRole("list"), [82, 946.7, 1116, 354]],
+      [page.getByTestId("home-band"), [82, 2162.7, 1116, 614.6]],
     ] as const) {
       const measured = await box.boundingBox();
       if (measured === null) throw new Error("a recorded box is not drawn");

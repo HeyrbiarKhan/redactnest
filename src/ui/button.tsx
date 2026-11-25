@@ -22,7 +22,7 @@ import { Spinner } from "./spinner";
  */
 export type ButtonVariant =
   "primary" | "secondary" | "ghost" | "link" | "danger" | "danger-secondary";
-export type ButtonSize = "default" | "lg" | "icon";
+export type ButtonSize = "default" | "lg" | "xl" | "icon";
 
 interface ButtonOwnProps {
   readonly variant?: ButtonVariant;
@@ -127,6 +127,9 @@ const buttonClasses = cva("transition-[background-color,border-color,color]", {
     size: {
       default: "min-h-10 text-small",
       lg: "min-h-12 text-body",
+      // The home page's 50 pixel buttons, 22 pixels in from each side
+      // (`Main.dc.html`): the hero's two and the closing card's.
+      xl: "min-h-12.5 text-body",
       // A 40 pixel square for a button whose words are visually hidden, such
       // as the header's menu button (spec 0026, child 0001, AC-27).
       icon: "min-h-10 min-w-10 text-small",
@@ -145,6 +148,7 @@ const buttonClasses = cva("transition-[background-color,border-color,color]", {
     },
     { shape: "box", size: "default", class: "px-4 py-2" },
     { shape: "box", size: "lg", class: "px-6 py-2.5" },
+    { shape: "box", size: "xl", class: "px-5.5 py-2.5" },
     { shape: "box", size: "icon", class: "p-2" },
     { hover: true, look: "primary", class: "hover:bg-accent-strong" },
     { hover: true, look: ["secondary", "ghost"], class: "hover:bg-muted" },

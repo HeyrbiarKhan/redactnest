@@ -54,6 +54,11 @@ const TOKENS = Object.freeze([
   "night-muted",
   "night-accent",
   "night-border",
+  "glow",
+  "glow-edge",
+  "ink-soft",
+  "accent-bright",
+  "border-soft",
 ]);
 
 /** 4.5:1 for text, 3:1 for icons, control edges and the focus ring (WCAG 1.4.3, 1.4.11). */
@@ -117,6 +122,15 @@ const CONTRACT: readonly Pairing[] = Object.freeze([
   // The network band on `night` (AC-9): its words, its link and the ring
   // around that link, which takes `night-accent` there because `focus` fails.
   ...pairings(["night-ink", "night-muted", "night-accent"], ["night"], TEXT),
+  // The home page's port of `Main.dc.html` (2026-11-25). The hero's words,
+  // caps line and buttons' ring over the `glow` wash; `ink-soft` for chips,
+  // the trust strip and drawn page text on the light fills; a count in
+  // `ink-subtle` on the drawn window's ticked `accent-faint` row. `glow-edge`,
+  // `accent-bright` and `border-soft` are edges in drawings and join none.
+  ...pairings(["ink", "ink-muted", "ink-subtle"], ["glow"], TEXT),
+  { foreground: "focus", background: "glow", minimum: GRAPHIC },
+  ...pairings(["ink-soft"], ["canvas", "surface", "subtle", "glow"], TEXT),
+  { foreground: "ink-subtle", background: "accent-faint", minimum: TEXT },
 ]);
 
 /**

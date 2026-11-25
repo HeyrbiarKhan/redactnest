@@ -23,6 +23,8 @@ import {
   NETWORK_ROWS,
   strippedItems,
 } from "@/lib/home-text";
+import { DETECTOR_LABELS } from "@/lib/detectors";
+import { FOUND_ITEMS_TITLE, LOCK_LINE, redactLabel } from "@/lib/flow-text";
 import { LEGAL } from "@/lib/legal";
 import { FREE_PLAN, PLAN_BADGE, PRO_PLAN } from "@/lib/plans";
 import { SUBSCRIBE_PATH, TOOL_PATH } from "@/lib/routes";
@@ -78,12 +80,13 @@ describe("the hero (AC-10)", () => {
     const headline = screen.getByRole("heading", { level: 1 });
     expect(eyebrow).toHaveTextContent(HOME_TEXT.eyebrow);
     expect(headline).toHaveTextContent(HOME_TEXT.headline);
-    expect(headline).toHaveClass("text-display");
+    // The mockup's 60 pixel headline from `lg` (`Main.dc.html`).
+    expect(headline).toHaveClass("text-hero");
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(
       eyebrow.compareDocumentPosition(headline) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(main().getByText(HOME_TEXT.lead)).toHaveClass("text-lead", "text-ink-muted");
+    expect(main().getByText(HOME_TEXT.lead)).toHaveClass("text-intro", "text-ink-muted");
   });
 
   /**
@@ -144,18 +147,44 @@ describe("the hero (AC-10)", () => {
   });
 });
 
-describe("the product shot (AC-12)", () => {
-  it("shows the real capture with its alt text, its size known and loaded first", () => {
+/**
+ * The hero's product window, drawn in HTML in place of the screenshot (the
+ * owner's port of `Main.dc.html`, 2026-11-25): one picture to assistive
+ * technology, named by `shotAlt`, drawn in the tool's own words.
+ */
+describe("the product window (AC-12, as the port amends it)", () => {
+  it("is one picture named by its alt text, with no image file behind it", () => {
     render(<HomePage />);
 
     const shot = screen.getByRole("img", { name: HOME_TEXT.shotAlt });
-    expect(shot).toHaveAttribute("width", "2560");
-    expect(shot).toHaveAttribute("height", "1600");
-    expect(shot).toHaveAttribute("sizes", "(min-width: 64rem) 40rem, calc(100vw - 2rem)");
-    expect(shot).toHaveAttribute("loading", "eager");
-    expect(shot).toHaveAttribute("fetchpriority", "high");
-    // From our own origin: a path, never another host.
-    expect(shot.getAttribute("src")).toMatch(/^\//);
+    expect(shot).toBe(screen.getByTestId("home-window"));
+    expect(shot.tagName).toBe("DIV");
+    expect(screen.getByRole("main").querySelector("img")).toBeNull();
+  });
+
+  it("draws the tool's own words, from the records the tool reads", () => {
+    render(<HomePage />);
+
+    const shot = screen.getByTestId("home-window");
+    const ticked = HOME_TEXT.window.groups
+      .filter(({ ticked: on }) => on)
+      .reduce((sum, { count }) => sum + count, 0);
+    expect(shot).toHaveTextContent(FOUND_ITEMS_TITLE);
+    expect(shot).toHaveTextContent(redactLabel(ticked));
+    expect(shot).toHaveTextContent(LOCK_LINE);
+    for (const { kind } of HOME_TEXT.window.groups) {
+      expect(shot).toHaveTextContent(DETECTOR_LABELS[kind].label);
+    }
+  });
+
+  it("hangs the card titled Checked before you download off its corner", () => {
+    render(<HomePage />);
+
+    const card = screen.getByTestId("home-shot-card");
+    expect(card).toHaveTextContent(
+      `${HOME_TEXT.shotCard.title}${HOME_TEXT.shotCard.line}`,
+    );
+    expect(card).toHaveClass("lg:absolute", "shadow-popover");
   });
 });
 
@@ -477,7 +506,26 @@ describe("the main content's words (AC-13)", () => {
       HOME_TEXT.primary,
       HOME_TEXT.howItWorks,
       capLine(billingEnabled, config.freePageCap, config.maxPages),
-      HOME_TEXT.shotCard,
+      HOME_TEXT.shotCard.title,
+      HOME_TEXT.shotCard.line,
+      // The drawn window: its made up values, then the tool's own words.
+      HOME_TEXT.window.file,
+      HOME_TEXT.window.title,
+      ...Object.values(HOME_TEXT.window.lines),
+      HOME_TEXT.window.found,
+      FOUND_ITEMS_TITLE,
+      LOCK_LINE,
+      redactLabel(
+        HOME_TEXT.window.groups.reduce(
+          (sum, { count, ticked }) => sum + (ticked ? count : 0),
+          0,
+        ),
+      ),
+      ...HOME_TEXT.window.groups.flatMap(({ kind, count }) => [
+        DETECTOR_LABELS[kind].label,
+        String(count),
+      ]),
+      String(HOME_TEXT.window.groups.reduce((sum, { count }) => sum + count, 0)),
       steps.eyebrow,
       steps.title,
       ...steps.drawing.rows.map(({ value }) => value),

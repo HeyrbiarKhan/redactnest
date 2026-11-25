@@ -183,6 +183,7 @@ describe("Button", () => {
   it.each([
     ["default", "min-h-10"],
     ["lg", "min-h-12"],
+    ["xl", "min-h-12.5"],
     ["icon", "min-h-10"],
   ] as const)("is at least as tall as size %s promises", (size, height) => {
     render(<Button size={size}>Go</Button>);

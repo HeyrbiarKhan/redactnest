@@ -83,26 +83,29 @@ describe("the red buttons (AC-35, INV-12)", () => {
 });
 
 /**
- * A shadow above a card's quiet `shadow-card`: the product shot's window and
- * the account menu's popover, the two the redesign draws (spec 0026, AC-2).
+ * A shadow above a card's quiet `shadow-card`: the home page's drawn window,
+ * the card hanging off it and the account menu's popover (spec 0026, AC-2, as
+ * the owner's port of `Main.dc.html` amends it, 2026-11-25).
  */
-const LARGE_SHADOW = /(^|[\s:!"'`])shadow-(popover|window)\b/g;
+const LARGE_SHADOW = /(^|[\s:!"'`])shadow-(popover|window|plan)\b/g;
 
 const DROPDOWN_MENU = "src/ui/dropdown-menu.tsx";
+const HOME_WINDOW = "src/app/home-window.tsx";
 
 describe("the larger shadows (spec 0013, AC-12, as spec 0026 amends it)", () => {
-  it("frame the product shot on the home page and the account menu, and nothing else", () => {
+  it("frame the home page's window and its card, and the account menu, and nothing else", () => {
     const uses = FILES.flatMap((file) =>
       [...source(file).matchAll(LARGE_SHADOW)].map(([match]) => [file, match.trim()]),
     );
 
     expect(uses).toEqual(
       expect.arrayContaining([
-        [HOME_PAGE, "shadow-window"],
+        [HOME_WINDOW, "shadow-window"],
+        [HOME_PAGE, "shadow-popover"],
         [DROPDOWN_MENU, "shadow-popover"],
       ]),
     );
-    expect(uses).toHaveLength(2);
+    expect(uses).toHaveLength(3);
   });
 
   it.each([['"shadow-popover"'], ['"hover:shadow-window"'], ['"p-4 shadow-window"']])(

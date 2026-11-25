@@ -220,12 +220,45 @@ export const HOME_TEXT = Object.freeze({
   /** The hero's second button, to the How it works section on this page. */
   howItWorks: "See how it works",
   /**
-   * The small card beside the product shot (spec 0026, AC-8), naming the
-   * self check by its result. Row M3: no file leaves unless the self check
-   * passed on its bytes (spec 0004, INV-2). Owner's read: it sits beside the
-   * third step card's "checked before you download".
+   * The small card beside the product window (spec 0026, AC-8, as the port
+   * of `Main.dc.html` amends it): the mockup's title, then the self check
+   * named by its result. Row M3: no file leaves unless the self check passed
+   * on its bytes (spec 0004, INV-2). The title repeats the trust strip's
+   * third item by the owner's read (2026-11-25), a place AC-30's test names.
    */
-  shotCard: "No pass, no file",
+  shotCard: Object.freeze({
+    title: "Checked before you download",
+    line: "No pass, no file",
+  }),
+
+  /**
+   * The hero's product window, drawn in HTML in place of the screenshot (the
+   * owner's port of `Main.dc.html`, 2026-11-25): a made up agreement open in
+   * the tool. Only the made up values live here. Every word the tool itself
+   * shows (the group names, "Found items", the Redact button and the lock
+   * line) is read from `detectors.ts` and `flow-text.ts`, as the screenshot
+   * showed them, so the drawing never says what the tool does not. Hidden
+   * from assistive technology, which hears `shotAlt` instead.
+   */
+  window: Object.freeze({
+    file: "employment-agreement.pdf · 2 pages",
+    title: "Employment Agreement",
+    lines: Object.freeze({
+      name: "Name: Alex Morgan",
+      email: "Email:",
+      phone: "Phone:",
+      // The mockup's "Pay questions:" wraps at the 14 pixel floor; "Pay:" keeps
+      // the line whole, as drawn.
+      pay: "Pay:",
+    }),
+    /** The one found value still shown, as the tool highlights it. */
+    found: "payroll@example.com",
+    groups: Object.freeze([
+      Object.freeze({ kind: "email", count: 4, ticked: true }),
+      Object.freeze({ kind: "phone", count: 3, ticked: true }),
+      Object.freeze({ kind: "date", count: 0, ticked: false }),
+    ] as const),
+  }),
 
   /**
    * How it works (spec 0026, AC-8): three cards, each a small drawing on
