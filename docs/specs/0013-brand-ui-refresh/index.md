@@ -5,6 +5,7 @@
 **Updated**: 2026-11-14, from spec [0018](../0018-security-page/index.md): AC-8's Product group names Security, between Redact a PDF and Pricing, on every page.
 **Updated**: 2026-11-15, from spec [0019](../0019-kept-object-allowlist/index.md), wording only: AC-10's lead says "looks for" and its "Removed, not covered" card names document info and attachments and, as built, selectable text; AC-11's heading, first card's title, both closing lines and `HOME_STRIPPED` (XMP metadata false until feature 32) take spec 0019's AC-12 words, as built; and the decisions table's "Below the hero" row follows.
 **Updated**: 2026-11-23, from spec [0024](../0024-search-pages/index.md) (feature 29): AC-26 names 320 pixels with 200% text together on `/`, menu shut and open, and the Follow-up on sideways scrolling there is done.
+**Updated**: 2026-11-25, from spec [0026](../0026-ui-redesign/index.md), AC-12: from `lg`, with a document on the page, `/tool` is one centred column (A, L, B's head with the plan card, C, then the action panel sticky to the window's foot with `bottom: 0`), replacing AC-16's two columns, AC-17's sticky top and INV-6's wording. The page order A, L, B, C, AC-14, AC-15 and INV-5 stand. Read 0026 AC-12 before building from AC-16 or AC-17.
 **Status**: Accepted
 
 ## Summary

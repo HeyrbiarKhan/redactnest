@@ -69,6 +69,37 @@ The three sensitive parts are each settled at the smallest change that keeps the
 
 Skateboard order follows from the token change: the first slice must restyle every page, or the site shows two palettes; the signed in header goes last because it alone needs a dashboard change, a privacy entry and a sandbox walk.
 
+## Amended after milestone 1 (2026-11-25)
+
+The build paused at task 6 because the first AC-12 asked for "one centred panel" with the action panel at its foot, while also keeping spec 0013 AC-17's sticky rail. Those two cannot both hold, so you ruled for one centred column with the panel sticky to the window's foot, keeping the areas' page order (A, L, B, C). That ruling replaces spec 0013 AC-16's two columns, AC-17's sticky top and INV-6's wording.
+
+**The constraint.** B (plan card, refusal, action panel) comes before C (the list) in the page, and that order is what keeps the focus order and the live regions stable (spec 0013, INV-5). So the panel can only be drawn after the list if the grid can place B's blocks one by one. A sticky element also cannot leave the box it sits in, so a panel inside a B box drawn under the list could never float over the list.
+
+**How B is placed** (options):
+- **`display: contents` on B, with its head and its panel** (chosen). Pros: B keeps its node, and only classes change between steps. The grid places the head above the list and the panel at the list's foot. Cons: one wrapper (the head) joins B. `display: contents` drops an element's role in some browsers, which is harmless only while B has none, so the spec says B gains none.
+
+  **Where the panel sits in the grid** (measured in Chromium on 2026-11-25 with a scratch page and the repo's Playwright; Firefox and WebKit are not installed). A sticky grid item in its own row after the list does float over the whole list in Chromium, because Chromium bounds a sticky grid item by the whole grid, not by its own area. A grid item's containing block is its grid area in the CSS Grid text, though, so another engine may bound it there, and then a panel in its own row would never float. The panel therefore sits in C's area with `align-self: end`, over a bottom padding on C of the panel's room, which floats under either reading. The cross check first called the own row placement blocking; the measurement showed that was wrong for Chromium but right to guard against. The same measurement showed Chromium lets the panel float above the list, over B's head and L, when the column above the list is taller than the window, so the focus rule covers the whole column, not only the list.
+- **Subgrid, with B spanning the list's rows.** Pros: B keeps a box. Cons: B's box overlaps C, so painting and pointer order become a puzzle, for no gain.
+- **A fifth area for the panel.** Pros: plain grid. Cons: changes the four areas spec 0013 INV-5 and spec 0026 AC-12 name, and moves the panel's node out of B.
+- **Reordering the page** (A, L, B's head, C, panel). Pros: what is drawn matches what is focused. Cons: you ruled the order is kept, and it would move focus order and spec 0007 AC-5.
+
+**Where the plan card goes** (options):
+- **B's head, under the document card and above Found items** (chosen). Pros: the reading and focus order stay exactly as spec 0007 AC-5 and spec 0013 AC-16 have them. The plan sits beside the open document it governs, before the list. Cons: on a long list it scrolls away, which is fine, because it informs rather than acts.
+- **Inside the sticky foot.** Pros: always in view. Cons: a taller floating panel covers more rows, and its polite region would float over the list.
+- **Above the file bar.** Pros: first thing seen. Cons: changes the order spec 0013 moved it out of.
+
+**The result card** goes in B's head at `complete`, above the list, so Download is in reach without scrolling past a long list. Spec 0007 already moves focus to its heading, and it is never sticky (spec 0013 AC-17).
+
+**Which steps use the column.** The ruling named the review step. The column covers every step with a document on the page, because a two column open turning into one column when the list arrives would move the file bar and the polite region mid flow. Idle keeps spec 0013 AC-15 (the drop zone beside the rail), which the ruling did not touch.
+
+**Focus.** A panel floating at the window's foot can hide a focused control, which WCAG 2.2, 2.4.11 forbids and spec 0013 INV-6 promised against. A scroll margin of the panel's room on every focusable control in the column keeps a focused control above the panel. Chromium honours it for Tab and for `focus()` (measured: every row stayed 24 pixels clear). The cross check recommended dropping the `focusin` fallback on that evidence; you kept it (2026-11-25), because Chromium is the only engine measured and the only Playwright project, and the panel's placement already plans for engines that read sticky differently, so Firefox and Safari must not be left to hide a focused control. The fallback scrolls only when the focused control's box overlaps the panel's box, a pure rule unit tested on its own, and the keyboard walk in Chromium stays the gate.
+
+**Short windows.** In a window under 36rem tall the panel would take a third of the height or more, so it is static there. A `min-height` media query also turns it off under browser zoom, where the window's height in CSS pixels shrinks. The panel being drawn after the list while reached before it is today's arrangement turned on its side (the rail is drawn right of the list and reached first). Because the panel floats in view whenever the list is, focus reaching it never jumps the page (WCAG 2.4.3).
+
+**Width.** `max-w-narrow` (44rem), the existing token the legal pages' text column uses, so no new token joins `@theme`. The runner up was the mockup's right column width, which is too narrow for context lines once small text grows to 14px.
+
+**Recorded as built, no new design.** Milestone 1 made four small choices with no spec line, now recorded: Button keeps `link` beside the new `ghost` (an action that must read as a link, always underlined, INV-8); Button gains an `icon` size (the header's menu button); IconCircle gains a `solid` tone (the guide pages' step tiles); and on the night band the focus ring is `night-accent`, because `focus` measures 2.62:1 on `night`.
+
 ## Evidence: where the mockups meet the rules
 
 | Mockup | Rule | Resolution |
