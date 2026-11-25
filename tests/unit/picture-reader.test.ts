@@ -5,6 +5,7 @@ import {
   joinParts,
   readJpeg,
   readJpx,
+  readPicture,
   sameDecodingParts,
   type PictureKind,
   type PictureRead,
@@ -394,6 +395,45 @@ describe("the JPEG 2000 rule (AC-3)", () => {
     const toEnd = codestream({ lastToEnd: true, extra: [codestreamComment("c")] });
     expect(stripped(toEnd, "jpx")).toEqual(codestream({ lastToEnd: true }));
   });
+
+  it("keeps TLM, PLM and the markers that carry no length in the main header", () => {
+    // Tile part and packet lengths do not change when a comment goes, so they
+    // stay (AC-3); FF 30 to FF 3F are read as bare markers.
+    const tileLengths = codestreamSegment(0x55, Uint8Array.of(0, 0x40, 0, 0, 0, 0x20));
+    const packetLengths = codestreamSegment(0x57, Uint8Array.of(0, 0, 0, 0, 1, 4));
+    const bare = Uint8Array.of(0xff, 0x30);
+    const source = codestream({
+      extra: [tileLengths, bare, codestreamComment("note"), packetLengths],
+    });
+    expect(stripped(source, "jpx")).toEqual(
+      codestream({ extra: [tileLengths, bare, packetLengths] }),
+    );
+  });
+
+  it("keeps a whitespace tail after the last box as stored, and never reports it", () => {
+    const tail = bytes("\r\n ");
+    const plainFile = jp2([IMAGE_HEADER, COLOUR], box("jp2c", plain), tail);
+    expect(readJpx(plainFile).kind).toBe("clean");
+    const withXml = jp2([IMAGE_HEADER, COLOUR], xml, box("jp2c", plain), tail);
+    expect(stripped(withXml, "jpx")).toEqual(plainFile);
+  });
+
+  it("writes an extended length header box anew in its extended form", () => {
+    const source = bytes(
+      SIGNATURE,
+      FILE_TYPE,
+      longBox("jp2h", IMAGE_HEADER, resolution, COLOUR),
+      box("jp2c", plain),
+    );
+    expect(stripped(source, "jpx")).toEqual(
+      bytes(
+        SIGNATURE,
+        FILE_TYPE,
+        longBox("jp2h", IMAGE_HEADER, COLOUR),
+        box("jp2c", plain),
+      ),
+    );
+  });
 });
 
 describe("a JPEG 2000 picture the reader leaves as stored (AC-4)", () => {
@@ -440,6 +480,12 @@ describe("a JPEG 2000 picture the reader leaves as stored (AC-4)", () => {
     "a comment in a tile part header": codestream({
       tileHeader: [codestreamComment("tile note")],
     }),
+    "a length 0 box that is not the last": jp2(
+      [IMAGE_HEADER, COLOUR],
+      openBox("xml ", "runs on"),
+      box("jp2c", plain),
+    ),
+    "a main header segment past the data": sizePastTheData(),
   };
 
   for (const [name, source] of Object.entries(cases)) {
@@ -461,3 +507,79 @@ function firstTileToEnd(): Uint8Array {
   }
   throw new Error("no tile part");
 }
+
+/** The plain codestream with its `SIZ` segment's length running past the data. */
+function sizePastTheData(): Uint8Array {
+  const source = plain.slice();
+  source[4] = 0xff;
+  source[5] = 0xf0;
+  return source;
+}
+
+/** `source` with the byte at `at` set to another value that is not `FF`. */
+function flipped(source: Uint8Array, at: number): Uint8Array {
+  const out = source.slice();
+  out[at] = out[at] === 0x11 ? 0x22 : 0x11;
+  return out;
+}
+
+describe("what the strip's guard compares (AC-6)", () => {
+  it("sees a changed quantisation table byte", () => {
+    const source = greyJpeg([jfif()]);
+    // SOI, the JFIF segment (18 bytes), then FF DB, its length, Pq/Tq, the first value.
+    const quantValue = 2 + 18 + 5;
+    expect(source[2 + 18 + 1]).toBe(0xdb);
+    const before = decodingParts(source, "jpeg", true)!;
+    const after = decodingParts(flipped(source, quantValue), "jpeg", true)!;
+    expect(sameDecodingParts(before, after)).toBe(false);
+  });
+
+  it("sees a changed JFIF density, though the JFIF header is compared as its first 14 payload bytes", () => {
+    const source = greyJpeg([jfif()]);
+    // SOI, FF E0, length, "JFIF\0", version (2), units (1), then the density.
+    const density = 2 + 4 + 5 + 2 + 1;
+    const before = decodingParts(source, "jpeg", true)!;
+    const after = decodingParts(flipped(source, density + 1), "jpeg", true)!;
+    expect(sameDecodingParts(before, after)).toBe(false);
+  });
+
+  it("compares a JFIF header with a thumbnail equal to the same header without one", () => {
+    const thumbnail = { width: 1, height: 1, pixels: Uint8Array.of(1, 2, 3) };
+    const withThumb = decodingParts(greyJpeg([jfif({ thumbnail })]), "jpeg", true)!;
+    const without = decodingParts(greyJpeg([jfif()]), "jpeg", true)!;
+    expect(sameDecodingParts(withThumb, without)).toBe(true);
+  });
+
+  it("sees a changed byte in a tile part", () => {
+    const at = plain.length - 3;
+    expect(plain.slice(-2)).toEqual(Uint8Array.of(0xff, 0xd9));
+    const before = decodingParts(plain, "jpx")!;
+    const after = decodingParts(flipped(plain, at), "jpx")!;
+    expect(sameDecodingParts(before, after)).toBe(false);
+  });
+
+  it("sees a dropped decoding segment as a different list", () => {
+    const [quant, frame, huffman] = grey.tables;
+    const restart = segment(0xdd, Uint8Array.of(0, 0));
+    const withRestart = bytes(SOI, quant, frame, huffman, restart, ...grey.scans, EOI);
+    const before = decodingParts(withRestart, "jpeg", true)!;
+    const after = decodingParts(greyJpeg(), "jpeg", true)!;
+    expect(sameDecodingParts(before, after)).toBe(false);
+    expect(sameDecodingParts([], [])).toBe(true);
+  });
+});
+
+describe("readPicture", () => {
+  it("reads by the kind the filter names, never by sniffing the bytes", () => {
+    expect(readPicture(plain, "jpx", false).kind).toBe("clean");
+    expect(readPicture(plain, "jpeg", false).kind).toBe("as-stored");
+    expect(readPicture(greyJpeg(), "jpeg", true).kind).toBe("clean");
+    expect(readPicture(greyJpeg(), "jpx", true).kind).toBe("as-stored");
+  });
+
+  it("passes the colour space answer through to the JPEG rule", () => {
+    const withProfile = greyJpeg([icc]);
+    expect(readPicture(withProfile, "jpeg", false).kind).toBe("clean");
+    expect(readPicture(withProfile, "jpeg", true).kind).toBe("strip");
+  });
+});

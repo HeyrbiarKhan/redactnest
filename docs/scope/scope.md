@@ -510,7 +510,7 @@ spec [0025](../specs/0025-picture-details/index.md) · code in `src/engine` (`pi
   - [x] JPEG 2000 and the gate: the hand built codestream, `readJpx`, `picture-jpx.pdf`, the tile part byte comparison, and the gate's rows (tasks 6 and 7) · AC-3, AC-4, AC-10, AC-13
   - [x] Cost, the browser and the words: the 1 second budget, the e2e download, the security page line, and specs 0001, 0004, 0006, 0007, 0019 and 0021 amended (tasks 8 to 10) · AC-9, AC-11, AC-12, AC-14
 - [x] Verify it: `/check verify details inside pictures`, with repo fixtures and documents built in tests only, never a PDF from outside the repository
-- [ ] Test it: `/test details inside pictures`
+- [x] Test it: `/test details inside pictures`
 
 ### 23. Legal review · needs a decision · Alpha · from spec 0011
 The lawyer questions launch left open, asked once RedactNest has 100+ users, on a tech lawyer's advice (2026-10-03). PECA section 32, Pakistani law and courts, and a full review of both pages (spec 0011 steps 3 and 4), plus two from spec 0012: does Polar's own use of billing details as merchant of record (fraud, security, tax records) make it a controller for that part, and does every cookie claim C6 calls strictly necessary meet that exemption, given Clerk's `__refresh_<suffix>` stays after sign out on production. It sits before feature 17 because the Polar answer can change what the DPA says.

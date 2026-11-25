@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   EngineFailure,
   joinParts,
+  pictureFilter,
   PIPELINE,
   redactDocumentWith,
   RunCancelled,
@@ -506,4 +507,101 @@ describe("picture-kept.pdf: pictures left as stored (AC-1, AC-4, AC-10, INV-6)",
     const skipped = await redactDocumentWith(mupdf, source, [], {}, NO_STRIP);
     expect(new Uint8Array(skipped.output)).toEqual(new Uint8Array(stripped.output));
   });
+});
+
+/**
+ * Which pictures the strip reads, by their filter (AC-1). Each case is a
+ * stream written in the test; `pictureFilter` reads it through its
+ * reference, as the strip and the self check both do (INV-2).
+ */
+describe("which filter the strip reads (AC-1)", () => {
+  const FILTERS: readonly (readonly [string, string, "jpeg" | "jpx" | null])[] = [
+    ["a direct /DCTDecode", "/Filter /DCTDecode", "jpeg"],
+    ["a direct /JPXDecode", "/Filter /JPXDecode", "jpx"],
+    ["an array of one /DCTDecode", "/Filter [/DCTDecode]", "jpeg"],
+    ["an array of one /JPXDecode", "/Filter [/JPXDecode]", "jpx"],
+    ["a chain ending in /DCTDecode", "/Filter [/FlateDecode /DCTDecode]", null],
+    ["the inline short name /DCT", "/Filter /DCT", null],
+    ["the inline short name /JPX", "/Filter /JPX", null],
+    ["an indirect /Filter", "/Filter 99 0 R", null],
+    ["an array holding an indirect name", "/Filter [99 0 R]", null],
+    ["data in an external file", "/Filter /DCTDecode /F (picture.jpg)", null],
+    ["another filter", "/Filter /FlateDecode", null],
+    ["no filter", "", null],
+  ];
+
+  it("names a direct DCT or JPX filter, alone or as an array of one, and nothing else", () => {
+    const first = 4;
+    const objects: (string | ReturnType<typeof stream>)[] = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+      ...FILTERS.map(([, filter]) =>
+        stream(
+          `/Type /XObject /Subtype /Image /Width 1 /Height 1 ${filter.replace("99 0 R", `${first + FILTERS.length} 0 R`)}`,
+          "x",
+        ),
+      ),
+      "/DCTDecode",
+    ];
+    const source = buffer(writePdf({ objects, trailer: "/Root 1 0 R" }).bytes);
+    const read = inspect(source, (doc) =>
+      FILTERS.map((_, index) => pictureFilter(doc.newIndirect(first + index))),
+    );
+    expect(
+      Object.fromEntries(FILTERS.map(([name], index) => [name, read[index]])),
+    ).toEqual(Object.fromEntries(FILTERS.map(([name, , kind]) => [name, kind])));
+  });
+
+  /** A one page document whose picture, filtered by `filter`, carries an EXIF make. */
+  function documentFiltered(filter: string): ArrayBuffer {
+    const encoded = encodeJpeg({
+      width: 16,
+      height: 16,
+      pixel: (x: number, y: number) => 60 + ((x * 3 + y * 7) % 120),
+    });
+    const picture = stream(
+      "/Type /XObject /Subtype /Image /Width 16 /Height 16 /ColorSpace /DeviceGray " +
+        `/BitsPerComponent 8 ${filter}`,
+      jpeg(encoded, { head: [jfif(), exif({ make: FILTER_MAKE, datum: "WGS-84" })] }),
+    );
+    return buffer(
+      writePdf({
+        objects: [
+          "<< /Type /Catalog /Pages 2 0 R >>",
+          "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+          "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+            "/Resources << /XObject << /Im1 5 0 R >> >> /Contents 4 0 R >>",
+          stream("", "q 64 0 0 64 72 700 cm /Im1 Do Q"),
+          picture,
+          "/DCTDecode",
+        ],
+        trailer: "/Root 1 0 R",
+      }).bytes,
+    );
+  }
+
+  const FILTER_MAKE = "RN-FILTER-MAKE";
+
+  it("strips a picture filtered by an array of one /DCTDecode", async () => {
+    const source = documentFiltered("/Filter [/DCTDecode]");
+    expect(holds(source, FILTER_MAKE)).toBe(true);
+    const result = await redactDocumentWith(mupdf, source, []);
+    expect(holds(result.output, FILTER_MAKE)).toBe(false);
+    expect(result.sanitized).toEqual(["picture-details"]);
+    expect(decodedPictures(result.output)).toEqual(decodedPictures(source));
+  });
+
+  it.each([
+    ["an indirect /Filter", "/Filter 6 0 R"],
+    ["the inline short name /DCT", "/Filter /DCT"],
+  ])(
+    "leaves a picture with %s as stored, passes the check and reports nothing",
+    async (_, filter) => {
+      const source = documentFiltered(filter);
+      const result = await redactDocumentWith(mupdf, source, []);
+      expect(holds(result.output, FILTER_MAKE)).toBe(true);
+      expect(result.sanitized).toEqual([]);
+    },
+  );
 });
