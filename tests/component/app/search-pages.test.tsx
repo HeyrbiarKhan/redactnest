@@ -23,13 +23,13 @@ import * as removeText from "@/app/remove-text-from-pdf/page";
 import { SearchPage, searchPageMetadata } from "@/app/search-page";
 import { config } from "@/config";
 import { lookedFor } from "@/lib/detectors";
-import { IDLE_STEPS } from "@/lib/flow-text";
 import { capLine } from "@/lib/home-text";
 import { LEGAL } from "@/lib/legal";
 import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
 import { TOOL_PATH } from "@/lib/routes";
 import {
-  HOW_IT_WORKS_TITLE,
+  CLOSING_LINE,
+  CLOSING_TITLE,
   LOOK_OVER_LINE,
   LOOK_OVER_LINK_TEXT,
   MORE_GUIDES_TITLE,
@@ -175,7 +175,11 @@ describe.each(SEARCH_PAGES)("%s", (kind) => {
     }
   });
 
-  /** covers: AC-3. Trio, How it works, the answer, then More guides, with no skipped level. */
+  /**
+   * covers: AC-3, as the owner's port of `Guide.dc.html` amends it
+   * (2026-11-25): the trio, the answer, More guides, then the closing band,
+   * with no skipped level. The cards stand in for the tool's steps.
+   */
   it("walks its h2s in the frame's order", () => {
     render(<Page />);
 
@@ -186,29 +190,32 @@ describe.each(SEARCH_PAGES)("%s", (kind) => {
         .map((heading) => heading.textContent),
     ).toEqual([
       ...text.features.map((feature) => feature.title),
-      HOW_IT_WORKS_TITLE,
       text.answerTitle,
       ...(others.length > 0 ? [MORE_GUIDES_TITLE] : []),
+      CLOSING_TITLE,
     ]);
     expect(screen.queryAllByRole("heading", { level: 4 })).toHaveLength(0);
     // The header and footer hold no heading, so the page's levels are its own.
     expect(within(content()).queryAllByRole("heading", { level: 3 })).toHaveLength(0);
   });
 
-  /** covers: AC-3. The tool's own steps, from `IDLE_STEPS`. */
-  it("lists the tool's own steps under How it works", () => {
+  /**
+   * covers: AC-3, AC-4, as the owner's port of `Guide.dc.html` amends them
+   * (2026-11-25). The closing band: its heading and line from the record, and
+   * the page's button again, last in the band.
+   */
+  it("closes on the band: its heading, its line, then the page's button", () => {
     render(<Page />);
 
-    const section = screen
-      .getByRole("heading", { level: 2, name: HOW_IT_WORKS_TITLE })
+    const band = screen
+      .getByRole("heading", { level: 2, name: CLOSING_TITLE })
       .closest("section");
-    if (section === null) throw new Error("How it works sits in no section");
-    expect(
-      within(section)
-        .getAllByRole("listitem")
-        // The drawn number is hidden from assistive technology; the words follow it.
-        .map((item) => item.lastElementChild?.textContent),
-    ).toEqual([...IDLE_STEPS]);
+    if (band === null) throw new Error("The closing band sits in no section");
+    expect(band).toHaveAttribute("data-band", "accent");
+    expect(within(band as HTMLElement).getByText(CLOSING_LINE)).toBeInTheDocument();
+    const links = within(band as HTMLElement).getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual([text.primary]);
+    expect(links[0]).toHaveAttribute("href", TOOL_PATH);
   });
 
   /** covers: AC-4. Both ways into the tool are plain links, the page's own words. */
@@ -237,9 +244,13 @@ describe.each(SEARCH_PAGES)("%s", (kind) => {
       .getByRole("heading", { level: 2, name: MORE_GUIDES_TITLE })
       .closest("section");
     if (section === null) throw new Error("More guides sits in no section");
+    // Each card's name, then its line, a space apart in the link's name.
     const links = within(section).getAllByRole("link");
     expect(links.map((link) => link.textContent)).toEqual(
-      others.map((other) => SEARCH_PAGE_TEXT[other].navLabel),
+      others.map(
+        (other) =>
+          `${SEARCH_PAGE_TEXT[other].navLabel} ${SEARCH_PAGE_TEXT[other].moreLine}`,
+      ),
     );
     expect(links.map((link) => link.getAttribute("href"))).toEqual(
       others.map((other) => SEARCH_PAGE_TEXT[other].path),

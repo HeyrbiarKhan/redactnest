@@ -512,6 +512,32 @@ describe("LinkGroup", () => {
 
     await expectNoAxeViolations(container);
   });
+
+  /**
+   * Spec 0026, AC-11: the guide pages' On this page look keeps the group's
+   * semantics, its label in small capitals and its links on a rail, with no
+   * link marked as the reader's place (that would need a script).
+   */
+  it("in its contents look keeps the nav, the hidden label and the list, on a rail", async () => {
+    const { container } = render(
+      <LinkGroup label="On this page" look="contents">
+        <li>
+          <a href="#answer">The answer</a>
+        </li>
+      </LinkGroup>,
+    );
+
+    const nav = screen.getByRole("navigation", { name: "On this page" });
+    const label = nav.firstElementChild;
+    expect(label).toHaveAttribute("aria-hidden", "true");
+    expect(label?.tagName).toBe("DIV");
+    expect(label).toHaveClass("uppercase", "text-small", "text-ink-subtle");
+    const list = within(nav).getByRole("list");
+    expect(list).toHaveAttribute("role", "list");
+    expect(list).toHaveClass("border-s-2", "border-muted");
+    expect(container.querySelector("[aria-current]")).toBeNull();
+    await expectNoAxeViolations(container);
+  });
 });
 
 describe("SkipLink", () => {
@@ -572,8 +598,12 @@ describe("the decorative pieces", () => {
     expect(circle?.querySelector("svg")).toHaveClass("size-5");
   });
 
-  /** Spec 0013, AC-11: the circles and the square tiles of the home page's cards. */
+  /**
+   * Spec 0013, AC-11: the circles and the square tiles of the home page's
+   * cards, and `sm`, the guide pages' 40 pixel step tile (spec 0026, AC-11).
+   */
   it.each([
+    ["sm", "size-10", "size-5", "rounded-control"],
     ["md", "size-12", "size-5", "rounded-control"],
     ["lg", "size-16", "size-7", "rounded-control"],
   ] as const)(

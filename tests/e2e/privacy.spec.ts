@@ -396,9 +396,11 @@ test("no request carries the document, its text or its name", async ({ page }) =
  * never asked for a font: a regression to a CDN stylesheet would show up as a
  * font request to someone else, not as no font request at all.
  *
- * Spec 0013, AC-29: the brand's icons and the home page's product shot are
- * held to it as well, and the shot is counted on `/` for the same reason the
- * fonts are, so an image moved to a CDN cannot pass as no image at all.
+ * Spec 0013, AC-29: the brand's icons are held to it as well. The home page's
+ * product shot was counted here too until the owner's port of `Main.dc.html`
+ * (2026-11-25) drew the hero's product window in HTML, so `/` asks for no
+ * picture now (`design-system.spec.ts` holds that the shot is never fetched);
+ * the origin check over every request is unchanged.
  */
 for (const path of PUBLIC_ROUTES) {
   test(`every request on ${path}, fonts included, stays on our own origin`, async ({
@@ -413,14 +415,6 @@ for (const path of PUBLIC_ROUTES) {
     const fonts = requests.filter((request) => request.resourceType() === "font");
 
     expect(fonts.length, "the page asked for no font file at all").toBeGreaterThan(0);
-    if (path === "/") {
-      const shots = requests.filter(
-        (request) =>
-          request.resourceType() === "image" &&
-          new URL(request.url()).pathname === "/_next/image",
-      );
-      expect(shots.length, "the home page asked for no product shot").toBeGreaterThan(0);
-    }
     for (const request of requests) {
       expect(new URL(request.url()).origin, `${request.url()} is a third party`).toBe(
         origin,

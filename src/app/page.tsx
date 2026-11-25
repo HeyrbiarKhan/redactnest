@@ -1,4 +1,4 @@
-import { ArrowRight, Check, FileUp, ShieldCheck } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, FileUp, ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
 import { Fragment } from "react";
 
@@ -397,6 +397,12 @@ export default function HomePage() {
                 <span>{HOME_TEXT.network.columns.name}</span>
                 <span>{HOME_TEXT.network.columns.path}</span>
               </div>
+              {/*
+                From `xl`, where the table is 1440's width, each row is a grid
+                whose paths take their whole line and whose name takes what is
+                left, wrapping between its words rather than pushing the paths
+                under it (the page's files). Below `xl` a row wraps as a whole.
+              */}
               <ul role="list" aria-label={HOME_TEXT.network.listLabel}>
                 {NETWORK_ROWS.map((row) => (
                   <li
@@ -404,7 +410,7 @@ export default function HomePage() {
                     data-testid="network-row"
                     data-paths={row.paths.join(" ")}
                     className={cx(
-                      "flex flex-wrap justify-between gap-x-6",
+                      "flex flex-wrap justify-between gap-x-6 xl:grid xl:grid-cols-[minmax(min-content,1fr)_auto]",
                       row.paths.length === 0 && "text-night-accent",
                     )}
                   >
@@ -453,7 +459,9 @@ export default function HomePage() {
         {/*
           The questions (the owner's port of `Main.dc.html`, 2026-11-25): the
           browser's own disclosures, no script, the first open, each answer in
-          today's words. 820 pixels across, as drawn.
+          today's words. 820 pixels across, as drawn. A small chevron that
+          turns down when open stands where the browser's marker was (hidden
+          as a list marker and, for Safari, as its own); CSS alone.
         */}
         <div className="mx-auto w-full max-w-205 px-4 pt-16 pb-16 sm:px-6 sm:pt-20 lg:px-8 lg:pb-28">
           <section aria-labelledby="home-questions" data-testid="home-questions">
@@ -468,10 +476,15 @@ export default function HomePage() {
                 <details
                   key={question}
                   open={index === 0}
-                  className="border-b border-border py-4.5 wrap-break-word"
+                  className="group border-b border-border py-4.5 wrap-break-word"
                 >
-                  <summary className="rounded-item text-body leading-6 font-semibold text-ink">
-                    {question}
+                  <summary className="flex list-none items-start gap-2.5 rounded-item text-body leading-6 font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                    <ChevronRight
+                      aria-hidden="true"
+                      className="mt-1 size-4 shrink-0 text-ink-subtle transition-transform duration-fast group-open:rotate-90"
+                      strokeWidth={2.25}
+                    />
+                    <span className="min-w-0">{question}</span>
                   </summary>
                   <p className="mt-2.5 text-copy leading-[1.6] text-ink-muted">
                     {answer}
