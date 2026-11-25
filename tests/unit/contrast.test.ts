@@ -59,6 +59,7 @@ const TOKENS = Object.freeze([
   "ink-soft",
   "accent-bright",
   "border-soft",
+  "border-mid",
 ]);
 
 /** 4.5:1 for text, 3:1 for icons, control edges and the focus ring (WCAG 1.4.3, 1.4.11). */

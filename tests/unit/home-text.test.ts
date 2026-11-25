@@ -51,6 +51,8 @@ describe("the hero (AC-10)", () => {
   it("gives How it works its three titles and lines, in order", () => {
     expect(HOME_TEXT.steps.eyebrow).toBe("How it works");
     expect(HOME_TEXT.steps.title).toBe("Three steps to a redacted PDF");
+    // The owner's line (2026-11-25), rows M1 and the free answer.
+    expect(HOME_TEXT.steps.lead).toBe("No upload, no queue, no account for small files.");
     expect(HOME_TEXT.steps.items.map(({ title, body }) => [title, body])).toEqual([
       ["Open a PDF", "Drop it on the page, or choose it from your files."],
       [
@@ -59,7 +61,7 @@ describe("the hero (AC-10)", () => {
       ],
       [
         "Download your new file",
-        "Checked before you download: every page of the new file is checked, and if RedactNest can't vouch for it, you get no file.",
+        "Every page of the new file is checked. If RedactNest can't vouch for it, you get no file.",
       ],
     ]);
   });
@@ -300,12 +302,12 @@ describe("AC-30: each claim said only in its named places", () => {
 
   it.each([
     ["in your browser", /browser/gi, ["eyebrow", "trust.0.text"]],
-    ["never uploaded", /upload/gi, ["eyebrow"]],
+    ["never uploaded", /upload/gi, ["eyebrow", "steps.lead"]],
     ["removed, not covered", /not covered/gi, ["trust.1.text"]],
     [
       "checked before you download",
       /checked before (you )?download/gi,
-      ["shotCard.title", "steps.items.2.body", "trust.2.text"],
+      ["shotCard.title", "trust.2.text"],
     ],
   ] as const)("says %s only in its named places", (_claim, pattern, named) => {
     expect(saidAt(pattern)).toEqual([...named].sort());
@@ -318,7 +320,7 @@ describe("AC-30: each claim said only in its named places", () => {
         (text?.match(/checked before (you )?download/gi) ?? []).map(() => path),
       )
       .sort();
-    expect(said).not.toEqual(["shotCard.title", "steps.items.2.body"]);
+    expect(said).not.toEqual(["shotCard.title", "trust.2.text"]);
   });
 });
 

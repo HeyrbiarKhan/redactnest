@@ -69,17 +69,20 @@
    * and `glow-edge` its eyebrow chip's rim; `ink-soft` the mockup's quieter
    * dark ink for chips, the trust strip and drawn page text, on light fills
    * only; `accent-bright` the drawn highlight's edge; `border-soft` an unticked
-   * box in a drawing, which is decoration and joins no pairing.
+   * box in a drawing and `border-mid` a drawn drop zone's dashed edge, both
+   * decoration that joins no pairing.
    */
   --color-glow: #ecfdf5;
   --color-glow-edge: #d1fae5;
   --color-ink-soft: #3f3f46;
   --color-accent-bright: #14b8a6;
   --color-border-soft: #d4d4d8;
+  --color-border-mid: #a1a1aa;
 
   /*
    * Radii, from the mockups (AC-2): a menu item, a control, a card, and the
-   * home page's drawn product window. `rounded-full` is Tailwind's own and
+   * home page's 16 pixel panels (its cards in `Main.dc.html`) and drawn
+   * product window. `rounded-full` is Tailwind's own and
    * stays for pills. The defaults go, so a pasted `rounded-lg` makes no
    * corner nobody chose.
    */
@@ -87,6 +90,7 @@
   --radius-item: 0.5rem;
   --radius-control: 0.625rem;
   --radius-card: 0.875rem;
+  --radius-panel: 1rem;
   --radius-window: 1.125rem;
 
   /*
@@ -153,6 +157,14 @@
   --text-intro--line-height: 1.6;
   --text-lede: 1.0625rem;
   --text-lede--line-height: 1.6;
+
+  /* A home page card's title and its line (`Main.dc.html`). */
+  --text-subhead: 1.1875rem;
+  --text-subhead--line-height: 1.25;
+  --text-subhead--font-weight: 600;
+  --text-subhead--letter-spacing: -0.01em;
+  --text-copy: 0.9375rem;
+  --text-copy--line-height: 1.55;
 
   --text-body: 1rem;
   --text-body--line-height: 1.5rem;
@@ -255,6 +267,11 @@
     font-size: 2.25rem;
     line-height: 1.1;
     letter-spacing: -0.025em;
+  }
+
+  /* The home page's 40 pixel section heading (`Main.dc.html`). */
+  @variant lg {
+    font-size: 2.5rem;
   }
 }
 

@@ -24,7 +24,7 @@ import {
   strippedItems,
 } from "@/lib/home-text";
 import { DETECTOR_LABELS } from "@/lib/detectors";
-import { FOUND_ITEMS_TITLE, LOCK_LINE, redactLabel } from "@/lib/flow-text";
+import { DROP_TEXT, FOUND_ITEMS_TITLE, LOCK_LINE, redactLabel } from "@/lib/flow-text";
 import { LEGAL } from "@/lib/legal";
 import { FREE_PLAN, PLAN_BADGE, PRO_PLAN } from "@/lib/plans";
 import { SUBSCRIBE_PATH, TOOL_PATH } from "@/lib/routes";
@@ -529,8 +529,12 @@ describe("the main content's words (AC-13)", () => {
       String(HOME_TEXT.window.groups.reduce((sum, { count }) => sum + count, 0)),
       steps.eyebrow,
       steps.title,
-      ...steps.drawing.rows.map(({ value }) => value),
+      steps.lead,
+      ...steps.drawing.rows.flatMap(({ value, page }) => [value, page]),
+      DROP_TEXT.title,
+      steps.drawing.badge,
       steps.drawing.file,
+      steps.drawing.fileNote,
       ...steps.items.flatMap(({ title, body }, index) => [
         String(index + 1).padStart(2, "0"),
         title,

@@ -305,14 +305,30 @@ export const HOME_TEXT = Object.freeze({
   steps: Object.freeze({
     eyebrow: "How it works",
     title: "Three steps to a redacted PDF",
-    /** The drawings' made up values, hidden from assistive technology. */
+    /**
+     * The owner's line (2026-11-25), under the heading. "No upload" is row
+     * M1 (privacy claim C1: `/tool`'s `connect-src 'self'`, spec 0011, INV-1
+     * and INV-2), and with it no queue: no server of ours does the work, the
+     * tab does. "No account for small files": a document within the free cap
+     * opens with no account (spec 0012, AC-1, the free answer for an
+     * anonymous visitor). It repeats the eyebrow chip's "never uploaded" by
+     * the owner's read, a place AC-30's test names.
+     */
+    lead: "No upload, no queue, no account for small files.",
+    /**
+     * The drawings' made up values, hidden from assistive technology. The
+     * drop zone's own words are the tool's (`DROP_TEXT.title`).
+     */
     drawing: Object.freeze({
       rows: Object.freeze([
-        Object.freeze({ value: "jane.doe@example.com", ticked: true }),
-        Object.freeze({ value: "020 7946 0958", ticked: true }),
-        Object.freeze({ value: "12 March 2026", ticked: false }),
+        Object.freeze({ value: "jane.doe@example.com", page: "p.1", ticked: true }),
+        Object.freeze({ value: "020 7946 0182", page: "p.1", ticked: true }),
+        Object.freeze({ value: "12 March 2026", page: "p.2", ticked: false }),
       ]),
+      badge: "PDF",
       file: "agreement-redacted.pdf",
+      /** The new file's chip: its check passed and what went (row M3). */
+      fileNote: "Checked · 7 removed",
     }),
     items: Object.freeze<readonly HomeStep[]>([
       Object.freeze({
@@ -330,14 +346,14 @@ export const HOME_TEXT = Object.freeze({
         body: "Each item found is listed with the words around it. A tick at the start is only a suggestion.",
       }),
       /**
-       * The page's one "checked before you download" (spec 0026, AC-8).
        * Row M3: the self check, which no file leaves without passing (spec
        * 0004, INV-2). "Every page" is its text part, which reads each page
-       * of the new file (AC-13), as the old trio card said it.
+       * of the new file (AC-13), in the old trio card's words. "Checked
+       * before you download" is the trust strip's and the hero card's now.
        */
       Object.freeze({
         title: "Download your new file",
-        body: "Checked before you download: every page of the new file is checked, and if RedactNest can't vouch for it, you get no file.",
+        body: "Every page of the new file is checked. If RedactNest can't vouch for it, you get no file.",
       }),
     ]),
   }),

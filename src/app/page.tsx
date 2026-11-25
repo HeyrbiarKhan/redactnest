@@ -1,7 +1,6 @@
 import {
   ArrowRight,
   Check,
-  FileCheck,
   FileMinus,
   FileUp,
   Info,
@@ -12,6 +11,8 @@ import {
 import type { Metadata } from "next";
 
 import { config } from "@/config";
+import { cx } from "@/lib/cx";
+import { DROP_TEXT } from "@/lib/flow-text";
 import {
   capLine,
   findsItems,
@@ -221,16 +222,26 @@ export default function HomePage() {
           </PageContainer>
         </div>
 
+        {/*
+          How it works (spec 0026, AC-8, as the owner's port of `Main.dc.html`
+          amends it): the head centred with its lead, then three cards side
+          by side from `md`, each a drawing on `subtle` over its number,
+          title and line.
+        */}
         <section
           id={HOW_IT_WORKS_ID}
           aria-labelledby={`${HOW_IT_WORKS_ID}-title`}
           data-testid="home-steps"
         >
-          <PageContainer width="wide" className="flex flex-col gap-10 py-16 sm:py-20">
+          <PageContainer
+            width="wide"
+            className="flex flex-col gap-14 py-16 sm:py-20 lg:py-28"
+          >
             <SectionHead
               id={`${HOW_IT_WORKS_ID}-title`}
               eyebrow={HOME_TEXT.steps.eyebrow}
               title={HOME_TEXT.steps.title}
+              lead={HOME_TEXT.steps.lead}
               centred
             />
             <ol
@@ -240,20 +251,23 @@ export default function HomePage() {
               {HOME_TEXT.steps.items.map((step, index) => (
                 <li
                   key={step.title}
-                  className="flex flex-col overflow-hidden rounded-card border border-border bg-surface shadow-card"
+                  className="flex flex-col overflow-hidden rounded-panel border border-border bg-surface shadow-card"
                 >
                   <div
                     aria-hidden="true"
-                    className="flex min-h-36 items-center justify-center border-b border-border bg-subtle p-3 sm:p-6"
+                    className="flex min-h-45 items-center justify-center border-b border-muted bg-subtle p-3 sm:p-6"
                   >
                     <StepDrawing index={index} />
                   </div>
                   <div className="flex flex-col gap-2 p-6">
-                    <p aria-hidden="true" className="text-small text-ink-muted">
+                    <p
+                      aria-hidden="true"
+                      className="text-small leading-tight font-semibold text-ink-subtle"
+                    >
                       {String(index + 1).padStart(2, "0")}
                     </p>
-                    <h3 className="text-heading text-ink">{step.title}</h3>
-                    <p className="text-ink-muted">{step.body}</p>
+                    <h3 className="text-subhead text-ink">{step.title}</h3>
+                    <p className="text-copy text-ink-muted">{step.body}</p>
                   </div>
                 </li>
               ))}
@@ -470,68 +484,104 @@ export default function HomePage() {
 }
 
 /**
- * A section's opening: a short accent eyebrow over its `h2` (spec 0026, AC-8).
- * `centred` for a section whose cards sit in a row under it.
+ * A section's opening (spec 0026, AC-8, as the owner's port of
+ * `Main.dc.html` amends it): a short accent eyebrow over its `h2`, 14 pixels
+ * apart, and a lead under it when the section has one. `centred` for a
+ * section whose cards sit in a row under it. The mockup's eyebrow is 13
+ * pixels, set at the 14 pixel floor (spec 0003, INV-6).
  */
 function SectionHead({
   id,
   eyebrow,
   title,
+  lead,
   centred = false,
 }: {
   readonly id: string;
   readonly eyebrow: string;
   readonly title: string;
+  readonly lead?: string;
   readonly centred?: boolean;
 }) {
   return (
-    <div className={centred ? "flex flex-col gap-3 text-center" : "flex flex-col gap-3"}>
-      <p className="text-small font-semibold text-accent">{eyebrow}</p>
-      <h2 id={id} className="text-headline text-balance text-ink wrap-break-word">
+    <div
+      className={
+        centred
+          ? "flex flex-col items-center gap-3.5 text-center"
+          : "flex flex-col gap-3.5"
+      }
+    >
+      <p className="text-small font-semibold tracking-[0.02em] text-accent">{eyebrow}</p>
+      <h2
+        id={id}
+        className="max-w-full text-headline text-balance text-ink wrap-break-word"
+      >
         {title}
       </h2>
+      {lead !== undefined && <p className="max-w-140 text-lede text-ink-muted">{lead}</p>}
     </div>
   );
 }
 
 /**
  * Each How it works card's small drawing, on made up values (spec 0026,
- * AC-8): the drop zone, three found rows with two ticked, and the new file.
- * Decoration, hidden from assistive technology by the caller, so the card's
- * title and line carry its meaning.
+ * AC-8, as `Main.dc.html` draws them): the drop zone in the tool's own words,
+ * three found rows with two ticked and the page each is on, and the new
+ * file's chip. Decoration, hidden from assistive technology by the caller, so
+ * the card's title and line carry its meaning. Every word is at least 14
+ * pixels (spec 0003, INV-6), where the mockup draws 9 to 12, and a page
+ * number takes `ink-subtle`, where the mockup's grey would fall under 4.5:1.
+ * The mockup's boxes are content box sized, so their widths here add the
+ * padding and edge it leaves out (the rows card is 230 inside, 252 across).
  */
 function StepDrawing({ index }: { readonly index: number }) {
+  const { drawing } = HOME_TEXT.steps;
   if (index === 0) {
     return (
-      <div className="flex flex-col items-center gap-2 rounded-control border-2 border-dashed border-border-strong bg-surface px-10 py-5 text-accent">
-        <FileUp className="size-6" strokeWidth={1.75} />
+      <div className="flex min-h-[7.6875rem] w-[13.9375rem] max-w-full flex-col items-center justify-center gap-2.5 rounded-[0.75rem] border-[1.5px] border-dashed border-border-mid bg-surface p-3 text-center text-small text-ink-muted">
+        <FileUp className="size-6.5 text-accent" strokeWidth={1.75} />
+        {DROP_TEXT.title}
       </div>
     );
   }
   if (index === 1) {
     return (
-      <ul className="flex w-full max-w-64 flex-col gap-2 rounded-control border border-border bg-surface p-3 text-small text-ink">
-        {HOME_TEXT.steps.drawing.rows.map(({ value, ticked }) => (
-          <li key={value} className="flex min-w-0 items-start gap-2">
+      <ul className="flex w-63 max-w-full flex-col gap-1 rounded-panel border border-border bg-surface p-2.5 text-small text-ink shadow-card">
+        {drawing.rows.map(({ value, page, ticked }, row) => (
+          <li
+            key={value}
+            className={cx(
+              "flex min-w-0 items-center gap-2 rounded-[0.375rem] p-1.5",
+              row === 0 && "bg-accent-faint",
+            )}
+          >
             <span
-              className={
-                ticked
-                  ? "inline-flex size-4 shrink-0 items-center justify-center rounded-[0.25rem] bg-accent text-on-accent"
-                  : "size-4 shrink-0 rounded-[0.25rem] border border-border-strong bg-surface"
-              }
-            >
-              {ticked && <Check className="size-3" strokeWidth={3} />}
-            </span>
+              className={cx(
+                "size-3.25 shrink-0 rounded-[0.25rem]",
+                ticked ? "bg-accent" : "border-[1.5px] border-border-soft",
+              )}
+            />
             <span className="min-w-0 wrap-anywhere">{value}</span>
+            <span className="ms-auto shrink-0 text-ink-subtle">{page}</span>
           </li>
         ))}
       </ul>
     );
   }
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-control border border-border bg-surface px-3 py-3 text-small text-ink sm:px-4">
-      <FileCheck className="size-5 shrink-0 text-accent" strokeWidth={1.75} />
-      <span className="min-w-0 wrap-anywhere">{HOME_TEXT.steps.drawing.file}</span>
+    // Its words drop under the badge where they cannot sit beside it (320
+    // pixels at 200% text), and the check sits inline so it wraps with them.
+    <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-[0.75rem] border border-border bg-surface px-3.5 py-3 shadow-card">
+      <span className="flex min-h-11 w-9 shrink-0 items-center justify-center rounded-[0.375rem] border border-danger-border bg-danger-bg text-small font-bold text-danger-ink">
+        {drawing.badge}
+      </span>
+      <span className="flex min-w-0 flex-col text-small wrap-anywhere">
+        <span className="font-semibold text-ink">{drawing.file}</span>
+        <span className="text-accent">
+          <Check className="me-1 inline size-2.75 align-[-0.0625em]" strokeWidth={3} />
+          {drawing.fileNote}
+        </span>
+      </span>
     </div>
   );
 }
