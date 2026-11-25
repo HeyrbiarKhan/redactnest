@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tool states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0f766e}a:hover{color:#115e59}
+.lbl{font-size:13px;font-weight:600;color:#71717a;margin:0}
+.pan{background:#fff;border:1px solid #e4e4e7;border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.btn{all:unset;box-sizing:border-box;height:44px;border-radius:10px;font:600 14px Inter,sans-serif;display:flex;align-items:center;justify-content:center;gap:8px}
+.bp{background:#0f766e;color:#fff}.bs{background:#fff;color:#18181b;border:1px solid #e4e4e7}
+.p{margin:0;font-size:14px;line-height:1.55;color:#52525b}
+</style>
+</helmet>
+<div style="width: 1440px; font-family: Inter, sans-serif; color: #09090b; background: #fafafa; padding: 48px; box-sizing: border-box; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; align-items: start">
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<p class="lbl">Empty: one drop zone, nothing else competing</p>
+<div class="pan" style="align-items: center; text-align: center; padding: 36px 24px; border: 1.5px dashed #d4d4d8; box-shadow: none">
+<span style="width: 52px; height: 52px; border-radius: 14px; background: #f0fdfa; display: grid; place-items: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="1.75" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 17v-6M9 14l3-3 3 3"/></svg></span>
+<div style="font-size: 17px; font-weight: 600">Drop a PDF to start</div>
+<p class="p" style="font-size: 13px">or</p>
+<button type="button" class="btn bp" style="padding: 0 20px">Choose a PDF</button>
+<p class="p" style="font-size: 12px; color: #71717a">Free: up to 3 pages · Opens on your device</p>
+</div>
+<p class="p" style="font-size: 12px; color: #71717a">By choosing a PDF you agree to the <a href="#">Terms</a>. <a href="#">Privacy</a>.</p>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<p class="lbl">Working: one progress line (motion)</p>
+<div class="pan">
+<div style="display: flex; align-items: center; gap: 12px"><span style="width: 36px; height: 36px; border-radius: 99px; border: 3px solid #ccfbf1; border-top-color: #0f766e; box-sizing: border-box"></span><div><div style="font-size: 15px; font-weight: 600">Redacting…</div><div style="font-size: 13px; color: #71717a">Checking every page</div></div></div>
+<div style="height: 6px; border-radius: 99px; background: #f4f4f5; overflow: hidden"><div style="width: 68%; height: 100%; background: #0f766e; border-radius: 99px"></div></div>
+<div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px">
+<div style="display: flex; gap: 8px; align-items: center; color: #3f3f46"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>Removing ticked items</div>
+<div style="display: flex; gap: 8px; align-items: center; color: #3f3f46"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>Stripping hidden data</div>
+<div style="display: flex; gap: 8px; align-items: center; color: #09090b; font-weight: 500"><span style="width: 14px; height: 14px; border-radius: 99px; border: 2px solid #0f766e; box-sizing: border-box"></span>Checking the new file</div>
+</div>
+<button type="button" class="btn bs" style="height: 38px; font-size: 13px">Cancel</button>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<p class="lbl">Done, with a warning: said once, short</p>
+<div class="pan">
+<div style="display: flex; align-items: center; gap: 12px"><span style="width: 36px; height: 36px; border-radius: 99px; background: #ccfbf1; display: grid; place-items: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="2.5" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></span><div style="font-size: 16px; font-weight: 600">Your file is ready</div></div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid #f4f4f5; border-radius: 12px; overflow: hidden">
+<div style="padding: 12px; border-right: 1px solid #f4f4f5"><div style="font-size: 20px; font-weight: 700">1</div><div style="font-size: 12px; color: #71717a">removed</div></div>
+<div style="padding: 12px; border-right: 1px solid #f4f4f5"><div style="font-size: 20px; font-weight: 700">0</div><div style="font-size: 12px; color: #71717a">left in</div></div>
+<div style="padding: 12px"><div style="font-size: 20px; font-weight: 700">0</div><div style="font-size: 12px; color: #71717a">stripped</div></div>
+</div>
+<div style="display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: #fffbeb; border: 1px solid #fde68a; font-size: 13px; line-height: 1.45; color: #78350f"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2" aria-hidden="true" style="flex: none; margin-top: 1px"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 18h.01"/></svg><span>Page 2 wasn't checked (scan), so the name ends in <strong style="font-weight: 600">partly-redacted</strong>.</span></div>
+<button type="button" class="btn bp"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></svg>Download</button>
+<div style="font-size: 12px; color: #71717a; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">letter-with-scan-partly-redacted.pdf</div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<p class="lbl">Refused: what happened, then one thing to try</p>
+<div class="pan">
+<div style="display: flex; align-items: center; gap: 12px"><span style="width: 36px; height: 36px; border-radius: 99px; background: #fef2f2; display: grid; place-items: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" stroke-width="2.25" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg></span><div style="font-size: 16px; font-weight: 600">No file made</div></div>
+<p class="p">A picture in this PDF stores its colours in a way RedactNest can't write back, so it stopped rather than drop that picture.</p>
+<div style="border-radius: 10px; background: #f4f4f5; padding: 12px; font-size: 13px; line-height: 1.5; color: #3f3f46"><strong style="font-weight: 600">Try this:</strong> print it to a new PDF from your PDF app, then open that copy here.</div>
+<button type="button" class="btn bs">Open another PDF</button>
+<a href="#" style="font-size: 13px; text-align: center">Why RedactNest stops</a>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":560}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Header states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f4f4f5}
+a{color:#0f766e}a:hover{color:#115e59}
+.bar{height:64px;background:#fff;border:1px solid #e4e4e7;border-radius:14px;display:flex;align-items:center;gap:36px;padding:0 24px}
+.nav{display:flex;gap:26px;font-size:14px;font-weight:500}.nav a{color:#52525b;text-decoration:none}
+.btn{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 16px;border-radius:10px;font:600 14px Inter,sans-serif;text-decoration:none}
+.bp{background:#0f766e;color:#fff}
+.lbl{font-size:13px;font-weight:600;color:#71717a;margin:0 0 10px}
+.av{width:34px;height:34px;border-radius:999px;background:#0f766e;color:#fff;display:grid;place-items:center;font-weight:600;font-size:14px;border:2px solid #fff;box-shadow:0 0 0 1px #e4e4e7}
+.mi{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;font-size:14px;color:#27272a;text-decoration:none}
+</style>
+</helmet>
+<div style="font-family: Inter, sans-serif; color: #09090b; padding: 48px; display: flex; flex-direction: column; gap: 36px">
+
+<div>
+<p class="lbl">Signed out, marketing pages</p>
+<div class="bar">
+<span style="display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px"><span style="width: 30px; height: 30px; border-radius: 8px; background: #0f766e; display: grid; place-items: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 9h16M4 14h10M4 19h7"/></svg></span>RedactNest</span>
+<nav class="nav" aria-label="Site"><a href="#">How it works</a><a href="#">Security</a><a href="#">Pricing</a><a href="#">Guides</a></nav>
+<div style="margin-left: auto; display: flex; gap: 10px"><a href="#" class="btn" style="color: #18181b">Sign in</a><a href="#" class="btn bp">Try it free</a></div>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 32px; align-items: start">
+<div>
+<p class="lbl">Signed in, marketing pages: "Try it free" becomes "Open the tool"; Account becomes the avatar</p>
+<div class="bar">
+<span style="display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px"><span style="width: 30px; height: 30px; border-radius: 8px; background: #0f766e; display: grid; place-items: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 9h16M4 14h10M4 19h7"/></svg></span>RedactNest</span>
+<nav class="nav" aria-label="Site"><a href="#">How it works</a><a href="#">Security</a><a href="#">Pricing</a><a href="#">Guides</a></nav>
+<div style="margin-left: auto; display: flex; gap: 14px; align-items: center"><a href="#" class="btn bp">Open the tool</a>
+<button type="button" aria-label="Account menu for alex@larkfield.co" aria-expanded="true" style="all: unset; display: flex; align-items: center; gap: 6px"><span class="av">A</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+</div>
+</div>
+<p class="lbl" style="margin-top: 28px">Signed in, on the tool: no button (it would point at itself), avatar only</p>
+<div class="bar">
+<span style="display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px"><span style="width: 30px; height: 30px; border-radius: 8px; background: #0f766e; display: grid; place-items: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 9h16M4 14h10M4 19h7"/></svg></span>RedactNest</span>
+<nav class="nav" aria-label="Site"><a href="#">Security</a><a href="#">Pricing</a></nav>
+<div style="margin-left: auto; display: flex; gap: 14px; align-items: center"><span style="font-size: 12px; font-weight: 600; color: #115e59; background: #f0fdfa; border: 1px solid #ccfbf1; padding: 4px 10px; border-radius: 99px">Pro</span><span class="av">A</span></div>
+</div>
+</div>
+
+<div>
+<p class="lbl">Avatar menu (opens on click)</p>
+<div style="background: #fff; border: 1px solid #e4e4e7; border-radius: 14px; box-shadow: 0 16px 40px -12px rgba(0,0,0,.18); padding: 6px">
+<div style="display: flex; gap: 12px; align-items: center; padding: 12px 10px 14px">
+<span class="av" style="width: 40px; height: 40px; font-size: 16px">A</span>
+<div style="min-width: 0"><div style="font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis">alex@larkfield.co</div><div style="font-size: 13px; color: #71717a">Pro · 50 pages a document</div></div>
+</div>
+<div style="height: 1px; background: #f4f4f5; margin: 0 4px 4px"></div>
+<a href="#" class="mi"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>Account</a>
+<a href="#" class="mi"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="1.75" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>Billing</a>
+<a href="#" class="mi"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="1.75" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>Redact a PDF</a>
+<div style="height: 1px; background: #f4f4f5; margin: 4px"></div>
+<a href="#" class="mi" style="color: #52525b"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="1.75" aria-hidden="true"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg>Sign out</a>
+</div>
+<p style="font-size: 13px; color: #71717a; line-height: 1.5; margin: 12px 2px 0">Free plan: the second line reads "Free · 3 pages a document" and Billing becomes "Upgrade to Pro".</p>
+</div>
+</div>
+
+<div>
+<p class="lbl">Phone, signed in</p>
+<div style="width: 390px; height: 60px; background: #fff; border: 1px solid #e4e4e7; border-radius: 14px; display: flex; align-items: center; padding: 0 16px; box-sizing: border-box; gap: 12px">
+<span style="display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px"><span style="width: 28px; height: 28px; border-radius: 8px; background: #0f766e; display: grid; place-items: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 9h16M4 14h10M4 19h7"/></svg></span>RedactNest</span>
+<span class="av" style="margin-left: auto">A</span>
+<button type="button" aria-label="Menu" style="all: unset; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 10px; border: 1px solid #e4e4e7"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#18181b" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":820}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

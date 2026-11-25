@@ -23,3 +23,6 @@ pnpm-lock.yaml
 # commit fights those edits and buries a real diff under table padding, for no
 # gain: nothing here is code that a formatter makes safer.
 *.md
+
+# Design mockups from the canvas, kept as exported (the design source).
+docs/design/references/redesign/

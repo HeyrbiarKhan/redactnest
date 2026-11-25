@@ -43,6 +43,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 30 | Engine and code follow ups | Release 5 | done |
 | 31 | Leaks through kept objects | Release 5 | done |
 | 32 | Details inside pictures | Release 5 | done |
+| 33 | UI redesign | Release 5 | planned |
 
 ## Foundations
 
@@ -396,7 +397,7 @@ spec [0017](../specs/0017-custom-terms/index.md) · code in `src/detect/terms.ts
 
 ## Release 5: Get found and get trusted
 
-Pulled ahead of rectangles (your call, 2026-11-14). Pro already has two things worth paying for, no page cap and custom terms, and the product is live, so visitors are what is missing now. The first month of counts (from about 2026-12-08) also says more once they arrive. The security page went first, since it needed no spec. Its verifies measured a real leak, so that leak (feature 31, split out of feature 30) and then the rest of feature 30 come next, ahead of the search pages (your call, 2026-11-15). Feature 30's glyph rule (spec 0020) merged on 2026-11-18, and its other items follow, joined by spec 0020's matplotlib chart refusal (your call, 2026-11-18). Feature 30 closed on 2026-11-23 (PR #36, tag `prod-2026-11-23-ad8f05c`, live check passed), so the search pages (feature 15) come next, with the home page reflow (feature 29) built beside them on one branch, and then feature 32, which never carries a ticked value and whose limit the security page already states, while search pages take weeks to be indexed (your call, 2026-11-18). Features 15 and 29 closed on 2026-11-24 (PR #37, tag `prod-2026-11-24-91cb119`, live check and PageSpeed Insights passed, sitemap submitted), so feature 32 is next. Features 23 and 17 stay in this release but wait for 100+ users and the lawyer, so release 6 can start while they wait.
+Pulled ahead of rectangles (your call, 2026-11-14). Pro already has two things worth paying for, no page cap and custom terms, and the product is live, so visitors are what is missing now. The first month of counts (from about 2026-12-08) also says more once they arrive. The security page went first, since it needed no spec. Its verifies measured a real leak, so that leak (feature 31, split out of feature 30) and then the rest of feature 30 come next, ahead of the search pages (your call, 2026-11-15). Feature 30's glyph rule (spec 0020) merged on 2026-11-18, and its other items follow, joined by spec 0020's matplotlib chart refusal (your call, 2026-11-18). Feature 30 closed on 2026-11-23 (PR #36, tag `prod-2026-11-23-ad8f05c`, live check passed), so the search pages (feature 15) come next, with the home page reflow (feature 29) built beside them on one branch, and then feature 32, which never carries a ticked value and whose limit the security page already states, while search pages take weeks to be indexed (your call, 2026-11-18). Features 15 and 29 closed on 2026-11-24 (PR #37, tag `prod-2026-11-24-91cb119`, live check and PageSpeed Insights passed, sitemap submitted), so feature 32 is next. Feature 32 closed on 2026-11-25 (PR #38, tag `prod-2026-11-25-1efec30`), so a UI redesign (feature 33) comes next, designed in its own session; the two refusals in Deferred (a shading under a ticked item, a page with no `/Resources`) wait there for the counts from about 2026-12-08 to show whether refusals are common, and rectangles and the small chores stay where they are (your call, 2026-11-25). Features 23 and 17 stay in this release but wait for 100+ users and the lawyer, so release 6 can start while they wait.
 
 ### 16. Security & how it works page · done · Alpha + review · spec 0018
 The page that closes the sale for HR, legal and healthcare buyers: what in memory processing means, what the logs do and do not hold, and why covering text with a box is not redaction.
@@ -512,6 +513,11 @@ spec [0025](../specs/0025-picture-details/index.md) · code in `src/engine` (`pi
 - [x] Verify it: `/check verify details inside pictures`, with repo fixtures and documents built in tests only, never a PDF from outside the repository
 - [x] Test it: `/test details inside pictures`
 - [x] Review it (fresh model): `/check review details inside pictures` ([2026-11-25](../reviews/2026-11-25-feat-picture-details.md))
+
+### 33. UI redesign · needs a decision
+A fresh look for the site, next after feature 32 (your call, 2026-11-25). What changes and how far it reaches are decided in its own design session, not here.
+**Done when:** the redesign its spec records is built on every page it names, the core path still meets WCAG 2.2 AA (keyboard, visible focus, the contrast contract), and the brand's raster files are rebuilt by `scripts/make-brand.mjs` wherever the look they picture changed.
+- [ ] Design it (spec): `/architect UI redesign`
 
 ### 23. Legal review · needs a decision · Alpha · from spec 0011
 The lawyer questions launch left open, asked once RedactNest has 100+ users, on a tech lawyer's advice (2026-10-03). PECA section 32, Pakistani law and courts, and a full review of both pages (spec 0011 steps 3 and 4), plus two from spec 0012: does Polar's own use of billing details as merchant of record (fraud, security, tax records) make it a controller for that part, and does every cookie claim C6 calls strictly necessary meet that exemption, given Clerk's `__refresh_<suffix>` stays after sign out on production. It sits before feature 17 because the Polar answer can change what the DPA says.
