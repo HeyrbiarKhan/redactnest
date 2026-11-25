@@ -2680,8 +2680,8 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
       // Recorded again for the owner's port of `Main.dc.html` (2026-11-25):
       // the hero, the How it works cards and the band.
       [page.getByTestId("home-hero"), [82, 153, 1116, 505.1]],
-      [page.getByTestId("home-steps").getByRole("list"), [82, 946.7, 1116, 354]],
-      [page.getByTestId("home-band"), [82, 2162.7, 1116, 614.6]],
+      [page.getByTestId("home-steps").getByRole("list"), [82, 1038.7, 1116, 354]],
+      [page.getByTestId("home-band"), [82, 2254.7, 1116, 614.6]],
     ] as const) {
       const measured = await box.boundingBox();
       if (measured === null) throw new Error("a recorded box is not drawn");

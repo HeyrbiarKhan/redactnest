@@ -65,11 +65,26 @@ describe("the hero (AC-10)", () => {
   });
 
   /**
+   * The trust strip (the owner's port of `Main.dc.html`, 2026-11-25): four
+   * claims, each with its icon, in the mockup's order.
+   */
+  it("gives the trust strip its four claims and icons, in order", () => {
+    expect(HOME_TEXT.trust.map(({ icon, text }) => [icon.displayName, text])).toEqual([
+      ["Monitor", "Processed in your browser tab"],
+      // Lucide names `Trash2` "Trash" in its display name.
+      ["Trash", "Removed, not covered"],
+      ["Shield", "Every file checked before download"],
+      ["Code", "Open source (AGPL), so you can check it"],
+    ]);
+  });
+
+  /**
    * Spec 0026, AC-8, row M2: "selectable" and "the page", never "the file",
    * and removed first, then marked.
    */
   it("says the black box section's claim behind the self check's text part", () => {
-    expect(HOME_TEXT.blackBox.eyebrow).toBe("Removed, not covered");
+    // The mockup's eyebrow; "Removed, not covered" is the trust strip's.
+    expect(HOME_TEXT.blackBox.eyebrow).toBe("Why it matters");
     expect(HOME_TEXT.blackBox.title).toBe("A black box is not redaction");
     expect(HOME_TEXT.blackBox.body).toContain(
       "RedactNest takes the selectable text you tick out of the page first, then marks where it was.",
@@ -238,23 +253,15 @@ describe("the pictures' words (AC-5, AC-12)", () => {
   });
 });
 
-describe("AC-30: each thing said once", () => {
+describe("AC-30: browser, outside the main content's named places", () => {
   /**
-   * The document's privacy is "in your browser" in the eyebrow alone, and the
-   * social card's alt text, which describes that eyebrow. Every other word on
-   * the page says it another way, once, or not at all.
+   * The social card's alt text describes the eyebrow, so it says browser
+   * too; the found and stripped lists never do. Where the main content says
+   * it is the table below.
    */
-  it("says browser only in the eyebrow and the social card's alt text", () => {
-    // The site line is the head's description, outside the main content this
-    // rule counts (spec 0024, AC-11), as the social card's alt text is.
-    const { eyebrow, socialAlt } = HOME_TEXT;
-    const rest = Object.entries(HOME_TEXT).filter(
-      ([key]) => !["eyebrow", "socialAlt", "siteLine"].includes(key),
-    );
-
-    expect(eyebrow).toMatch(/browser/);
-    expect(socialAlt).toMatch(/browser/);
-    expect(JSON.stringify(rest)).not.toMatch(/browser/i);
+  it("says browser in the social card's alt text, and in no found or stripped item", () => {
+    expect(HOME_TEXT.eyebrow).toMatch(/browser/);
+    expect(HOME_TEXT.socialAlt).toMatch(/browser/);
     for (const item of [...strippedItems(), ...findsItems().map(({ label }) => label)]) {
       expect(item).not.toMatch(/browser/i);
     }
@@ -292,13 +299,13 @@ describe("AC-30: each claim said only in its named places", () => {
     MAIN.flatMap(([path, text]) => (text.match(pattern) ?? []).map(() => path)).sort();
 
   it.each([
-    ["in your browser", /browser/gi, ["eyebrow"]],
+    ["in your browser", /browser/gi, ["eyebrow", "trust.0.text"]],
     ["never uploaded", /upload/gi, ["eyebrow"]],
-    ["removed, not covered", /not covered/gi, ["blackBox.eyebrow"]],
+    ["removed, not covered", /not covered/gi, ["trust.1.text"]],
     [
       "checked before you download",
       /checked before (you )?download/gi,
-      ["shotCard.title", "steps.items.2.body"],
+      ["shotCard.title", "steps.items.2.body", "trust.2.text"],
     ],
   ] as const)("says %s only in its named places", (_claim, pattern, named) => {
     expect(saidAt(pattern)).toEqual([...named].sort());

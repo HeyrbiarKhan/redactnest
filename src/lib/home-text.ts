@@ -24,7 +24,7 @@
  * (`tests/unit/brand-files.test.ts`).
  */
 
-import type { LucideIcon } from "lucide-react";
+import { Code, Monitor, Shield, Trash2, type LucideIcon } from "lucide-react";
 
 import { DETECTOR_LABELS, lookedFor } from "@/lib/detectors";
 import { SANITIZED_TEXT } from "@/lib/flow-text";
@@ -41,6 +41,12 @@ import type { CoverPanel } from "@/ui/cover-figure";
 import { DETECTOR_KINDS, SANITIZED_KINDS, type SanitizedKind } from "@/worker/protocol";
 
 const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** One item of the trust strip under the hero: a line icon and its words. */
+export interface HomeTrustItem {
+  readonly icon: LucideIcon;
+  readonly text: string;
+}
 
 /** One How it works card: its title and its line, under a small drawing. */
 export interface HomeStep {
@@ -261,6 +267,38 @@ export const HOME_TEXT = Object.freeze({
   }),
 
   /**
+   * The trust strip under the hero (the owner's port of `Main.dc.html`,
+   * 2026-11-25): four short claims in a row. Each says again a claim the page
+   * makes elsewhere, by the owner's read, in the places AC-30's test names.
+   */
+  trust: Object.freeze<readonly HomeTrustItem[]>([
+    /**
+     * Row M1: privacy claim C1, held by `/tool`'s `connect-src 'self'` (spec
+     * 0011, INV-1 and INV-2) and no endpoint of ours that takes document
+     * data. The security page's own words: "processed in your browser".
+     */
+    Object.freeze({ icon: Monitor, text: "Processed in your browser tab" }),
+    /**
+     * The page's one "removed, not covered", moved here from the black box
+     * section's eyebrow. Row M2: the selectable text you tick is taken out of
+     * the page before any box is drawn (spec 0004, AC-13 and INV-2; its
+     * *Decision* bullet "Box pass"), which the black box section shows.
+     */
+    Object.freeze({ icon: Trash2, text: "Removed, not covered" }),
+    /**
+     * Row M3: no file leaves unless the self check passed on its bytes (spec
+     * 0004, INV-2), so every new file is checked before it can be downloaded.
+     */
+    Object.freeze({ icon: Shield, text: "Every file checked before download" }),
+    /**
+     * The owner's line (2026-11-25). The AGPL is the licence every page's
+     * footer states, with a link to the source of the exact commit built
+     * (spec 0009, AC-1 and AC-4), which is what lets anyone check it.
+     */
+    Object.freeze({ icon: Code, text: "Open source (AGPL), so you can check it" }),
+  ]),
+
+  /**
    * How it works (spec 0026, AC-8): three cards, each a small drawing on
    * made up values, a number, a title and a line.
    */
@@ -306,10 +344,11 @@ export const HOME_TEXT = Object.freeze({
 
   /**
    * The black box comparison (spec 0026, AC-8), drawn with `CoverFigure` on
-   * a made up page. The page's one "removed, not covered", in its eyebrow.
+   * a made up page. Its eyebrow is the mockup's "Why it matters", which
+   * claims nothing; "removed, not covered" moved to the trust strip.
    */
   blackBox: Object.freeze({
-    eyebrow: "Removed, not covered",
+    eyebrow: "Why it matters",
     title: "A black box is not redaction",
     /**
      * Row M2: "the selectable text you tick is taken out of the page, then

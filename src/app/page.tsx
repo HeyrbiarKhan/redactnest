@@ -192,11 +192,39 @@ export default function HomePage() {
           </PageContainer>
         </div>
 
+        {/*
+          The trust strip (the owner's port of `Main.dc.html`, 2026-11-25):
+          four short claims across the page on `subtle`, between quiet rules,
+          two to a row from `sm` and four from `lg`. Each is said elsewhere on
+          the page too, by the owner's read, in the places AC-30's test names.
+        */}
+        <div data-testid="home-trust" className="border-y border-muted bg-subtle">
+          <PageContainer width="wide" className="py-7">
+            <ul
+              role="list"
+              className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4"
+            >
+              {HOME_TEXT.trust.map(({ icon: Icon, text }) => (
+                <li
+                  key={text}
+                  className="flex min-w-0 items-center gap-3 text-small leading-tight font-medium text-ink-soft"
+                >
+                  <Icon
+                    aria-hidden="true"
+                    className="size-5 shrink-0 text-accent"
+                    strokeWidth={1.75}
+                  />
+                  <span className="min-w-0 wrap-break-word">{text}</span>
+                </li>
+              ))}
+            </ul>
+          </PageContainer>
+        </div>
+
         <section
           id={HOW_IT_WORKS_ID}
           aria-labelledby={`${HOW_IT_WORKS_ID}-title`}
           data-testid="home-steps"
-          className="border-t border-border"
         >
           <PageContainer width="wide" className="flex flex-col gap-10 py-16 sm:py-20">
             <SectionHead

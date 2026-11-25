@@ -508,6 +508,7 @@ describe("the main content's words (AC-13)", () => {
       capLine(billingEnabled, config.freePageCap, config.maxPages),
       HOME_TEXT.shotCard.title,
       HOME_TEXT.shotCard.line,
+      ...HOME_TEXT.trust.map(({ text }) => text),
       // The drawn window: its made up values, then the tool's own words.
       HOME_TEXT.window.file,
       HOME_TEXT.window.title,
