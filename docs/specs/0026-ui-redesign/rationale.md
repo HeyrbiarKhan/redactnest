@@ -100,6 +100,28 @@ The build paused at task 6 because the first AC-12 asked for "one centred panel"
 
 **Recorded as built, no new design.** Milestone 1 made four small choices with no spec line, now recorded: Button keeps `link` beside the new `ghost` (an action that must read as a link, always underlined, INV-8); Button gains an `icon` size (the header's menu button); IconCircle gains a `solid` tone (the guide pages' step tiles); and on the night band the focus ring is `night-accent`, because `focus` measures 2.62:1 on `night`.
 
+## Amended after the visual port (2026-11-26)
+
+You ported `/` and the guides to `Main.dc.html`, `Guide.dc.html`, `06-home.png` and `10-guide.png` at 1440 pixels, section by section (c10756e to 418dd59), asking for the look to follow the mockups exactly, within hard limits: no lint rule, contrast pair, test threshold or 14 pixel floor loosened; engine words keeping today's meaning (a new claim meant stopping to ask); `src/engine`, `src/worker`, both content security policies, `/api` and the signed in header untouched; layout pins free to move, rule guards never weakened. Where a mockup met a rule, you ruled (2026-11-25 and 26). This section records those rulings; the index records the result as built. No new design was made.
+
+**Repeats** (spec 0013, INV-11 and AC-30). The trust strip, the hero's card and the questions say claims the page already makes. INV-11 asks for your read before a repeat; you read each one and kept it. Holding each claim to an exact list of named places keeps what the rule is for (nothing repeats unread) while allowing the repeats you chose. The first draft's answer, leaving the strip and the questions out, was the other option.
+
+**Monospace** (spec 0003, INV-6). You chose the mockup's monospace for the network table and the black box copies. Both show machine output (a request path, what a copy of the page's text gives), no font file is added (`ui-monospace` is the visitor's own), and `data-mono` with the fonts test's exact list keeps every other word in Inter.
+
+**Teal shadows** (AC-2). You chose the mockup's accent tinted shadows for the drawn window and the Pro card. A shadow is depth, not a colour role, and never sits under text, so the contrast contract is untouched; the larger shadows list names both places.
+
+**The sticky header.** The mockup's bar sticks. A sticky bar can hide a focused control (WCAG 2.4.11), so on `/` it holds only from `lg`, with a top scroll padding of its height (technique C43) and a browser test proving every focus stop clears it. Every other page keeps spec 0003 AC-14's static header.
+
+**Get Pro to Pricing.** Home's Pro card opens `/pricing`, with no Polar, tax or terms line on home: those stay on the page that starts a checkout.
+
+**The closing heading.** "Redact your next PDF", without the mockup's "in a minute": a 50 page Pro file can take longer.
+
+**New lines.** You approved How it works' lead, the trust strip's AGPL line, the "+ Your own terms with Pro" chip and the closing caps line's "Nothing to install." On the guides: "Ready to redact?", "Your file stays on your device." (row M1, a repeat you read) and one More guides line per guide, each naming the guide's topic and claiming nothing.
+
+**The guides' numbered list.** The How it works list went, and the three cards stand in for it. The cards carry no "STEP n" label, because they hold points, not steps. Spec 0024 AC-3 is amended to match.
+
+**The network table's widest row.** From `xl` the page's files row wraps its name beside one line of paths; shortening the name was the other option.
+
 ## Evidence: where the mockups meet the rules
 
 | Mockup | Rule | Resolution |
@@ -113,4 +135,11 @@ The build paused at task 6 because the first AC-12 asked for "one centred panel"
 | "Stripping hidden data" as a run step | spec 0019, AC-12; spec 0018, AC-5 | "Removing what you ticked" (child 0003, AC-32) |
 | Highlight box on a match in the page | spec 0002, INV-2 | deferred (child 0002) |
 | Network tab list `[real list to confirm]` | a claim with no gate | `NETWORK_ROWS` held by an e2e test (AC-9) |
-| Trust strip and questions on home | spec 0013, INV-11 (said once) | left out (AC-8) |
+| Trust strip and questions on home | spec 0013, INV-11 (said once) | left out in the first draft; built in the visual port by your read, each claim held to its named places (AC-8) |
+| Network table and copy boxes in monospace | spec 0003, INV-6 (Inter only) | the named `data-mono` places only, held by the fonts test (AC-8, AC-9) |
+| Window and Pro card shadows tinted teal | AC-2 (black shadows) | those two only, in the larger shadows list (AC-2) |
+| Header sticky with a blur | spec 0003, AC-14 (static header) | `/` from `lg` only, with a top scroll padding and a focus test (AC-5) |
+| Hero product shot as a screenshot | spec 0013, AC-12 | drawn in HTML from the tool's own words (AC-8) |
+| "in a minute" on the closing heading | claims no wider than the code (a 50 page Pro file can take longer) | "Redact your next PDF" (AC-8) |
+| A Pro button on home's plan card | the seller, tax and terms lines stay beside Subscribe on `/pricing` | "Get Pro" opens Pricing (AC-10) |
+| No numbered How it works list on the guides | spec 0024, AC-3 (the list in the frame) | removed, the cards stand in; AC-3 amended (AC-11) |
