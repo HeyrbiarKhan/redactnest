@@ -1,5 +1,5 @@
-import { Info, SearchCheck, TextSearch } from "lucide-react";
-import { memo, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { SearchCheck, TextSearch } from "lucide-react";
+import { memo, useMemo, useRef, type ReactNode } from "react";
 
 import {
   BLOCKED_REASON_TEXT,
@@ -13,12 +13,7 @@ import {
   TERM_NOTE_TEXT,
 } from "@/lib/detectors";
 import { countText } from "@/lib/count-text";
-import {
-  COVERAGE_LINK,
-  FOUND_ITEMS_NOUN,
-  FOUND_ITEMS_TITLE,
-  TERMS_TEXT,
-} from "@/lib/flow-text";
+import { FOUND_ITEMS_NOUN, FOUND_ITEMS_TITLE, TERMS_TEXT } from "@/lib/flow-text";
 import { CONCEALED_TEXT } from "@/lib/page-findings";
 import type { TermState } from "@/lib/session";
 import {
@@ -147,10 +142,10 @@ const NO_TERMS: readonly TermGroupTerm[] = Object.freeze([]);
  * Rendered by `tool-client` outside the polite live region: a list this long
  * read out as it appeared would drown the phase line. One card, titled Found
  * items with a count of every row found, blocked ones included (spec 0013,
- * AC-19). The coverage note comes first inside it, behind "What it looks for"
- * beside the heading (`ToolReview.dc.html`, the owner's call, 2026-11-26): a
- * disclosure button, `aria-expanded`, controlling the note, which stays in the
- * page, hidden, until it is opened.
+ * AC-19); the coverage note comes first inside it, always, with no control
+ * that hides it, so a short list, or an empty one, never reads as a complete
+ * redaction (spec 0005, AC-14; spec 0026, AC-12, the owner's call,
+ * 2026-11-26).
  */
 export function ReviewChecklist({
   matches,
@@ -165,8 +160,6 @@ export function ReviewChecklist({
   termActions,
   flat = false,
 }: ReviewChecklistProps) {
-  const coverageId = useId();
-  const [coverageShown, setCoverageShown] = useState(false);
   const groups = useMemo<readonly Group[]>(
     () =>
       DETECTOR_KINDS.flatMap((kind) => {
@@ -195,42 +188,29 @@ export function ReviewChecklist({
         look={flat ? "flat" : "card"}
         title={FOUND_ITEMS_TITLE}
         badge={
-          // The count beside the heading, its noun heard but not shown, then
-          // the coverage note's control at the row's end.
-          <span className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3">
+          // The count beside the heading, its noun heard but not shown.
+          <span className="flex min-w-0 flex-1 items-center">
             <CountBadge
               count={matches.length}
               noun={FOUND_ITEMS_NOUN}
               tone="quiet"
               compact
             />
-            <Button
-              variant="link"
-              icon={Info}
-              data-testid="coverage-toggle"
-              aria-expanded={coverageShown}
-              aria-controls={coverageId}
-              onClick={() => setCoverageShown((shown) => !shown)}
-            >
-              {COVERAGE_LINK}
-            </Button>
           </span>
         }
         data-testid="checklist"
       >
         {/* The note in the page's compact form, as the warning at open is. */}
-        <div id={coverageId} hidden={!coverageShown}>
-          <NoteBox
-            data-testid="coverage"
-            lines={[
-              searched > 0
-                ? coverageNoteWithTerms(searched, partly)
-                : partly
-                  ? COVERAGE_NOTE_PARTLY
-                  : COVERAGE_NOTE,
-            ]}
-          />
-        </div>
+        <NoteBox
+          data-testid="coverage"
+          lines={[
+            searched > 0
+              ? coverageNoteWithTerms(searched, partly)
+              : partly
+                ? COVERAGE_NOTE_PARTLY
+                : COVERAGE_NOTE,
+          ]}
+        />
 
         {panel}
 

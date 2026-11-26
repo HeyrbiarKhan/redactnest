@@ -614,12 +614,6 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await expect(page.getByTestId("redact")).toBeFocused();
     await expectFocusRing(page.getByTestId("redact"));
 
-    // The Found items heading's "What it looks for", which opens the coverage
-    // note (the owner's call, 2026-11-26).
-    await page.keyboard.press("Tab");
-    await expect(page.getByTestId("coverage-toggle")).toBeFocused();
-    await expectFocusRing(page.getByTestId("coverage-toggle"));
-
     // Spec 0017, AC-1 and AC-2: the custom terms panel sits in the found
     // items before the groups. This job is Free, so the panel is locked and
     // its one stop is the link to Pricing; the field and Add are disabled.
@@ -673,9 +667,6 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("redact")).toBeFocused();
     await expectFocusRing(page.getByTestId("redact"));
-    // "What it looks for" at the Found items heading.
-    await page.keyboard.press("Tab");
-    await expect(page.getByTestId("coverage-toggle")).toBeFocused();
     // The locked custom terms panel's link to Pricing (spec 0017, AC-2).
     await page.keyboard.press("Tab");
     await expect(
@@ -1416,10 +1407,6 @@ test.describe("reflow and zoom on the tool page (AC-15)", () => {
     await openDocument(page);
     await expectNoHorizontalScroll(page);
     await expectContained(page.getByRole("region", { name: "Document opened" }));
-    // The coverage note waits behind "What it looks for" (the owner's call,
-    // 2026-11-26), so it is opened before it is measured.
-    await page.getByTestId("coverage-toggle").click();
-    await expectContained(page.getByTestId("coverage-toggle"));
     await expectContained(page.getByTestId("coverage"));
     for (const row of await page.getByTestId("checklist").locator("label").all()) {
       await expectContained(row);
@@ -1649,14 +1636,11 @@ test.describe("the checklist on the tool page (spec 0005, AC-13)", () => {
     await page.goto("/tool");
     await openDocument(page);
 
-    // Behind "What it looks for" beside the Found items heading (the owner's
-    // call, 2026-11-26), shown once it is asked for.
-    const toggle = page.getByTestId("coverage-toggle");
-    await expect(page.getByTestId("coverage")).toBeHidden();
-    await expect(toggle).toHaveAttribute("aria-expanded", "false");
-    await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    // Shown on open, with nothing that hides it (spec 0026, AC-12, task 18:
+    // the owner's call, 2026-11-26, keeping spec 0005 AC-14 and spec 0013
+    // AC-19).
     await expect(page.getByTestId("coverage")).toBeVisible();
+    await expect(page.getByTestId("coverage-toggle")).toHaveCount(0);
     await expect(page.getByTestId("coverage")).toHaveText(
       /RedactNest looked for email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers\. Anything else, such as names and addresses, stays in the file\./,
     );

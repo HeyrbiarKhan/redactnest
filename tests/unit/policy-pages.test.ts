@@ -158,7 +158,6 @@ const SEARCH_FILES = [
   "src/ui/icon-circle.tsx",
   "src/ui/link-group.tsx",
   "src/ui/callout.tsx",
-  "src/ui/step-list.tsx",
   "src/ui/prose.tsx",
   "src/ui/page-container.tsx",
   "src/ui/button.tsx",

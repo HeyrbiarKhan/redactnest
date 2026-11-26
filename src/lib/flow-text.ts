@@ -505,17 +505,6 @@ export function redactLabel(ticked: number): string {
  */
 export const LOCK_LINE = "Your file never leaves your browser.";
 
-/**
- * The rail's three steps while nothing is open (AC-15). None repeats a button's
- * name, and none promises a "cleaned copy", which is only the button's label
- * when nothing is ticked.
- */
-export const IDLE_STEPS: readonly string[] = Object.freeze([
-  "Open a PDF",
-  "Tick what to remove",
-  "Download your new file",
-]);
-
 /* The page preview (spec 0026 child 0002). */
 
 /**
@@ -549,14 +538,6 @@ export const FOUND_ITEMS_NOUN = Object.freeze({
   one: "found item",
   other: "found items",
 });
-
-/**
- * The control beside the Found items heading that opens the coverage note
- * (`ToolReview.dc.html`, the owner's call, 2026-11-26). The note's own words
- * are unchanged and still say what RedactNest looked for and that anything
- * else stays in the file.
- */
-export const COVERAGE_LINK = "What it looks for";
 
 /* The result card. */
 

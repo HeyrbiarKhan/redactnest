@@ -260,17 +260,13 @@ describe("a blocked match", () => {
     expect(screen.getByRole("checkbox", { name: "jane@example.com" })).toBeEnabled();
   });
 
-  /**
-   * AC-13: Tab goes to the coverage note's control at the card's head, then
-   * each group's summary, then each checkbox that is not blocked.
-   */
+  /** AC-13: Tab goes each group's summary, then each checkbox that is not blocked. */
   it("is passed over by Tab, while every other row is reached in order", async () => {
     const user = userEvent.setup();
     const { container } = show();
     const [emails, phones] = container.querySelectorAll("summary");
 
     for (const stop of [
-      screen.getByTestId("coverage-toggle"),
       emails,
       screen.getByRole("checkbox", { name: "jane@example.com" }),
       phones,
@@ -325,35 +321,83 @@ describe("the coverage note and the empty state", () => {
   });
 
   /**
-   * The coverage note waits behind "What it looks for" beside the heading
-   * (`ToolReview.dc.html`, the owner's call, 2026-11-26): a disclosure that
-   * shows the same words and hides them again.
+   * Spec 0026, AC-12 (task 18), spec 0005, AC-14 and spec 0013, AC-19: the
+   * note shows on the first render, first in the Found items card, before
+   * the custom terms panel and the groups, in each of its three wordings,
+   * and nothing on the page hides it. d67ff4d put it behind "What it looks
+   * for"; the owner's call (2026-11-26) brought it back, because the note is
+   * what stops a visitor believing names were removed.
    */
-  it("shows the coverage note from What it looks for, and hides it again", async () => {
-    const user = userEvent.setup();
-    show();
+  it.each([
+    { wording: "the detectors' note", partly: false, searched: false },
+    { wording: "the note for the pages it could read", partly: true, searched: false },
+    { wording: "the note with a searched term", partly: false, searched: true },
+  ])(
+    "shows $wording on the first render, first in the card, with no control that hides it",
+    ({ partly, searched }) => {
+      const acme = asTermId("acme");
+      const { container } = render(
+        <ReviewChecklist
+          matches={[...MATCHES, match("a1", "term", "Acme Ltd", { term: acme })]}
+          ticked={new Set([asMatchId("p1")])}
+          running={false}
+          partly={partly}
+          onToggle={() => {}}
+          onTicksSet={() => {}}
+          panel={<div data-testid="terms-panel" />}
+          terms={[
+            {
+              id: acme,
+              text: "Acme Ltd",
+              state: searched ? { state: "searched" } : { state: "searching" },
+            },
+          ]}
+        />,
+      );
 
-    const toggle = screen.getByRole("button", { name: "What it looks for" });
-    const note = screen.getByTestId("coverage");
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(note).not.toBeVisible();
-    expect(
-      document.getElementById(toggle.getAttribute("aria-controls") ?? ""),
-    ).toContainElement(note);
+      const note = screen.getByTestId("coverage");
+      expect(note).toBeVisible();
+      expect(note).toHaveTextContent(
+        searched
+          ? coverageNoteWithTerms(1, partly)
+          : partly
+            ? COVERAGE_NOTE_PARTLY
+            : COVERAGE_NOTE,
+      );
 
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(note).toBeVisible();
-    expect(note).toHaveTextContent(COVERAGE_NOTE);
+      // First in the card: only the heading row comes before it.
+      const card = screen.getByRole("region", { name: "Found items" });
+      expect(card.children[0]).toContainElement(
+        within(card).getByRole("heading", { name: "Found items" }),
+      );
+      expect(card.children[1]).toBe(note);
+      for (const after of [
+        screen.getByTestId("terms-panel"),
+        ...container.querySelectorAll("details"),
+      ]) {
+        expect(
+          note.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+      }
 
-    await user.click(toggle);
-    expect(note).not.toBeVisible();
-  });
+      // Nothing hides it: no toggle, no control, no hidden box around it.
+      expect(screen.queryByTestId("coverage-toggle")).toBeNull();
+      expect(screen.queryByRole("button", { name: "What it looks for" })).toBeNull();
+      expect(container.querySelector("[aria-controls], [aria-expanded]")).toBeNull();
+      expect(note.closest("[hidden]")).toBeNull();
+    },
+  );
 
   it("says nothing was found, and that a cleaned copy is still on offer, when there is nothing", () => {
     show({ matches: [] });
 
-    expect(screen.getByTestId("coverage")).toBeInTheDocument();
+    // The note shows above the empty state (spec 0026, AC-12, task 18).
+    const note = screen.getByTestId("coverage");
+    expect(note).toBeVisible();
+    expect(
+      note.compareDocumentPosition(screen.getByText(NOTHING_FOUND.title)) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.getByText(NOTHING_FOUND.title)).toBeVisible();
     expect(screen.getByText(NOTHING_FOUND.helper)).toBeVisible();
     expect(NOTHING_FOUND.helper).toBe(
@@ -817,11 +861,9 @@ describe("custom term groups (spec 0017)", () => {
     expect(screen.getByTestId("term-set-aside")).toHaveTextContent(
       "Set aside: not searched in this file because the search could not finish.",
     );
-    // Every button but the coverage note's control, which only shows words.
-    const buttons = screen
-      .getAllByRole("button")
-      .filter((button) => button !== screen.getByTestId("coverage-toggle"));
-    expect(buttons.map((button) => button.textContent)).toEqual(["Remove Acme Ltd"]);
+    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Remove Acme Ltd",
+    ]);
   });
 
   it("disables every way on while a run is under way (AC-1)", () => {
@@ -842,13 +884,9 @@ describe("custom term groups (spec 0017)", () => {
       running: true,
     });
 
-    // Every way on waits; the coverage note's control only shows words, so it
-    // stays live.
-    const toggle = screen.getByTestId("coverage-toggle");
-    const buttons = screen.getAllByRole("button").filter((button) => button !== toggle);
+    const buttons = screen.getAllByRole("button");
     expect(buttons.length).toBeGreaterThan(0);
     for (const button of buttons) expect(button).toBeDisabled();
-    expect(toggle).toBeEnabled();
   });
 
   it("shows Nothing found only when no row of any kind exists (AC-14)", () => {
