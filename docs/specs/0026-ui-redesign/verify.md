@@ -68,3 +68,36 @@ _The steps above stand. These add what the build named: the test files as writte
 
 ### Acceptance-criteria coverage (task 17)
 - AC-37 fit, probe, run origin · AC-38 frame, 26.25rem, panel room 17rem · AC-39 order and no live region · AC-40 bar and warnings · AC-41 rail · AC-42 boxes · AC-43 pick · AC-44 zoom · AC-45 scheduling and caps · AC-46 failure · AC-47 cleanup · AC-48 protocol and client · AC-49 engine draw · AC-50 boxes and rows version · AC-51 lint ban, loggable · AC-52 network walk, export spy, storage · AC-53 memory and frame · AC-54 speed · AC-55 words and contrast · AC-56 security and privacy words
+
+## Task 13 as built (signed in header, child 0001) · added 2026-11-26
+_These are the steps the "Owed later" line above names for AC-19 to AC-30; the three `shell.spec.ts` reds it mentions cleared in d7d3fe9. The first group is the AC-29 walk: it needs `pnpm dev` on Clerk's development instance with its real keys (the `email` claim was set there on 2026-11-26) and a sandbox account. The rest run on any build. One step per row of child 0001's Value sourcing table is marked with the value it tests._
+
+### UI / manual (the AC-29 walk, on `pnpm dev`)
+- [ ] Signed in, open `/`, run `document.cookie` in the console → it shows `__client_uat` (or `__client_uat_<suffix>`) holding a number above 0, so the cookie is not `HttpOnly` → AC-19, AC-29 (value: signed in time, from the cookie)
+- [ ] Same visit, Network filtered to `entitlement` → exactly one `GET /api/entitlement`, same origin, `Cache-Control: private, no-store`, its body holding `email` → AC-19, AC-21, AC-29
+- [ ] Same page → the avatar shows the address's first letter, uppercased; open the menu by keyboard → the address, the plan line ("Free · 3 pages a document" or "Pro · 50 pages a document" with this build's caps), then Account, Upgrade to Pro (Free) or Billing (Pro), Redact a PDF, Sign out → AC-22, AC-23 (values: the email claim; tier and account from the same answer; caps from `config` through `countText`; names from `plans.ts`)
+- [ ] Change the account's primary address in Clerk's dashboard, reload `/` without opening an account page → the header keeps the old letter; open Account, then `/` → the new one → AC-21 (value: the claim is frozen when Clerk issues the token)
+- [ ] Sign out, then visit `/` → no request to `/api/entitlement`, Sign in and Try it free → AC-19, AC-29
+- [ ] Signed in with a Pro account on `/tool` → one `GET /api/entitlement`, the same count as signed out; the Pro chip before the avatar; no Open the tool; in the menu, Account and Billing open new tabs and there is no Redact a PDF → AC-19, AC-22, AC-23, AC-29
+- [ ] On `/tool`, open a PDF, change a tick, open the menu, Sign out → the leave warning first; leave → `/sign-out` shows the spinner and "Signing you out", then lands on `/` signed out, with Sign in in the header and no request → AC-26, AC-29 (value: the landing is `HOME_PATH`)
+- [ ] `/sign-out` while signed in, axe through `.playwright-mcp/axe-run.js` → no violations, at desktop width, at 320 pixels and in forced colours → AC-16, AC-26
+- [ ] Block `*.clerk.accounts.dev` in DevTools, visit `/sign-out` signed in → "We couldn't sign you out. Check your connection, then reload this page." in `danger-ink`, and Go to the home page as a plain link → AC-26
+- [ ] Production, after the deploy: confirm the claim is on the production instance, then repeat the `/` signed in, `/` signed out and `/tool` steps → AC-29
+
+### UI / manual (any build)
+- [ ] `/` at 1280 pixels, signed out, then with a `__client_uat` cookie and a stubbed signed in answer → no layout shift in the header in either, and the slot 196 pixels wide in both → AC-25 (value: `--spacing-account-slot`)
+- [ ] `/` with scripts turned off → Sign in and Try it free, from the `noscript` → AC-25
+- [ ] `__client_uat=9999999999` set by hand, with no session → one request, then the signed out shape → AC-19, AC-20 (the cookie decides only whether to ask, never what shows)
+- [ ] 320 pixels, signed in → the lockup, the avatar and the menu button on one row; the menu holds the nav and Open the tool; at 200% text, no sideways scroll → AC-27
+- [ ] `/tool`, open a PDF with a long name → the header holds the file icon, the name cut with an ellipsis (whole in the accessibility tree), "· 2 pages", Choose another PDF and Start over, and no nav; the tab title and the address bar never show the name; Start over brings the nav back → AC-30 (values: the session's `file.name` and `summary.pageCount`)
+- [ ] A build with none of the seven billing values → no account slot, no cookie read, no request on `/`; on `/tool` the header's right side is empty with and without a document → AC-19, AC-30
+
+### Commands
+- [ ] `pnpm exec vitest run tests/unit/billing-entitlement.test.ts tests/unit/entitlement-route.test.ts tests/unit/entitlement.test.ts` → pass → AC-19, AC-20, AC-21
+- [ ] `pnpm exec vitest run tests/component/app/account-slot.test.tsx tests/component/app/site-nav.test.tsx tests/component/app/sign-out.test.tsx tests/component/ui/drop-zone.test.tsx tests/component/tool-client.test.tsx` → pass → AC-19 to AC-26, AC-30
+- [ ] `pnpm exec vitest run tests/unit/policy-pages.test.ts tests/unit/engine-wall.test.ts tests/unit/proxy-matcher.test.ts tests/unit/sitemap.test.ts tests/unit/policy-changes.test.ts` → pass → AC-21, AC-25, AC-26, AC-28
+- [ ] `pnpm exec playwright test tests/e2e/account-slot.spec.ts --project=chromium` → 16 pass → AC-19, AC-22 to AC-27, AC-30
+- [ ] Read `/privacy`, Your documents and Your account, and its 2026-11-26 entry → C5 and C6 as AC-28 lists them, with both limits (up to 7 days old; the token travels with every request) → AC-28
+
+### Acceptance-criteria coverage (task 13)
+- AC-19 cookie gate, one ask, none on `/tool` or billing off · AC-20 the three states, fallback never confirmed · AC-21 claim, route, four key snapshot, no report · AC-22 avatar and chip · AC-23 menu, new tabs, lazy load · AC-24 Open the tool · AC-25 held width, `noscript`, no shift, the one island · AC-26 `/sign-out`, matcher, robots, leave warning · AC-27 small screens · AC-28 privacy words and entry · AC-29 the walk above, production after the deploy · AC-30 `/tool`'s file context

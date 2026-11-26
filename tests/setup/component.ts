@@ -35,9 +35,18 @@ afterEach(cleanup);
  * file's own `vi.mock("next/link")` could apply. It is `SITE_MENU_ID`; if that
  * changes, the header's links hide here and its tests fail, so they cannot
  * drift apart quietly.
+ *
+ * The account slot's menu part (spec 0026 child 0001, AC-27) is the other
+ * half of the same reading: below `sm` it holds Sign in or Open the tool in
+ * the menu, and from `sm` it is `sm:hidden`, because the row part shows them.
+ * So it is hidden here too, by its data attribute, and a header test sees
+ * each link once, where it sits from `sm`.
  */
 const headerFromSm = document.createElement("style");
-headerFromSm.textContent = "#site-menu:not(:popover-open) { display: contents; }";
+headerFromSm.textContent = [
+  "#site-menu:not(:popover-open) { display: contents; }",
+  '[data-account-part="menu"] { display: none; }',
+].join(" ");
 document.head.append(headerFromSm);
 
 /** Spec 0003, AC-18: the same rule tags the browser suite runs. */

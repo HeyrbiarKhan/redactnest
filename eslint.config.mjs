@@ -977,6 +977,19 @@ const eslintConfig = defineConfig([
     ),
   },
   {
+    // The header's account slot and its menu (spec 0026, child 0001, AC-21
+    // and AC-25). They hold the visitor's own address, so they may make no
+    // count at all, which keeps it out of every telemetry field by
+    // construction. Everything else the wall zone holds is restated: the
+    // tool client ban, the billing walls and the rest of the engine wall.
+    name: "redactnest/account-slot",
+    files: ["src/app/account-slot.tsx", "src/app/account-menu.tsx"],
+    rules: zone(
+      [...WALL_IMPORTS, ...BILLING_IMPORTS, ...NO_TELEMETRY_IMPORTS],
+      [...WALL_SYNTAX, ...BILLING_SYNTAX, ...NO_TELEMETRY_SYNTAX],
+    ),
+  },
+  {
     // The one page allowed to render ToolClient (spec 0003, INV-11). Last, so
     // it replaces the tool client ban above rather than being replaced by it,
     // and it restates the rest of the engine wall, which still applies here.

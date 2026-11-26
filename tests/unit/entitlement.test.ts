@@ -572,3 +572,231 @@ describe("keeping a recent Pro answer (spec 0012, AC-4)", () => {
     expect(readEntitlement()).toEqual(SERVER_UNKNOWN);
   });
 });
+
+/**
+ * Spec 0026 child 0001, AC-19: whether a page asks at all, from Clerk's sign
+ * in time cookie, read in the browser. Pure, so tested on strings.
+ */
+describe("browserSignedIn (AC-19)", () => {
+  it.each([
+    ["the plain name", "__client_uat=1791033000", true],
+    ["a suffixed name", "theme=dark; __client_uat_Xy9Zab12=1791033000", true],
+    ["a forged large value, which costs one request", "__client_uat=9999999999", true],
+    ["0, as Clerk writes it once signed out", "__client_uat=0", false],
+    ["no such cookie", "theme=dark; __session=abc", false],
+    ["an empty cookie string", "", false],
+    ["a value that is not a number", "__client_uat=yes", false],
+    ["a negative number", "__client_uat=-5", false],
+    ["a fraction", "__client_uat=1.5", false],
+    ["a number too large to be a time", `__client_uat=${"9".repeat(25)}`, false],
+    ["a name that only starts the same", "__client_uat_x-y=1791033000", false],
+    ["a name with something before it", "x__client_uat=1791033000", false],
+  ])("reads %s", async (_label, cookies, expected) => {
+    const { browserSignedIn } = await loadEntitlement();
+    expect(browserSignedIn(cookies)).toBe(expected);
+  });
+
+  it("is true when any one of several holds a sign in", async () => {
+    const { browserSignedIn } = await loadEntitlement();
+    expect(browserSignedIn("__client_uat=0; __client_uat_abc=1791033000")).toBe(true);
+  });
+});
+
+/**
+ * Spec 0026 child 0001, AC-20 and AC-21: who the answer confirms, for the
+ * header, read beside the snapshot and never inside it.
+ */
+describe("readIdentity (AC-20)", () => {
+  const ADDRESS = "ada@example.com";
+
+  it("is pending until an ask settles", async () => {
+    const held = heldFetch();
+    vi.stubGlobal("fetch", held.fetcher);
+    const { askAtLoad, readIdentity } = await loadEntitlement();
+
+    expect(readIdentity()).toEqual({ state: "pending", email: null });
+    askAtLoad();
+    expect(readIdentity().state).toBe("pending");
+  });
+
+  it.each([
+    ["signed-in", { ...FREE_SIGNED_IN, email: ADDRESS }],
+    ["signed-in on Pro", { ...PAID, email: ADDRESS }],
+    ["unknown from our server", { ...SERVER_UNKNOWN, email: ADDRESS }],
+  ])("confirms %s, with the address", async (_label, body) => {
+    vi.stubGlobal("fetch", reply(body));
+    const { getEntitlement, readIdentity } = await loadEntitlement();
+
+    await getEntitlement();
+
+    expect(readIdentity()).toEqual({ state: "confirmed", email: ADDRESS });
+  });
+
+  it("confirms with no address when the answer holds none, or a malformed one", async () => {
+    for (const email of [null, undefined, 42, "no-at-sign", "a@b@c"]) {
+      vi.stubGlobal("fetch", reply({ ...FREE_SIGNED_IN, email }));
+      const { getEntitlement, readIdentity } = await loadEntitlement();
+      await getEntitlement();
+      expect(readIdentity()).toEqual({ state: "confirmed", email: null });
+    }
+  });
+
+  it.each([
+    ["sign-in-needed", reply({ ...SIGN_IN_NEEDED, email: ADDRESS })],
+    ["none", reply({ ...SIGN_IN_NEEDED, account: "none", email: ADDRESS })],
+    ["a failed request", vi.fn(() => Promise.reject(new Error("offline")))],
+    ["an error status", reply({ ...FREE_SIGNED_IN, email: ADDRESS }, false)],
+    ["an unreadable answer", reply({ tier: "paid", email: ADDRESS })],
+    ["paid with an account that is not signed in", reply({ ...PAID, account: "none" })],
+  ])("never confirms %s", async (_label, fetcher) => {
+    vi.stubGlobal("fetch", fetcher);
+    const { getEntitlement, readIdentity } = await loadEntitlement();
+
+    await getEntitlement();
+
+    expect(readIdentity()).toEqual({ state: "unconfirmed", email: null });
+  });
+
+  /** The fallback says `unknown` too, but no server said it. */
+  it("never confirms the store's own fallback, at the budget", async () => {
+    vi.useFakeTimers();
+    const held = heldFetch();
+    vi.stubGlobal("fetch", held.fetcher);
+    const { askAtLoad, readEntitlement, readIdentity, FREE_ENTITLEMENT } =
+      await loadEntitlement();
+
+    askAtLoad();
+    await vi.advanceTimersByTimeAsync(4_000);
+
+    expect(readEntitlement()).toBe(FREE_ENTITLEMENT);
+    expect(readIdentity()).toEqual({ state: "unconfirmed", email: null });
+  });
+
+  it("confirms an answer that lands after the budget, as the plan line catches up", async () => {
+    vi.useFakeTimers();
+    const held = heldFetch();
+    vi.stubGlobal("fetch", held.fetcher);
+    const { askAtLoad, readIdentity } = await loadEntitlement();
+
+    askAtLoad();
+    await vi.advanceTimersByTimeAsync(4_000);
+    held.answer({ ...FREE_SIGNED_IN, email: ADDRESS });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(readIdentity()).toEqual({ state: "confirmed", email: ADDRESS });
+  });
+
+  it("keeps one object until something changes, so it can be a snapshot", async () => {
+    vi.stubGlobal("fetch", reply({ ...FREE_SIGNED_IN, email: ADDRESS }));
+    const { askAgain, getEntitlement, readIdentity } = await loadEntitlement();
+
+    await getEntitlement();
+    const first = readIdentity();
+    await askAgain();
+
+    expect(readIdentity()).toBe(first);
+    expect(Object.isFrozen(first)).toBe(true);
+  });
+
+  it("tells its subscribers when only the address changes", async () => {
+    vi.useFakeTimers();
+    const held = heldFetch();
+    vi.stubGlobal("fetch", held.fetcher);
+    const { askAtLoad, askAgain, readIdentity, subscribeEntitlement } =
+      await loadEntitlement();
+    const heard = vi.fn();
+    subscribeEntitlement(heard);
+
+    askAtLoad();
+    held.answer({ ...FREE_SIGNED_IN, email: ADDRESS });
+    await vi.advanceTimersByTimeAsync(0);
+    const again = askAgain();
+    await vi.advanceTimersByTimeAsync(0);
+    held.answer({ ...FREE_SIGNED_IN, email: "grace@example.com" });
+    await again;
+
+    expect(heard).toHaveBeenCalledTimes(2);
+    expect(readIdentity().email).toBe("grace@example.com");
+  });
+
+  it("tells its subscribers when the fallback replaces a server's unknown", async () => {
+    vi.useFakeTimers();
+    const held = heldFetch();
+    vi.stubGlobal("fetch", held.fetcher);
+    const { askAtLoad, askAgain, readIdentity, subscribeEntitlement } =
+      await loadEntitlement();
+    const heard = vi.fn();
+    subscribeEntitlement(heard);
+
+    askAtLoad();
+    held.answer({ ...FREE_UNKNOWN, email: ADDRESS });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(readIdentity().state).toBe("confirmed");
+    const again = askAgain();
+    await vi.advanceTimersByTimeAsync(0);
+    held.fail();
+    await again;
+
+    expect(heard).toHaveBeenCalledTimes(2);
+    expect(readIdentity()).toEqual({ state: "unconfirmed", email: null });
+  });
+
+  it("keeps a kept Pro answer's address through a failed refresh for age", async () => {
+    vi.useFakeTimers();
+    const held = heldFetch();
+    vi.stubGlobal("fetch", held.fetcher);
+    const { askAtLoad, getEntitlement, readEntitlement, readIdentity } =
+      await loadEntitlement();
+    askAtLoad();
+    held.answer({ ...PAID, email: ADDRESS });
+    await vi.advanceTimersByTimeAsync(10 * MINUTE);
+
+    const open = getEntitlement();
+    held.answer({ ...SERVER_UNKNOWN, email: "someone-else@example.com" });
+    await open;
+
+    expect(readEntitlement()).toEqual(PAID);
+    expect(readIdentity()).toEqual({ state: "confirmed", email: ADDRESS });
+  });
+});
+
+/**
+ * Spec 0026 child 0001, AC-21: the address never enters the snapshot, so it
+ * never reaches a job or the worker.
+ */
+describe("the snapshot beside the address (AC-21)", () => {
+  it("has exactly the four keys, though the answer holds an email", async () => {
+    const { readSnapshot } = await loadEntitlement();
+
+    const snapshot = readSnapshot({ ...PAID, email: "ada@example.com" });
+
+    expect(Object.keys(snapshot).sort()).toEqual([
+      "account",
+      "maxFileBytes",
+      "pageCap",
+      "tier",
+    ]);
+    expect(Object.isFrozen(snapshot)).toBe(true);
+  });
+
+  it("hands a job the four keys alone", async () => {
+    vi.stubGlobal("fetch", reply({ ...PAID, email: "ada@example.com" }));
+    const { getEntitlement, readEntitlement } = await loadEntitlement();
+
+    const job = await getEntitlement();
+
+    expect(Object.keys(job)).not.toContain("email");
+    expect(JSON.stringify(readEntitlement())).not.toContain("ada@example.com");
+  });
+
+  it("reads the address apart, narrowed as the server narrows the claim", async () => {
+    const { readAccountEmail } = await loadEntitlement();
+
+    expect(readAccountEmail({ ...PAID, email: "ada@example.com" })).toBe(
+      "ada@example.com",
+    );
+    for (const body of [null, "ada@example.com", { email: 1 }, { email: "x" }, {}]) {
+      expect(readAccountEmail(body)).toBeNull();
+    }
+  });
+});

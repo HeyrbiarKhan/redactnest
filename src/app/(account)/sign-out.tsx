@@ -3,15 +3,27 @@
 import { useClerk } from "@clerk/nextjs";
 import { useEffect, useRef, useState } from "react";
 
+import { cx } from "@/lib/cx";
 import { loadDocument } from "@/lib/document-load";
 import { HOME_PATH } from "@/lib/routes";
 import { Button } from "@/ui/button";
+import { Spinner } from "@/ui/spinner";
 
 /** The control's words, beside it, as the account pages keep theirs. */
 const SIGN_OUT_LABEL = "Sign out";
 /** Exported, so the delete's button says the same once the account is gone. */
 export const SIGNING_OUT = "Signing you out";
 const SIGN_OUT_FAILED = "We couldn't sign you out. Try again.";
+
+/**
+ * The sign out page's failure line and its way home (spec 0026, child 0001,
+ * AC-26). Draft words, for the owner's read: the page has no button to try
+ * again, so the line says how, as `ClerkWait` does when sign in fails.
+ */
+export const SIGN_OUT_PAGE_TEXT = Object.freeze({
+  failed: "We couldn't sign you out. Check your connection, then reload this page.",
+  home: "Go to the home page",
+});
 
 /**
  * Clerk, as far as leaving needs it: `useClerk()` itself, never a copy of
@@ -195,5 +207,56 @@ export function SignOutControl() {
         </p>
       )}
     </>
+  );
+}
+
+/**
+ * The sign out page's whole job (spec 0026, child 0001, AC-26): sign out as
+ * soon as the page loads, through the same `leaveAccount` Account's button
+ * uses, so it waits for Clerk's script, ends the session and loads the home
+ * page as a new document, never Clerk's own navigation (spec 0012, INV-10).
+ *
+ * The spinner and "Signing you out" show from the first render, the words in
+ * a polite region already in the page when the work begins (spec 0013,
+ * INV-13). If Clerk's script fails to load, or signing out fails or runs past
+ * its limit, the line says so in `danger-ink` and a plain link goes home,
+ * which is still a full page load.
+ *
+ * It starts once, however often React runs the effect in development, and
+ * only when the page's script runs: an embedded image or a prefetch of the
+ * address signs nobody out.
+ */
+export function SignOutNow() {
+  const clerk = useClerk();
+  const [failed, setFailed] = useState(false);
+  const started = useRef(false);
+
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    void leaveAccount(clerk, "sign-out").then((left) => {
+      if (!left) setFailed(true);
+    });
+  }, [clerk]);
+
+  return (
+    <div
+      data-testid="sign-out-now"
+      className="flex flex-col items-center gap-4 text-center"
+    >
+      {!failed && <Spinner size="lg" />}
+      <p
+        role="status"
+        className={cx("max-w-80", failed ? "text-danger-ink" : "text-ink")}
+      >
+        {failed ? SIGN_OUT_PAGE_TEXT.failed : SIGNING_OUT}
+      </p>
+      {/* A plain `a`, a full page load out of the account group (INV-10). */}
+      {failed && (
+        <Button href={HOME_PATH} reload variant="secondary">
+          {SIGN_OUT_PAGE_TEXT.home}
+        </Button>
+      )}
+    </div>
   );
 }

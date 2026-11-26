@@ -104,6 +104,16 @@
   --radius-band: 1.5rem;
 
   /*
+   * The header's account slot from `sm` (spec 0026, child 0001, AC-25): wide
+   * enough for Sign in and Try it free side by side, so the slot holds its
+   * place before the page knows who is signed in, and nothing in the row
+   * moves when it fills. A minimum, never a width, so larger text grows it.
+   * Measured 2026-11-26: Sign in and Try it free take 189 pixels, Open the
+   * tool and the avatar 175.
+   */
+  --spacing-account-slot: 12.25rem;
+
+  /*
    * Shadows are depth, never a colour role and never behind text, so they are
    * the one place a colour carries alpha (AC-2). Black, except the home
    * page's window and Pro card, which `Main.dc.html` tints with the accent

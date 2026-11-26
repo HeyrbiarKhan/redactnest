@@ -33,6 +33,8 @@ import {
 import { decodeJwt } from "@clerk/backend/jwt";
 import { getCookieSuffix, getSuffixedCookieName } from "@clerk/shared/keys";
 
+import { accountEmail } from "@/lib/account-email";
+
 /**
  * How long a genuine expired token still names its user: the session lifetime
  * Clerk's free plan fixes, 7 days. A rule about Clerk's sessions, not a cap on
@@ -54,7 +56,16 @@ const CLIENT_UAT_COOKIE = "__client_uat";
 export type SessionVerdict =
   | { readonly kind: "none" }
   | { readonly kind: "sign-in-needed" }
-  | { readonly kind: "user"; readonly userId: string };
+  | {
+      readonly kind: "user";
+      readonly userId: string;
+      /**
+       * The token's `email` claim (spec 0026, child 0001, AC-21), narrowed, or
+       * `null` when the token carries none or one of the wrong shape. Only
+       * ever returned to the browser holding this token.
+       */
+      readonly email: string | null;
+    };
 
 /** A cookie's value by name, or `undefined`. */
 export type CookieJar = (name: string) => string | undefined;
@@ -102,19 +113,30 @@ function signedInBefore(clientUat: string | undefined): boolean {
  * The checks `verifyToken` leaves to us (INV-11), on the decoded payload: the
  * issuer, an authorized party that is present and ours, a subject, and an
  * `nbf` and `iat` that are not in the future. Returns the subject and the
- * issue time when every one holds.
+ * issue time when every one holds, with the `email` claim beside them.
+ *
+ * The email is read here, on the payload both paths share, so a live token
+ * and an expired one proven genuine (INV-11) give it alike. It decides
+ * nothing: a missing or malformed claim is `null`, never a refusal, so the
+ * plan check stands exactly as it did before the claim was added (spec 0026,
+ * child 0001, AC-21). Clerk writes it as the session token's `email` claim,
+ * `{{user.primary_email_address}}`, set on each instance's dashboard.
  */
 function checkClaims(
   token: string,
   deps: SessionDeps,
-): { readonly userId: string; readonly issuedAtMs: number } | null {
+): {
+  readonly userId: string;
+  readonly issuedAtMs: number;
+  readonly email: string | null;
+} | null {
   let payload: Record<string, unknown>;
   try {
     payload = decodeJwt(token).payload as unknown as Record<string, unknown>;
   } catch {
     return null;
   }
-  const { iss, azp, sub, nbf, iat } = payload;
+  const { iss, azp, sub, nbf, iat, email } = payload;
   const latest = deps.now() + CLOCK_SKEW_MS;
 
   if (iss !== deps.issuer) return null;
@@ -124,7 +146,7 @@ function checkClaims(
     return null;
   if (nbf !== undefined && (typeof nbf !== "number" || nbf * 1000 > latest)) return null;
 
-  return { userId: sub, issuedAtMs: iat * 1000 };
+  return { userId: sub, issuedAtMs: iat * 1000, email: accountEmail(email) };
 }
 
 /**
@@ -175,5 +197,5 @@ export async function readSession(
   // Rule 4: fresh. Rule 5: expired, but issued within the trust window.
   if (expired && deps.now() - claims.issuedAtMs > SESSION_TRUST_MS) return SIGN_IN_NEEDED;
 
-  return Object.freeze({ kind: "user", userId: claims.userId });
+  return Object.freeze({ kind: "user", userId: claims.userId, email: claims.email });
 }

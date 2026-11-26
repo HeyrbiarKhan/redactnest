@@ -67,7 +67,8 @@ export default async function proxy(request: NextRequest, event: NextFetchEvent)
 
 // Literal paths, because a matcher must be a constant Next.js can read at
 // build. They are `SIGN_IN_PATH`, `SIGN_UP_PATH` and `ACCOUNT_PATH` from
-// `src/lib/routes.ts`, each with everything under it.
+// `src/lib/routes.ts`, each with everything under it, and `SIGN_OUT_PATH`,
+// a single page (spec 0026, child 0001, AC-26).
 export const config = {
   matcher: [
     "/sign-in",
@@ -76,5 +77,6 @@ export const config = {
     "/sign-up/(.*)",
     "/account",
     "/account/(.*)",
+    "/sign-out",
   ],
 };

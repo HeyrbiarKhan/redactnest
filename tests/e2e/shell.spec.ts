@@ -502,7 +502,9 @@ test.describe("the header", () => {
    * `sm` (a phone turned sideways) keeps its button and shows its links in one
    * row beneath the header until it is closed; then the button goes and the
    * links sit in the header's own row. Try it free never joins the menu: it
-   * stays in the header's row throughout (spec 0026, child 0001, AC-27).
+   * stays in the header's row throughout (spec 0026, child 0001, AC-27), and
+   * so does Sign in from `sm`, where the account slot's row shows it and its
+   * menu part is hidden.
    */
   test("keeps a menu left open as the window widens, its links in one row, until it is closed", async ({
     page,
@@ -513,7 +515,8 @@ test.describe("the header", () => {
     const button = header.getByRole("button", { name: "Menu", exact: true });
     const lockup = header.getByRole("link", { name: "RedactNest", exact: true });
     const action = header.getByRole("link", { name: "Try it free", exact: true });
-    const links = ["How it works", "Security", "Pricing", "Sign in"].map((name) =>
+    const signIn = header.getByRole("link", { name: "Sign in", exact: true });
+    const links = ["How it works", "Security", "Pricing"].map((name) =>
       header.getByRole("link", { name, exact: true }),
     );
     const middles = async (of = links) => {
@@ -537,16 +540,17 @@ test.describe("the header", () => {
       expect(middle).toBeGreaterThan((bar?.y ?? 0) + (bar?.height ?? 0));
     }
     const atOpen = await lockup.boundingBox();
-    const [actionAtOpen] = await middles([action]);
-    expect(
-      Math.abs((actionAtOpen ?? 0) - ((atOpen?.y ?? 0) + (atOpen?.height ?? 0) / 2)),
-    ).toBeLessThan(2);
+    for (const middle of await middles([signIn, action])) {
+      expect(
+        Math.abs(middle - ((atOpen?.y ?? 0) + (atOpen?.height ?? 0) / 2)),
+      ).toBeLessThan(2);
+    }
 
     await button.click();
 
     await expect(button).toBeHidden();
     const home = await lockup.boundingBox();
-    const closed = await middles([...links, action]);
+    const closed = await middles([...links, signIn, action]);
     for (const middle of closed) {
       expect(Math.abs(middle - ((home?.y ?? 0) + (home?.height ?? 0) / 2))).toBeLessThan(
         2,
@@ -902,7 +906,7 @@ test.describe("the sitemap and the robots file", () => {
     expect(xml).not.toMatch(/<lastmod>|<changefreq>|<priority>/);
   });
 
-  test("/robots.txt allows everything but /api/ and names the sitemap", async ({
+  test("/robots.txt allows everything but /api/ and /sign-out, and names the sitemap", async ({
     request,
   }) => {
     const response = await request.get("/robots.txt");
@@ -912,6 +916,8 @@ test.describe("the sitemap and the robots file", () => {
     expect(text).toMatch(/User-Agent: \*/i);
     expect(text).toMatch(/^Allow: \/$/m);
     expect(text).toMatch(/^Disallow: \/api\/$/m);
+    // Spec 0026 child 0001, AC-26: an action, not a page.
+    expect(text).toMatch(/^Disallow: \/sign-out$/m);
     expect(text).toContain("Sitemap: https://redactnest.test/sitemap.xml");
     expect(text).not.toMatch(/account|sign-in|sign-up/);
   });

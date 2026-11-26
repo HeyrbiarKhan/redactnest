@@ -363,11 +363,13 @@ async function targetBoxes(page: Page): Promise<TargetBox[]> {
  * the skip link until it is focused, on the tool page the file input, which
  * is not a tab stop at all, and at these desktop widths the header's Menu
  * button, which shows only below `sm`, where the links fold into its menu
- * (feature 28). Anything else hidden that way is a control nobody can see.
+ * (feature 28), with the account slot's own Sign in for that menu, since from
+ * `sm` the slot's row shows it (spec 0026 child 0001, AC-27). Anything else
+ * hidden that way is a control nobody can see.
  */
 async function expectTargetSizes(
   page: Page,
-  hiddenOnPurpose: readonly string[] = ["#main", "file-input", "Menu"],
+  hiddenOnPurpose: readonly string[] = ["#main", "file-input", "Menu", "/sign-in"],
 ): Promise<void> {
   const boxes = await targetBoxes(page);
   const hidden = boxes.filter((box) => box.width <= 1 || box.height <= 1);
@@ -419,6 +421,20 @@ async function expectRingAtOnce(target: Locator): Promise<void> {
   });
   expect(ring.ringed).toBe(true);
   expect(ring.landed).toBe(ring.settled);
+}
+
+/**
+ * Spec 0026 child 0001, AC-30: with a document open, the file bar's buttons
+ * sit in the header, and the account slot's Sign in follows them before
+ * `main`, for a visitor who is signed out on a billing on build.
+ */
+async function tabPastTheHeaderSignIn(page: Page): Promise<void> {
+  await page.keyboard.press("Tab");
+  const signIn = page
+    .getByRole("banner")
+    .getByRole("link", { name: "Sign in", exact: true });
+  await expect(signIn).toBeFocused();
+  await expectFocusRing(signIn);
 }
 
 /**
@@ -591,7 +607,8 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
   });
 
   // Spec 0007, AC-5, as spec 0026 AC-12 amends it: the file bar's two buttons
-  // first, then B (the plan card, then the action panel's Untick all and main
+  // first, now in the header (child 0001, AC-30), then the header's Sign in,
+  // then B (the plan card, then the action panel's Untick all and main
   // action), then the found items' group summary and each row.
   test("Start over, Redact and the checklist are reached and ringed like every other control", async ({
     page,
@@ -604,6 +621,7 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("start-over")).toBeFocused();
     await expectFocusRing(page.getByTestId("start-over"));
+    await tabPastTheHeaderSignIn(page);
 
     await tabPastThePlanCard(page);
     // Spec 0026, AC-12: Untick all beside the count, then Redact.
@@ -653,6 +671,7 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
 
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("start-over")).toBeFocused();
+    await tabPastTheHeaderSignIn(page);
     await page.keyboard.press("Tab");
     const whatToDo = page
       .getByTestId("page-warnings")
@@ -754,7 +773,10 @@ test.describe("target sizes on the tool page (AC-7)", () => {
       await page.goto("/tool");
       await reach(page);
 
-      await expectTargetSizes(page);
+      // With a document on the page the header holds the file bar in the
+      // nav's place, so no menu and no menu Sign in (child 0001, AC-30).
+      const open = (await page.getByRole("banner").getByTestId("file-bar").count()) > 0;
+      await expectTargetSizes(page, open ? ["#main", "file-input"] : undefined);
     });
   }
 
@@ -950,11 +972,12 @@ test.describe("the tool page's layout (spec 0013)", () => {
 
   /**
    * Spec 0026, AC-12, *One column*: from `lg` while reviewing, each block that
-   * holds something (A, L, B's head, C) stacks top to bottom in that order,
+   * holds something (L, B's head, C) stacks top to bottom in that order,
    * centred and no wider than 44rem, with the plan card below the document
    * card and above the Found items card. In the page, B still comes before C.
+   * A is empty and hidden: the file bar is in the header (child 0001, AC-30).
    */
-  test("stacks the file bar, the document card, B's head and the list in one centred column", async ({
+  test("stacks the document card, B's head and the list in one centred column", async ({
     page,
   }) => {
     // AC-12's column holds wherever the preview does not show (child 0002).
@@ -965,8 +988,9 @@ test.describe("the tool page's layout (spec 0013)", () => {
     await reviewBothGroups(page);
 
     const grid = await box(page, "tool-grid");
+    await expect(page.getByTestId("area-document")).toBeHidden();
+    await expect(page.getByRole("banner").getByTestId("file-bar")).toBeVisible();
     const blocks = [
-      await box(page, "area-document"),
       await box(page, "area-live"),
       await box(page, "area-rail-head"),
       await box(page, "area-found"),
@@ -1017,10 +1041,11 @@ test.describe("the tool page's layout (spec 0013)", () => {
   });
 
   /**
-   * AC-12: while a document opens, L sits under the file bar, sized to what
-   * it holds, and B's head (the plan card and the lock line) follows it.
+   * AC-12: while a document opens, L heads the column, sized to what it
+   * holds, and B's head (the plan card and the lock line) follows it. The
+   * file bar is in the header (child 0001, AC-30), so A is hidden.
    */
-  test("draws the phase line under the file bar while a document opens, with no stretch", async ({
+  test("draws the phase line at the column's head while a document opens, with no stretch", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -1029,14 +1054,15 @@ test.describe("the tool page's layout (spec 0013)", () => {
     await openingHeld(page);
 
     const live = page.getByTestId("area-live");
-    const [document, area, line, head] = [
-      await box(page, "area-document"),
+    await expect(page.getByTestId("area-document")).toBeHidden();
+    const [bar, area, line, head] = [
+      await rectOf(page.getByRole("banner").getByTestId("file-bar")),
       await rectOf(live),
       await rectOf(live.getByTestId("progress-card")),
       await box(page, "area-rail-head"),
     ];
-    expect(area.top).toBeGreaterThanOrEqual(document.bottom);
-    expectNear(area.left, document.left);
+    expect(area.top).toBeGreaterThanOrEqual(bar.bottom);
+    expectNear(area.left, head.left);
     // L is sized to the progress card it holds (child 0003).
     expectNear(area.bottom - area.top, line.bottom - line.top);
     expect(head.top).toBeGreaterThanOrEqual(area.bottom);
@@ -1044,12 +1070,13 @@ test.describe("the tool page's layout (spec 0013)", () => {
 
   /**
    * Child 0003, AC-31 and AC-33: while a document opens, the progress card
-   * sits between the file bar and B's head, the full column's width, with the
-   * open's four steps, and the polite region's own copy of the line hidden
-   * from the eye. At 1280 and at 900.
+   * heads the column above B's head, the full column's width, with the open's
+   * four steps, and the polite region's own copy of the line hidden from the
+   * eye. At 1280 and at 900. The file bar is in the header (child 0001,
+   * AC-30), above it all.
    */
   for (const width of [1280, 900] as const) {
-    test(`shows the open's steps in a card under the file bar while a document opens at ${width} pixels`, async ({
+    test(`shows the open's steps in a card at the column's head while a document opens at ${width} pixels`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height: 800 });
@@ -1068,11 +1095,11 @@ test.describe("the tool page's layout (spec 0013)", () => {
       const [area, panel, fileBar, head] = [
         await rectOf(live),
         await rectOf(card),
-        await rectOf(page.getByTestId("file-bar")),
+        await rectOf(page.getByRole("banner").getByTestId("file-bar")),
         await rectOf(page.getByTestId("area-rail-head")),
       ];
-      expectNear(panel.left, fileBar.left);
-      expectNear(panel.right, fileBar.right);
+      expectNear(panel.left, head.left);
+      expectNear(panel.right, head.right);
       expect(fileBar.bottom).toBeLessThanOrEqual(area.top);
       expect(area.bottom).toBeLessThanOrEqual(head.top);
       // The line is still in the polite region, for a screen reader only.
@@ -1305,7 +1332,8 @@ test.describe("the tool page's layout (spec 0013)", () => {
 
   /**
    * AC-14, below `lg`, and at 200% text in a wide window: one column in page
-   * order, so a phone reads the file bar, then B, then the list.
+   * order, so a phone reads the file bar (in the header, child 0001, AC-30),
+   * then B, then the list.
    */
   for (const [label, width, doubled] of [
     ["at 900 pixels", 900, false],
@@ -1321,16 +1349,16 @@ test.describe("the tool page's layout (spec 0013)", () => {
       }
       await reviewBothGroups(page);
 
+      await expect(page.getByTestId("area-document")).toBeHidden();
       const [document, live, rail, list] = [
-        await box(page, "area-document"),
+        await rectOf(page.getByRole("banner").getByTestId("file-bar")),
         await box(page, "area-live"),
         await box(page, "area-rail"),
         await box(page, "area-found"),
       ];
-      expect(live.left).toBe(document.left);
-      expect(rail.left).toBe(document.left);
-      expect(list.left).toBe(document.left);
-      expect(document.top).toBeLessThan(live.top);
+      expect(rail.left).toBe(live.left);
+      expect(list.left).toBe(live.left);
+      expect(document.bottom).toBeLessThanOrEqual(live.top);
       expect(live.top).toBeLessThan(rail.top);
       expect(rail.top).toBeLessThan(list.top);
     });
@@ -1351,15 +1379,15 @@ test.describe("the tool page's layout (spec 0013)", () => {
       await planAnswered(page);
       await openingHeld(page);
 
+      await expect(page.getByTestId("area-document")).toBeHidden();
       const [document, live, rail] = [
-        await box(page, "area-document"),
+        await rectOf(page.getByRole("banner").getByTestId("file-bar")),
         await box(page, "area-live"),
         await box(page, "area-rail"),
       ];
       await expect(page.getByTestId("area-live").getByTestId("progress")).toBeVisible();
-      expect(live.left).toBe(document.left);
-      expect(rail.left).toBe(document.left);
-      expect(document.top).toBeLessThan(live.top);
+      expect(rail.left).toBe(live.left);
+      expect(document.bottom).toBeLessThanOrEqual(live.top);
       expect(live.top).toBeLessThan(rail.top);
       const railArea = page.getByTestId("area-rail");
       await expect(railArea.getByTestId("plan-card")).toBeVisible();
@@ -2273,7 +2301,7 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     expect(header?.height).toBe(40);
     expect(main?.height).toBe(50);
 
-    await expectTargetSizes(page, ["#main", "Menu"]);
+    await expectTargetSizes(page, ["#main", "Menu", "/sign-in"]);
   });
 
   test("axe reports nothing", async ({ page }) => {

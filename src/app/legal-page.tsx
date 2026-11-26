@@ -48,7 +48,9 @@ import { type NavItem, PageHeader } from "./site-nav";
  * All of it is CSS: no script, so the pages stay static (spec 0011, INV-7).
  *
  * A server component with no script of its own, so neither page collects
- * anything (INV-7). The header's button is a real page load (`reload`), never
+ * anything (INV-7). The shared header's account slot is the one script on a
+ * billing on build, and it reads a cookie and collects nothing (spec 0026,
+ * child 0001, AC-25). The header's button is a real page load (`reload`), never
  * `next/link`, so the tool opens under its own content security policy (spec
  * 0003, INV-10). The header marks `current` when the page has a nav item of
  * its own (Security, spec 0026, AC-5), and nothing on the privacy and terms

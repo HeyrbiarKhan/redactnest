@@ -13,6 +13,7 @@ import {
   useSyncExternalStore,
   type CSSProperties,
   type FocusEvent,
+  type ReactNode,
   type RefObject,
 } from "react";
 
@@ -106,9 +107,11 @@ import { Button } from "@/ui/button";
 import { Callout } from "@/ui/callout";
 import { Card } from "@/ui/card";
 import { DropZone } from "@/ui/drop-zone";
+import { PageContainer } from "@/ui/page-container";
 import { ProgressSteps } from "@/ui/progress-steps";
 import { Spinner } from "@/ui/spinner";
 
+import { PageHeader } from "../site-nav";
 import { ActionPanel } from "./action-panel";
 import { FailureCallout } from "./failure-callout";
 import { LockLine } from "./lock-line";
@@ -1243,9 +1246,11 @@ export function ToolClient() {
   // warms the engine or asks for the entitlement.
   if (guard === "reload") {
     return (
-      <div aria-live="polite" className="flex flex-col gap-6">
-        <StatusLine text="Loading the tool" />
-      </div>
+      <ToolFrame>
+        <div aria-live="polite" className="flex flex-col gap-6">
+          <StatusLine text="Loading the tool" />
+        </div>
+      </ToolFrame>
     );
   }
 
@@ -1253,35 +1258,39 @@ export function ToolClient() {
   // automatically, because a reload here would load this same wrong URL again.
   if (guard === "wrong-url") {
     return (
-      <Callout
-        tone="danger"
-        data-testid="wrong-url"
-        title="This page cannot open a document"
-        headingLevel={2}
-        action={
-          <Button variant="secondary" href={TOOL_PATH} reload>
-            Open the tool
-          </Button>
-        }
-      >
-        <p>The tool only works at its own address.</p>
-      </Callout>
+      <ToolFrame>
+        <Callout
+          tone="danger"
+          data-testid="wrong-url"
+          title="This page cannot open a document"
+          headingLevel={2}
+          action={
+            <Button variant="secondary" href={TOOL_PATH} reload>
+              Open the tool
+            </Button>
+          }
+        >
+          <p>The tool only works at its own address.</p>
+        </Callout>
+      </ToolFrame>
     );
   }
 
   if (support && !support.supported) {
     return (
-      <Callout
-        tone="danger"
-        role="alert"
-        data-testid="unsupported"
-        title="RedactNest cannot run in this browser"
-        headingLevel={2}
-      >
-        {support.missing.map((gap) => (
-          <p key={gap}>{SUPPORT_GAP_TEXT[gap]}</p>
-        ))}
-      </Callout>
+      <ToolFrame>
+        <Callout
+          tone="danger"
+          role="alert"
+          data-testid="unsupported"
+          title="RedactNest cannot run in this browser"
+          headingLevel={2}
+        >
+          {support.missing.map((gap) => (
+            <p key={gap}>{SUPPORT_GAP_TEXT[gap]}</p>
+          ))}
+        </Callout>
+      </ToolFrame>
     );
   }
 
@@ -1337,8 +1346,34 @@ export function ToolClient() {
   // B's head holds something in every step but one: reviewing with billing
   // off and no refusal, when the action panel is all B shows (AC-12, *Rows*).
   const headHolds = config.billingEnabled || !acting || runRefused;
+  /*
+   * Spec 0026 child 0001, AC-30: with a document on the page, the file's name
+   * and page count, Choose another PDF and Start over sit in the header, in
+   * the nav's place, with their test ids, names and spec 0007 focus moves.
+   * A then holds nothing, so it is hidden and has no row (AC-12, *Rows*). The
+   * name is header text only: never a title, a URL or a landmark's label.
+   */
+  const fileContext =
+    live !== null && compact ? (
+      <DropZone
+        compact
+        look="header"
+        fileName={live.file.name}
+        pageCount={live.summary?.pageCount ?? null}
+        buttonLabel="Choose another PDF"
+        accept="application/pdf"
+        onFile={(file) => void handleFile(file)}
+        onWarm={warm}
+        buttonRef={chooseRef}
+        action={
+          <Button variant="link" data-testid="start-over" onClick={handleStartOver}>
+            Start over
+          </Button>
+        }
+      />
+    ) : undefined;
   const template = toolGridAreas(compact, {
-    document: true,
+    document: !compact,
     live: !quiet,
     head: headHolds,
     found: reviewable,
@@ -1371,99 +1406,85 @@ export function ToolClient() {
    * column's scroll margin rule in `globals.css`.
    */
   return (
-    <div className="@container/tool">
-      <div
-        data-testid="tool-grid"
-        data-panel={acting ? "" : undefined}
-        data-preview={preview !== null ? "" : undefined}
-        style={gridStyle}
-        onFocus={handleColumnFocus}
-        className={
-          "grid gap-6 @min-[61rem]:justify-center " +
-          "@min-[61rem]:[grid-template-columns:var(--tool-columns)] " +
-          "@min-[61rem]:[grid-template-rows:var(--tool-rows)] " +
-          "@min-[61rem]:[grid-template-areas:var(--tool-areas)]"
-        }
-      >
+    <ToolFrame file={fileContext}>
+      <div className="@container/tool">
         <div
-          key="a"
-          data-testid="area-document"
-          className="flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:a]"
+          data-testid="tool-grid"
+          data-panel={acting ? "" : undefined}
+          data-preview={preview !== null ? "" : undefined}
+          style={gridStyle}
+          onFocus={handleColumnFocus}
+          className={
+            "grid gap-6 @min-[61rem]:justify-center " +
+            "@min-[61rem]:[grid-template-columns:var(--tool-columns)] " +
+            "@min-[61rem]:[grid-template-rows:var(--tool-rows)] " +
+            "@min-[61rem]:[grid-template-areas:var(--tool-areas)]"
+          }
         >
-          {/*
+          <div
+            key="a"
+            data-testid="area-document"
+            hidden={compact}
+            className="flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:a]"
+          >
+            {/*
           Spec 0007, AC-15. An open that failed says so above the full drop
           zone, so the next file is one drop away. Nothing of the failed
           document is held beyond its name and its frozen caps.
         */}
-          {session.state === "failed" && (
-            <OpenFailure
-              session={session}
-              titleRef={failureRef}
-              onRecheck={handleRecheck}
-            />
-          )}
-
-          {live !== null && compact ? (
-            <DropZone
-              compact
-              fileName={live.file.name}
-              pageCount={live.summary?.pageCount ?? null}
-              buttonLabel="Choose another PDF"
-              accept="application/pdf"
-              onFile={(file) => void handleFile(file)}
-              onWarm={warm}
-              buttonRef={chooseRef}
-              action={
-                <Button variant="link" data-testid="start-over" onClick={handleStartOver}>
-                  Start over
-                </Button>
-              }
-            />
-          ) : (
-            <div className="flex flex-col gap-3">
-              <DropZone
-                title={DROP_TEXT.title}
-                or={DROP_TEXT.or}
-                helper={dropZoneHelper(planAnswer)}
-                note={DROP_TEXT.device}
-                buttonLabel="Choose a PDF"
-                accept="application/pdf"
-                onFile={(file) => void handleFile(file)}
-                onWarm={warm}
-                buttonRef={chooseRef}
+            {session.state === "failed" && (
+              <OpenFailure
+                session={session}
+                titleRef={failureRef}
+                onRecheck={handleRecheck}
               />
-              {/*
+            )}
+
+            {compact ? null : (
+              <div className="flex flex-col gap-3">
+                <DropZone
+                  title={DROP_TEXT.title}
+                  or={DROP_TEXT.or}
+                  helper={dropZoneHelper(planAnswer)}
+                  note={DROP_TEXT.device}
+                  buttonLabel="Choose a PDF"
+                  accept="application/pdf"
+                  onFile={(file) => void handleFile(file)}
+                  onWarm={warm}
+                  buttonRef={chooseRef}
+                />
+                {/*
               Spec 0011, AC-5. Choosing a PDF is agreeing to the terms, so the
               line sits under the full drop zone and goes with it once the file
               bar takes its place. Outside the polite region, so it is never
               announced as news.
             */}
-              <TermsNotice />
-              {/*
+                <TermsNotice />
+                {/*
               Spec 0017, AC-6. The tab's list outlives the job, so while the
               full zone shows and the list holds terms, one line says how many
               are kept, with Remove all. It adds and searches nothing.
             */}
-              {terms.length > 0 && (
-                <p
-                  data-testid="terms-kept"
-                  className="flex flex-wrap items-center gap-x-3 text-small text-ink"
-                >
-                  <span>{TERMS_TEXT.kept(terms.length)}</span>
-                  <Button
-                    variant="link"
-                    data-testid="terms-kept-remove-all"
-                    onClick={handleRemoveKeptTerms}
+                {terms.length > 0 && (
+                  <p
+                    data-testid="terms-kept"
+                    className="flex flex-wrap items-center gap-x-3 text-small text-ink"
                   >
-                    {TERMS_TEXT.removeAll}
-                  </Button>
-                </p>
-              )}
-            </div>
-          )}
-        </div>
+                    <span>{TERMS_TEXT.kept(terms.length)}</span>
+                    <Button
+                      variant="link"
+                      data-testid="terms-kept-remove-all"
+                      onClick={handleRemoveKeptTerms}
+                    >
+                      {TERMS_TEXT.removeAll}
+                    </Button>
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
 
-        {/*
+          {/*
           Spec 0003, AC-12, and spec 0007, AC-4. The polite region holds only
           what is worth hearing as it changes: the opened document card, heard
           once with the open and then left alone, and the one phase line while
@@ -1486,44 +1507,44 @@ export function ToolClient() {
           phase arrives in a new node. Each line is heard once (spec 0013,
           AC-16).
         */}
-        <div
-          key="l"
-          data-testid="area-live"
-          aria-live="polite"
-          className={cx(
-            "flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:l]",
-            quiet && "sr-only",
-          )}
-        >
-          {reviewable && <OpenedDocument session={session} />}
-          {phaseText !== null && (
-            <StatusLine text={phaseText} visuallyHidden={progress !== null} />
-          )}
-          {/*
+          <div
+            key="l"
+            data-testid="area-live"
+            aria-live="polite"
+            className={cx(
+              "flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:l]",
+              quiet && "sr-only",
+            )}
+          >
+            {reviewable && <OpenedDocument session={session} />}
+            {phaseText !== null && (
+              <StatusLine text={phaseText} visuallyHidden={progress !== null} />
+            )}
+            {/*
             Child 0003, AC-31: the progress card, inside the polite region's
             area but `aria-live="off"`, so a step's tick is never announced on
             top of the phase line, which the region still says exactly as
             before. The card shows the same line, so the region's own copy is
             visually hidden while it does.
           */}
-          {progress !== null && phaseText !== null && (
-            <Card look="state" data-testid="progress-card" aria-live="off">
-              <ProgressSteps
-                data-testid="progress-steps"
-                title={progress.title}
-                line={phaseText}
-                steps={progress.steps.map(({ phase, state }) => ({
-                  label: phaseLine(phase, tickedCount),
-                  state,
-                }))}
-                fraction={progress.fraction}
-                stateText={STEP_STATE_TEXT}
-              />
-            </Card>
-          )}
-        </div>
+            {progress !== null && phaseText !== null && (
+              <Card look="state" data-testid="progress-card" aria-live="off">
+                <ProgressSteps
+                  data-testid="progress-steps"
+                  title={progress.title}
+                  line={phaseText}
+                  steps={progress.steps.map(({ phase, state }) => ({
+                    label: phaseLine(phase, tickedCount),
+                    state,
+                  }))}
+                  fraction={progress.fraction}
+                  stateText={STEP_STATE_TEXT}
+                />
+              </Card>
+            )}
+          </div>
 
-        {/*
+          {/*
           B, in two parts (spec 0026, AC-12): its head, rendered from the first
           render in every step so neither it nor the plan card's region inside
           it ever remounts, then the action panel while acting. From `lg` with
@@ -1533,230 +1554,281 @@ export function ToolClient() {
           no role, name or landmark and must gain none, because some browsers
           drop the role of an element shown as `contents`.
         */}
-        <div
-          key="b"
-          data-testid="area-rail"
-          className={cx(
-            "flex min-w-0 flex-col gap-6",
-            compact ? "@min-[61rem]:contents" : "@min-[61rem]:[grid-area:b]",
-          )}
-        >
           <div
-            data-testid="area-rail-head"
-            hidden={!headHolds}
-            className="flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:h]"
+            key="b"
+            data-testid="area-rail"
+            className={cx(
+              "flex min-w-0 flex-col gap-6",
+              compact ? "@min-[61rem]:contents" : "@min-[61rem]:[grid-area:b]",
+            )}
           >
-            {/*
+            <div
+              data-testid="area-rail-head"
+              hidden={!headHolds}
+              className="flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:h]"
+            >
+              {/*
           Spec 0012, AC-5, as spec 0013 places it (AC-18): the plan card, after
           the drop zone and after the document card, and only on a build that
           sells Pro.
         */}
-            {config.billingEnabled && (
-              <PlanLine
-                answer={planAnswer}
-                checking={planChecking}
-                onTryAgain={() => void handleTryAgain()}
-                lineRef={planLineRef}
-              />
-            )}
+              {config.billingEnabled && (
+                <PlanLine
+                  answer={planAnswer}
+                  checking={planChecking}
+                  onTryAgain={() => void handleTryAgain()}
+                  lineRef={planLineRef}
+                />
+              )}
 
-            {session.state === "lost" && (
-              <FailureCallout
-                data-testid="lost"
-                title={LOST_TEXT.title}
-                body={LOST_TEXT.body}
-                action={
-                  <Button
-                    ref={retryRef}
-                    variant="secondary"
-                    fullWidth
-                    data-testid="retry"
-                    onClick={handleRetry}
-                  >
-                    Try again
-                  </Button>
-                }
-              />
-            )}
+              {session.state === "lost" && (
+                <FailureCallout
+                  data-testid="lost"
+                  title={LOST_TEXT.title}
+                  body={LOST_TEXT.body}
+                  action={
+                    <Button
+                      ref={retryRef}
+                      variant="secondary"
+                      fullWidth
+                      data-testid="retry"
+                      onClick={handleRetry}
+                    >
+                      Try again
+                    </Button>
+                  }
+                />
+              )}
 
-            {/*
+              {/*
           Spec 0007, AC-14. A refused run keeps the review, so the refusal sits
           before the action it asks to change, and stays through tick changes.
         */}
-            {session.state === "reviewing" && session.runFailure !== null && (
-              <FailureCallout
-                data-testid="run-refusal"
-                why={SHOWS_WHY[session.runFailure]}
-                lead={RUN_REFUSAL_LEAD}
-                titleRef={refusalRef}
-                {...runRefusalText(
-                  session.runFailure,
-                  session.entitlement,
-                  session.ticked.size,
-                )}
-                action={
-                  isTickCaused(session.runFailure) ? undefined : (
-                    <Button
-                      variant="secondary"
-                      fullWidth
-                      data-testid="refusal-choose"
-                      onClick={() => chooseRef.current?.click()}
-                    >
-                      Choose another PDF
-                    </Button>
-                  )
-                }
-              />
-            )}
+              {session.state === "reviewing" && session.runFailure !== null && (
+                <FailureCallout
+                  data-testid="run-refusal"
+                  why={SHOWS_WHY[session.runFailure]}
+                  lead={RUN_REFUSAL_LEAD}
+                  titleRef={refusalRef}
+                  {...runRefusalText(
+                    session.runFailure,
+                    session.entitlement,
+                    session.ticked.size,
+                  )}
+                  action={
+                    isTickCaused(session.runFailure) ? undefined : (
+                      <Button
+                        variant="secondary"
+                        fullWidth
+                        data-testid="refusal-choose"
+                        onClick={() => chooseRef.current?.click()}
+                      >
+                        Choose another PDF
+                      </Button>
+                    )
+                  }
+                />
+              )}
 
-            {session.state === "complete" && counts !== null && outputForm !== null && (
-              <ResultCard
-                counts={counts}
-                terms={termView?.results}
-                setAside={termView?.setAside}
-                summary={session.summary}
-                outputForm={outputForm}
-                downloaded={session.downloaded}
-                onDownload={handleDownload}
-                onRedactAnother={handleStartOver}
-                onMakeAgain={() => void runRedaction("rerun")}
-                outputName={session.outputName}
-                headingRef={resultRef}
-                redactAnotherRef={redactAnotherRef}
-              />
-            )}
+              {session.state === "complete" && counts !== null && outputForm !== null && (
+                <ResultCard
+                  counts={counts}
+                  terms={termView?.results}
+                  setAside={termView?.setAside}
+                  summary={session.summary}
+                  outputForm={outputForm}
+                  downloaded={session.downloaded}
+                  onDownload={handleDownload}
+                  onRedactAnother={handleStartOver}
+                  onMakeAgain={() => void runRedaction("rerun")}
+                  outputName={session.outputName}
+                  headingRef={resultRef}
+                  redactAnotherRef={redactAnotherRef}
+                />
+              )}
 
-            {/*
+              {/*
           Inside the action panel while it shows; at the rail's foot otherwise.
           While nothing is open it is centred under the drop zone's column at
           every width (`ToolStates.dc.html`, the owner's call, 2026-11-26);
           once a document is open it stays as it was (feature 28).
         */}
-            {!acting && <LockLine className={compact ? undefined : "justify-center"} />}
-          </div>
+              {!acting && <LockLine className={compact ? undefined : "justify-center"} />}
+            </div>
 
-          {/*
+            {/*
           The action panel, after the head: B's last block, carrying the lock
           line. In the page it comes before the list, so it is reached first
           at every width; from `lg` it is drawn at the list's foot and floats
           at the window's foot over a long list (spec 0026, AC-12).
         */}
-          {acting && (
-            <ActionPanel
-              line={tickCountLine(
-                session.ticked.size,
-                session.matches.filter((match) => match.blocked === null).length,
-                session.matches.length,
-              )}
-              label={redactLabel(session.ticked.size)}
-              running={session.state === "redacting"}
-              waiting={
-                termView === null
-                  ? null
-                  : makeWaitsLine(
-                      termView.searching,
-                      termView.notSearched,
-                      TERMS_LOCKED_TEXT[session.entitlement.account].recheck !== null,
-                    )
-              }
-              anyTicked={session.ticked.size > 0}
-              onRedact={() => void runRedaction("redact-started")}
-              onCancel={handleCancel}
-              onUntickAll={handleUntickAll}
-              redactRef={redactRef}
-              cancelRef={cancelRef}
-              flat={preview !== null}
-            />
-          )}
-        </div>
+            {acting && (
+              <ActionPanel
+                line={tickCountLine(
+                  session.ticked.size,
+                  session.matches.filter((match) => match.blocked === null).length,
+                  session.matches.length,
+                )}
+                label={redactLabel(session.ticked.size)}
+                running={session.state === "redacting"}
+                waiting={
+                  termView === null
+                    ? null
+                    : makeWaitsLine(
+                        termView.searching,
+                        termView.notSearched,
+                        TERMS_LOCKED_TEXT[session.entitlement.account].recheck !== null,
+                      )
+                }
+                anyTicked={session.ticked.size > 0}
+                onRedact={() => void runRedaction("redact-started")}
+                onCancel={handleCancel}
+                onUntickAll={handleUntickAll}
+                redactRef={redactRef}
+                cancelRef={cancelRef}
+                flat={preview !== null}
+              />
+            )}
+          </div>
 
-        {/*
+          {/*
         Spec 0005, AC-13, and spec 0013, AC-19. The found items, outside the
         live region for the same reason the failure is: a list read out as it
         appears would drown the phase line. Shown for every step that has a
         document open to review.
       */}
-        {reviewable && (
-          <div
-            key="c"
-            data-testid="area-found"
-            className={cx(
-              "min-w-0 @min-[61rem]:[grid-area:c]",
-              // The panel's room at the list's end, where it rests (AC-12).
-              acting && "@min-[61rem]:pb-[var(--tool-panel-room)]",
-            )}
-          >
-            <ReviewChecklist
-              matches={session.matches}
-              ticked={session.ticked}
-              running={session.state === "redacting"}
-              partly={session.summary !== null && isPartly(session.summary)}
-              onToggle={handleToggle}
-              onTicksSet={handleTicksSet}
-              onPick={handlePick}
-              flat={preview !== null}
-              terms={termView?.groups}
-              termActions={{
-                onSetAside: handleSetAside,
-                onRemove: handleRemoveTerm,
-                onTryAgain: handleTryAgainTerms,
-                onRecheck:
-                  TERMS_LOCKED_TEXT[session.entitlement.account].recheck === null
-                    ? null
-                    : handleTermsRecheck,
-                searching: termView?.searching ?? false,
-              }}
-              panel={
-                // Spec 0017, AC-1 and AC-2: with billing on, Pro gets the
-                // panel and Free the locked one; with billing off, none.
-                config.billingEnabled && termView !== null ? (
-                  <TermsPanel
-                    terms={termView.chips}
-                    locked={
-                      session.entitlement.tier === "paid"
-                        ? null
-                        : TERMS_LOCKED_TEXT[session.entitlement.account]
-                    }
-                    partly={session.summary !== null && isPartly(session.summary)}
-                    running={session.state === "redacting"}
-                    searching={termView.searching}
-                    status={[
-                      ...(searchLine === null ? [] : [searchLine.text]),
-                      ...refusedLines.map(({ text }) => text),
-                    ]}
-                    onAdd={handleAddTerms}
-                    onRemove={handleRemoveTerm}
-                    onRemoveAll={handleRemoveAllTerms}
-                    onRecheck={handleTermsRecheck}
-                    fieldRef={termFieldRef}
-                    focusRef={termFocusRef}
-                  />
-                ) : undefined
-              }
-            />
-          </div>
-        )}
+          {reviewable && (
+            <div
+              key="c"
+              data-testid="area-found"
+              className={cx(
+                "min-w-0 @min-[61rem]:[grid-area:c]",
+                // The panel's room at the list's end, where it rests (AC-12).
+                acting && "@min-[61rem]:pb-[var(--tool-panel-room)]",
+              )}
+            >
+              <ReviewChecklist
+                matches={session.matches}
+                ticked={session.ticked}
+                running={session.state === "redacting"}
+                partly={session.summary !== null && isPartly(session.summary)}
+                onToggle={handleToggle}
+                onTicksSet={handleTicksSet}
+                onPick={handlePick}
+                flat={preview !== null}
+                terms={termView?.groups}
+                termActions={{
+                  onSetAside: handleSetAside,
+                  onRemove: handleRemoveTerm,
+                  onTryAgain: handleTryAgainTerms,
+                  onRecheck:
+                    TERMS_LOCKED_TEXT[session.entitlement.account].recheck === null
+                      ? null
+                      : handleTermsRecheck,
+                  searching: termView?.searching ?? false,
+                }}
+                panel={
+                  // Spec 0017, AC-1 and AC-2: with billing on, Pro gets the
+                  // panel and Free the locked one; with billing off, none.
+                  config.billingEnabled && termView !== null ? (
+                    <TermsPanel
+                      terms={termView.chips}
+                      locked={
+                        session.entitlement.tier === "paid"
+                          ? null
+                          : TERMS_LOCKED_TEXT[session.entitlement.account]
+                      }
+                      partly={session.summary !== null && isPartly(session.summary)}
+                      running={session.state === "redacting"}
+                      searching={termView.searching}
+                      status={[
+                        ...(searchLine === null ? [] : [searchLine.text]),
+                        ...refusedLines.map(({ text }) => text),
+                      ]}
+                      onAdd={handleAddTerms}
+                      onRemove={handleRemoveTerm}
+                      onRemoveAll={handleRemoveAllTerms}
+                      onRecheck={handleTermsRecheck}
+                      fieldRef={termFieldRef}
+                      focusRef={termFocusRef}
+                    />
+                  ) : undefined
+                }
+              />
+            </div>
+          )}
 
-        {/*
+          {/*
           P, the page preview (spec 0026 child 0002, AC-39): a fifth area, after
           C in the page, so it is reached last and changes no order before it,
           though the frame draws it on the left. Keyed by the job, so a second
           document's preview never inherits the first one's pictures, and
           gone, with its one cleanup, whenever AC-37 stops holding.
         */}
-        {preview !== null && preview.summary !== null && (
-          <PagePreview
-            key={preview.jobId}
-            ref={previewRef}
-            summary={preview.summary}
-            matches={preview.matches}
-            ticked={preview.ticked}
-            running={preview.state === "redacting"}
-            draw={drawPage}
-          />
-        )}
+          {preview !== null && preview.summary !== null && (
+            <PagePreview
+              key={preview.jobId}
+              ref={previewRef}
+              summary={preview.summary}
+              matches={preview.matches}
+              ticked={preview.ticked}
+              running={preview.state === "redacting"}
+              draw={drawPage}
+            />
+          )}
+        </div>
       </div>
-    </div>
+    </ToolFrame>
+  );
+}
+
+/**
+ * The page around the tool: the header, then `main` with the page's title
+ * (spec 0026, child 0001, AC-30). `ToolClient` renders the header itself
+ * because it alone holds the session, so with a document on the page the
+ * header can carry the file context in the nav's place; `page.tsx` renders
+ * `ToolClient` alone. Every link out of the header is a real page load, so
+ * spec 0007's leave warning still guards ticked work.
+ *
+ * `main` is the skip link's target (spec 0003, AC-14): focusable so the link
+ * can move focus here, and the one element allowed to drop its outline,
+ * because it is a place focus lands rather than a control. Its three data
+ * attributes are the page preview's hooks (spec 0026 child 0002, AC-38):
+ * while the tool grid carries `data-preview`, one rule in `globals.css` lifts
+ * `main`'s padding and the container's cap and gutters, and hides the title
+ * visually, so the frame fills the window under the header. The title stays
+ * the page's `h1`, centred over the tool's one centred column (AC-12).
+ */
+function ToolFrame({
+  file,
+  children,
+}: {
+  readonly file?: ReactNode;
+  readonly children: ReactNode;
+}) {
+  return (
+    <>
+      {/* Nothing current, and no Try it free on its own page (spec 0013, AC-7). */}
+      <PageHeader current="tool" file={file} />
+      <main
+        id="main"
+        tabIndex={-1}
+        data-tool-main=""
+        className="flex-1 bg-subtle py-10 focus:outline-none sm:py-14"
+      >
+        {/*
+          Wide, for the tool grid (spec 0013, AC-14). The lock line ends the
+          column, inside the action panel or under the drop zone, where the
+          file is.
+        */}
+        <PageContainer width="wide" className="flex flex-col gap-8" data-tool-frame="">
+          <h1 data-tool-title="" className="text-center text-title text-ink">
+            Redact a PDF
+          </h1>
+          {children}
+        </PageContainer>
+      </main>
+    </>
   );
 }
 

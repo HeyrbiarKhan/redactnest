@@ -23,12 +23,13 @@ export interface PolicyChange {
 export type PolicyChanges = readonly [PolicyChange, ...PolicyChange[]];
 
 export const PRIVACY_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
-  // Spec 0026 child 0002, AC-56: C3 names the pictures of your pages, dated
-  // the day it was built, a literal.
+  // Spec 0026 child 0002, AC-56: C3 names the pictures of your pages; and
+  // child 0001, AC-28: C5 and C6 for the signed in header. One entry for the
+  // day both were built, a literal.
   Object.freeze({
     date: "2026-11-26",
     summary:
-      "Added the page preview: the pictures of your pages the tool shows you while you review stay on your device, like your document.",
+      "Added the page preview: the pictures of your pages the tool shows you while you review stay on your device, like your document. Added the signed in header: when you have signed in, every page shows your email address and plan, which our server sends only to your own browser. A page reads Clerk’s sign in time cookie in your browser to decide whether to ask, and Clerk’s sign in token now holds your email address.",
   }),
   Object.freeze({
     date: "2026-11-14",

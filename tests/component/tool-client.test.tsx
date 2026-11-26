@@ -91,6 +91,13 @@ vi.mock("@/lib/entitlement", () => ({
     mocks.answerListeners.add(listener);
     return () => mocks.answerListeners.delete(listener);
   },
+  // The header's account slot (spec 0026 child 0001): signed out here.
+  browserSignedIn: () => false,
+  // One object, as the store keeps it, so it can be a snapshot.
+  readIdentity: (
+    (identity) => () =>
+      identity
+  )(Object.freeze({ state: "pending", email: null })),
 }));
 
 // Every other value is the real config; whether billing is on is the test's.
@@ -2628,7 +2635,7 @@ describe("the redact flow (spec 0007)", () => {
      * template travels as custom properties (`toolGridAreas`), which jsdom
      * keeps on the grid's style; `design-system.spec.ts` measures the boxes.
      */
-    it("stacks A over B while nothing is open, then one column of A, L and C with B as contents", async () => {
+    it("stacks A over B while nothing is open, then one column of L and C with B as contents", async () => {
       const run = controllable();
       mocks.openSession.mockResolvedValue(run.session);
       render(<ToolClient />);
@@ -2647,11 +2654,14 @@ describe("the redact flow (spec 0007)", () => {
 
       await chooseFile(pdfFile());
       await screen.findByTestId("review");
-      // Billing is off and nothing was refused, so B's head is empty and hidden.
+      // Billing is off and nothing was refused, so B's head is empty and
+      // hidden; the file bar is in the header (spec 0026 child 0001, AC-30),
+      // so A is empty and hidden too, with no row.
       expect(templateOf(grid)).toEqual({
         columns: "minmax(0, 44rem)",
-        areas: "'a' 'l' 'c'",
+        areas: "'l' 'c'",
       });
+      expect(screen.getByTestId("area-document")).not.toBeVisible();
       expect(screen.getByTestId("area-rail-head")).not.toBeVisible();
       expect(screen.getByTestId("area-rail")).toHaveClass("@min-[61rem]:contents");
       expect(screen.getByTestId("area-rail")).not.toHaveClass(
@@ -2835,7 +2845,7 @@ describe("the redact flow (spec 0007)", () => {
         "@min-[61rem]:pb-[var(--tool-panel-room)]",
       );
       expect(screen.getByTestId("tool-grid")).not.toHaveAttribute("data-panel");
-      expect(templateOf(screen.getByTestId("tool-grid")).areas).toBe("'a' 'l' 'h' 'c'");
+      expect(templateOf(screen.getByTestId("tool-grid")).areas).toBe("'l' 'h' 'c'");
     });
 
     /** AC-19: one card, titled Found items, counting every row found. */
@@ -2852,7 +2862,9 @@ describe("the redact flow (spec 0007)", () => {
     /**
      * Spec 0013, AC-16, with billing on, so the plan card takes its place:
      * file bar, document card, plan card, run refusal, action panel, then the
-     * list, each in its own area. The test above runs with billing off.
+     * list, each in its own area. The test above runs with billing off. The
+     * file bar is in the header, first in the page (spec 0026 child 0001,
+     * AC-30).
      */
     it("reads file bar, document, plan card, refusal, action panel, then the list, with billing on (AC-16)", async () => {
       mocks.billingEnabled = true;
@@ -2874,7 +2886,8 @@ describe("the redact flow (spec 0007)", () => {
         expect(before(order[at - 1], order[at])).toBe(true);
       }
       const [fileBar, document, plan, refusal, panel, list] = order;
-      expect(screen.getByTestId("area-document")).toContainElement(fileBar);
+      expect(screen.getByRole("banner")).toContainElement(fileBar);
+      expect(screen.getByTestId("area-document")).not.toBeVisible();
       // The document card in the polite region, which heads the rail column.
       expect(screen.getByTestId("area-live")).toContainElement(document);
       const rail = screen.getByTestId("area-rail");
@@ -2883,7 +2896,7 @@ describe("the redact flow (spec 0007)", () => {
       }
       expect(rail.lastElementChild).toBe(panel);
       expect(screen.getByTestId("area-rail-head")).toContainElement(refusal);
-      expect(templateOf(screen.getByTestId("tool-grid")).areas).toBe("'a' 'l' 'h' 'c'");
+      expect(templateOf(screen.getByTestId("tool-grid")).areas).toBe("'l' 'h' 'c'");
       expect(screen.getByTestId("area-found")).toContainElement(list);
     });
 
@@ -2935,10 +2948,10 @@ describe("the redact flow (spec 0007)", () => {
     });
 
     /**
-     * AC-16, as feature 26 changes it: while a file opens, the file bar takes
-     * A, the list is not there yet, and the spinner and the phase line sit in
-     * the left column, in the polite region, rather than in the rail beside an
-     * empty column.
+     * AC-16, as feature 26 changes it: while a file opens, the list is not
+     * there yet, and the spinner and the phase line sit in the polite region,
+     * rather than in the rail beside an empty column. The file bar is in the
+     * header, so A is empty and hidden (spec 0026 child 0001, AC-30).
      */
     it("lays the page out for a document while it opens, the phase line under the file bar (AC-16)", async () => {
       mocks.openSession.mockImplementation(hangsAt("opening"));
@@ -2949,11 +2962,10 @@ describe("the redact flow (spec 0007)", () => {
       const grid = screen.getByTestId("tool-grid");
       expect(templateOf(grid)).toEqual({
         columns: "minmax(0, 44rem)",
-        areas: "'a' 'l' 'h'",
+        areas: "'l' 'h'",
       });
-      expect(screen.getByTestId("area-document")).toContainElement(
-        screen.getByTestId("file-bar"),
-      );
+      expect(screen.getByRole("banner")).toContainElement(screen.getByTestId("file-bar"));
+      expect(screen.getByTestId("area-document")).not.toBeVisible();
       const polite = screen.getByTestId("area-live");
       expect(polite).toContainElement(progress);
       expect(polite).not.toHaveClass("sr-only");
@@ -3001,7 +3013,7 @@ describe("the redact flow (spec 0007)", () => {
         // The region's line; the progress card beside it is `aria-live="off"`.
         expect(screen.getByTestId("progress").textContent).toBe(`${PHASE_TEXT[phase]}…`);
         expect(screen.getAllByTestId("progress")).toHaveLength(1);
-        expect(templateOf(grid).areas).toBe("'a' 'l' 'h'");
+        expect(templateOf(grid).areas).toBe("'l' 'h'");
         expect(chooseAnother()).toHaveFocus();
       }
 
@@ -3033,7 +3045,7 @@ describe("the redact flow (spec 0007)", () => {
 
       const lost = await screen.findByTestId("lost");
       // L is quiet, so it leaves the template; the head holds the callout.
-      expect(templateOf(grid).areas).toBe("'a' 'h'");
+      expect(templateOf(grid).areas).toBe("'h'");
       expect(screen.getByTestId("area-rail")).toContainElement(lost);
       expect(screen.getByTestId("area-live")).toBe(polite);
       expect(polite).toBeEmptyDOMElement();
@@ -3067,7 +3079,7 @@ describe("the redact flow (spec 0007)", () => {
 
       const progress = screen.getByTestId("progress");
       // Billing off: the head is empty while the run works.
-      expect(templateOf(grid).areas).toBe("'a' 'l' 'c'");
+      expect(templateOf(grid).areas).toBe("'l' 'c'");
       expect(screen.getByTestId("area-live")).toBe(polite);
       expect(polite).toContainElement(progress);
       expect(screen.getByRole("region", { name: "Document opened" })).toBe(documentCard);
@@ -3075,7 +3087,7 @@ describe("the redact flow (spec 0007)", () => {
       expect(screen.getAllByTestId("progress")).toHaveLength(1);
 
       await run.finish();
-      expect(templateOf(grid).areas).toBe("'a' 'l' 'h' 'c'");
+      expect(templateOf(grid).areas).toBe("'l' 'h' 'c'");
       expect(screen.getByTestId("area-live")).toBe(polite);
       expect(screen.queryByTestId("progress")).not.toBeInTheDocument();
 

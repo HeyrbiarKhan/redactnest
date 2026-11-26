@@ -80,13 +80,19 @@ const MENU_OPEN = cx(
  * Without a `nav` there is no menu: everything sits in the row and wraps
  * beneath the lockup when it must, with no script.
  *
- * `nav`, `account` and `action` are the caller's, because what they hold
+ * `context` takes the nav's place in a header with no menu: `/tool`'s file
+ * context while a document is open (spec 0026, child 0001, AC-30). From `sm`
+ * it fills the row between the lockup and the right side; below `sm` it takes
+ * a second row under the lockup, which keeps the right side beside it.
+ *
+ * `nav`, `context`, `account` and `action` are the caller's, because what they hold
  * depends on the build's config and on who is signed in, which a primitive
  * never reads (spec 0003, INV-7). So are the menu button's words, `menuLabel`.
  */
 export function SiteHeader({
   nav,
   menuLabel,
+  context,
   account,
   action,
   sticky = false,
@@ -100,12 +106,19 @@ export function SiteHeader({
       readonly nav: ReactNode;
       /** The menu button's name; the button shows its icon alone. */
       readonly menuLabel: string;
+      readonly context?: undefined;
     }
-  | { readonly nav?: undefined; readonly menuLabel?: undefined }
+  | {
+      readonly nav?: undefined;
+      readonly menuLabel?: undefined;
+      /** In the nav's place, with no menu (see above). */
+      readonly context?: ReactNode;
+    }
 )) {
   const hasAccount = (account ?? null) !== null;
   const hasAction = (action ?? null) !== null;
   const hasMenu = (nav ?? null) !== null;
+  const hasContext = (context ?? null) !== null;
 
   const accountPart = hasAccount && (
     <div
@@ -125,7 +138,7 @@ export function SiteHeader({
         "flex items-center",
         // Pushed right: below `sm` always (the menu holds the rest), and from
         // `sm` only when no account part sits before it.
-        hasMenu && "ms-auto",
+        (hasMenu || hasContext) && "ms-auto",
         hasAccount && "sm:ms-0",
         !hasMenu && !hasAccount && "sm:ms-auto",
       )}
@@ -162,7 +175,9 @@ export function SiteHeader({
       >
         <div
           className={
-            hasMenu ? "sm:me-1.5 md:me-7.5" : "w-full sm:me-1.5 sm:w-auto md:me-7.5"
+            hasMenu || hasContext
+              ? "sm:me-1.5 md:me-7.5"
+              : "w-full sm:me-1.5 sm:w-auto md:me-7.5"
           }
         >
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- a real page load, see above */}
@@ -215,6 +230,11 @@ export function SiteHeader({
         ) : (
           <>
             {nav}
+            {hasContext && (
+              <div className="order-last flex w-full min-w-0 sm:order-none sm:w-auto sm:flex-1">
+                {context}
+              </div>
+            )}
             {accountPart}
             {actionPart}
           </>

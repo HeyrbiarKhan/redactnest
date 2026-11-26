@@ -19,9 +19,17 @@
  * (INV-2). One exception, and it is bounded: a Pro answer confirmed on this
  * page in the last 30 minutes survives a failed refresh for age, so a Polar
  * blip at an open does not cap someone confirmed Pro minutes ago.
+ *
+ * The same store tells the header who is signed in (spec 0026, child 0001,
+ * AC-19 and AC-20): `browserSignedIn` reads Clerk's sign in time cookie to
+ * decide whether a page asks at all, and `readIdentity` says whether the
+ * answer confirmed a sign in, with the address the session token names. The
+ * address is kept beside the snapshot, never in it, so it never reaches a
+ * job or the worker (AC-21).
  */
 
 import { config } from "@/config";
+import { accountEmail } from "@/lib/account-email";
 import { ENTITLEMENT_PATH } from "@/lib/routes";
 import { ENTITLEMENT_ACCOUNTS, type EntitlementSnapshot } from "@/worker/protocol";
 
@@ -66,6 +74,36 @@ export const FREE_ENTITLEMENT: EntitlementSnapshot = Object.freeze({
 });
 
 /**
+ * Who the page's answer says is signed in, for the header (spec 0026, child
+ * 0001, AC-20). `pending` until an ask settles; `confirmed` only when our own
+ * server answered `signed-in`, or `unknown` for a genuine token whose plan
+ * check failed; `unconfirmed` for every other outcome, the store's own
+ * fallback included, which says `unknown` too but came from no server. The
+ * header shows the avatar only for `confirmed`, so it never says signed in on
+ * an answer it could not confirm.
+ */
+export interface AccountIdentity {
+  readonly state: "pending" | "confirmed" | "unconfirmed";
+  /** The session token's address, only ever with `confirmed`. */
+  readonly email: string | null;
+}
+
+const PENDING: AccountIdentity = Object.freeze({ state: "pending", email: null });
+const UNCONFIRMED: AccountIdentity = Object.freeze({ state: "unconfirmed", email: null });
+
+/** What an ask brought back: the snapshot, and who it confirms. */
+interface Landing {
+  readonly snapshot: EntitlementSnapshot;
+  readonly identity: AccountIdentity;
+}
+
+/** Every failure on this side: the free fallback, confirming nobody. */
+const FALLBACK: Landing = Object.freeze({
+  snapshot: FREE_ENTITLEMENT,
+  identity: UNCONFIRMED,
+});
+
+/**
  * Why an ask was made. Only `age` may keep a recent Pro answer: the tab coming
  * back never asks a Pro page, and a button that asks fresh wants the truth.
  */
@@ -84,6 +122,8 @@ interface Ask {
  * INV-10), so each visit starts with none.
  */
 let answer: EntitlementSnapshot | null = null;
+/** Who the page's answer confirms, for the header; kept with `answer`. */
+let identity: AccountIdentity = PENDING;
 /** When the page's answer was last set, for the age rule. */
 let answeredAt = 0;
 /** When the page last heard Pro from the server, for the keep rule. */
@@ -98,6 +138,15 @@ const listeners = new Set<() => void>();
  */
 export function readEntitlement(): EntitlementSnapshot | null {
   return answer;
+}
+
+/**
+ * Who is signed in, by the page's answer (spec 0026, child 0001, AC-20), for
+ * the header's account slot. The same object until it changes, so it can be a
+ * `useSyncExternalStore` snapshot; `subscribeEntitlement` tells of a change.
+ */
+export function readIdentity(): AccountIdentity {
+  return identity;
 }
 
 /** For `useSyncExternalStore`: told whenever the page's answer changes. */
@@ -179,7 +228,7 @@ function startAsk(reason: AskReason): Ask {
 
   const budget = new Promise<EntitlementSnapshot>((resolve) => {
     timer = setTimeout(() => {
-      take(FREE_ENTITLEMENT, reason);
+      take(FALLBACK, reason);
       settledYet = true;
       resolve(answer ?? FREE_ENTITLEMENT);
     }, WAIT_BUDGET_MS);
@@ -206,35 +255,44 @@ function startAsk(reason: AskReason): Ask {
  * Make an ask's outcome the page's answer, by AC-4's rules. Subscribers hear
  * of it only when something they show could change.
  */
-function take(next: EntitlementSnapshot, reason: AskReason): void {
+function take(next: Landing, reason: AskReason): void {
   const now = Date.now();
   const keepsPaid =
     reason === "age" &&
-    next.account === "unknown" &&
+    next.snapshot.account === "unknown" &&
     answer?.tier === "paid" &&
     now - paidAt <= KEEP_PAID_MS;
   // Kept, not confirmed: the time stays, so the next open asks again, and
-  // the 30 minutes still run from the last Pro the server actually said.
+  // the 30 minutes still run from the last Pro the server actually said. The
+  // kept answer keeps its address too (spec 0026, child 0001, AC-20).
   if (keepsPaid) return;
 
   answeredAt = now;
-  if (next.tier === "paid") paidAt = now;
-  if (answer !== null && sameAnswer(answer, next)) return;
-  answer = next;
+  if (next.snapshot.tier === "paid") paidAt = now;
+  if (answer !== null && sameAnswer({ snapshot: answer, identity }, next)) return;
+  answer = next.snapshot;
+  identity = next.identity;
   for (const listener of listeners) listener();
 }
 
-function sameAnswer(a: EntitlementSnapshot, b: EntitlementSnapshot): boolean {
+/**
+ * Whether anything a subscriber shows could differ. Who is confirmed and
+ * their address count too, so a changed address, or the fallback replacing a
+ * server's `unknown`, reaches the header (spec 0026, child 0001, AC-20).
+ */
+function sameAnswer(a: Landing, b: Landing): boolean {
   return (
-    a.tier === b.tier &&
-    a.pageCap === b.pageCap &&
-    a.maxFileBytes === b.maxFileBytes &&
-    a.account === b.account
+    a.snapshot.tier === b.snapshot.tier &&
+    a.snapshot.pageCap === b.snapshot.pageCap &&
+    a.snapshot.maxFileBytes === b.snapshot.maxFileBytes &&
+    a.snapshot.account === b.snapshot.account &&
+    a.identity.state === b.identity.state &&
+    a.identity.email === b.identity.email
   );
 }
 
-/** The request itself. Never rejects: every failure is `FREE_ENTITLEMENT`. */
-function request(): Promise<EntitlementSnapshot> {
+/** The request itself. Never rejects: every failure is `FALLBACK`. */
+function request(): Promise<Landing> {
   return fetch(ENTITLEMENT_URL, {
     // Same origin only. Clerk's sign in cookie has to travel, and nothing here
     // may ever be sent anywhere else.
@@ -242,8 +300,36 @@ function request(): Promise<EntitlementSnapshot> {
     headers: { Accept: "application/json" },
   })
     .then((response) => (response.ok ? response.json() : null))
-    .then((body: unknown) => readSnapshot(body))
-    .catch(() => FREE_ENTITLEMENT);
+    .then((body: unknown) => readLanding(body))
+    .catch(() => FALLBACK);
+}
+
+/**
+ * One body read twice, apart: the snapshot a job may freeze, and who it
+ * confirms. Only an answer our server really sent can confirm anybody, so a
+ * body `readSnapshot` could not read (it hands back `FREE_ENTITLEMENT`
+ * itself) confirms nobody, though it says `unknown` too (AC-20).
+ */
+function readLanding(body: unknown): Landing {
+  const snapshot = readSnapshot(body);
+  const confirmed =
+    snapshot !== FREE_ENTITLEMENT &&
+    (snapshot.account === "signed-in" || snapshot.account === "unknown");
+  if (!confirmed) return Object.freeze({ snapshot, identity: UNCONFIRMED });
+  return Object.freeze({
+    snapshot,
+    identity: Object.freeze({ state: "confirmed", email: readAccountEmail(body) }),
+  });
+}
+
+/**
+ * The visitor's own address from the answer's `email`, narrowed as the server
+ * narrowed the claim, or `null` (spec 0026, child 0001, AC-21). Read beside
+ * `readSnapshot`, never through it, so the snapshot keeps its four fields.
+ */
+export function readAccountEmail(body: unknown): string | null {
+  if (typeof body !== "object" || body === null) return null;
+  return accountEmail((body as Record<string, unknown>).email);
 }
 
 /**
@@ -274,4 +360,33 @@ export function readSnapshot(body: unknown): EntitlementSnapshot {
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+/**
+ * Clerk's sign in time cookie, `__client_uat`, and its suffixed form
+ * `__client_uat_<suffix>`. The suffix is a hash of the publishable key, which
+ * the page never derives, so any suffix is taken (spec 0026, child 0001,
+ * AC-19).
+ */
+const CLIENT_UAT_NAME = /^__client_uat(_[A-Za-z0-9]+)?$/;
+
+/**
+ * Whether this browser signed in, from `document.cookie`: true when any
+ * `__client_uat` cookie holds a whole number above 0 (Clerk writes the sign in
+ * time in seconds, and 0 once signed out). Pure, so it is tested on strings.
+ *
+ * It decides only whether a page asks our server, never what the header
+ * shows: a forged cookie costs one request, whose answer then shows the
+ * signed out shape (AC-19, AC-20). The cookie is read, never written.
+ */
+export function browserSignedIn(cookieString: string): boolean {
+  return cookieString.split(";").some((pair) => {
+    const at = pair.indexOf("=");
+    if (at === -1) return false;
+    const name = pair.slice(0, at).trim();
+    const value = pair.slice(at + 1).trim();
+    if (!CLIENT_UAT_NAME.test(name) || !/^\d+$/.test(value)) return false;
+    const seconds = Number(value);
+    return Number.isSafeInteger(seconds) && seconds > 0;
+  });
 }

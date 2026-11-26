@@ -65,16 +65,16 @@ describe("the sitemap", () => {
       expect(Object.keys(entry)).toEqual(["url"]);
       const { pathname, origin } = new URL(entry.url);
       expect(origin).toBe(new URL(config.siteUrl).origin);
-      expect(pathname).not.toMatch(/^\/(account|sign-in|sign-up|api)(\/|$)/);
+      expect(pathname).not.toMatch(/^\/(account|sign-in|sign-up|sign-out|api)(\/|$)/);
     }
   });
 });
 
 describe("the robots file", () => {
   /** covers: AC-10 */
-  it("allows every crawler everywhere but /api/, and names the sitemap's address", () => {
+  it("allows every crawler everywhere but /api/ and /sign-out, and names the sitemap's address", () => {
     expect(robots()).toEqual({
-      rules: { userAgent: "*", allow: "/", disallow: "/api/" },
+      rules: { userAgent: "*", allow: "/", disallow: ["/api/", "/sign-out"] },
       sitemap: at("/sitemap.xml"),
     });
   });

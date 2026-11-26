@@ -185,8 +185,9 @@ export const NETWORK_ROWS: readonly NetworkRow[] = Object.freeze([
     paths: Object.freeze([ENGINE_PREFIX]),
   }),
   /**
-   * The plan check: a `GET` with no body, answered with the plan alone
-   * (spec 0012, AC-1; privacy claim C5).
+   * The plan check: a `GET` with no body, answered with the plan and, for a
+   * signed in visitor, their own address for the header (spec 0012, AC-1, as
+   * spec 0026 child 0001 AC-21 amends it; privacy claim C5).
    */
   Object.freeze({
     label: "The plan check",

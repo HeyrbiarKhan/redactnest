@@ -9,19 +9,24 @@
  * this build there is no Pro and no account, so the nav loses Pricing and the
  * header loses Sign in. The browser suite (`tests/e2e/shell.spec.ts`) proves
  * that hovering them requests nothing.
+ *
+ * With billing on, the right side is the account slot (spec 0026, child
+ * 0001), whose signed in shapes `account-slot.test.tsx` covers. Here no
+ * `__client_uat` cookie is set, so the slot shows the signed out shape at once.
  */
 
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  ACCOUNT_MENU_PLAN,
   GuidesNav,
   NAV_TEXT,
   PageHeader,
   ProductNav,
-  SignInLink,
   SiteNav,
 } from "@/app/site-nav";
+import { config } from "@/config";
 import {
   HOW_IT_WORKS_PATH,
   PRICING_PATH,
@@ -74,11 +79,30 @@ describe("NAV_TEXT", () => {
       pricing: "Pricing",
       signIn: "Sign in",
       tryFree: "Try it free",
+      openTool: "Open the tool",
       redactPdf: "Redact a PDF",
       security: "Security",
       menu: "Menu",
+      yourAccount: "Your account",
+      account: "Account",
+      billing: "Billing",
+      upgrade: "Upgrade to Pro",
+      signOut: "Sign out",
     });
     expect(Object.isFrozen(NAV_TEXT)).toBe(true);
+  });
+
+  /**
+   * covers: child 0001, AC-23. The plan line's names come from `plans.ts` and
+   * its caps from `config`, through `countText`, so no number is written here.
+   */
+  it("holds the account menu's plan line for each plan", () => {
+    expect(ACCOUNT_MENU_PLAN).toEqual({
+      paid: `Pro · ${config.maxPages.toLocaleString("en-GB")} pages a document`,
+      free: `Free · ${config.freePageCap.toLocaleString("en-GB")} pages a document`,
+      unknown: "Plan unknown right now",
+    });
+    expect(Object.isFrozen(ACCOUNT_MENU_PLAN)).toBe(true);
   });
 
   /** covers: spec 0013, AC-30, and spec 0026, AC-5. No nav item names the tool or the guides. */
@@ -114,7 +138,7 @@ describe("with billing on", () => {
 
   /** covers: AC-5. Sign in is a plain link into the account group. */
   it("shows Sign in as a plain link, pointing at /sign-in", () => {
-    render(<SignInLink />);
+    render(<PageHeader />);
 
     const link = screen.getByRole("link", { name: "Sign in" });
     expect(link.tagName).toBe("A");
@@ -219,11 +243,13 @@ describe("with billing off on this build (AC-5; spec 0012, AC-23)", () => {
     ]);
   });
 
-  it("shows no Sign in", () => {
+  /** covers: child 0001, AC-19. No slot at all, so no cookie read and no request. */
+  it("shows no Sign in and no account slot", () => {
     mocks.billingEnabled = false;
-    const { container } = render(<SignInLink />);
+    render(<PageHeader />);
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByRole("link", { name: "Sign in" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("account-slot")).not.toBeInTheDocument();
   });
 
   it("leaves the header the lockup, the nav and the button", () => {
@@ -313,9 +339,41 @@ describe("the footer's Guides group (spec 0024, AC-9)", () => {
 describe("SiteHeader with the real nav", () => {
   it("passes axe with every slot filled", async () => {
     const { container } = render(
-      <SiteHeader nav={<SiteNav />} menuLabel={NAV_TEXT.menu} account={<SignInLink />} />,
+      <SiteHeader
+        nav={<SiteNav />}
+        menuLabel={NAV_TEXT.menu}
+        account={<a href={SIGN_IN_PATH}>{NAV_TEXT.signIn}</a>}
+        action={<a href={TOOL_PATH}>{NAV_TEXT.tryFree}</a>}
+      />,
     );
 
     await expectNoAxeViolations(container);
+  });
+});
+
+/**
+ * Child 0001, AC-30: `/tool`'s header with a document open, the file context
+ * in the nav's place, no nav and no menu.
+ */
+describe("the header with a file context (AC-30)", () => {
+  it("holds the context where the nav was, with no nav and no menu", () => {
+    render(<PageHeader current="tool" file={<p>letter.pdf</p>} />);
+    const banner = screen.getByRole("banner");
+
+    expect(within(banner).getByText("letter.pdf")).toBeInTheDocument();
+    expect(within(banner).queryByRole("navigation")).toBeNull();
+    expect(within(banner).queryByRole("button", { name: "Menu" })).toBeNull();
+    // Billing on: the right side is the slot's, Sign in for a signed out visitor.
+    expect(linksIn(banner)).toEqual([
+      ["RedactNest", "/"],
+      ["Sign in", SIGN_IN_PATH],
+    ]);
+  });
+
+  it("leaves the right side empty with billing off", () => {
+    mocks.billingEnabled = false;
+    render(<PageHeader current="tool" file={<p>letter.pdf</p>} />);
+
+    expect(linksIn(screen.getByRole("banner"))).toEqual([["RedactNest", "/"]]);
   });
 });

@@ -503,15 +503,22 @@ test("the tool route asks its own server only for the entitlement, and posts onl
   const requests = recordRequests(page);
 
   await page.goto("/tool");
-  await openDocument(page);
 
   // Spec 0012, AC-9, with spec 0026 AC-5's signed out header: Pricing and
   // Sign in are plain links, so hovering them prefetches neither, and the
-  // route's requests stay as they were.
+  // route's requests stay as they were. With a document open the header
+  // holds the file bar and Sign in instead of the nav (child 0001, AC-30),
+  // so its links are hovered in both shapes.
   const header = page.getByRole("banner");
   await expect(
     header.getByRole("link", { name: "Pricing", exact: true }),
   ).toHaveAttribute("href", "/pricing");
+  await expect(
+    header.getByRole("link", { name: "Sign in", exact: true }),
+  ).toHaveAttribute("href", "/sign-in");
+  await hoverHeaderLinks(page);
+
+  await openDocument(page);
   await expect(
     header.getByRole("link", { name: "Sign in", exact: true }),
   ).toHaveAttribute("href", "/sign-in");

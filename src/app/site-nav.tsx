@@ -1,18 +1,19 @@
+import type { ReactNode } from "react";
+
 import { config } from "@/config";
+import { countText } from "@/lib/count-text";
 import { cx } from "@/lib/cx";
+import { NEW_TAB } from "@/lib/flow-text";
 import { LEGAL } from "@/lib/legal";
-import {
-  HOW_IT_WORKS_PATH,
-  PRICING_PATH,
-  SECURITY_PATH,
-  SIGN_IN_PATH,
-  TOOL_PATH,
-} from "@/lib/routes";
+import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
+import { HOW_IT_WORKS_PATH, PRICING_PATH, SECURITY_PATH, TOOL_PATH } from "@/lib/routes";
 import { SEARCH_PAGE_TEXT, SEARCH_PAGES } from "@/lib/search-pages";
 import { Button } from "@/ui/button";
 import { LinkGroup } from "@/ui/link-group";
 import { SiteHeader } from "@/ui/site-header";
 
+import type { AccountMenuPlan } from "./account-menu";
+import { AccountSlot, type AccountSlotText } from "./account-slot";
 import { FOOTER_LINK_CLASS } from "./footer-link";
 
 /**
@@ -29,15 +30,60 @@ import { FOOTER_LINK_CLASS } from "./footer-link";
  * named by its title (spec 0018, AC-2). `howItWorks` is the header's link to
  * the home page's section of that name, and `signIn` the header's way to sign
  * in, a plain link (spec 0026, AC-5).
+ *
+ * Signed in (spec 0026, child 0001): `openTool` takes Try it free's place
+ * (AC-24), `yourAccount` names the avatar, the menu's trigger (AC-22), and
+ * `account`, `billing`, `upgrade` and `signOut` are the menu's items, with
+ * `redactPdf` the way to the tool there too (AC-23).
  */
 export const NAV_TEXT = Object.freeze({
   howItWorks: "How it works",
   pricing: "Pricing",
   signIn: "Sign in",
   tryFree: "Try it free",
+  openTool: "Open the tool",
   redactPdf: "Redact a PDF",
   security: "Security",
   menu: "Menu",
+  yourAccount: "Your account",
+  account: "Account",
+  billing: "Billing",
+  upgrade: "Upgrade to Pro",
+  signOut: "Sign out",
+});
+
+/**
+ * The account menu's plan line, under the visitor's address (spec 0026,
+ * child 0001, AC-23): the plan's name and its page cap, the caps from
+ * `config` through `countText` and the names from `plans.ts`, so no number
+ * is written here. `unknown` is a genuine sign in whose plan check failed.
+ */
+export const ACCOUNT_MENU_PLAN: Readonly<Record<AccountMenuPlan, string>> = Object.freeze(
+  {
+    paid: `${PRO_PLAN.name} · ${countText(config.maxPages)} pages a document`,
+    free: `${FREE_PLAN.name} · ${countText(config.freePageCap)} pages a document`,
+    unknown: "Plan unknown right now",
+  },
+);
+
+/**
+ * Every word the account slot and its menu show, handed to the slot as a
+ * prop, so the words stay here and the client island never imports this
+ * module (which would pull the whole header into the page's script).
+ */
+const ACCOUNT_SLOT_TEXT: AccountSlotText = Object.freeze({
+  signIn: NAV_TEXT.signIn,
+  tryFree: NAV_TEXT.tryFree,
+  openTool: NAV_TEXT.openTool,
+  yourAccount: NAV_TEXT.yourAccount,
+  account: NAV_TEXT.account,
+  billing: NAV_TEXT.billing,
+  upgrade: NAV_TEXT.upgrade,
+  redactPdf: NAV_TEXT.redactPdf,
+  signOut: NAV_TEXT.signOut,
+  newTab: NEW_TAB,
+  proChip: PRO_PLAN.name,
+  plan: ACCOUNT_MENU_PLAN,
 });
 
 /**
@@ -124,23 +170,6 @@ export function SiteNav({ current }: { readonly current?: NavItem }) {
 }
 
 /**
- * The header's Sign in, signed out with billing on (spec 0026, AC-5). A
- * `ghost` button drawn as a plain `a` (`reload`), never `next/link`, so
- * nothing prefetches an account page and every way into the `(account)` group
- * is a full page load (spec 0012, INV-10 and INV-13). With billing off there
- * is no account to sign in to, so there is none.
- */
-export function SignInLink() {
-  if (!config.billingEnabled) return null;
-
-  return (
-    <Button href={SIGN_IN_PATH} reload variant="ghost">
-      {NAV_TEXT.signIn}
-    </Button>
-  );
-}
-
-/**
  * The header every page shows, with `current` naming the page's own item.
  *
  * The primary "Try it free" button is on every page but `/tool`, where it
@@ -150,9 +179,19 @@ export function SignInLink() {
  * link is a real page load too, so spec 0007's leave warning still guards
  * ticked work.
  *
+ * With billing on, the right side is the account slot (spec 0026, child
+ * 0001), the one client island this header carries: signed out, Sign in and
+ * Try it free; signed in, Open the tool and the avatar with its menu. It
+ * comes in two parts of one component, both reading one store: the row part
+ * in the action's place, and below `sm` the menu part after the nav, so the
+ * small screen menu holds Sign in or Open the tool while the row keeps Try it
+ * free or the avatar (AC-27). With billing off there is no slot, no cookie
+ * read and no request (AC-19).
+ *
  * The nav is on every build, so on a small screen the header always folds it
- * into a menu (feature 28), with Sign in beside it there when billing is on
- * (spec 0026, child 0001, AC-27).
+ * into a menu (feature 28). `file` replaces the nav on `/tool` while a
+ * document is open (AC-30): the file's name and page count with its two
+ * controls, a second row under the lockup below `sm`, and no menu.
  *
  * `sticky` is the home page's: the bar stays at the window's top from `lg`,
  * as `Main.dc.html` draws it (`SiteHeader` says how focus stays clear of it).
@@ -162,23 +201,55 @@ export function SignInLink() {
 export function PageHeader({
   current,
   sticky = false,
+  file,
 }: {
   readonly current?: NavItem;
   readonly sticky?: boolean;
+  /** `/tool`'s file context while a document is open (AC-30); `ToolClient` passes it. */
+  readonly file?: ReactNode;
 }) {
-  const action =
-    current === "tool" ? undefined : (
-      <Button href={TOOL_PATH} reload>
-        {NAV_TEXT.tryFree}
-      </Button>
+  const onTool = current === "tool";
+
+  if (file !== undefined) {
+    return (
+      <SiteHeader
+        context={file}
+        action={
+          config.billingEnabled ? (
+            <AccountSlot part="whole" onTool={onTool} text={ACCOUNT_SLOT_TEXT} />
+          ) : undefined
+        }
+      />
     );
+  }
+
+  if (!config.billingEnabled) {
+    return (
+      <SiteHeader
+        nav={<SiteNav current={current} />}
+        menuLabel={NAV_TEXT.menu}
+        action={
+          onTool ? undefined : (
+            <Button href={TOOL_PATH} reload>
+              {NAV_TEXT.tryFree}
+            </Button>
+          )
+        }
+        sticky={sticky}
+      />
+    );
+  }
 
   return (
     <SiteHeader
-      nav={<SiteNav current={current} />}
+      nav={
+        <>
+          <SiteNav current={current} />
+          <AccountSlot part="menu" onTool={onTool} text={ACCOUNT_SLOT_TEXT} />
+        </>
+      }
       menuLabel={NAV_TEXT.menu}
-      account={config.billingEnabled ? <SignInLink /> : undefined}
-      action={action}
+      action={<AccountSlot part="row" onTool={onTool} text={ACCOUNT_SLOT_TEXT} />}
       sticky={sticky}
     />
   );

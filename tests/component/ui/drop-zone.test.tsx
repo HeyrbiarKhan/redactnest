@@ -278,3 +278,71 @@ describe("DropZone as the file bar", () => {
     await expectNoAxeViolations(container);
   });
 });
+
+/**
+ * Spec 0026 child 0001, AC-30: the file bar in `/tool`'s header. The same
+ * input, the same cleared value, the same test ids and names, in the header's
+ * row with no box of its own until a file is dragged over it.
+ */
+describe("DropZone in the header", () => {
+  function renderHeaderBar(pageCount: number | null = 1234) {
+    const onFile = vi.fn();
+    const view = render(
+      <DropZone
+        compact
+        look="header"
+        fileName="a rather long quarterly report for the board.pdf"
+        pageCount={pageCount}
+        buttonLabel="Choose another PDF"
+        accept="application/pdf"
+        onFile={onFile}
+        onWarm={() => {}}
+        action={<Button variant="link">Start over</Button>}
+      />,
+    );
+    return { ...view, onFile };
+  }
+
+  it("holds the whole name for assistive technology, cut only by CSS", () => {
+    renderHeaderBar();
+
+    const name = screen.getByText("a rather long quarterly report for the board.pdf");
+    expect(name).toHaveClass("truncate");
+    expect(screen.getByTestId("file-bar")).toHaveAttribute("data-look", "header");
+  });
+
+  it("writes the page count through countText, after a dot only the eye sees", () => {
+    renderHeaderBar(1234);
+
+    expect(screen.getByTestId("page-count")).toHaveTextContent("1,234 pages");
+    expect(screen.getByText("·", { exact: false })).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+  });
+
+  it("keeps the button, its name and the cleared input, and takes a dropped file", async () => {
+    const user = userEvent.setup();
+    const { onFile } = renderHeaderBar();
+
+    const button = screen.getByRole("button", { name: "Choose another PDF" });
+    expect(button).toHaveAttribute("data-testid", "choose-file");
+    const input = screen.getByTestId<HTMLInputElement>("file-input");
+    await user.upload(input, pdf());
+    expect(onFile).toHaveBeenCalledTimes(1);
+    expect(input.value).toBe("");
+
+    fireEvent.drop(screen.getByTestId("file-bar"), {
+      dataTransfer: { files: [pdf("dropped.pdf")] },
+    });
+    expect(onFile).toHaveBeenLastCalledWith(
+      expect.objectContaining({ name: "dropped.pdf" }),
+    );
+  });
+
+  it("passes axe", async () => {
+    const { container } = renderHeaderBar();
+
+    await expectNoAxeViolations(container);
+  });
+});

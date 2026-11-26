@@ -35,7 +35,8 @@ import { ChangeList, ContactLink, LegalPage, SectionHeading } from "../legal-pag
  * price as a number, and no word for the source repository (AC-9).
  *
  * Prerendered static in the legal pages' frame, with no client component and
- * no script of its own (AC-11). It describes production in every build, as
+ * no script of its own (AC-11), but the shared header's account slot on a
+ * billing on build (spec 0026, child 0001, AC-25). It describes production in every build, as
  * the privacy policy does, so Pro and custom terms are named even with billing
  * off.
  */

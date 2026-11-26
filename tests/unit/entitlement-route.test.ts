@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ENTITLEMENT_ACCOUNTS, type EntitlementSnapshot } from "@/worker/protocol";
+import type { EntitlementAnswer } from "@/billing/entitlement";
+import { ENTITLEMENT_ACCOUNTS } from "@/worker/protocol";
 
 /**
  * The route reads Clerk's cookie through `next/headers`, which needs a request
@@ -139,6 +140,7 @@ describe("where the caps come from", () => {
       pageCap: 7,
       maxFileBytes: 4242,
       account: "none",
+      email: null,
     });
   });
 
@@ -153,6 +155,7 @@ describe("where the caps come from", () => {
       pageCap: 3,
       maxFileBytes: 26_214_400,
       account: "none",
+      email: null,
     });
   });
 });
@@ -205,15 +208,18 @@ describe("what it refuses to know", () => {
   /**
    * The whole payload, asserted as a whole. If somebody later attaches a
    * request id, a file name or anything else to help with debugging, this
-   * fails, and that is the point.
+   * fails, and that is the point. The fifth field is the visitor's own
+   * address, for the signed in header, which the page reads apart from the
+   * other four (spec 0026 child 0001, AC-21).
    */
-  it("carries four fields and nothing else", async () => {
+  it("carries five fields and nothing else", async () => {
     const { GET } = await loadRoute();
 
     const body = (await (await GET()).json()) as Record<string, unknown>;
 
     expect(Object.keys(body).sort()).toEqual([
       "account",
+      "email",
       "maxFileBytes",
       "pageCap",
       "tier",
@@ -270,14 +276,22 @@ describe("every account kind", () => {
     vi.doUnmock("@/billing/entitlement");
   });
 
-  const answers: readonly EntitlementSnapshot[] = [
+  // Spec 0026 child 0001, AC-21: a genuine token's answers carry its address.
+  const answers: readonly EntitlementAnswer[] = [
     ...ENTITLEMENT_ACCOUNTS.map((account) => ({
       tier: "free" as const,
       pageCap: 3,
       maxFileBytes: 26_214_400,
       account,
+      email: account === "signed-in" || account === "unknown" ? "ada@example.com" : null,
     })),
-    { tier: "paid", pageCap: 50, maxFileBytes: 26_214_400, account: "signed-in" },
+    {
+      tier: "paid",
+      pageCap: 50,
+      maxFileBytes: 26_214_400,
+      account: "signed-in",
+      email: "ada@example.com",
+    },
   ];
 
   for (const answer of answers) {
@@ -311,5 +325,45 @@ describe("every account kind", () => {
     await GET();
 
     expect(seen).toEqual(["token-value", undefined]);
+  });
+});
+
+/**
+ * Spec 0026 child 0001, AC-21: the visitor's address goes back to their own
+ * browser and nowhere else. An `unknown` answer is the one the route reports
+ * (spec 0016, AC-16), so it is the one place the address could leak into a
+ * report: every payload `reportServer` is handed holds the event's name alone.
+ */
+describe("the address in a report", () => {
+  afterEach(() => {
+    vi.doUnmock("@/billing/entitlement");
+    vi.doUnmock("@/telemetry/server");
+  });
+
+  it("never reaches a report, though the answer carries it", async () => {
+    const reports: unknown[] = [];
+    const answer: EntitlementAnswer = {
+      tier: "free",
+      pageCap: 3,
+      maxFileBytes: 26_214_400,
+      account: "unknown",
+      email: "ada@example.com",
+    };
+    vi.resetModules();
+    vi.doMock("@/billing/entitlement", () => ({
+      resolveEntitlement: () => Promise.resolve(answer),
+    }));
+    vi.doMock("@/telemetry/server", () => ({
+      reportServer: (...args: unknown[]) => {
+        reports.push(args[0]);
+      },
+    }));
+    const { GET } = await import("@/app/api/entitlement/route");
+
+    const response = await GET();
+
+    expect(await response.json()).toEqual(answer);
+    expect(reports).toEqual([{ name: "plan-check-failed" }]);
+    expect(JSON.stringify(reports)).not.toContain("ada@example.com");
   });
 });

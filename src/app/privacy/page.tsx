@@ -28,8 +28,9 @@ import { ServicesSection } from "./services-section";
  * walk the register.
  *
  * Prerendered static, with no client component and no script of its own
- * (INV-7). No cap is stated as a number and the source repository is never
- * named (INV-6). It describes production in every build, billing off
+ * (INV-7), but the shared header's account slot on a billing on build (spec
+ * 0026, child 0001, AC-25). No cap is stated as a number and the source
+ * repository is never named (INV-6). It describes production in every build, billing off
  * included, so Clerk's host is always its production address.
  */
 export const dynamic = "force-static";
@@ -94,7 +95,7 @@ export default function PrivacyPage() {
           When you close the page or start over, the document is gone from the page’s
           memory.
         </p>
-        {/* C5, as spec 0016 changes it */}
+        {/* C5, as spec 0016 and spec 0026 (child 0001, AC-21 and AC-28) change it */}
         <p>
           Apart from loading the page and its own files, the tool page asks our server
           which plan applies to you, and tells it counts of what happened (see Counts and
@@ -102,7 +103,8 @@ export default function PrivacyPage() {
           The counts carry no cookie, and neither carries anything about your document. To
           answer the plan question, our server checks your sign in cookie itself and, when
           it shows you are signed in, asks Polar whether you hold Pro, sending your
-          account id and nothing else.
+          account id and nothing else. When you are signed in, the answer also holds your
+          email address, so the header can show who is signed in (see Your account).
         </p>
         <p>
           The cleaned file is saved wherever your browser saves downloads. We cannot see,
@@ -121,23 +123,43 @@ export default function PrivacyPage() {
           Account. Clerk also records details of each sign in, listed under Services we
           use.
         </p>
+        {/* C5 for the header, spec 0026 child 0001, AC-19, AC-21 and AC-28 */}
         <p>
-          We use your email address to sign you in and to run your Pro subscription. Our
-          legal basis is the contract between us (Article 6(1)(b) of the UK GDPR and the
-          EU GDPR).
+          When you have signed in, the header on every page shows your email address and
+          your plan. To know whether to show them, the page reads, in your browser, the
+          cookie Clerk keeps with the time you last signed in. Only when that cookie says
+          you signed in does the page ask our server which plan applies to you, the same
+          question the tool page asks. Our server answers with your plan and your email
+          address, and sends them only to your own browser, to show in the header. We
+          never store, log or send that address anywhere else. If you have not signed in,
+          the page asks nothing.
+        </p>
+        {/* AC-21's two limits, stated (AC-28) */}
+        <p>
+          The address comes from Clerk’s sign in token, the cookie that keeps you signed
+          in, which now holds your email address. Your browser sends that cookie to our
+          site with every request, as it always has. The token is renewed only on the sign
+          in and account pages, so the address the header shows can be up to 7 days old.
+        </p>
+        <p>
+          We use your email address to sign you in, to show you who is signed in, and to
+          run your Pro subscription. Our legal basis is the contract between us (Article
+          6(1)(b) of the UK GDPR and the EU GDPR).
         </p>
         {/* AC-11 of spec 0012 */}
         <p>
           When you delete your account, we delete it at Clerk and delete your customer
           record at Polar. Polar still keeps the records tax law requires.
         </p>
-        {/* C6 */}
+        {/* C6, as spec 0026 (child 0001, AC-28) changes it */}
         <p>
           No page on this site sets a cookie, except the sign in and account pages. There,
           Clerk sets the cookies that sign in needs, on our site and on {CLERK_HOST}, its
-          address for us. On that address, Cloudflare, the network Clerk uses, also sets
-          cookies that protect sign in from abuse. All of them are strictly necessary for
-          signing in and keeping it secure.
+          address for us. Its sign in token also holds your email address, for the header.
+          On that address, Cloudflare, the network Clerk uses, also sets cookies that
+          protect sign in from abuse. All of them are strictly necessary for signing in
+          and keeping it secure. Every other page only reads, in your browser, the one
+          with the time you last signed in, and sets nothing.
         </p>
         <p>
           Nothing else sets a cookie on our site or on {CLERK_HOST}, and we set none of

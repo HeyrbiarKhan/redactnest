@@ -3,6 +3,7 @@
 import { FileText, FileUp, Upload } from "lucide-react";
 import { useRef, useState, type DragEvent, type ReactNode, type Ref } from "react";
 
+import { countText } from "@/lib/count-text";
 import { cx } from "@/lib/cx";
 
 import { Button } from "./button";
@@ -38,9 +39,14 @@ interface FullDropZone extends DropZoneCommon {
  * The file bar, shown once a document is chosen (spec 0007, AC-3): the file's
  * name, its page count once known, the button, and the caller's `action` (Start
  * over). It still takes a dropped file.
+ *
+ * `look` is where it sits: `bar`, a box of its own in the page, or `header`,
+ * in the site header's row in the nav's place, with no box until a file is
+ * dragged over it (`/tool`, spec 0026, child 0001, AC-30).
  */
 interface CompactDropZone extends DropZoneCommon {
   readonly compact: true;
+  readonly look?: "bar" | "header";
   /** From somebody's disk, so untrusted: rendered only as React text (INV-7). */
   readonly fileName: string;
   /** Null until the document is open, and nothing is shown for it until then. */
@@ -128,6 +134,64 @@ export function DropZone(props: DropZoneProps) {
       }}
     />
   );
+
+  if (props.compact && props.look === "header") {
+    return (
+      <div
+        {...zone}
+        data-testid="file-bar"
+        data-look="header"
+        className={cx(
+          // An edge only while a file is dragged over it: at rest the header's
+          // own row is the box. The edge's room is kept either way, so the
+          // row never moves.
+          "flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2 rounded-control border px-2 py-1",
+          "transition-colors",
+          state === "dragging" ? STATE.dragging : "border-transparent",
+        )}
+      >
+        {/*
+          The name is cut with an ellipsis to fit, but the element still holds
+          all of it, so assistive technology reads the whole name (AC-30). The
+          count follows after a dot for the eye and a pause for a screen
+          reader, through `countText` like every count the flow shows.
+        */}
+        <p className="flex min-w-0 flex-1 basis-48 items-center gap-2 text-small text-ink">
+          <FileText
+            aria-hidden="true"
+            className="size-4.5 shrink-0 text-ink-muted"
+            strokeWidth={1.75}
+          />
+          <span className="min-w-0 truncate font-semibold">{props.fileName}</span>
+          {props.pageCount !== null && (
+            <span className="shrink-0 whitespace-nowrap text-ink-muted">
+              <span aria-hidden="true">· </span>
+              <span className="sr-only">, </span>
+              <span data-testid="page-count">
+                {countText(props.pageCount)} {props.pageCount === 1 ? "page" : "pages"}
+              </span>
+            </span>
+          )}
+        </p>
+
+        {input}
+
+        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
+          <Button
+            ref={buttonRef}
+            variant="secondary"
+            icon={Upload}
+            data-testid="choose-file"
+            onFocus={onWarm}
+            onClick={() => inputRef.current?.click()}
+          >
+            {buttonLabel}
+          </Button>
+          {props.action}
+        </div>
+      </div>
+    );
+  }
 
   if (props.compact) {
     return (

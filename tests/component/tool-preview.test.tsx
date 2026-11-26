@@ -57,6 +57,13 @@ vi.mock("@/lib/entitlement", () => ({
   askAgain: vi.fn(),
   readEntitlement: () => null,
   subscribeEntitlement: () => () => {},
+  // The header's account slot (spec 0026 child 0001): signed out here.
+  browserSignedIn: () => false,
+  // One object, as the store keeps it, so it can be a snapshot.
+  readIdentity: (
+    (identity) => () =>
+      identity
+  )(Object.freeze({ state: "pending", email: null })),
 }));
 
 vi.mock("@/lib/support", async (importOriginal) => ({

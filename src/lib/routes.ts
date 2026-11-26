@@ -71,6 +71,14 @@ export const BILLING_PATH = "/account/billing";
 export const WELCOME_PATH = "/account/welcome";
 
 /**
+ * The page that signs a visitor out, so the header's menu can offer Sign out
+ * without Clerk's script on the page it sits on (spec 0026, child 0001,
+ * AC-26). In the account group, so Clerk loads there and nowhere else; kept
+ * out of the sitemap and disallowed in `robots.ts`.
+ */
+export const SIGN_OUT_PATH = "/sign-out";
+
+/**
  * Where every page posts its counts and failure reports (spec 0016, AC-4).
  * Our own origin, so `/tool`'s `connect-src 'self'` already allows it, and the
  * route passes each event on server to server.
