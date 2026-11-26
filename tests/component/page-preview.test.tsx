@@ -466,6 +466,186 @@ describe("the zoom (AC-44)", () => {
     expect(zoomIn).not.toHaveAttribute("aria-disabled");
   });
 
+  describe("a live change of pixel density (AC-44, AC-45)", () => {
+    /**
+     * Chromium's device emulation fires no `resolution` change (verify.md,
+     * task 17's 1x then 2x step), so the switch is pinned here: a fake
+     * `matchMedia` records each query and its listeners, and the test moves
+     * `devicePixelRatio` and fires the one being listened to, as a window
+     * dragged to a screen with another scale would.
+     */
+    interface FakeQuery {
+      readonly media: string;
+      readonly listeners: Set<() => void>;
+    }
+    let queries: FakeQuery[];
+
+    function listening(): FakeQuery[] {
+      return queries.filter((query) => query.listeners.size > 0);
+    }
+
+    function moveToScale(ratio: number): void {
+      const [current] = listening();
+      vi.stubGlobal("devicePixelRatio", ratio);
+      act(() => {
+        for (const listener of [...(current?.listeners ?? [])]) listener();
+      });
+    }
+
+    beforeEach(() => {
+      queries = [];
+      vi.stubGlobal("devicePixelRatio", 1);
+      vi.stubGlobal(
+        "matchMedia",
+        vi.fn((media: string) => {
+          const query: FakeQuery = { media, listeners: new Set() };
+          queries.push(query);
+          return {
+            media,
+            addEventListener: (_type: string, listener: () => void) =>
+              query.listeners.add(listener),
+            removeEventListener: (_type: string, listener: () => void) =>
+              query.listeners.delete(listener),
+          };
+        }),
+      );
+    });
+
+    it("listens for the current density only, and moves its listener to the new one", () => {
+      renderPreview();
+      expect(listening().map((query) => query.media)).toEqual(["(resolution: 1dppx)"]);
+
+      moveToScale(2);
+      expect(listening().map((query) => query.media)).toEqual(["(resolution: 2dppx)"]);
+
+      moveToScale(1.5);
+      expect(listening().map((query) => query.media)).toEqual(["(resolution: 1.5dppx)"]);
+    });
+
+    it("stops listening when the preview goes", () => {
+      const { unmount } = renderPreview();
+      moveToScale(2);
+      unmount();
+      expect(listening()).toEqual([]);
+    });
+
+    it("asks for the page again at the new density 150 ms after the change, never at once", async () => {
+      vi.useFakeTimers();
+      renderPreview();
+      layOut(600);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(pageDraws().map((entry) => entry.ask.width)).toEqual([600]);
+      const first = picture(600, 776);
+      await pageDraws()[0].answer(first, BOXES);
+
+      moveToScale(2);
+      expect(pageDraws()).toHaveLength(1);
+      // The picture on show stays, stretched to the same CSS width.
+      expect(pageCanvas().style.width).toBe("600px");
+      expect(first.close).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(149);
+      });
+      expect(pageDraws()).toHaveLength(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(pageDraws()).toHaveLength(2);
+      expect(pageDraws()[1].ask).toEqual({
+        page: 1,
+        purpose: "page",
+        width: 1200,
+        maxPixels: config.previewMaxPixels,
+      });
+
+      const sharper = picture(1200, 1552);
+      await pageDraws()[1].answer(sharper, BOXES);
+      expect(shown.get(pageCanvas())?.at(-1)).toBe(sharper);
+      expect(pageCanvas().style.width).toBe("600px");
+    });
+
+    it("settles once after a run of changes, at the last density", async () => {
+      vi.useFakeTimers();
+      renderPreview();
+      layOut(600);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      await pageDraws()[0].answer(picture(), BOXES);
+
+      moveToScale(2);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      moveToScale(3);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(pageDraws().map((entry) => entry.ask.width)).toEqual([600, 1800]);
+    });
+
+    it("keeps the thumbnails drawn at the old density rather than drawing them again", async () => {
+      renderPreview();
+      layOut();
+      await act(async () => {});
+      const thumbs = () => pending.filter((entry) => entry.ask.purpose === "thumbnail");
+      expect(thumbs().map((entry) => entry.ask.width)).toEqual([84, 84]);
+      await thumbs()[0].answer(picture(84, 109));
+      expect(thumbs()[2].ask.page).toBe(3);
+
+      // Page 2 is still in flight at 1x; the switch comes before it lands.
+      moveToScale(2);
+      await thumbs()[1].answer(picture(84, 109));
+      await thumbs()[2].answer(picture(84, 109));
+      await act(async () => {});
+      // Every page has its thumbnail now, so none is asked again at 2x.
+      expect(thumbs()).toHaveLength(3);
+    });
+
+    it("asks a thumbnail still waiting for its turn at the density it is asked under", async () => {
+      renderPreview();
+      layOut();
+      await act(async () => {});
+      const thumbs = () => pending.filter((entry) => entry.ask.purpose === "thumbnail");
+      expect(thumbs().map((entry) => entry.ask.page)).toEqual([1, 2]);
+
+      moveToScale(2);
+      await thumbs()[0].answer(picture(168, 218));
+      expect(thumbs()[2].ask).toEqual({
+        page: 3,
+        purpose: "thumbnail",
+        width: 168,
+        maxPixels: 84 * 112 * 4,
+      });
+    });
+
+    it("sends no draw for a change of density while a run works, and the wanted one after", async () => {
+      vi.useFakeTimers();
+      const { rerender } = renderPreview();
+      layOut(600);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      await pageDraws()[0].answer(picture(), BOXES);
+
+      rerender({ running: true });
+      moveToScale(2);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500);
+      });
+      expect(pageDraws()).toHaveLength(1);
+
+      rerender({ running: false });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(pageDraws().map((entry) => entry.ask.width)).toEqual([600, 1200]);
+    });
+  });
+
   it("makes the page area a focusable region named for the page", () => {
     renderPreview();
     const region = screen.getByRole("region", { name: "Page 1" });

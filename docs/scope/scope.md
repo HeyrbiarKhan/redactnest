@@ -529,7 +529,7 @@ spec [0026](../specs/0026-ui-redesign/index.md) (2026-11-25: every page in the m
   - [x] Restore the coverage note as a visible compact line in today's words, no link (d67ff4d hid it behind "What it looks for"; spec 0005 AC-14 and spec 0013 AC-19 stand, your call, 2026-11-26), before verify · AC-12, task 18
   - [x] Proof and records: accessibility sweep, brand rerun, `design.md` and the amendment lines · AC-16 to AC-18
 - [x] Verify it: `/check verify UI redesign`
-- [ ] Test it: `/test UI redesign`
+- [x] Test it: `/test UI redesign`
 - [ ] Review it (fresh model): `/check review UI redesign`
 
 ### 23. Legal review · needs a decision · Alpha · from spec 0011
