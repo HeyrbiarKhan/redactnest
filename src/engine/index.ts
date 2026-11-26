@@ -83,6 +83,14 @@
  *     picture, and the self check fails a picture that still holds one to
  *     drop.
  *
+ * Spec 0026 child 0002 added the page preview's renderer:
+ *
+ *   - `draw.ts` draws one page of the review copy as a picture
+ *     (`drawPageWith`, behind `OpenDocument.drawPage`), within a pixel cap
+ *     and `CANVAS_SIDE_MAX`, and empties MuPDF's store after every draw.
+ *     `geometry.ts`'s `quadRects` turns a target's quads into display boxes
+ *     as fractions of that page, for the worker to send beside it.
+ *
  * Nothing in this folder calls `search()` (spec 0005, INV-11); lint holds it.
  *
  * The functions ending in `With` take the loaded MuPDF module as a parameter.
@@ -147,6 +155,13 @@ export {
   type Transform,
 } from "./device";
 export { hasPdfHeader, PDF_HEADER_WINDOW } from "./door";
+export {
+  CANVAS_SIDE_MAX,
+  drawPageWith,
+  drawScale,
+  type DrawnPage,
+  type DrawOptions,
+} from "./draw";
 export { glyphRuleOf, judgeGlyphs, type GlyphVerdict } from "./glyphs";
 export { inlineRuleOf, judgeInlinePictures, type InlineVerdict } from "./inline";
 export { checkpoint, EngineFailure, RunCancelled } from "./failure";
@@ -165,12 +180,14 @@ export {
   MIN_QUAD_SIDE,
   paddedArea,
   quadHeight,
+  quadRects,
   quadWidth,
   REMOVAL_BAND_RATIO,
   REMOVAL_INSET_RATIO,
   removalBand,
   TARGET_PADDING_ALONG_RATIO,
   TARGET_PADDING_RATIO,
+  type PageFrame,
 } from "./geometry";
 export {
   contrastWithWhite,

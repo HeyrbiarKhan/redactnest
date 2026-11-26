@@ -33,6 +33,12 @@
  * session lives on in `lost` holding its `jobId`, its `File` and its frozen
  * entitlement. Releasing a worker is neither necessary for a session to have
  * ended (a replacement ends one and releases nothing) nor sufficient.
+ *
+ * Spec 0026 child 0002 adds a fourth kind of operation, a draw, which none of
+ * those words touches: a draw is never cancelled, and every way an operation
+ * is let go (a replacement, a lost worker, a release) settles a pending draw
+ * as no picture rather than as a failure. Every picture a reply carries that
+ * nobody takes is closed here, at once (AC-47, AC-48).
  */
 
 import { config } from "@/config";
@@ -41,8 +47,10 @@ import {
   isEngineErrorKind,
   OperationCancelled,
   type DocumentSummary,
+  type DrawRequest,
   type EngineLimits,
   type MatchId,
+  type PageDrawnMessage,
   type ProgressPhase,
   type RedactedMessage,
   type RedactionOutcome,
@@ -81,6 +89,9 @@ export interface TermSearch {
   cancel(): void;
 }
 
+/** What the preview asks a draw for; the client adds the ids. Spec 0026 child 0002, AC-48. */
+export type DrawAsk = Pick<DrawRequest, "page" | "purpose" | "width" | "maxPixels">;
+
 /**
  * A document held open in the worker.
  *
@@ -102,6 +113,14 @@ export interface OpenedSession {
    * session is already doing.
    */
   findTerms(terms: readonly TermQuery[]): TermSearch;
+  /**
+   * Draw one page for the preview (spec 0026 child 0002, AC-48), with this
+   * session's own `jobId`. Answered at once in the worker, outside its queue,
+   * and never cancelled. Always resolves: a replacement, a lost worker or a
+   * release settles it with no picture, never as a failure. Whoever takes the
+   * reply owns its picture and must show it or close it.
+   */
+  draw(ask: DrawAsk): Promise<PageDrawnMessage>;
   /** Abort the open or the run in flight. The session survives. */
   cancel(): void;
   /** End the session. Terminates the worker and frees everything. */
@@ -109,13 +128,32 @@ export interface OpenedSession {
 }
 
 /** A reply that settles an operation. */
-type Settling = ResultMessage | RedactedMessage | TermsFoundMessage;
+type Settling = ResultMessage | RedactedMessage | TermsFoundMessage | PageDrawnMessage;
 
 interface PendingOperation {
   readonly jobId: string;
   readonly resolve: (message: Settling) => void;
   readonly reject: (error: Error) => void;
   readonly onProgress?: (phase: ProgressPhase) => void;
+  /**
+   * A draw's alone: settle it with no picture. Present only on a draw, which
+   * is never cancelled and never fails (spec 0026 child 0002, AC-48).
+   */
+  readonly settleEmpty?: () => void;
+}
+
+/**
+ * Close the picture a reply carries, if it carries one. Every reply the
+ * listener drops goes through here, so a picture nobody takes is let go at
+ * once rather than when the collector gets to it (spec 0026 child 0002,
+ * AC-47). Narrowed from `unknown`, since the reply may be anything.
+ */
+function closePicture(message: unknown): void {
+  if (typeof message !== "object" || message === null) return;
+  const { kind, picture } = message as { kind?: unknown; picture?: unknown };
+  if (kind !== "page-drawn" || typeof picture !== "object" || picture === null) return;
+  const close = (picture as { close?: unknown }).close;
+  if (typeof close === "function") close.call(picture);
 }
 
 /**
@@ -163,15 +201,26 @@ function getWorker(): Worker {
   const isCurrent = () => worker === instance;
 
   instance.addEventListener("message", (event: MessageEvent<ResponseMessage>) => {
-    if (!isCurrent()) return;
+    // Each early drop closes any picture the reply carries (spec 0026 child
+    // 0002, AC-48), since nobody else ever will.
+    if (!isCurrent()) {
+      closePicture(event.data);
+      return;
+    }
 
     const message = event.data;
     const operation = pending.get(message.id);
-    if (!operation) return;
+    if (!operation) {
+      closePicture(message);
+      return;
+    }
 
     // A reply belonging to a session that has since been replaced. Dropped
     // rather than delivered to whoever holds that operation id now.
-    if (operation.jobId !== message.jobId) return;
+    if (operation.jobId !== message.jobId) {
+      closePicture(message);
+      return;
+    }
 
     switch (message.kind) {
       case "progress":
@@ -180,6 +229,15 @@ function getWorker(): Worker {
       case "result":
       case "redacted":
       case "terms-found":
+        pending.delete(message.id);
+        operation.resolve(message);
+        break;
+      case "page-drawn":
+        // Only a draw takes a drawn page; anything else asked for none.
+        if (!operation.settleEmpty) {
+          closePicture(message);
+          break;
+        }
         pending.delete(message.id);
         operation.resolve(message);
         break;
@@ -215,7 +273,10 @@ function getWorker(): Worker {
 function failAll(error: Error): void {
   for (const [id, operation] of pending) {
     pending.delete(id);
-    operation.reject(error);
+    // A draw never fails (spec 0026 child 0002, AC-48): it settles with no
+    // picture, whether the worker died or was released.
+    if (operation.settleEmpty) operation.settleEmpty();
+    else operation.reject(error);
   }
 }
 
@@ -241,6 +302,13 @@ function failAll(error: Error): void {
 function retireOtherJobs(engine: Worker): void {
   for (const [id, operation] of pending) {
     pending.delete(id);
+    // A draw is never cancelled, so its id never enters the worker's
+    // cancelled set: it settles with no picture, and its late reply, if any,
+    // is closed by the listener (spec 0026 child 0002, AC-48).
+    if (operation.settleEmpty) {
+      operation.settleEmpty();
+      continue;
+    }
     const message: RequestMessage = { id, jobId: operation.jobId, kind: "cancel" };
     engine.postMessage(message);
     operation.reject(new OperationCancelled());
@@ -411,6 +479,41 @@ export function openSession(options: {
             operation.reject(new OperationCancelled());
           },
         };
+      },
+
+      draw(ask) {
+        const drawId = crypto.randomUUID();
+        const empty: PageDrawnMessage = {
+          id: drawId,
+          jobId,
+          kind: "page-drawn",
+          page: ask.page,
+          purpose: ask.purpose,
+          picture: null,
+          boxes: [],
+        };
+        const drawn = new Promise<Settling>((resolve, reject) => {
+          pending.set(drawId, {
+            jobId,
+            resolve,
+            reject,
+            settleEmpty: () => resolve(empty),
+          });
+        });
+        const drawRequest: RequestMessage = {
+          id: drawId,
+          jobId,
+          kind: "draw",
+          page: ask.page,
+          purpose: ask.purpose,
+          width: ask.width,
+          maxPixels: ask.maxPixels,
+        };
+        engine.postMessage(drawRequest);
+        return drawn.then(
+          (reply) => (reply.kind === "page-drawn" ? reply : empty),
+          () => empty,
+        );
       },
 
       cancel,

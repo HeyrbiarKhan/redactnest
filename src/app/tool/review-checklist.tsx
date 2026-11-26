@@ -67,6 +67,13 @@ interface ReviewChecklistProps {
   /** A group's select all, as one action (spec 0007, AC-7). Stable, likewise. */
   readonly onTicksSet: (ids: readonly MatchId[], on: boolean) => void;
   /**
+   * A row was picked for the page preview: its checkbox took focus or changed
+   * its tick (spec 0026 child 0002, AC-43). Stable, and the pick itself is
+   * never handed back to the rows, so a pick renders no row again. A group's
+   * select all never picks.
+   */
+  readonly onPick?: (id: MatchId) => void;
+  /**
    * The custom terms panel, after the coverage note and before the groups
    * (spec 0017, AC-1), or nothing with billing off.
    */
@@ -138,6 +145,7 @@ export function ReviewChecklist({
   partly,
   onToggle,
   onTicksSet,
+  onPick,
   panel,
   terms = NO_TERMS,
   termActions,
@@ -210,6 +218,7 @@ export function ReviewChecklist({
                     checked={ticked.has(match.id)}
                     disabled={running}
                     onToggle={onToggle}
+                    onPick={onPick}
                   />
                 ))}
                 {rows.length === 0 && (
@@ -249,6 +258,7 @@ export function ReviewChecklist({
                       checked={ticked.has(match.id)}
                       disabled={running}
                       onToggle={onToggle}
+                      onPick={onPick}
                     />
                   ))}
                 </ChecklistGroup>
@@ -386,11 +396,13 @@ const ReviewRow = memo(function ReviewRow({
   checked,
   disabled,
   onToggle,
+  onPick,
 }: {
   readonly match: ReviewMatch;
   readonly checked: boolean;
   readonly disabled: boolean;
   readonly onToggle: (id: MatchId) => void;
+  readonly onPick?: (id: MatchId) => void;
 }) {
   return (
     <ChecklistItem
@@ -410,7 +422,13 @@ const ReviewRow = memo(function ReviewRow({
         match.concealed === null ? undefined : CONCEALED_TEXT[match.concealed]
       }
       notes={match.termNotes.map((note) => TERM_NOTE_TEXT[note])}
-      onCheckedChange={() => onToggle(match.id)}
+      onCheckedChange={() => {
+        onToggle(match.id);
+        // Spec 0026 child 0002, AC-43: a click does not focus a checkbox in
+        // Safari, or in Firefox on macOS, so a tick change picks too.
+        onPick?.(match.id);
+      }}
+      onFocus={onPick && (() => onPick(match.id))}
     />
   );
 });

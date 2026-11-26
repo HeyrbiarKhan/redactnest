@@ -160,3 +160,55 @@ describe("toolGridAreas (spec 0026, AC-12, *Rows*)", () => {
     );
   });
 });
+
+/**
+ * Spec 0026 child 0002, AC-38: the frame. While the preview shows, P sits on
+ * the left beside every row and the right column is 26.25rem, its areas in
+ * page order, one `auto` row each and the last taking the slack.
+ */
+describe("toolGridAreas with the preview (child 0002, AC-38)", () => {
+  const holds = (over: Partial<ToolAreas>): ToolAreas => ({
+    document: true,
+    live: true,
+    head: true,
+    found: true,
+    preview: true,
+    ...over,
+  });
+  const FRAME = "minmax(0, 1fr) 26.25rem";
+
+  it("puts P beside each right column area, billing on", () => {
+    expect(toolGridAreas(true, holds({}))).toEqual({
+      columns: FRAME,
+      rows: "auto auto auto minmax(0, 1fr)",
+      areas: "'p a' 'p l' 'p h' 'p c'",
+    });
+  });
+
+  it("leaves out B's head when it holds nothing, billing off", () => {
+    expect(toolGridAreas(true, holds({ head: false }))).toEqual({
+      columns: FRAME,
+      rows: "auto auto minmax(0, 1fr)",
+      areas: "'p a' 'p l' 'p c'",
+    });
+  });
+
+  it("gives the slack to whichever area comes last", () => {
+    expect(
+      toolGridAreas(true, holds({ document: false, live: false, head: false })),
+    ).toEqual({
+      columns: FRAME,
+      rows: "minmax(0, 1fr)",
+      areas: "'p c'",
+    });
+  });
+
+  it("is AC-12's column whenever the preview is off", () => {
+    expect(toolGridAreas(true, holds({ preview: false })).columns).toBe(
+      "minmax(0, 44rem)",
+    );
+    expect(toolGridAreas(false, holds({})).columns).toBe(
+      "minmax(0, 1fr) minmax(20rem, 24rem)",
+    );
+  });
+});

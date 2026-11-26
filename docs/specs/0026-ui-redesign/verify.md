@@ -43,3 +43,28 @@ _Steps derived from spec 0026's acceptance criteria for tasks 6 to 12 (commits b
 - AC-8 home steps · AC-9 band, forced colours, ring and network list · AC-10 plan cards · AC-11 guide pages · AC-12 tool column, panel, focus, Untick all, result, refusal · AC-13 Clerk card · AC-14 network list · AC-16 reflow and forced colours · AC-31 to AC-35 progress card
 - AC-37 to AC-56 page preview (child 0002, task 17): the steps above once it is built
 - Owed later: AC-17 brand rerun (task 15), AC-18 records (task 16), AC-19 to AC-30 signed in header (task 13); the header's narrow shapes (AC-27) keep three `shell.spec.ts` tests red until then.
+
+## Task 17 as built (page preview, child 0002) · added 2026-11-26
+_The steps above stand. These add what the build named: the test files as written (the two `preview-fit` and `geometry` commands above were built as `preview-rules.test.ts` and `preview-engine.test.ts`), one step per row of child 0002's Value sourcing table, and the failure line._
+
+### UI / manual
+- [ ] `/tool` at 1440 by 960, open `read-mixed.pdf` → rail (1 with badge "1", "2 · scan" with the mark, 3), page 1 with one box on the address, the right column at 26.25rem → AC-38, AC-41, AC-42
+- [ ] Same page, resize the window from 1100 to 1023 wide, and from 600 to 575 tall → the preview goes below 64rem by 36rem and comes back above, with no reload → AC-37 (fit: `window.innerWidth`, `innerHeight`, root size)
+- [ ] Same page, set the browser's text size to 200% (settings, not zoom) → the preview goes, the one column shows → AC-37 (fit: root size through the 1rem probe)
+- [ ] Page bar on page 2 → "Page 2 of 3" from the page on show and `summary.pageCount`, and the warning line is the open card's scan line for page 2 alone → AC-40 (`pageWarningLines`)
+- [ ] Thumbnail badges on a page with a blocked row (`detect-blocked.pdf`) → the badge counts blocked rows too; the page has no box for them → AC-41, AC-42 (badge: rows with `page === n`; boxes: target map only)
+- [ ] With a term search landing rows on the page on show (Pro, `terms.pdf`, add a term found on page 1) → the page is drawn again and the new row has a box; remove the term → its box goes at once with no draw → AC-50 (rows version, listed ids)
+- [ ] DevTools at device emulation 1x, then 2x → the page redraws sharper a moment later; the canvas's picture is within 8,388,608 pixels → AC-44, AC-45 (`width` times `devicePixelRatio`, `config.previewMaxPixels`)
+- [ ] Block the worker's answer for one draw (scratch init script answering `picture: null`) → "RedactNest couldn't show this page. Its items are still listed." centred on a page shaped placeholder, the list untouched; showing the page again asks again → AC-46
+- [ ] Forced colours on → the boxes lose their fill and keep their edge; axe clean → AC-42
+
+### Commands
+- [ ] `pnpm exec vitest run tests/unit/preview-engine.test.ts tests/unit/preview-rules.test.ts tests/unit/engine-worker.test.ts tests/unit/worker-client.test.ts tests/unit/protocol.test.ts tests/unit/loggable.test.ts` → pass → AC-37, AC-44, AC-45, AC-47 to AC-51
+- [ ] `pnpm exec vitest run tests/component/page-preview.test.tsx tests/component/tool-preview.test.tsx tests/component/checklist-renders.test.tsx` → pass → AC-37, AC-39 to AC-47, AC-50
+- [ ] `pnpm exec vitest run tests/unit/engine-wall.test.ts tests/unit/config.test.ts tests/unit/contrast.test.ts tests/unit/page-findings.test.ts tests/unit/flow-text.test.ts` → pass → AC-45, AC-51, AC-55
+- [ ] `pnpm exec vitest run tests/component/app/security-page.test.tsx tests/component/app/legal-pages.test.tsx` → pass → AC-56
+- [ ] `pnpm exec playwright test tests/e2e/design-system.spec.ts -g "page preview, drawn" --project=chromium` → axe at 1280 and in forced colours, the keyboard walk into P → AC-39, AC-41, AC-44
+- [ ] `pnpm exec playwright test --project=speed --no-deps tests/e2e/preview-speed.spec.ts` → slowest of three within 1,000 / 500 / 750 / 1,000 / 3,000 ms (2026-11-26: 128 / 132 / 259 / 67 / 144) → AC-54
+
+### Acceptance-criteria coverage (task 17)
+- AC-37 fit, probe, run origin · AC-38 frame, 26.25rem, panel room 17rem · AC-39 order and no live region · AC-40 bar and warnings · AC-41 rail · AC-42 boxes · AC-43 pick · AC-44 zoom · AC-45 scheduling and caps · AC-46 failure · AC-47 cleanup · AC-48 protocol and client · AC-49 engine draw · AC-50 boxes and rows version · AC-51 lint ban, loggable · AC-52 network walk, export spy, storage · AC-53 memory and frame · AC-54 speed · AC-55 words and contrast · AC-56 security and privacy words

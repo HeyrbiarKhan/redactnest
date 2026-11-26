@@ -306,6 +306,34 @@ test("a document can be opened without anything being written down", async ({ pa
   ).toEqual([]);
 });
 
+/**
+ * Spec 0026 child 0002, AC-52. The same proof with the page preview drawn: the
+ * page's picture, its thumbnails, a zoom and another page through the rail,
+ * and still nothing is written down.
+ */
+test("the page preview, drawn and walked, writes nothing down", async ({ page }) => {
+  await watchStorage(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/tool");
+  await openDocument(page);
+
+  await expect(page.getByTestId("preview-canvas")).not.toHaveClass(/invisible/, {
+    timeout: ENGINE_TIMEOUT,
+  });
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  const thumbs = page.getByTestId("preview-thumb");
+  await thumbs.last().click();
+  await expect(page.getByTestId("preview-canvas")).not.toHaveClass(/invisible/);
+
+  const writes = await page.evaluate(() => window.__redactnestWrites ?? []);
+  expect(
+    writes,
+    `something wrote to browser storage:\n${writes
+      .map((write) => `${write.api}(${write.detail})`)
+      .join("\n")}`,
+  ).toEqual([]);
+});
+
 test("the proxies are really installed, so the test above can fail", async ({ page }) => {
   await watchStorage(page);
   await page.goto("/tool");

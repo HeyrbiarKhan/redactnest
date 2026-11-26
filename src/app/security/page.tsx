@@ -108,6 +108,24 @@ export default function SecurityPage() {
           Worker), which holds the document while you work on it. The PDF engine, MuPDF
           built for the browser, runs inside that worker too.
         </p>
+        {/* Spec 0026 child 0002, AC-56: three things. AC-37, AC-48 and AC-50
+            (from `lg`, while reviewing, the worker draws a page and sends it
+            with a display box for each row whose id is in its target map, the
+            rows that can be ticked). AC-51 and AC-52 ("no step" names steps
+            that do not exist: no URL, storage, request or canvas export,
+            held by lint in every zone and by `network-list.spec.ts`), and
+            spec 0026 AC-14 (the tool page's policy is unchanged). Spec 0002,
+            INV-2, as child 0002 amends it: no request type holds a box or a
+            rectangle (`protocol.test.ts`), so "always" sits behind a gate
+            every run passes. */}
+        <p>
+          On a wide screen, while you review, the worker also draws pictures of your pages
+          for the tool page to show, with a box where each item you can tick sits. No step
+          of the page puts those pictures or boxes in a link or sends them anywhere, and
+          the tool page’s content security policy lets it reach only its own server.
+          Nothing the page draws goes back to the worker, so a removal is always worked
+          out from the worker’s own copy of your document.
+        </p>
         {/* Spec 0001's *Consequences* bullet "`'unsafe-inline'` on the tool
             route" (the page is rendered static, so no server is in its path)
             and spec 0002, INV-1 (the document exists only inside the worker),
@@ -141,6 +159,16 @@ export default function SecurityPage() {
             "only until": keeping the copy past the handover is a step that
             does not exist (INV-7). */}
         <p>The cleaned copy waits in the page only until you download it.</p>
+        {/* Spec 0026 child 0002, AC-47 (every way out of the preview runs one
+            cleanup that gives each canvas nothing, and every picture the page
+            drops is closed) and AC-53 (after Start over and after a second
+            document opens, no canvas holds a picture, in a real browser). The
+            four endings are AC-37's: `complete`, Start over, another PDF and
+            leaving the page. */}
+        <p>
+          The page lets go of the pictures of your pages when the review ends: when a run
+          finishes, when you start over or open another PDF, and when you leave the page.
+        </p>
         {/* Spec 0002, AC-11, and its *Security model* bullet "The `File` handle
             is worth naming". "Stores nothing new" sits behind spec 0002, INV-3:
             no storage is ever written, held by lint in every zone and by

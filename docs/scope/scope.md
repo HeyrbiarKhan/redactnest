@@ -525,7 +525,7 @@ spec [0026](../specs/0026-ui-redesign/index.md) (2026-11-25: every page in the m
   - [x] `/tool` in the new look with step progress · AC-12, AC-31 to AC-36
   - [x] Home (with the network band and its test, the pricing cards), the guides and every other page · AC-8 to AC-11, AC-13
   - [ ] The signed in header: the email claim, the account slot, `/sign-out`, the privacy entry and the Clerk setup · AC-19 to AC-30
-  - [ ] The page preview (child 0002, task 17): the worker's draw and display only boxes, the full window frame with one page, picking, the rail, zoom and the failure line, then its privacy, memory and speed proofs and the security page and privacy words · AC-37 to AC-56
+  - [x] The page preview (child 0002, task 17): the worker's draw and display only boxes, the full window frame with one page, picking, the rail, zoom and the failure line, then its privacy, memory and speed proofs and the security page and privacy words · AC-37 to AC-56
   - [ ] Proof and records: accessibility sweep, brand rerun, `design.md` and the amendment lines · AC-16 to AC-18
 - [ ] Verify it: `/check verify UI redesign`
 - [ ] Test it: `/test UI redesign`

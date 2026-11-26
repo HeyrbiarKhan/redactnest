@@ -135,37 +135,42 @@ export function DropZone(props: DropZoneProps) {
         {...zone}
         data-testid="file-bar"
         className={cx(
-          "flex flex-col gap-3 rounded-card border-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4",
+          // A row once the bar itself is 36rem wide, not the window: so it
+          // stacks in the page preview's 26.25rem column (spec 0026 child
+          // 0002, AC-38), and a phone switches where it always did.
+          "@container/file-bar rounded-card border-2 px-4 py-3",
           "transition-colors",
           COMPACT_STATE[state],
         )}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <IconCircle icon={FileText} tone="accent" shape="square" />
-          <div className="flex min-w-0 flex-col">
-            <p className="font-semibold text-ink wrap-anywhere">{props.fileName}</p>
-            {props.pageCount !== null && (
-              <p data-testid="page-count" className="text-small text-ink-muted">
-                {props.pageCount} {props.pageCount === 1 ? "page" : "pages"}
-              </p>
-            )}
+        <div className="flex flex-col gap-3 @min-[36rem]/file-bar:flex-row @min-[36rem]/file-bar:items-center @min-[36rem]/file-bar:gap-4">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <IconCircle icon={FileText} tone="accent" shape="square" />
+            <div className="flex min-w-0 flex-col">
+              <p className="font-semibold text-ink wrap-anywhere">{props.fileName}</p>
+              {props.pageCount !== null && (
+                <p data-testid="page-count" className="text-small text-ink-muted">
+                  {props.pageCount} {props.pageCount === 1 ? "page" : "pages"}
+                </p>
+              )}
+            </div>
           </div>
-        </div>
 
-        {input}
+          {input}
 
-        <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-2">
-          <Button
-            ref={buttonRef}
-            variant="secondary"
-            icon={Upload}
-            data-testid="choose-file"
-            onFocus={onWarm}
-            onClick={() => inputRef.current?.click()}
-          >
-            {buttonLabel}
-          </Button>
-          {props.action}
+          <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-2">
+            <Button
+              ref={buttonRef}
+              variant="secondary"
+              icon={Upload}
+              data-testid="choose-file"
+              onFocus={onWarm}
+              onClick={() => inputRef.current?.click()}
+            >
+              {buttonLabel}
+            </Button>
+            {props.action}
+          </div>
         </div>
       </div>
     );

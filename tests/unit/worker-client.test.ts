@@ -1037,3 +1037,213 @@ function cancelARedaction(
   session.cancel();
   return redacting;
 }
+
+/**
+ * Spec 0026 child 0002, AC-47 and AC-48. A draw resolves with its reply, is
+ * never cancelled, and settles with no picture on every way an operation is
+ * let go. Every picture a reply carries that nobody takes is closed at once.
+ */
+describe("drawing a page", () => {
+  /** A stand in for a transferred `ImageBitmap`, with its close spied on. */
+  function picture() {
+    return { width: 2, height: 2, close: vi.fn() } as unknown as ImageBitmap & {
+      close: ReturnType<typeof vi.fn>;
+    };
+  }
+
+  const ASK = { page: 1, purpose: "page", width: 1224, maxPixels: 8_388_608 } as const;
+
+  function lastDraw(worker: FakeWorker) {
+    const request = [...worker.requests].reverse().find((entry) => entry.kind === "draw");
+    if (!request || request.kind !== "draw") throw new Error("no draw was posted");
+    return request;
+  }
+
+  it("asks for the page under the session's own job and resolves with the reply", async () => {
+    const client = await loadClient();
+    const { session, worker } = await openedSession(client);
+    const drawing = session.draw(ASK);
+    const request = lastDraw(worker);
+    expect(request).toMatchObject({ jobId: "job-1", ...ASK });
+    expect(Object.keys(request).sort()).toEqual(
+      ["id", "jobId", "kind", "maxPixels", "page", "purpose", "width"].sort(),
+    );
+
+    const shown = picture();
+    const boxes = [
+      { id: asMatchId("m-1"), rects: [{ x: 0.1, y: 0.1, width: 0.2, height: 0.02 }] },
+    ];
+    worker.reply({
+      id: request.id,
+      jobId: "job-1",
+      kind: "page-drawn",
+      page: 1,
+      purpose: "page",
+      picture: shown,
+      boxes,
+    });
+
+    await expect(drawing).resolves.toMatchObject({ picture: shown, boxes });
+    expect(shown.close).not.toHaveBeenCalled();
+  });
+
+  it("closes the picture of a reply from a worker that was already released", async () => {
+    const client = await loadClient();
+    const { session, worker } = await openedSession(client);
+    const drawing = session.draw(ASK);
+    const { id } = lastDraw(worker);
+    client.releaseEngine();
+
+    const late = picture();
+    worker.reply({
+      id,
+      jobId: "job-1",
+      kind: "page-drawn",
+      page: 1,
+      purpose: "page",
+      picture: late,
+      boxes: [],
+    });
+    expect(late.close).toHaveBeenCalledTimes(1);
+    await expect(drawing).resolves.toMatchObject({ picture: null, boxes: [] });
+  });
+
+  it("closes the picture of a reply no operation is waiting for", async () => {
+    const client = await loadClient();
+    const { worker } = await openedSession(client);
+
+    const stray = picture();
+    worker.reply({
+      id: "nobody",
+      jobId: "job-1",
+      kind: "page-drawn",
+      page: 1,
+      purpose: "page",
+      picture: stray,
+      boxes: [],
+    });
+    expect(stray.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the picture of a reply that names another job", async () => {
+    const client = await loadClient();
+    const { session, worker } = await openedSession(client);
+    const drawing = session.draw(ASK);
+    const { id } = lastDraw(worker);
+
+    const other = picture();
+    worker.reply({
+      id,
+      jobId: "job-9",
+      kind: "page-drawn",
+      page: 1,
+      purpose: "page",
+      picture: other,
+      boxes: [],
+    });
+    expect(other.close).toHaveBeenCalledTimes(1);
+
+    // Still waiting for its own reply.
+    const own = picture();
+    worker.reply({
+      id,
+      jobId: "job-1",
+      kind: "page-drawn",
+      page: 1,
+      purpose: "page",
+      picture: own,
+      boxes: [],
+    });
+    await expect(drawing).resolves.toMatchObject({ picture: own });
+  });
+
+  it("settles as no picture on a replacement, and posts no cancel for it", async () => {
+    const client = await loadClient();
+    const { session, worker } = await openedSession(client);
+    const drawing = session.draw(ASK);
+    const { id } = lastDraw(worker);
+
+    void client.openSession({
+      jobId: "job-2",
+      bytes: new ArrayBuffer(8),
+      limits: LIMITS,
+      terms: [],
+    });
+
+    await expect(drawing).resolves.toMatchObject({ id, picture: null, boxes: [] });
+    const cancels = worker.requests.filter((request) => request.kind === "cancel");
+    expect(cancels.map((request) => request.id)).not.toContain(id);
+
+    // Its late reply is dropped, and its picture closed.
+    const late = picture();
+    worker.reply({
+      id,
+      jobId: "job-1",
+      kind: "page-drawn",
+      page: 1,
+      purpose: "page",
+      picture: late,
+      boxes: [],
+    });
+    expect(late.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("settles as no picture when the worker dies, never as a failure", async () => {
+    const client = await loadClient();
+    const { session, worker } = await openedSession(client);
+    const drawing = session.draw(ASK);
+    worker.fail();
+    await expect(drawing).resolves.toMatchObject({ picture: null, boxes: [] });
+  });
+
+  it("settles as no picture on a release", async () => {
+    const client = await loadClient();
+    const { session } = await openedSession(client);
+    const drawing = session.draw(ASK);
+    client.releaseEngine();
+    await expect(drawing).resolves.toMatchObject({ picture: null, boxes: [] });
+  });
+
+  it("is never stopped by the session's cancel", async () => {
+    const client = await loadClient();
+    const { session, worker } = await openedSession(client);
+    const drawing = session.draw(ASK);
+    const { id } = lastDraw(worker);
+    session.cancel();
+    expect(worker.requests.filter((request) => request.kind === "cancel")).toEqual([]);
+
+    const shown = picture();
+    worker.reply({
+      id,
+      jobId: "job-1",
+      kind: "page-drawn",
+      page: 1,
+      purpose: "page",
+      picture: shown,
+      boxes: [],
+    });
+    await expect(drawing).resolves.toMatchObject({ picture: shown });
+  });
+
+  it("closes a drawn page sent to an operation that asked for none", async () => {
+    const client = await loadClient();
+    const { session, worker } = await openedSession(client);
+    void session.redact([]).catch(() => undefined);
+    const redact = [...worker.requests]
+      .reverse()
+      .find((request) => request.kind === "redact");
+    if (!redact) throw new Error("no redact was posted");
+
+    const wrong = picture();
+    worker.reply({
+      id: redact.id,
+      jobId: "job-1",
+      kind: "page-drawn",
+      page: 1,
+      purpose: "page",
+      picture: wrong,
+      boxes: [],
+    });
+    expect(wrong.close).toHaveBeenCalledTimes(1);
+  });
+});

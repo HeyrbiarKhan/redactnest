@@ -7,7 +7,7 @@
  * wrapper renders the real primitive, so the page under test is the real one.
  */
 
-import { render } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   createElement,
@@ -36,6 +36,7 @@ const renders = vi.hoisted(() => ({
   rows: [] as string[],
   selectAll: [] as string[],
   commits: 0,
+  picks: [] as string[],
 }));
 
 vi.mock("@/ui/checklist-item", async (importOriginal) => {
@@ -114,6 +115,11 @@ function Page() {
     (ids: readonly MatchId[], on: boolean) => dispatch({ type: "ticks-set", ids, on }),
     [],
   );
+  // The page preview's pick, as `tool-client` routes it: stable, and kept out
+  // of the checklist's props (spec 0026 child 0002, AC-43).
+  const onPick = useCallback((id: MatchId) => {
+    renders.picks.push(id);
+  }, []);
   if (session.state === "idle") return null;
 
   return (
@@ -125,6 +131,7 @@ function Page() {
         partly={false}
         onToggle={onToggle}
         onTicksSet={onTicksSet}
+        onPick={onPick}
       />
     </Profiler>
   );
@@ -144,6 +151,7 @@ function forget(): void {
   renders.rows.length = 0;
   renders.selectAll.length = 0;
   renders.commits = 0;
+  renders.picks.length = 0;
 }
 
 beforeEach(() => {
@@ -184,5 +192,42 @@ describe("rendering a long checklist (AC-8, INV-7)", { timeout: 30_000 }, () => 
     expect(renders.rows.every((id) => id.startsWith("match-phone-"))).toBe(true);
     expect(renders.selectAll).toEqual(["select-all-phone"]);
     expect(renders.commits).toBe(1);
+  });
+});
+
+/**
+ * Spec 0026 child 0002, AC-43. A row is picked for the page preview when its
+ * checkbox takes focus or changes its tick, never by a group's select all,
+ * and a pick renders no row again.
+ */
+describe("picking a row for the page preview", { timeout: 30_000 }, () => {
+  it("picks a row whose checkbox takes focus, and renders nothing", () => {
+    render(<Page />);
+    forget();
+
+    act(() => box("match-email-150").focus());
+
+    expect(renders.picks).toEqual(["email-150"]);
+    expect(renders.rows).toEqual([]);
+    expect(renders.commits).toBe(0);
+  });
+
+  it("picks a row whose tick changes, rendering only that row", () => {
+    render(<Page />);
+    forget();
+
+    fireEvent.click(box("match-phone-20"));
+
+    expect(renders.picks).toEqual(["phone-20"]);
+    expect(renders.rows).toEqual(["match-phone-20"]);
+  });
+
+  it("never picks through a group's select all", () => {
+    render(<Page />);
+    forget();
+
+    fireEvent.click(box("select-all-phone"));
+
+    expect(renders.picks).toEqual([]);
   });
 });

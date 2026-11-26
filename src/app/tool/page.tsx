@@ -34,9 +34,17 @@ export default function ToolPage() {
         move focus here, and the one element allowed to drop its outline,
         because it is a place focus lands rather than a control.
       */}
+      {/*
+        The three data attributes are the page preview's hooks (spec 0026
+        child 0002, AC-38): while the tool grid carries `data-preview`, one
+        rule in `globals.css` lifts `main`'s padding and the container's cap
+        and gutters, and hides the title visually, so the frame fills the
+        window under the header. The title stays the page's `h1`.
+      */}
       <main
         id="main"
         tabIndex={-1}
+        data-tool-main=""
         className="flex-1 bg-subtle py-10 focus:outline-none sm:py-14"
       >
         {/*
@@ -44,8 +52,10 @@ export default function ToolPage() {
           sat under the title now ends the rail, beside the drop zone or inside
           the action panel, where the file is.
         */}
-        <PageContainer width="wide" className="flex flex-col gap-8">
-          <h1 className="text-title text-ink">Redact a PDF</h1>
+        <PageContainer width="wide" className="flex flex-col gap-8" data-tool-frame="">
+          <h1 data-tool-title="" className="text-title text-ink">
+            Redact a PDF
+          </h1>
 
           <ToolClient />
         </PageContainer>

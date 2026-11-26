@@ -169,6 +169,7 @@ function openedSession(jobId = "job"): OpenedSession {
     matches: [],
     redact: vi.fn(),
     findTerms: vi.fn(),
+    draw: vi.fn(),
     cancel: vi.fn(),
     release: vi.fn(),
   };
@@ -2664,7 +2665,8 @@ describe("the redact flow (spec 0007)", () => {
       expect(screen.getByTestId("area-live")).toContainElement(
         screen.getByRole("region", { name: "Document opened" }),
       );
-      expect(grid.style.getPropertyValue("--tool-panel-room")).toBe("16rem");
+      // Measured again at the preview's 26.25rem column (spec 0026 child 0002).
+      expect(grid.style.getPropertyValue("--tool-panel-room")).toBe("17rem");
     });
 
     /** AC-15: the idle rail, in order. */

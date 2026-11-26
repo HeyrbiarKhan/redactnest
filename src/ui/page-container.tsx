@@ -9,6 +9,12 @@ interface PageContainerProps {
   readonly width: PageWidth;
   /** Layout only, such as the gap between the column's children. */
   readonly className?: string;
+  /**
+   * Marks `/tool`'s container, so the page preview's frame can lift its width
+   * cap and gutters with one rule in `globals.css` (spec 0026 child 0002,
+   * AC-38). Layout only, as `className` is.
+   */
+  readonly "data-tool-frame"?: string;
   readonly children: ReactNode;
 }
 
@@ -19,9 +25,17 @@ const WIDTH: Readonly<Record<PageWidth, string>> = Object.freeze({
 });
 
 /** Gutters and a maximum width, and nothing else. */
-export function PageContainer({ width, className, children }: PageContainerProps) {
+export function PageContainer({
+  width,
+  className,
+  "data-tool-frame": toolFrame,
+  children,
+}: PageContainerProps) {
   return (
-    <div className={cx("mx-auto w-full px-4 sm:px-6", WIDTH[width], className)}>
+    <div
+      data-tool-frame={toolFrame}
+      className={cx("mx-auto w-full px-4 sm:px-6", WIDTH[width], className)}
+    >
       {children}
     </div>
   );

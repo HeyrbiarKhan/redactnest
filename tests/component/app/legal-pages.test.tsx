@@ -354,6 +354,8 @@ describe("the privacy policy's facts", () => {
     expect(text).toContain(
       "the names, numbers or phrases you type for it to find, and your file’s name all stay on your device",
     );
+    // C3, as spec 0026 child 0002 changes it (AC-56): the preview's pictures.
+    expect(text).toContain("the pictures of your pages it shows you");
 
     const counts = sectionText(PRIVACY_SECTIONS.countsAndReports);
     // C14

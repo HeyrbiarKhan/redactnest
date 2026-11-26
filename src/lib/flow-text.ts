@@ -516,6 +516,33 @@ export const IDLE_STEPS: readonly string[] = Object.freeze([
   "Download your new file",
 ]);
 
+/* The page preview (spec 0026 child 0002). */
+
+/**
+ * Every word the page preview shows (AC-55): the aside's name, the rail's,
+ * each thumbnail's name and visible label, the page bar, the zoom control,
+ * the page region's name and the failure line. Page numbers and counts go
+ * through `countText`, and nothing here carries document text, the file name
+ * or a coordinate. A thumbnail's name holds its visible label (WCAG 2.5.3).
+ */
+export const PREVIEW_TEXT = Object.freeze({
+  label: "Page preview",
+  rail: "Pages",
+  thumb: (page: number, mark: string | null, count: number): string =>
+    `Page ${countText(page)}${mark === null ? "" : ` · ${mark}`}` +
+    (count > 0 ? `, ${countText(count)} found` : ""),
+  thumbLabel: (page: number, mark: string | null): string =>
+    mark === null ? countText(page) : `${countText(page)} · ${mark}`,
+  pageOf: (page: number, total: number): string =>
+    `Page ${countText(page)} of ${countText(total)}`,
+  zoom: "Zoom",
+  zoomOut: "Zoom out",
+  zoomIn: "Zoom in",
+  level: (percent: number): string => `${percent}%`,
+  pageRegion: (page: number): string => `Page ${countText(page)}`,
+  failed: "RedactNest couldn't show this page. Its items are still listed.",
+});
+
 /** The found items column's card, and its count of every row found (AC-19). */
 export const FOUND_ITEMS_TITLE = "Found items";
 export const FOUND_ITEMS_NOUN = Object.freeze({

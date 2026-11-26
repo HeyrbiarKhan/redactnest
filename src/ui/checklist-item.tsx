@@ -43,6 +43,12 @@ interface ChecklistItemProps {
    */
   readonly notes?: readonly string[];
   readonly onCheckedChange: (checked: boolean) => void;
+  /**
+   * The checkbox took focus, by Tab, a click where the browser focuses it, or
+   * script (spec 0026 child 0002, AC-43). The page preview's pick; it moves
+   * no focus and scrolls nothing here.
+   */
+  readonly onFocus?: () => void;
 }
 
 /**
@@ -77,6 +83,7 @@ export function ChecklistItem({
   concealedNote,
   notes = [],
   onCheckedChange,
+  onFocus,
 }: ChecklistItemProps) {
   const textId = `${id}-text`;
   const pageId = `${id}-page`;
@@ -92,6 +99,9 @@ export function ChecklistItem({
     <li className="[contain-intrinsic-size:auto_4.5rem] [content-visibility:auto]">
       <label
         htmlFor={id}
+        // React's focus event bubbles, and the checkbox is the row's one
+        // focusable control, so this hears exactly its focus.
+        onFocus={onFocus}
         className={cx(
           "flex items-start gap-3 rounded-control px-3 py-3",
           // The cursor comes from the one rule in `globals.css` (spec 0013, AC-33).

@@ -20,6 +20,7 @@ import {
   OPEN_STEPS,
   PHASE_TEXT,
   phaseLine,
+  PREVIEW_TEXT,
   PROGRESS_TITLE,
   redactLabel,
   refusalLines,
@@ -945,5 +946,53 @@ describe("the custom terms words (spec 0017)", () => {
         `“${accented.repeat(60)}…” (61 characters) not added because it is too long (at most 100 characters).`,
       ]);
     });
+  });
+});
+
+/**
+ * Spec 0026 child 0002, AC-41 and AC-55: every word the page preview shows,
+ * each count through `countText`, no page number written in, and each
+ * thumbnail's name holding its visible label (WCAG 2.5.3).
+ */
+describe("the page preview's words (child 0002)", () => {
+  it("names the aside, the rail, the zoom and its buttons", () => {
+    expect(PREVIEW_TEXT.label).toBe("Page preview");
+    expect(PREVIEW_TEXT.rail).toBe("Pages");
+    expect(PREVIEW_TEXT.zoom).toBe("Zoom");
+    expect(PREVIEW_TEXT.zoomOut).toBe("Zoom out");
+    expect(PREVIEW_TEXT.zoomIn).toBe("Zoom in");
+    expect(PREVIEW_TEXT.level(125)).toBe("125%");
+  });
+
+  it("names a thumbnail by its page, its mark and its count, its label inside", () => {
+    expect(PREVIEW_TEXT.thumb(2, "scan", 0)).toBe("Page 2 · scan");
+    expect(PREVIEW_TEXT.thumb(1, null, 1)).toBe("Page 1, 1 found");
+    expect(PREVIEW_TEXT.thumb(3, "covered", 1200)).toBe("Page 3 · covered, 1,200 found");
+    expect(PREVIEW_TEXT.thumbLabel(2, "scan")).toBe("2 · scan");
+    expect(PREVIEW_TEXT.thumbLabel(1, null)).toBe("1");
+    for (const [page, mark, count] of [
+      [2, "scan", 0],
+      [1, null, 4],
+      [40, "no text", 2],
+    ] as const) {
+      expect(PREVIEW_TEXT.thumb(page, mark, count)).toContain(
+        PREVIEW_TEXT.thumbLabel(page, mark),
+      );
+    }
+  });
+
+  it("counts pages through countText", () => {
+    expect(PREVIEW_TEXT.pageOf(1, 3)).toBe("Page 1 of 3");
+    expect(PREVIEW_TEXT.pageOf(2, 1000)).toBe(`Page 2 of ${countText(1000)}`);
+    expect(PREVIEW_TEXT.pageRegion(1000)).toBe(`Page ${countText(1000)}`);
+  });
+
+  it("writes no page number and claims nothing about the page", () => {
+    for (const value of Object.values(PREVIEW_TEXT)) {
+      if (typeof value === "string") expect(value).not.toMatch(/\d/);
+    }
+    expect(PREVIEW_TEXT.failed).toBe(
+      "RedactNest couldn't show this page. Its items are still listed.",
+    );
   });
 });

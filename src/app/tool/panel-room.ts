@@ -10,8 +10,12 @@
  * with its padding and edge. C's bottom padding and every scroll margin in the
  * column read this one value (as `--tool-panel-room`), so they never
  * disagree. A rule about the panel's own size, not a cap on the visitor.
+ *
+ * Measured again in the page preview's 26.25rem column (spec 0026 child 0002,
+ * AC-38), where the lines wrap more: 266 pixels at the default size, against
+ * 256 in the 44rem column, so it takes the larger, with room to spare.
  */
-export const PANEL_ROOM = "16rem";
+export const PANEL_ROOM = "17rem";
 
 /** A box as `getBoundingClientRect` gives it, in the window's coordinates. */
 export interface Box {

@@ -442,6 +442,22 @@ async function tabPastThePlanCard(page: Page): Promise<void> {
  * the wrong place or left unreachable fails here without the list being kept
  * by hand.
  */
+/**
+ * A browser that cannot show a transferred picture, so `/tool` never shows
+ * the page preview (spec 0026 child 0002, AC-37) and keeps AC-12's column at
+ * every width. For the checks that hold that column and its walk; the
+ * preview's own frame, walk and axe pass are `preview.spec.ts` and the
+ * "page preview, drawn" tests below.
+ */
+async function withoutPreview(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "createImageBitmap", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+}
+
 async function expectKeyboardWalk(page: Page): Promise<void> {
   const stops = await page.locator("main").evaluate((main) => {
     const reachable = [
@@ -667,9 +683,12 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await expectRingAtOnce(page.getByTestId("start-over"));
   });
 
-  // Spec 0007, AC-22: every step state, walked control by control.
+  // Spec 0007, AC-22: every step state, walked control by control, in AC-12's
+  // column. With the preview a focused row picks its page, which moves the
+  // rail's one tab stop as AC-41 has it, so that walk is its own test.
   for (const [state, reach] of TOOL_STATES) {
     test(`reaches every control in order in the ${state} state`, async ({ page }) => {
+      await withoutPreview(page);
       await page.goto("/tool");
       await reach(page);
 
@@ -1035,6 +1054,8 @@ test.describe("the tool page's layout (spec 0013)", () => {
   test("stacks the file bar, the document card, B's head and the list in one centred column", async ({
     page,
   }) => {
+    // AC-12's column holds wherever the preview does not show (child 0002).
+    await withoutPreview(page);
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/tool");
     await planAnswered(page);
@@ -2996,4 +3017,85 @@ test.describe("the sign in wait (spec 0013, AC-23, AC-26)", () => {
       await expectContained(placeholder(page));
     });
   }
+});
+
+/**
+ * Spec 0026 child 0002, AC-39, AC-41 and AC-44: the page preview drawn at
+ * 1280 pixels passes axe with the page's tags, in forced colours too, and the
+ * keyboard reaches it after the list: the rail (one tab stop, arrows move
+ * focus, Enter shows), Zoom out and Zoom in, then the page region, which the
+ * keyboard can scroll. Each stop shows the ring.
+ */
+test.describe("the page preview, drawn (child 0002)", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/tool");
+    await page
+      .getByTestId("file-input")
+      .setInputFiles(resolve("tests/fixtures/read-mixed.pdf"));
+    await expect(page.getByTestId("preview-canvas")).not.toHaveClass(/invisible/, {
+      timeout: ENGINE_TIMEOUT,
+    });
+    await expect(page.locator('[data-testid="preview-thumb"] .bg-surface')).toHaveCount(
+      3,
+    );
+  });
+
+  test("passes axe, and again in forced colours", async ({ page }) => {
+    await expectNoAxeViolations(page);
+    await page.emulateMedia({ forcedColors: "active" });
+    await expectNoAxeViolations(page);
+    // The boxes keep their edge and lose their fill in forced colours: the
+    // fill's alpha is 0, whatever colour the system gives it.
+    const box = page.locator("[data-box]").first();
+    const fill = await box.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    expect(fill).toMatch(/^rgba\(\d+, \d+, \d+, 0\)$/);
+    expect(await box.evaluate((element) => getComputedStyle(element).borderStyle)).toBe(
+      "solid",
+    );
+    await page.emulateMedia({ forcedColors: "none" });
+  });
+
+  test("walks from the list into the rail, the zoom and the page region", async ({
+    page,
+  }) => {
+    await page.locator('input[type="checkbox"][id^="match-"]').last().focus();
+
+    await page.keyboard.press("Tab");
+    const first = page.getByRole("button", { name: "Page 1, 1 found" });
+    await expect(first).toBeFocused();
+    await expectFocusRing(first);
+
+    await page.keyboard.press("ArrowDown");
+    const second = page.getByRole("button", { name: "Page 2 · scan" });
+    await expect(second).toBeFocused();
+    await expect(page.getByTestId("preview-page-of")).toHaveText("Page 1 of 3");
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("preview-page-of")).toHaveText("Page 2 of 3");
+    await expect(second).toHaveAttribute("aria-current", "page");
+    await expect(second).toBeFocused();
+
+    await page.keyboard.press("Tab");
+    const zoomOut = page.getByRole("button", { name: "Zoom out" });
+    await expect(zoomOut).toBeFocused();
+    await expectFocusRing(zoomOut);
+    await page.keyboard.press("Tab");
+    const zoomIn = page.getByRole("button", { name: "Zoom in" });
+    await expect(zoomIn).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("preview-zoom-level")).toHaveText("125%");
+    await expect(zoomIn).toBeFocused();
+
+    await page.keyboard.press("Tab");
+    const region = page.getByRole("region", { name: "Page 2" });
+    await expect(region).toBeFocused();
+    await expectFocusRing(region);
+    const before = await region.evaluate((element) => element.scrollTop);
+    await page.keyboard.press("PageDown");
+    await expect
+      .poll(() => region.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(before);
+  });
 });

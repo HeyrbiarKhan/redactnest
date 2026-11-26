@@ -116,6 +116,8 @@
   --shadow-window:
     0 30px 60px -20px rgb(15 118 110 / 0.25), 0 12px 24px -12px rgb(0 0 0 / 0.12);
   --shadow-plan: 0 20px 40px -20px rgb(15 118 110 / 0.35);
+  /* The page in `/tool`'s preview, as `ToolReview.dc.html` draws it (spec 0026 child 0002, AC-40). */
+  --shadow-sheet: 0 1px 3px rgb(0 0 0 / 0.1), 0 8px 24px -8px rgb(0 0 0 / 0.1);
 
   /*
    * One ease out curve. Every transition without a duration of its own takes
@@ -315,10 +317,68 @@
     [data-testid="tool-grid"][data-panel]
       :is(a[href], button, input, select, textarea, summary, [tabindex]):not(
         [data-testid="action-panel"] *
-      ) {
+      ):not([data-testid="area-preview"] *) {
       scroll-margin-bottom: var(--tool-panel-room);
     }
   }
+}
+
+/*
+ * The page preview's frame (spec 0026 child 0002, AC-38). While the tool
+ * grid carries `data-preview`, `/tool` is drawn full window under its static
+ * header: `main` loses its padding, the container its cap and gutters, and
+ * the title is hidden visually but stays the page's `h1`. Unlayered, so these
+ * outrank Tailwind's utilities with no `!important`.
+ *
+ * The grid is at least the window tall, so with a short list the last row
+ * takes the slack and the action panel rests at the window's foot. It paints
+ * the right column itself, as one `surface` panel with a `border` on its left
+ * 26.25rem from the grid's right, because the column's blocks are separate
+ * grid items (B is `display: contents`). Each block keeps its own look, set
+ * in from the column's edges as the mockup's column is.
+ */
+main[data-tool-main]:has([data-preview]) {
+  padding-block: 0;
+}
+
+main[data-tool-main]:has([data-preview]) [data-tool-frame] {
+  max-width: none;
+  padding-inline: 0;
+  gap: 0;
+}
+
+main[data-tool-main]:has([data-preview]) [data-tool-title] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+[data-testid="tool-grid"][data-preview] {
+  min-height: 100dvh;
+  column-gap: 0;
+  background-image: linear-gradient(
+    to right,
+    transparent calc(100% - 26.25rem),
+    var(--color-border) calc(100% - 26.25rem),
+    var(--color-border) calc(100% - 26.25rem + 1px),
+    var(--color-surface) calc(100% - 26.25rem + 1px)
+  );
+}
+
+[data-testid="tool-grid"][data-preview]
+  > :not([data-testid="area-preview"], [data-testid="area-rail"]),
+[data-testid="tool-grid"][data-preview] > [data-testid="area-rail"] > * {
+  margin-inline: 1.25rem;
+}
+
+[data-testid="tool-grid"][data-preview] > [data-testid="area-document"] {
+  margin-top: 1.25rem;
 }
 
 /* Built and tested now, first placed by feature 15. */

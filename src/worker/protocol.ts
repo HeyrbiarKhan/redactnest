@@ -11,11 +11,15 @@
  *  2. An error payload carries a kind and nothing derived from the document. No
  *     file name, no stack trace, no extracted text. That is what makes feature
  *     11's scrubbing requirement achievable rather than aspirational.
- *  3. Spec 0002, INV-2: coordinate quads, page geometry and extraction offsets
- *     never appear in this file. The main thread names a match by its opaque
- *     `MatchId` alone, so a stale or tampered quad cannot cause a wrong removal.
- *     Feature 14 needs geometry on the main thread and must widen INV-2
- *     deliberately, with its own decision, rather than by editing a type here.
+ *  3. Spec 0002, INV-2: coordinate quads and extraction offsets never appear in
+ *     this file, and no request carries any geometry. The main thread names a
+ *     match by its opaque `MatchId` alone, so a stale or tampered box cannot
+ *     cause a wrong removal. Spec 0026 child 0002 widens INV-2 for display
+ *     only: a drawn page's picture and its tickable rows' boxes, as fractions
+ *     of the page (`PageRect`, `MatchBox`), travel from the worker with a
+ *     `page-drawn` reply, and nothing drawn ever travels back (AC-48, AC-50).
+ *     Feature 14 needs geometry going the other way and must widen INV-2
+ *     again, with its own decision, rather than by editing a type here.
  */
 
 /**
@@ -603,8 +607,51 @@ export interface CancelRequest extends Envelope {
   readonly kind: "cancel";
 }
 
+/**
+ * What a drawn page is for. Spec 0026 child 0002, AC-48: `page` is the one
+ * page the preview shows, whose reply carries its tickable rows' boxes;
+ * `thumbnail` is a page in the rail, whose reply carries none.
+ */
+export const DRAW_PURPOSES = Object.freeze(["page", "thumbnail"] as const);
+
+export type DrawPurpose = (typeof DRAW_PURPOSES)[number];
+
+/**
+ * A place on a drawn page, each value a fraction of the page's width or
+ * height, 0 to 1. Display only (spec 0026 child 0002, AC-50): no request
+ * holds one, so a box can never name what a run removes.
+ */
+export interface PageRect {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** One tickable row's boxes on a drawn page. Never sent to the worker. */
+export interface MatchBox {
+  readonly id: MatchId;
+  readonly rects: readonly PageRect[];
+}
+
+/**
+ * Draw one page of the open review copy as a picture. Spec 0026 child 0002,
+ * AC-48. Answered at once, outside the run queue, and never cancelled: a
+ * draw reads only the review copy, which a run never touches.
+ */
+export interface DrawRequest extends Envelope {
+  readonly kind: "draw";
+  /** One based, as `ReviewMatch.page`. */
+  readonly page: number;
+  readonly purpose: DrawPurpose;
+  /** Device pixels wanted across the page. */
+  readonly width: number;
+  /** The most device pixels the picture may hold: `config.previewMaxPixels`, or a thumbnail's box. */
+  readonly maxPixels: number;
+}
+
 export type RequestMessage =
-  OpenRequest | FindTermsRequest | RedactRequest | CancelRequest;
+  OpenRequest | FindTermsRequest | RedactRequest | CancelRequest | DrawRequest;
 
 /* Worker to main thread. */
 
@@ -666,8 +713,30 @@ export interface ErrorMessage extends Envelope {
   readonly errorKind: EngineErrorKind;
 }
 
+/**
+ * A page drawn, or not. Spec 0026 child 0002, AC-48 and AC-50.
+ *
+ * `picture` is transferred, never copied, and `null` whenever the worker could
+ * not or would not draw (any doubt about the request, a session that is gone,
+ * a throw while drawing): a draw never answers with an `error`, so it never
+ * fails a session. `boxes` holds one entry per row on that page the worker
+ * holds a target for, only for `purpose: "page"` and only beside a picture.
+ */
+export interface PageDrawnMessage extends Envelope {
+  readonly kind: "page-drawn";
+  readonly page: number;
+  readonly purpose: DrawPurpose;
+  readonly picture: ImageBitmap | null;
+  readonly boxes: readonly MatchBox[];
+}
+
 export type ResponseMessage =
-  ResultMessage | TermsFoundMessage | RedactedMessage | ProgressMessage | ErrorMessage;
+  | ResultMessage
+  | TermsFoundMessage
+  | RedactedMessage
+  | ProgressMessage
+  | ErrorMessage
+  | PageDrawnMessage;
 
 /**
  * Raised on the main thread when a job fails.

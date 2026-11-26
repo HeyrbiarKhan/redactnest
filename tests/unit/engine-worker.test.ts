@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { FindOptions, FoundMatch, RedactionTarget } from "@/engine";
+import type { DrawnPage, FindOptions, FoundMatch, RedactionTarget } from "@/engine";
 import { RunCancelled } from "@/engine";
 import {
   asMatchId,
@@ -54,10 +54,13 @@ interface RunHooks {
 class FakeScope {
   readonly posted: ResponseMessage[] = [];
   /** The transfer list each message was posted with, in the same order. */
-  readonly transferred: (readonly ArrayBuffer[] | undefined)[] = [];
+  readonly transferred: (readonly (ArrayBuffer | ImageBitmap)[] | undefined)[] = [];
   private readonly listeners = new Map<string, ((event: unknown) => void)[]>();
 
-  postMessage(message: ResponseMessage, transfer?: readonly ArrayBuffer[]): void {
+  postMessage(
+    message: ResponseMessage,
+    transfer?: readonly (ArrayBuffer | ImageBitmap)[],
+  ): void {
     this.posted.push(message);
     this.transferred.push(transfer);
   }
@@ -116,6 +119,15 @@ function fakeDocument(found: readonly FoundMatch[] = []) {
     findTerms: vi.fn<(options: FindOptions) => Promise<readonly FoundMatch[]>>(
       async () => [],
     ),
+    // Spec 0026 child 0002: a two by two white page on a US Letter frame.
+    drawPage: vi.fn<
+      (pageIndex: number, options: { width: number; maxPixels: number }) => DrawnPage
+    >(() => ({
+      width: 2,
+      height: 2,
+      pixels: new Uint8ClampedArray(16).fill(255),
+      frame: [0, 0, 612, 792],
+    })),
   };
 }
 
@@ -1554,5 +1566,302 @@ describe("custom terms", () => {
     await settle();
     expect(first.close).toHaveBeenCalledTimes(1);
     expect(scope.of("terms-found")).toEqual([]);
+  });
+});
+
+/**
+ * Spec 0026 child 0002, AC-48 and AC-50. A draw is answered at once, outside
+ * the session's run queue, with a picture transferred and, for the page on
+ * show, a box for every tickable row on it. Any doubt answers with no
+ * picture, never an `error`, so a draw never fails a session.
+ */
+describe("drawing a page for the preview", () => {
+  const TARGET: RedactionTarget = Object.freeze<RedactionTarget>({
+    page: 0,
+    quads: [[61.2, 79.2, 183.6, 79.2, 61.2, 95.04, 183.6, 95.04]],
+    start: 9,
+    end: 25,
+    kind: "email",
+    term: null,
+    text: "jane@example.com",
+  });
+
+  const FOUND: readonly FoundMatch[] = Object.freeze([
+    {
+      page: 0,
+      kind: "email",
+      term: null,
+      text: "jane@example.com",
+      before: "Contact: ",
+      after: "",
+      beforeCut: false,
+      afterCut: false,
+      tickedByDefault: true,
+      blocked: null,
+      concealed: null,
+      termNotes: [],
+      target: TARGET,
+    },
+    {
+      page: 1,
+      kind: "phone",
+      text: "020 7946 0958",
+      before: "",
+      after: "",
+      beforeCut: false,
+      afterCut: false,
+      tickedByDefault: false,
+      blocked: "slanted-text",
+      concealed: null,
+      term: null,
+      termNotes: [],
+      target: null,
+    },
+  ]);
+
+  /** A picture the fake `createImageBitmap` hands back, with its close spied on. */
+  function fakePicture() {
+    return { width: 2, height: 2, close: vi.fn() } as unknown as ImageBitmap & {
+      close: ReturnType<typeof vi.fn>;
+    };
+  }
+
+  let pictures: ReturnType<typeof fakePicture>[];
+
+  beforeEach(() => {
+    pictures = [];
+    vi.stubGlobal(
+      "ImageData",
+      class {
+        constructor(
+          readonly data: Uint8ClampedArray,
+          readonly width: number,
+          readonly height: number,
+        ) {}
+      },
+    );
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => {
+        const picture = fakePicture();
+        pictures.push(picture);
+        return picture;
+      }),
+    );
+  });
+
+  function draw(
+    overrides: Partial<{
+      id: string;
+      jobId: string;
+      page: unknown;
+      purpose: unknown;
+      width: unknown;
+      maxPixels: unknown;
+    }> = {},
+  ): RequestMessage {
+    return {
+      id: "draw-1",
+      jobId: "job-1",
+      kind: "draw",
+      page: 1,
+      purpose: "page",
+      width: 1224,
+      maxPixels: 8_388_608,
+      ...overrides,
+    } as RequestMessage;
+  }
+
+  function drawn(): Extract<ResponseMessage, { kind: "page-drawn" }>[] {
+    return scope.of("page-drawn") as Extract<ResponseMessage, { kind: "page-drawn" }>[];
+  }
+
+  async function openWith(found: readonly FoundMatch[] = FOUND) {
+    const doc = fakeDocument(found);
+    openDocument.mockResolvedValue(doc);
+    await startWorker();
+    scope.send(openRequest());
+    await settle();
+    return doc;
+  }
+
+  function rowIds(): readonly string[] {
+    const [message] = scope.of("result");
+    if (message?.kind !== "result") throw new Error("expected a result");
+    return message.matches.map((row) => row.id);
+  }
+
+  it("draws the page asked for and transfers its picture", async () => {
+    const doc = await openWith();
+    scope.send(draw({ page: 1, width: 1224 }));
+    await settle();
+
+    expect(doc.drawPage).toHaveBeenCalledWith(0, { width: 1224, maxPixels: 8_388_608 });
+    const [message] = drawn();
+    expect(message).toMatchObject({
+      id: "draw-1",
+      jobId: "job-1",
+      page: 1,
+      purpose: "page",
+      picture: pictures[0],
+    });
+    expect(scope.transferred.at(-1)).toEqual([pictures[0]]);
+    expect(scope.of("error")).toEqual([]);
+  });
+
+  it("sends a box for exactly the tickable rows on the page drawn, as fractions of it", async () => {
+    await openWith();
+    const [emailId, blockedId] = rowIds();
+
+    scope.send(draw({ id: "draw-1", page: 1 }));
+    scope.send(draw({ id: "draw-2", page: 2 }));
+    await settle();
+
+    const [first, second] = drawn();
+    expect(first.boxes.map((box) => box.id)).toEqual([emailId]);
+    const [rect] = first.boxes[0].rects;
+    expect(rect.x).toBeCloseTo(0.1, 6);
+    expect(rect.y).toBeCloseTo(0.1, 6);
+    expect(rect.width).toBeCloseTo(0.2, 6);
+    expect(rect.height).toBeCloseTo(0.02, 6);
+    // Nothing else of the target crosses: no quad, offset or text.
+    expect(JSON.stringify(first.boxes)).not.toContain("jane");
+    expect(Object.keys(first.boxes[0]).sort()).toEqual(["id", "rects"]);
+    // The blocked row on page 2 has no target, so it has no box.
+    expect(second.boxes).toEqual([]);
+    expect(JSON.stringify(second.boxes)).not.toContain(blockedId);
+  });
+
+  it("sends no box with a thumbnail", async () => {
+    await openWith();
+    scope.send(draw({ purpose: "thumbnail", width: 168, maxPixels: 37_632 }));
+    await settle();
+
+    const [message] = drawn();
+    expect(message).toMatchObject({ purpose: "thumbnail", boxes: [] });
+    expect(message.picture).toBe(pictures[0]);
+  });
+
+  it("answers while a review search waits at a checkpoint, outside the queue", async () => {
+    const doc = fakeDocument();
+    const reading = gate<readonly FoundMatch[]>();
+    doc.findTerms.mockReturnValue(reading.promise);
+    openDocument.mockResolvedValue(doc);
+    await startWorker();
+    scope.send({
+      ...openRequest(),
+      limits: { maxBytes: 26_214_400, maxPages: 50, maxTerms: 50, maxTermChars: 100 },
+    } as RequestMessage);
+    await settle();
+    scope.send({
+      id: "op-3",
+      jobId: "job-1",
+      kind: "find-terms",
+      terms: [{ id: asTermId("t-acme"), text: "Acme Ltd" }],
+    } as RequestMessage);
+    await settle();
+
+    scope.send(draw());
+    await settle();
+    expect(drawn()).toHaveLength(1);
+    expect(drawn()[0].picture).not.toBeNull();
+    expect(scope.of("terms-found")).toEqual([]);
+
+    reading.resolve([]);
+    await settle();
+    expect(scope.of("terms-found")).toHaveLength(1);
+  });
+
+  const doubts: readonly (readonly [string, Parameters<typeof draw>[0]])[] = [
+    ["a session it has never heard of", { jobId: "job-9" }],
+    ["a page before the first", { page: 0 }],
+    ["a page past the last", { page: 3 }],
+    ["a page that is not whole", { page: 1.5 }],
+    ["a page that is not a number", { page: "1" }],
+    ["a purpose it does not know", { purpose: "print" }],
+    ["a width of nothing", { width: 0 }],
+    ["a width that is not whole", { width: 12.5 }],
+    ["a width wider than a canvas may be", { width: 16_385 }],
+    ["a pixel cap of nothing", { maxPixels: 0 }],
+    ["a pixel cap that is not a number", { maxPixels: "lots" }],
+  ];
+
+  for (const [label, overrides] of doubts) {
+    it(`answers ${label} with no picture and no error`, async () => {
+      const doc = await openWith();
+      scope.send(draw(overrides));
+      await settle();
+
+      expect(doc.drawPage).not.toHaveBeenCalled();
+      const [message] = drawn();
+      expect(message).toMatchObject({ id: "draw-1", picture: null, boxes: [] });
+      expect(scope.of("error")).toEqual([]);
+    });
+  }
+
+  it("answers with no picture in a worker with no createImageBitmap", async () => {
+    vi.stubGlobal("createImageBitmap", undefined);
+    const doc = await openWith();
+    scope.send(draw());
+    await settle();
+
+    expect(doc.drawPage).not.toHaveBeenCalled();
+    expect(drawn()[0]).toMatchObject({ picture: null, boxes: [] });
+  });
+
+  it("answers a throw while drawing with no picture, and keeps the session", async () => {
+    const doc = await openWith();
+    doc.drawPage.mockImplementationOnce(() => {
+      throw new Error(`MuPDF said: ${SECRET}`);
+    });
+    scope.send(draw());
+    await settle();
+
+    expect(drawn()[0]).toMatchObject({ picture: null, boxes: [] });
+    expect(scope.of("error")).toEqual([]);
+    expect(JSON.stringify(scope.posted)).not.toContain("Jane");
+
+    // The session is untouched: the next draw and a run both work.
+    scope.send(draw({ id: "draw-2" }));
+    scope.send(redactRequest());
+    await settle();
+    expect(drawn()[1].picture).not.toBeNull();
+    expect(scope.of("redacted")).toHaveLength(1);
+  });
+
+  it("closes a picture made for a session a replacement has since ended", async () => {
+    const first = await openWith();
+    let release!: (picture: ImageBitmap) => void;
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(
+        () =>
+          new Promise<ImageBitmap>((resolve) => {
+            release = resolve;
+          }),
+      ),
+    );
+    scope.send(draw());
+    await settle();
+    expect(first.drawPage).toHaveBeenCalled();
+
+    openDocument.mockResolvedValue(fakeDocument());
+    scope.send(openRequest({ id: "op-5", jobId: "job-2" }));
+    await settle();
+    const late = fakePicture();
+    release(late);
+    await settle();
+
+    expect(late.close).toHaveBeenCalled();
+    expect(drawn()[0]).toMatchObject({ picture: null, boxes: [] });
+  });
+
+  it("never consults the cancelled set, so a cancel naming a draw changes nothing", async () => {
+    await openWith();
+    scope.send({ id: "draw-1", jobId: "job-1", kind: "cancel" });
+    scope.send(draw({ id: "draw-1" }));
+    await settle();
+
+    expect(drawn()[0].picture).not.toBeNull();
   });
 });

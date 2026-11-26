@@ -299,6 +299,35 @@ const noStorageAnywhere = [
   },
 ];
 
+const CANVAS_EXPORT_MESSAGE =
+  "A page picture never leaves its canvas (spec 0026 child 0002, AC-51): no " +
+  "data URL, no blob, no pixels read back, no bitmap taken out. A picture " +
+  "turned into any of those could be put in a link, stored or sent. Show it " +
+  "with `transferFromImageBitmap` and nothing else.";
+
+/**
+ * Every call that turns what a canvas shows into something that can travel:
+ * a data URL, a blob, its pixels, or a bitmap taken back out. Matched as a
+ * member access by name, dotted or written as a string key, so a call through
+ * `.call`, `.bind` or a saved reference is caught as well as a plain call.
+ * `tests/e2e/network-list.spec.ts` spies on the first two in a real browser,
+ * as the backstop; a script cannot reach inside the worker, so this ban alone
+ * holds `convertToBlob` there.
+ */
+const CANVAS_EXPORTS =
+  "/^(toDataURL|toBlob|convertToBlob|getImageData|transferToImageBitmap)$/";
+
+const noCanvasExport = [
+  {
+    selector: `MemberExpression[property.name=${CANVAS_EXPORTS}]`,
+    message: CANVAS_EXPORT_MESSAGE,
+  },
+  {
+    selector: `MemberExpression[property.value=${CANVAS_EXPORTS}]`,
+    message: CANVAS_EXPORT_MESSAGE,
+  },
+];
+
 const OPACITY_MESSAGE =
   "No alpha modifier on a colour utility (spec 0003, INV-3). A quieter text " +
   "colour is `ink-muted`, never `ink` at 70%, because a colour made from " +
@@ -617,10 +646,10 @@ const NO_TELEMETRY_SYNTAX = [...noTelemetryAnywhere, ...noConfigTelemetryAnywher
 /**
  * A zone's rules, from the restrictions it does not get to relax.
  *
- * The storage ban, the colour patterns, the cursor ban, the log ban and the
- * ban on Clerk's sign out components are applied to every zone here rather
- * than passed in, so a zone can only ever relax what it explicitly names, and
- * no zone can name these.
+ * The storage ban, the canvas export ban (spec 0026 child 0002, AC-51), the
+ * colour patterns, the cursor ban, the log ban and the ban on Clerk's sign out
+ * components are applied to every zone here rather than passed in, so a zone
+ * can only ever relax what it explicitly names, and no zone can name these.
  */
 const zone = (imports, syntax) => ({
   "no-restricted-imports": ["error", { patterns: imports }],
@@ -628,6 +657,7 @@ const zone = (imports, syntax) => ({
     "error",
     ...syntax,
     ...noStorageAnywhere,
+    ...noCanvasExport,
     ...noUncheckedColour,
     ...noCursorUtility,
     ...noProcessStreams,

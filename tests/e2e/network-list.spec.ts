@@ -15,19 +15,77 @@ import { TELEMETRY_PATH } from "../../src/lib/routes";
  * post sends a body. The counts post is checked for the fixture's text and
  * name. So the list cannot drift from what the page does.
  *
+ * Spec 0026 child 0002, AC-52: at 1280 by 800 the page preview shows, so the
+ * run walks it too, between the list appearing and Redact: the page's picture
+ * and the thumbnails in view, two zooms in and one out, the other page
+ * through the rail, then a row on the first page picked by focusing its
+ * checkbox. No request may be made during the walk. A picture turned into a
+ * `blob:` or `data:` URL makes no `http` request, so an init script spies on
+ * the export calls instead: `toDataURL` and `toBlob` at any time, and
+ * `URL.createObjectURL` during the walk (Download makes one of its own,
+ * `src/lib/download.ts`). A script cannot reach inside the worker, so
+ * `convertToBlob` there is held by the lint ban alone.
+ *
  * In the `chromium` project, because it times nothing.
  */
 
 // A 10 MB WebAssembly payload has to arrive and compile first.
 const ENGINE_TIMEOUT = 60_000;
 
-const FIXTURE = resolve("tests/fixtures/detect-email.pdf");
+/** Two pages, with finds on each (`SAMPLE_AGREEMENT`). */
+const FIXTURE = resolve("tests/fixtures/sample-agreement.pdf");
 
 /** A name nothing in the product has any reason to utter. */
 const FILE_NAME = "zznetworklist.pdf";
 
 /** What the fixture holds and a found row shows, which no request may carry. */
-const FIXTURE_TEXT = ["sales@example.org", "for the report", "%PDF-", FILE_NAME];
+const FIXTURE_TEXT = [
+  "alex.morgan@example.com",
+  "payroll@example.com",
+  "020 7946 0182",
+  "%PDF-",
+  FILE_NAME,
+];
+
+interface ExportCall {
+  readonly name: string;
+  readonly at: number;
+}
+
+declare global {
+  interface Window {
+    __exports?: ExportCall[];
+  }
+}
+
+/** Runs before the page's own code: every export call is noted with its time. */
+function spyOnExports(): void {
+  const calls: ExportCall[] = [];
+  window.__exports = calls;
+  const note = (name: string) => calls.push({ name, at: performance.now() });
+  const canvas = HTMLCanvasElement.prototype;
+  const toDataURL = canvas.toDataURL;
+  canvas.toDataURL = function (
+    this: HTMLCanvasElement,
+    ...args: Parameters<HTMLCanvasElement["toDataURL"]>
+  ) {
+    note("toDataURL");
+    return toDataURL.apply(this, args);
+  };
+  const toBlob = canvas.toBlob;
+  canvas.toBlob = function (
+    this: HTMLCanvasElement,
+    ...args: Parameters<HTMLCanvasElement["toBlob"]>
+  ) {
+    note("toBlob");
+    return toBlob.apply(this, args);
+  };
+  const createObjectURL = URL.createObjectURL;
+  URL.createObjectURL = function (object: Blob | MediaSource) {
+    note("createObjectURL");
+    return createObjectURL.call(URL, object);
+  };
+}
 
 interface Row {
   readonly label: string;
@@ -61,15 +119,59 @@ test("lists every request a full run on /tool makes, and nothing else", async ({
     if (/^https?:/.test(request.url())) requests.push(request);
   });
 
+  await page.addInitScript(spyOnExports);
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/tool");
   await page.getByTestId("file-input").setInputFiles({
     name: FILE_NAME,
     mimeType: "application/pdf",
     buffer: readFileSync(FIXTURE),
   });
-  await expect(page.getByTestId("checklist")).toContainText("sales@example.org", {
+  await expect(page.getByTestId("checklist")).toContainText("alex.morgan@example.com", {
     timeout: ENGINE_TIMEOUT,
   });
+
+  // The preview walk (AC-52). The page's picture and the thumbnails in view
+  // land first, so the walk starts with nothing in flight.
+  await expect(page.getByTestId("preview-page")).not.toHaveAttribute("aria-busy", "true");
+  await expect(page.getByTestId("preview-canvas")).not.toHaveClass(/invisible/);
+  await expect(page.locator('[data-testid="preview-thumb"] .bg-surface')).toHaveCount(2);
+  const walkFrom = await page.evaluate(() => performance.now());
+  const requestsBefore = requests.length;
+
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await page.getByRole("button", { name: "Zoom out" }).click();
+  await expect(page.getByTestId("preview-zoom-level")).toHaveText("125%");
+  await page
+    .getByRole("navigation", { name: "Pages" })
+    .getByRole("button", { name: /^Page 2\b/ })
+    .click();
+  await expect(page.getByTestId("preview-page-of")).toHaveText("Page 2 of 2");
+  await expect(page.getByTestId("preview-canvas")).not.toHaveClass(/invisible/);
+  await page.getByRole("checkbox", { name: "alex.morgan@example.com" }).focus();
+  await expect(page.getByTestId("preview-page-of")).toHaveText("Page 1 of 2");
+  await expect(page.locator("[data-box][data-picked]")).toHaveCount(1);
+
+  // No picture in the preview names a URL of its own.
+  const named = await page.getByTestId("area-preview").evaluate((preview) =>
+    [...preview.querySelectorAll("*")].flatMap((element) => {
+      const values = [
+        element.getAttribute("src") ?? "",
+        element.getAttribute("srcset") ?? "",
+        getComputedStyle(element).backgroundImage,
+      ];
+      return values.filter((value) => /(blob|data):/.test(value));
+    }),
+  );
+  expect(named).toEqual([]);
+
+  const walkTo = await page.evaluate(() => performance.now());
+  expect(
+    requests.slice(requestsBefore).map((request) => request.url()),
+    "a request was made during the preview walk",
+  ).toEqual([]);
+
   await page.getByTestId("redact").click();
   await expect(page.getByTestId("download")).toBeVisible({ timeout: ENGINE_TIMEOUT });
   const downloading = page.waitForEvent("download");
@@ -112,4 +214,16 @@ test("lists every request a full run on /tool makes, and nothing else", async ({
   for (const row of rows.filter(({ paths }) => paths.length > 0)) {
     expect([...seen], `${row.label} was never seen`).toContain(row.label);
   }
+
+  const exports = await page.evaluate(() => window.__exports ?? []);
+  expect(
+    exports.filter(({ name }) => name === "toDataURL" || name === "toBlob"),
+    "a canvas was turned into a URL or a blob",
+  ).toEqual([]);
+  expect(
+    exports.filter(
+      ({ name, at }) => name === "createObjectURL" && at >= walkFrom && at <= walkTo,
+    ),
+    "a URL was made for something during the preview walk",
+  ).toEqual([]);
 });

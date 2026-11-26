@@ -147,6 +147,10 @@ const CONTRACT: readonly Pairing[] = Object.freeze([
   // on the `accent-bright` wash behind it.
   { foreground: "accent-soft", background: "accent", minimum: TEXT },
   ...pairings(["ink"], ["accent", "accent-bright"], GRAPHIC),
+  // The page preview's rail (spec 0026 child 0002, AC-41): a warning page's
+  // mark, an exclamation in `on-accent` on a `warning-icon` disc, held as a
+  // graphic, since it is decorative and the button's name says it.
+  { foreground: "on-accent", background: "warning-icon", minimum: GRAPHIC },
 ]);
 
 /**

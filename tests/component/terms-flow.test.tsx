@@ -115,6 +115,7 @@ function session(
     matches,
     redact: vi.fn(),
     findTerms,
+    draw: vi.fn(),
     cancel: vi.fn(),
     release: vi.fn(),
   };

@@ -7,7 +7,10 @@ import type {
   DocumentSummary,
   EngineErrorKind,
   LoggablePayload,
+  MatchBox,
+  PageDrawnMessage,
   PageReading,
+  PageRect,
   ProgressPhase,
   RedactionOutcome,
   ResultCounts,
@@ -162,5 +165,18 @@ describe("what may reach a log", () => {
   it("would catch a review match, which is why it is not in the union", () => {
     expectTypeOf<Verdict<ReviewMatch>>().toEqualTypeOf<"carries a free string">();
     expectTypeOf<LoggablePayload>().not.toEqualTypeOf<ReviewMatch>();
+  });
+
+  /**
+   * Spec 0026 child 0002, AC-51. A drawn page's rectangles, a row's boxes and
+   * the reply that carries them (its picture with them) are document data:
+   * where a tickable find sits on a page. None may reach a log, so none is
+   * assignable to the union.
+   */
+  it("keeps the preview's rectangles, boxes and drawn page out of the union", () => {
+    expectTypeOf<PageRect>().not.toExtend<LoggablePayload>();
+    expectTypeOf<MatchBox>().not.toExtend<LoggablePayload>();
+    expectTypeOf<PageDrawnMessage>().not.toExtend<LoggablePayload>();
+    expectTypeOf<readonly MatchBox[]>().not.toExtend<LoggablePayload>();
   });
 });

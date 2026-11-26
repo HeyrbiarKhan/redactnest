@@ -83,11 +83,11 @@ export default function PrivacyPage() {
           We never store your document, and nothing about it is saved in your browser’s
           storage.
         </p>
-        {/* C3, as spec 0017 changes it */}
+        {/* C3, as specs 0017 and 0026 (child 0002, AC-56) change it */}
         <p>
           What RedactNest finds in your document, the words around each item it finds, the
-          names, numbers or phrases you type for it to find, and your file’s name all stay
-          on your device.
+          pictures of your pages it shows you, the names, numbers or phrases you type for
+          it to find, and your file’s name all stay on your device.
         </p>
         {/* C4 */}
         <p>

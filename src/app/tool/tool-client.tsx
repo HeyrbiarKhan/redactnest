@@ -87,6 +87,7 @@ import {
   type EngineLimits,
   type EntitlementSnapshot,
   type MatchId,
+  type PageDrawnMessage,
   type TermId,
   type TermQuery,
 } from "@/worker/protocol";
@@ -95,6 +96,7 @@ import {
   openSession,
   releaseEngine,
   warmEngine,
+  type DrawAsk,
   type OpenedSession,
   type TermSearch,
 } from "@/worker/client";
@@ -109,8 +111,10 @@ import { StepList } from "@/ui/step-list";
 import { ActionPanel } from "./action-panel";
 import { FailureCallout } from "./failure-callout";
 import { LockLine } from "./lock-line";
+import { PagePreview, type PreviewHandle } from "./page-preview";
 import { coversFocus, PANEL_ROOM } from "./panel-room";
 import { NewTabLink, PlanLine } from "./plan-line";
+import { previewSupported, readPreviewFit, subscribePreviewFit } from "./preview-fit";
 import { ResultCard } from "./result-card";
 import { ReviewChecklist, type TermGroupTerm } from "./review-checklist";
 import { TermsNotice } from "./terms-notice";
@@ -208,6 +212,9 @@ function focusAfter(previous: ToolSession, next: ToolSession): FocusTarget | nul
 const NEVER_CHANGES = () => () => {};
 const SERVER_SNAPSHOT = () => null;
 
+/** The server's answer for the preview's fit and support: no preview (AC-37). */
+const NO_PREVIEW = () => false;
+
 /**
  * The prerendered HTML is only ever used by a document the browser loaded at
  * `/tool`, so that is the honest server answer for both the load and the
@@ -288,6 +295,27 @@ export function ToolClient() {
   );
 
   const [session, dispatch] = useReducer(sessionReducer, IDLE as ToolSession);
+
+  /*
+   * Spec 0026 child 0002, AC-37. Whether the page preview may show: the
+   * window fits (heard on a resize and on a root size change alike), and the
+   * browser can show a transferred picture, probed once. Both answer `false`
+   * on the server, so the prerendered page holds no preview.
+   */
+  const previewFit = useSyncExternalStore(
+    subscribePreviewFit,
+    readPreviewFit,
+    NO_PREVIEW,
+  );
+  const previewCan = useSyncExternalStore(NEVER_CHANGES, previewSupported, NO_PREVIEW);
+
+  /**
+   * Where the run in flight began (AC-37): `true` for Redact, from review,
+   * `false` for Make it again, from `complete`. Set as `runRedaction`
+   * dispatches, and read only while `redacting`, so in every other state it
+   * says nothing. Session state, never in the reducer, which knows no layout.
+   */
+  const [runFromReview, setRunFromReview] = useState(false);
 
   /**
    * The page's answer to which plan applies, for the helper and the plan line
@@ -699,6 +727,7 @@ export function ToolClient() {
     const attempt = attemptRef.current;
     const current = () => attemptRef.current === attempt;
 
+    setRunFromReview(start === "redact-started");
     dispatch({ type: start });
 
     try {
@@ -723,6 +752,39 @@ export function ToolClient() {
         dispatch({ type: "failed", failure: error.errorKind });
       }
     }
+  }, []);
+
+  /**
+   * Spec 0026 child 0002, AC-48. The one stable callback the preview draws
+   * through: it reads the opened session from its ref when called, never in
+   * render, so the draw carries that session's own job. With no session open
+   * it answers no picture, as the client would.
+   */
+  const drawPage = useCallback((ask: DrawAsk): Promise<PageDrawnMessage> => {
+    const opened = openedRef.current;
+    if (opened === null) {
+      return Promise.resolve({
+        id: "",
+        jobId: "",
+        kind: "page-drawn",
+        page: ask.page,
+        purpose: ask.purpose,
+        picture: null,
+        boxes: [],
+      });
+    }
+    return opened.draw(ask);
+  }, []);
+
+  /**
+   * The preview's pick (AC-43): a row's checkbox took focus or changed its
+   * tick. Handed to every row through the checklist, stable, and routed to the
+   * preview's own state, so a pick renders no row again. Nothing while the
+   * preview is not on the page.
+   */
+  const previewRef = useRef<PreviewHandle>(null);
+  const handlePick = useCallback((id: MatchId) => {
+    previewRef.current?.pick(id);
   }, []);
 
   /** AC-17. The worker notices within a page; the checklist comes back now. */
@@ -1257,6 +1319,19 @@ export function ToolClient() {
           ? { title: PROGRESS_TITLE.run, ...stepStates(session.phase, RUN_STEPS) }
           : null;
   const runRefused = session.state === "reviewing" && session.runFailure !== null;
+  /*
+   * Spec 0026 child 0002, AC-37: the preview shows while reviewing, and
+   * through a run started from review, wherever the window fits and the
+   * browser can show a picture. Everywhere else it is not rendered at all.
+   */
+  const preview =
+    previewFit &&
+    previewCan &&
+    live !== null &&
+    live.summary !== null &&
+    (live.state === "reviewing" || (live.state === "redacting" && runFromReview))
+      ? live
+      : null;
   // B's head holds something in every step but one: reviewing with billing
   // off and no refusal, when the action panel is all B shows (AC-12, *Rows*).
   const headHolds = config.billingEnabled || !acting || runRefused;
@@ -1265,6 +1340,7 @@ export function ToolClient() {
     live: !quiet,
     head: headHolds,
     found: reviewable,
+    preview: preview !== null,
   });
   const gridStyle = {
     "--tool-columns": template.columns,
@@ -1297,6 +1373,7 @@ export function ToolClient() {
       <div
         data-testid="tool-grid"
         data-panel={acting ? "" : undefined}
+        data-preview={preview !== null ? "" : undefined}
         style={gridStyle}
         onFocus={handleColumnFocus}
         className={
@@ -1630,6 +1707,7 @@ export function ToolClient() {
               partly={session.summary !== null && isPartly(session.summary)}
               onToggle={handleToggle}
               onTicksSet={handleTicksSet}
+              onPick={handlePick}
               terms={termView?.groups}
               termActions={{
                 onSetAside: handleSetAside,
@@ -1670,6 +1748,25 @@ export function ToolClient() {
               }
             />
           </div>
+        )}
+
+        {/*
+          P, the page preview (spec 0026 child 0002, AC-39): a fifth area, after
+          C in the page, so it is reached last and changes no order before it,
+          though the frame draws it on the left. Keyed by the job, so a second
+          document's preview never inherits the first one's pictures, and
+          gone, with its one cleanup, whenever AC-37 stops holding.
+        */}
+        {preview !== null && preview.summary !== null && (
+          <PagePreview
+            key={preview.jobId}
+            ref={previewRef}
+            summary={preview.summary}
+            matches={preview.matches}
+            ticked={preview.ticked}
+            running={preview.state === "redacting"}
+            draw={drawPage}
+          />
         )}
       </div>
     </div>
