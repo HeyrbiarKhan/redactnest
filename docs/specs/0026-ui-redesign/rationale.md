@@ -53,7 +53,7 @@ The forces:
 
 ### Page preview
 
-**Pages, thumbnails and boxes**, **pages without boxes**, **a page list only**, and **defer** (chosen). Deferring keeps INV-2 whole in this feature and gives the widening its own spec. Cons: `/tool` does not match the mockup's left two columns yet. The other three are recorded in [0002-page-preview-deferred.md](0002-page-preview-deferred.md) with the owner's leanings.
+**Pages, thumbnails and boxes**, **pages without boxes**, **a page list only**, and **defer** (chosen on 2026-11-25). Deferring keeps INV-2 whole in this feature and gives the widening its own spec. Cons: `/tool` does not match the mockup's left two columns yet. The other three were recorded in child 0002 (then `0002-page-preview-deferred.md`) with the owner's leanings. _Reversed on 2026-11-26 (the owner's call): pages, thumbnails and boxes, designed in [0002-page-preview.md](0002-page-preview.md); see *Amended for the page preview* below._
 
 ### Progress
 
@@ -122,6 +122,81 @@ You ported `/` and the guides to `Main.dc.html`, `Guide.dc.html`, `06-home.png` 
 
 **The network table's widest row.** From `xl` the page's files row wraps its name beside one line of paths; shortening the name was the other option.
 
+## Amended for the page preview (2026-11-26)
+
+You brought the preview back into this feature, so child 0002 became its design. It started from the leanings recorded on 2026-11-25 (pages, thumbnails and boxes; a transferred `ImageBitmap` on a canvas; look and jump only; nothing drawn below `lg`), and settled each open question below. You chose the recommendation every time.
+
+**The forces.** INV-2 kept every coordinate in the worker for one stated reason: a stale or tampered box must never cause a wrong removal. INV-1 kept page pictures off the main thread because they are a new kind of document data there. A drawn page also costs memory in two places: pictures in the tab, and decoded pictures in a worker heap that never shrinks. `/tool`'s areas, focus order and single polite regions are fixed by spec 0013 INV-5 and AC-20, and AC-12's sticky foot and focus rules took a milestone to get right. Area L is the `aria-live` region itself, and a checklist row is a `label` around its checkbox, so clicking a row already toggles its tick.
+
+### What was measured
+
+Scratch tests ran MuPDF 1.28.1 in Node through the repository's own `prepareDocument`, on three 50 page US Letter documents built in the test: `cost.test.ts`'s dense text shape (60 lines a page), a 300 dpi grey scan with its own JPEG on each page, and a 300 dpi colour scan over ten JPEGs. Each draw is `toPixmap` to RGB with alpha, then a copy of the samples out of the heap, as a transfer would need. The machine's speed drifts between sessions, so these figures set the order of magnitude, not a budget.
+
+| Draw | Device pixels | RGBA size | Dense text | Grey scan | Colour scan |
+|---|---|---|---|---|---|
+| Thumbnail at 1x (84 px across) | 84 by 109 | 0.03 MB | 1.2 ms | 26 ms | 0.4 ms (cached) to 55 ms |
+| Thumbnail at 2x (168 px across) | 168 by 218 | 0.14 MB | 1.2 ms | 26 ms | 0.8 ms (cached) to 54 ms |
+| Page 560 px across at 1x | 560 by 725 | 1.55 MB | 1.6 ms | 29 ms | 58 ms |
+| Page 560 px across at 2x | 1120 by 1450 | 6.2 MB | 3.0 ms | 40 ms | 84 ms |
+| The same at 200% | 2240 by 2899 | 24.8 MB | 11 ms | 78 ms | 158 ms |
+
+Medians, with the slowest within about 10% except the cached colour thumbnails. All 50 thumbnails took 70 ms on text, 1.3 s on the grey scan and 0.55 s on the colour scan. Copying the samples out cost 1 to 7 ms a page.
+
+The worker's heap, read with MuPDF's heap exposed as `device.test.ts` reads it, on the grey scan:
+
+| Step | Store kept | Store emptied after each draw |
+|---|---|---|
+| Opened | 37 MB | 37 MB |
+| 50 thumbnails at 2x | 53 MB | 37 MB |
+| 50 pages at 2x | 159 MB | 44 MB |
+| 10 pages at 200% | 190 MB | 65 MB |
+| 10 pages at 400% (one 104 MB picture each) | 269 MB | 166 MB |
+
+A WebAssembly heap never shrinks, so without `emptyStore` one look through a scan raises the worker's floor by over 100 MB for the rest of the session. With it, the heap grows once, by about one picture and one decoded image. The 400% row is why a picture needs a cap.
+
+### The questions, the options and the calls
+
+- **Page view.** *One page at a time* (chosen): as the mockup draws it, with one page picture alive, so "draw only what is in view" holds by construction. *Every page in one scroll*: reads like a PDF viewer, but each page's size must cross up front, pages are drawn and dropped as they scroll, and two or three pictures are alive at once.
+- **Frame.** *Full window* (chosen): the mockup's frame, with the page column about 830 pixels at 1440. *Inside today's 1180 pixel container*: the h1 stays visible, but the page column is about 580 pixels at most.
+- **How the full window frame scrolls.** First proposed as each column scrolling on its own. Working through the code showed that needs a wrapper around A, L, B and C (against spec 0013 INV-5) and would move AC-12's sticky foot and focus rules into a nested scroller. *The window scrolls and P sticks* (chosen): AC-12's right column is reused word for word, P is sticky at full window height beside it, and the footer is reached as now. *The right column as its own scroller*: closest to the mockup's code, at the cost of that wrapper and a second set of focus rules.
+- **Between `lg` and `xl`.** *The same three columns* (chosen): about 400 pixels of page at a 1024 window, enough to find a box, and one layout to build and test. *Two columns with a page picker*: a bigger page, but a second shape of P. *No preview below `xl`*: simplest, but a laptop's window misses it.
+- **Steps.** *Reviewing, and a run started from review* (chosen): nothing moves when Redact is pressed, and the pictures go at `complete` because they show the original, not the cleaned copy. A rerun from `complete` keeps the one column, so the layout never jumps twice in a few seconds. *Also at `complete`*: the original beside the result card, with a line saying so, which invites a misreading. *Reviewing only*: a layout jump on every Redact, Cancel and refusal.
+- **Picking a row.** *Its checkbox taking focus* (chosen): no new control and no new tab stop, and it works for Tab and click alike. Changing the preview on focus is not a change of context (WCAG 3.2.1), since focus stays and nothing outside P moves. *A page button on each row*: explicit, but up to 3,000 more tab stops. *Both*: more controls for little gain.
+- **Which rows get a box.** *Rows that can be ticked* (chosen): a box marks exactly the geometry the engine vouches for, since a blocked row is refused because its outline is unsound, slanted or reaches over a picture. *Every row with a place*: needs quads the engine now drops for blocked rows, and draws outlines the engine distrusts. *Ticked rows only*: an unticked find can't be seen.
+- **Box look.** *By tick, with the picked row ringed* (chosen): the page shows what a run would remove. *One look for all*: simpler, says less. The mockup's `accent-bright` edge measures under 3:1 on white, so the edges take `accent` and a dashed `border-strong`, both already in the contract.
+- **Rail badge.** *Rows listed on the page* (chosen): agrees with the list's page labels. *Ticked rows*: changes as you tick. *Tickable rows*: matches the boxes but not the list.
+- **Scan mark.** *A rail mark plus a line by the page* (chosen): a box free scan page can't read as "nothing here", and the line reuses the warning's own words. *Rail mark only*: says it once. *Hatched overlay*: hard to read in forced colours.
+- **Zoom steps.** *100% fits the column, 50 to 200%* (chosen): the mockup's single control with no Fit button. *100% as actual size, up to 300%*: a viewer's convention, with larger pictures at the top end.
+- **Zoom method.** *Stretch at once, then draw again* (chosen): instant and then sharp, which 3 to 160 ms draws make affordable. *Draw again only*: a visible wait on a big scan. *Stretch only*: soft text from 125%.
+- **Draw failure.** *A placeholder and one line, no retry* (chosen): a MuPDF failure is almost always the same next time, and moving away and back asks again. *With Try again*: a control that rarely helps. *Nothing said*: a blank page that may read as an empty page.
+- **Page order.** *Last, after the list* (chosen): every existing order, id and test stays, and the place a tick changes comes first. *Before the panel, left to right*: matches the drawing but moves spec 0007 AC-5's order and puts a long rail before the checklist.
+- **How boxes cross.** *With each drawn page* (chosen): no geometry crosses when nothing is drawn, and `ReviewMatch` stays free of geometry. *In every row at open*: simplest, but every position crosses on every screen.
+- **Rail keys.** *One tab stop with arrow keys* (chosen): a 50 page file adds one tab stop. *Every thumbnail a tab stop*: 50 of them.
+- **Proof.** *Extend the network list test* (chosen), with an export spy, the storage check and a lint ban: one walk proves no request, no URL and no store. *A separate spec*: the same checks apart from the list they prove. *Network list only*: misses a picture turned into a URL and never sent.
+- **Privacy C3.** *Name the pictures, with a change entry* (chosen): a new kind of document data is better said than implied. *Leave it*: C3's "what RedactNest finds" arguably covers it.
+- **Telemetry.** *No new count* (chosen): a failed draw changes neither the review nor the file. *Count draw failures*: a catalog change for a rare event.
+
+### The calls made without a question
+
+- **`bitmaprenderer` over a 2D canvas.** `transferFromImageBitmap` takes the picture's pixels with no copy, so the page holds each picture once, and `null` drops it. The runner up, `drawImage` then `close()`, holds a copy for a moment and needs the 2D context.
+- **Draws outside the run queue, and none during a run.** A draw reads only the review copy, so the worker answers it at once, outside the run queue, and a draw during a review search waits at most one page read. The first draft also let P draw during a run, answered between the run's yields. The cross check showed that a run has stretches of seconds with no yield (the write, the self check), and that emptying MuPDF's store mid run throws away pictures the run had decoded, so P now sends no draw while `redacting`: it keeps its pictures, a zoom only stretches, and the wanted draws go out back in `reviewing`. The runner up, drawing during runs with the store left alone, keeps the preview live at the cost of a delayed Cancel and an unbounded store during the run.
+- **`emptyStore` after every draw.** It keeps the heap flat, at the price of decoding a picture again when the same page is drawn twice. The runner up, MuPDF's own store limit, lets the heap grow by about the store's size first.
+- **A cap of 8 million device pixels, configurable to Safari's 16.7 million.** It covers a fit width page at 200% on a 2x screen at 1024 pixels with room to spare, and holds one picture to about 32 MB. Above it CSS stretches the picture, a little soft.
+- **The page area's own scroll, never `scrollIntoView`.** `scrollIntoView` scrolls every scrolling ancestor, the window included, which would move the focused row.
+- **No new live region.** The zoom level is a description of its buttons, and the page shown is `aria-current` in the rail, so `/tool` keeps its single polite regions. A page change or a zoom step is silent to a screen reader, a shown limit.
+
+### The cross check (2026-11-26)
+
+An independent read on another model checked the first draft against the code and found gaps the build would have had to guess. Each claim was checked against the code before you ruled, and you chose to apply every recommended fix:
+- A grid item 100dvh tall that spans every row would push its height into those rows. P's cell now takes `contain: size`, the grid's last row takes the slack, and the column gap is 0.
+- `OpenDocument` keeps its MuPDF document private, so the draw is a method on it, backed by a `drawPageWith` seam.
+- The client's three early drops, `retireOtherJobs`, the lost worker path and `releaseEngine` each needed a rule for a draw: close its picture, never cancel it, and settle it as `null`.
+- No draw during a run, as above.
+- The mark words, a support probe, picking on a tick change (a click does not focus a checkbox in Safari, or in Firefox on macOS), a rows version against a term search racing a draw, and the empty page on a page change.
+- The tests as they can be written: the spy cannot reach the worker, Download already makes an object URL, and the speed file needs the trace off.
+
+One finding was wrong and dropped: it took `/tool`'s header to be sticky from `lg`, but only `/`'s header sticks (`src/app/site-nav.tsx`), so P sticking at `top: 0` already clears it.
+
 ## Evidence: where the mockups meet the rules
 
 | Mockup | Rule | Resolution |
@@ -133,7 +208,10 @@ You ported `/` and the guides to `Main.dc.html`, `Guide.dc.html`, `06-home.png` 
 | A different mark (three lines in a tile) | spec 0013, AC-1 | the nest mark kept, set in the tile (AC-7) |
 | "Guides" nav item and breadcrumb link | no index page exists | no Guides item; the breadcrumb is text (AC-5, AC-11) |
 | "Stripping hidden data" as a run step | spec 0019, AC-12; spec 0018, AC-5 | "Removing what you ticked" (child 0003, AC-32) |
-| Highlight box on a match in the page | spec 0002, INV-2 | deferred (child 0002) |
+| Highlight box on a match in the page | spec 0002, INV-2 | deferred on 2026-11-25; built as display only boxes from 2026-11-26, INV-2 widened (child 0002, AC-42, AC-50) |
+| Box edge in `#14b8a6` | WCAG 1.4.11 (3:1 for a graphic that carries meaning) | `accent` for a ticked box, dashed `border-strong` for an unticked one (child 0002, AC-42) |
+| Zoom pill under the page | P sticks at full window height from below the header, so its lower edge starts under the window's edge | the zoom control in a bar above the page (child 0002, AC-40) |
+| Each column scrolls on its own | spec 0013 INV-5 (no wrapper around the areas), AC-12's tested sticky foot | the window scrolls the right column; P sticks beside it (child 0002, AC-38) |
 | Network tab list `[real list to confirm]` | a claim with no gate | `NETWORK_ROWS` held by an e2e test (AC-9) |
 | Trust strip and questions on home | spec 0013, INV-11 (said once) | left out in the first draft; built in the visual port by your read, each claim held to its named places (AC-8) |
 | Network table and copy boxes in monospace | spec 0003, INV-6 (Inter only) | the named `data-mono` places only, held by the fonts test (AC-8, AC-9) |
