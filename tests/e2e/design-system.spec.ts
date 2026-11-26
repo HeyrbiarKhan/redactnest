@@ -2322,7 +2322,8 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     expect(header?.height).toBe(40);
     expect(main?.height).toBe(50);
 
-    await expectTargetSizes(page, ["#main", "Menu", "/sign-in"]);
+    // The menu's copy of Try it free shows only on a row under 20.5rem.
+    await expectTargetSizes(page, ["#main", "Menu", "/sign-in", "/tool"]);
   });
 
   test("axe reports nothing", async ({ page }) => {
@@ -2525,8 +2526,13 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
    * link is `sr-only` until it takes focus, a 1 pixel clipped box that scrolls
    * nothing, but a range over its text reports the words unclipped, 309 pixels
    * at 200% text, past a 305 window. The scroll check and the box loop are the
-   * same at both widths, and at 320 the text loop keeps every node. Spec 0024,
-   * *The lockup at narrow widths*.
+   * same at both widths, and at 320 the text loop keeps the skip link's words.
+   * Spec 0024, *The lockup at narrow widths*.
+   *
+   * The text loop passes over every other visually hidden word for the same
+   * reason: the header's Menu button sits at the row's right edge, and its
+   * `sr-only` name reads 4 pixels past the window at 200% text, though it
+   * draws and scrolls nothing (`ROW_UNLESS_NARROW` put the button there).
    */
   async function expectNothingPastTheWindow(page: Page, width: 320 | 305): Promise<void> {
     await expectNoHorizontalScroll(page);
@@ -2551,7 +2557,9 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
       }
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        if (passOverSkipLink && node.parentElement?.closest('a[href="#main"]')) continue;
+        const skipLink = node.parentElement?.closest('a[href="#main"]');
+        if (skipLink && passOverSkipLink) continue;
+        if (!skipLink && node.parentElement?.closest(".sr-only")) continue;
         const range = document.createRange();
         range.selectNodeContents(node);
         const box = range.getBoundingClientRect();
@@ -2586,8 +2594,14 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
 
   /**
    * The fix leaves wider screens as they were: `/`'s hero, trio and band at
-   * 1280 pixels, recorded from the build before it as x, y, width and height.
-   * Within a pixel, so a rounding difference between machines is not a change.
+   * 1280 pixels, recorded from the build before it as x, y and width. Within
+   * a pixel, so a rounding difference between machines is not a change.
+   *
+   * No height is recorded, because a box's height follows its wrapped text and
+   * Linux draws Inter a few pixels wider than Windows, where these were read:
+   * on CI the band's Looks for chips wrapped one more row (44 pixels, 36 and a
+   * gap of 8) with nothing moved (CI run 45842120945). The hero's height and
+   * the trio's are still held, by the y of the box below each.
    */
   test("/: keeps the hero, the trio and the band where they were at 1280 pixels", async ({
     page,
@@ -2598,18 +2612,17 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
     for (const [box, recorded] of [
       // Recorded again for the owner's port of `Main.dc.html` (2026-11-25):
       // the hero, the How it works cards and the band.
-      [page.getByTestId("home-hero"), [82, 153, 1116, 505.1]],
-      [page.getByTestId("home-steps").getByRole("list"), [82, 1131.8, 1116, 357]],
-      [page.getByTestId("home-band"), [82, 2213.1, 1116, 481.5]],
+      [page.getByTestId("home-hero"), [82, 153, 1116]],
+      [page.getByTestId("home-steps").getByRole("list"), [82, 1131.8, 1116]],
+      [page.getByTestId("home-band"), [82, 2213.1, 1116]],
     ] as const) {
       const measured = await box.boundingBox();
       if (measured === null) throw new Error("a recorded box is not drawn");
-      const [x, y, width, height] = recorded;
+      const [x, y, width] = recorded;
       for (const [value, was] of [
         [measured.x, x],
         [measured.y, y],
         [measured.width, width],
-        [measured.height, height],
       ] as const) {
         expect(Math.abs(value - was)).toBeLessThanOrEqual(1);
       }
@@ -2921,12 +2934,15 @@ test.describe("every control on every page (spec 0026, AC-16)", () => {
       // Sign in has no box, and the Menu button shows only below `sm`
       // (child 0001, AC-27). The tool page's file input is never a stop.
       // A link inside a sentence takes WCAG 2.5.8's inline exception.
-      const tool = path === "/tool" ? ["file-input"] : [];
+      // Try it free has two copies off `/tool`, the row's and the menu's, and
+      // one is always hidden: the menu's from a 20.5rem row, the row's below
+      // it (`ROW_UNLESS_NARROW`). Both are a plain `a` to `/tool`.
+      const tool = path === "/tool" ? ["file-input"] : ["/tool"];
       await expectTargetSizes(page, ["#main", "Menu", "/sign-in", ...tool], {
         sentences: true,
       });
 
-      // Below `sm` the row keeps Try it free and the menu takes Sign in.
+      // Below `sm` the menu takes Sign in, and at 320 Try it free too.
       await page.setViewportSize({ width: 320, height: 640 });
       await page
         .getByRole("banner")

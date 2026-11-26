@@ -103,11 +103,17 @@ async function expectFocusRing(target: Locator, offset = "2px"): Promise<void> {
   expect(ring).toEqual({ ringed: true, style: "solid", width: "2px", offset });
 }
 
-/** At least 24 by 24 pixels, and a menu item 40 tall (WCAG 2.5.8; spec 0026, AC-16). */
+/**
+ * At least 24 by 24 pixels, and a menu item 40 tall (WCAG 2.5.8; spec 0026, AC-16).
+ * Each side is rounded to 0.01 pixel first: a menu placed at a fractional
+ * offset can report 39.99998 for a 40 pixel item (CI, 2026-11-26), and that
+ * is layout rounding, not a smaller target. The minimums themselves stay.
+ */
 async function expectTarget(target: Locator, height = 24): Promise<void> {
   const box = await target.boundingBox();
-  expect(box?.width ?? 0).toBeGreaterThanOrEqual(24);
-  expect(box?.height ?? 0).toBeGreaterThanOrEqual(height);
+  const round = (side: number) => Math.round(side * 100) / 100;
+  expect(round(box?.width ?? 0)).toBeGreaterThanOrEqual(24);
+  expect(round(box?.height ?? 0)).toBeGreaterThanOrEqual(height);
 }
 
 test.describe("signed out (AC-19, AC-25)", () => {

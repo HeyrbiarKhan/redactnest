@@ -373,65 +373,71 @@ test.describe("the header", () => {
   }
 
   /**
-   * Below `sm`, with billing on and signed out, the lockup, Try it free and
-   * the menu button share one row, in that order, and the nav and Sign in wait
-   * in the menu; the button opens it beneath the header, the links stacked in
-   * page order, so focus never moves back up the screen (feature 28, as spec
-   * 0026 child 0001 AC-27 amends AC-7).
+   * Below `sm`, with billing on and signed out, the lockup and the menu button
+   * share one row, and the nav and Sign in wait in the menu; the button opens
+   * it beneath the header, the links stacked in page order, so focus never
+   * moves back up the screen (feature 28, as spec 0026 child 0001 AC-27
+   * amends AC-7). On a row narrower than 20.5rem (a 360 pixel window) Try it
+   * free waits there too, last, because beside the lockup and the button it
+   * left 5 pixels at 320 on Windows and wrapped the button on Linux, whose
+   * Inter is wider (`ROW_UNLESS_NARROW`). The row is held by boxes against
+   * boxes, so a font's width can only fail it by really wrapping it.
    */
-  test("folds the links into a menu at 320 pixels, with no sideways scroll", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 320, height: 640 });
-    await page.goto("/");
-    const header = page.getByRole("banner");
-    const links = ["How it works", "Security", "Pricing", "Sign in"].map((name) =>
-      header.getByRole("link", { name, exact: true }),
-    );
+  // 305 is 320 less a classic scrollbar (spec 0024, *The lockup at narrow widths*).
+  for (const width of [320, 305]) {
+    test(`folds the links into a menu at ${width} pixels, with no sideways scroll`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 640 });
+      await page.goto("/");
+      const header = page.getByRole("banner");
+      const links = ["How it works", "Security", "Pricing", "Sign in", "Try it free"].map(
+        (name) => header.getByRole("link", { name, exact: true }),
+      );
 
-    const row = [];
-    for (const control of [
-      header.getByRole("link", { name: "RedactNest", exact: true }),
-      header.getByRole("link", { name: "Try it free", exact: true }),
-      header.getByRole("button", { name: "Menu", exact: true }),
-    ]) {
-      const box = await control.boundingBox();
-      if (box === null) throw new Error("the row has no box");
-      row.push(box);
-    }
-    const [lockup] = row;
-    for (const box of row) {
-      expect(
-        Math.abs(box.y + box.height / 2 - (lockup.y + lockup.height / 2)),
-      ).toBeLessThan(2);
-    }
-    row.reduce((before, box) => {
-      expect(box.x).toBeGreaterThanOrEqual(before.x + before.width);
-      return box;
+      const row = [];
+      for (const control of [
+        header.getByRole("link", { name: "RedactNest", exact: true }),
+        header.getByRole("button", { name: "Menu", exact: true }),
+      ]) {
+        const box = await control.boundingBox();
+        if (box === null) throw new Error("the row has no box");
+        row.push(box);
+      }
+      const [lockup] = row;
+      for (const box of row) {
+        expect(
+          Math.abs(box.y + box.height / 2 - (lockup.y + lockup.height / 2)),
+        ).toBeLessThan(2);
+      }
+      row.reduce((before, box) => {
+        expect(box.x).toBeGreaterThanOrEqual(before.x + before.width);
+        return box;
+      });
+      for (const link of links) await expect(link).toBeHidden();
+
+      await header.getByRole("button", { name: "Menu", exact: true }).click();
+      const bar = await header.boundingBox();
+      const tops: number[] = [];
+      for (const link of links) {
+        await expect(link).toBeVisible();
+        tops.push((await link.boundingBox())?.y ?? Number.NaN);
+      }
+      for (const top of tops) {
+        expect(top).toBeGreaterThanOrEqual((bar?.y ?? 0) + (bar?.height ?? 0));
+      }
+      tops.reduce((above, top) => {
+        expect(top).toBeGreaterThan(above);
+        return top;
+      });
+
+      const scroll = await page.evaluate(() => ({
+        width: document.documentElement.scrollWidth,
+        viewport: document.documentElement.clientWidth,
+      }));
+      expect(scroll.width).toBeLessThanOrEqual(scroll.viewport);
     });
-    for (const link of links) await expect(link).toBeHidden();
-
-    await header.getByRole("button", { name: "Menu", exact: true }).click();
-    const bar = await header.boundingBox();
-    const tops: number[] = [];
-    for (const link of links) {
-      await expect(link).toBeVisible();
-      tops.push((await link.boundingBox())?.y ?? Number.NaN);
-    }
-    for (const top of tops) {
-      expect(top).toBeGreaterThanOrEqual((bar?.y ?? 0) + (bar?.height ?? 0));
-    }
-    tops.reduce((above, top) => {
-      expect(top).toBeGreaterThan(above);
-      return top;
-    });
-
-    const scroll = await page.evaluate(() => ({
-      width: document.documentElement.scrollWidth,
-      viewport: document.documentElement.clientWidth,
-    }));
-    expect(scroll.width).toBeLessThanOrEqual(scroll.viewport);
-  });
+  }
 
   /** From `sm`, the lockup, the nav, Sign in and the button on one row, the button last. */
   for (const width of [640, 1280]) {
@@ -501,8 +507,9 @@ test.describe("the header", () => {
    * Feature 28, amending AC-7: a menu still open when the window widens past
    * `sm` (a phone turned sideways) keeps its button and shows its links in one
    * row beneath the header until it is closed; then the button goes and the
-   * links sit in the header's own row. Try it free never joins the menu: it
-   * stays in the header's row throughout (spec 0026, child 0001, AC-27), and
+   * links sit in the header's own row. Try it free never joins the menu on a
+   * row this wide (20.5rem or more, `ROW_UNLESS_NARROW`): it stays in the
+   * header's row throughout (spec 0026, child 0001, AC-27), and
    * so does Sign in from `sm`, where the account slot's row shows it and its
    * menu part is hidden.
    */

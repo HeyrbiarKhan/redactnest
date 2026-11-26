@@ -10,7 +10,7 @@ import { HOW_IT_WORKS_PATH, PRICING_PATH, SECURITY_PATH, TOOL_PATH } from "@/lib
 import { SEARCH_PAGE_TEXT, SEARCH_PAGES } from "@/lib/search-pages";
 import { Button } from "@/ui/button";
 import { LinkGroup } from "@/ui/link-group";
-import { SiteHeader } from "@/ui/site-header";
+import { MENU_WHEN_NARROW, ROW_UNLESS_NARROW, SiteHeader } from "@/ui/site-header";
 
 import type { AccountMenuPlan } from "./account-menu";
 import { AccountSlot, type AccountSlotText } from "./account-slot";
@@ -226,13 +226,27 @@ export function PageHeader({
   if (!config.billingEnabled) {
     return (
       <SiteHeader
-        nav={<SiteNav current={current} />}
+        nav={
+          <>
+            <SiteNav current={current} />
+            {/* The menu's copy, on a row too narrow for the row's (see `ROW_UNLESS_NARROW`). */}
+            {!onTool && (
+              <span className={MENU_WHEN_NARROW}>
+                <Button href={TOOL_PATH} reload>
+                  {NAV_TEXT.tryFree}
+                </Button>
+              </span>
+            )}
+          </>
+        }
         menuLabel={NAV_TEXT.menu}
         action={
           onTool ? undefined : (
-            <Button href={TOOL_PATH} reload>
-              {NAV_TEXT.tryFree}
-            </Button>
+            <span className={ROW_UNLESS_NARROW}>
+              <Button href={TOOL_PATH} reload>
+                {NAV_TEXT.tryFree}
+              </Button>
+            </span>
           )
         }
         sticky={sticky}

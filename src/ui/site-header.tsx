@@ -11,6 +11,24 @@ import { PageContainer } from "./page-container";
 export const SITE_MENU_ID = "site-menu";
 
 /**
+ * A header action that leaves the row for the menu on a very narrow row:
+ * `ROW_UNLESS_NARROW` on the row's copy, `MENU_WHEN_NARROW` on the menu's.
+ * The lockup, Try it free and the menu button need about 282 pixels of row,
+ * so a 320 pixel window (a 288 pixel row) kept 5 to spare and a 305 one (320
+ * less a classic scrollbar) none, and Linux draws Inter a few pixels wider
+ * than Windows, which wrapped the menu button to a second line on CI. Below a
+ * 20.5rem row (a 360 pixel window) the action moves into the menu, which
+ * leaves the lockup and the menu button about 100 pixels to spare at 305;
+ * from 20.5rem the row keeps it, with 46 to spare. The query reads the row's
+ * `@container` in rem, as the lockup's does, so larger text moves it too and
+ * no viewport unit is read (spec 0003, INV-6; spec 0026, child 0001, AC-27).
+ * Classes, not a prop, because which action moves is the caller's: the avatar
+ * stays in the row at every width.
+ */
+export const ROW_UNLESS_NARROW = "@max-[20.5rem]:hidden";
+export const MENU_WHEN_NARROW = "@min-[20.5rem]:hidden";
+
+/**
  * The open menu: a full width panel hanging from the header's bottom edge,
  * in the header's own white with a quiet rule beneath, the links stacked in
  * page order. Every rule sits behind `open:` (`:popover-open`), so none of it

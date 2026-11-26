@@ -13,6 +13,7 @@ import {
 import { SIGN_IN_PATH, TOOL_PATH } from "@/lib/routes";
 import { Avatar } from "@/ui/avatar";
 import { Button } from "@/ui/button";
+import { MENU_WHEN_NARROW, ROW_UNLESS_NARROW } from "@/ui/site-header";
 
 import type { AccountMenuText } from "./account-menu";
 
@@ -123,9 +124,15 @@ export function AccountSlot({
         {view === "hidden" && (
           <noscript>
             <SignIn text={text} />
+            {!onTool && <TryFreeInMenu text={text} />}
           </noscript>
         )}
-        {view === "signed-out" && <SignIn text={text} />}
+        {view === "signed-out" && (
+          <>
+            <SignIn text={text} />
+            {!onTool && <TryFreeInMenu text={text} />}
+          </>
+        )}
         {view === "signed-in" && !onTool && <OpenTool text={text} />}
       </div>
     );
@@ -146,7 +153,7 @@ export function AccountSlot({
             <span className={menuItem}>
               <SignIn text={text} />
             </span>
-            {!onTool && <TryFree text={text} />}
+            {!onTool && <TryFreeInRow part={part} text={text} />}
           </span>
         </noscript>
       )}
@@ -156,7 +163,7 @@ export function AccountSlot({
           <span className={menuItem}>
             <SignIn text={text} />
           </span>
-          {!onTool && <TryFree text={text} />}
+          {!onTool && <TryFreeInRow part={part} text={text} />}
         </>
       )}
 
@@ -220,6 +227,33 @@ function TryFree({ text }: { readonly text: AccountSlotText }) {
     <Button href={TOOL_PATH} reload>
       {text.tryFree}
     </Button>
+  );
+}
+
+/**
+ * Try it free in the row: on a row narrower than 20.5rem the menu holds it
+ * instead (`ROW_UNLESS_NARROW`). The `whole` part has no menu, so it keeps it.
+ */
+function TryFreeInRow({
+  part,
+  text,
+}: {
+  readonly part: AccountSlotPart;
+  readonly text: AccountSlotText;
+}) {
+  return (
+    <span className={part === "row" ? ROW_UNLESS_NARROW : undefined}>
+      <TryFree text={text} />
+    </span>
+  );
+}
+
+/** Try it free in the menu, after Sign in, only on a row narrower than 20.5rem. */
+function TryFreeInMenu({ text }: { readonly text: AccountSlotText }) {
+  return (
+    <span className={MENU_WHEN_NARROW}>
+      <TryFree text={text} />
+    </span>
   );
 }
 

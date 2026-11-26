@@ -46,6 +46,9 @@ const headerFromSm = document.createElement("style");
 headerFromSm.textContent = [
   "#site-menu:not(:popover-open) { display: contents; }",
   '[data-account-part="menu"] { display: none; }',
+  // `MENU_WHEN_NARROW`: the menu's copy of Try it free, which a row of 20.5rem
+  // or more hides by a container query jsdom cannot evaluate.
+  String.raw`.\@min-\[20\.5rem\]\:hidden { display: none; }`,
 ].join(" ");
 document.head.append(headerFromSm);
 
