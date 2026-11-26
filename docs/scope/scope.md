@@ -526,8 +526,8 @@ spec [0026](../specs/0026-ui-redesign/index.md) (2026-11-25: every page in the m
   - [x] Home (with the network band and its test, the pricing cards), the guides and every other page · AC-8 to AC-11, AC-13
   - [ ] The signed in header: the email claim, the account slot, `/sign-out`, the privacy entry and the Clerk setup · AC-19 to AC-30
   - [x] The page preview (child 0002, task 17): the worker's draw and display only boxes, the full window frame with one page, picking, the rail, zoom and the failure line, then its privacy, memory and speed proofs and the security page and privacy words · AC-37 to AC-56
-  - [ ] Restore the coverage note as a visible compact line in today's words, no link (d67ff4d hid it behind "What it looks for"; spec 0005 AC-14 and spec 0013 AC-19 stand, your call, 2026-11-26), before verify · AC-12, task 18
-  - [ ] Proof and records: accessibility sweep, brand rerun, `design.md` and the amendment lines · AC-16 to AC-18
+  - [x] Restore the coverage note as a visible compact line in today's words, no link (d67ff4d hid it behind "What it looks for"; spec 0005 AC-14 and spec 0013 AC-19 stand, your call, 2026-11-26), before verify · AC-12, task 18
+  - [x] Proof and records: accessibility sweep, brand rerun, `design.md` and the amendment lines · AC-16 to AC-18
 - [ ] Verify it: `/check verify UI redesign`
 - [ ] Test it: `/test UI redesign`
 - [ ] Review it (fresh model): `/check review UI redesign`

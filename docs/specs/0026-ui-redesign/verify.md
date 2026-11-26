@@ -80,7 +80,7 @@ _These are the steps the "Owed later" line above names for AC-19 to AC-30; the t
 - [x] Sign out, then visit `/` → no request to `/api/entitlement`, Sign in and Try it free → AC-19, AC-29
 - [ ] Signed in with a Pro account on `/tool` → one `GET /api/entitlement`, the same count as signed out; the Pro chip before the avatar; no Open the tool; in the menu, Account and Billing open new tabs and there is no Redact a PDF → AC-19, AC-22, AC-23, AC-29
 - [x] On `/tool`, open a PDF, change a tick, open the menu, Sign out → the leave warning first; leave → `/sign-out` shows the spinner and "Signing you out", then lands on `/` signed out, with Sign in in the header and no request → AC-26, AC-29 (value: the landing is `HOME_PATH`)
-- [ ] `/sign-out` while signed in, axe through `.playwright-mcp/axe-run.js` → no violations, at desktop width, at 320 pixels and in forced colours → AC-16, AC-26
+- [x] `/sign-out` while signed in, axe through `.playwright-mcp/axe-run.js` → no violations, at desktop width, at 320 pixels and in forced colours → AC-16, AC-26 _(desktop and 320 on 2026-11-26's AC-29 walk; forced colours in task 14's walk below)_
 - [x] Block `*.clerk.accounts.dev` in DevTools, visit `/sign-out` signed in → "We couldn't sign you out. Check your connection, then reload this page." in `danger-ink`, and Go to the home page as a plain link → AC-26
 - [ ] Production, after the deploy: confirm the claim is on the production instance, then repeat the `/` signed in, `/` signed out and `/tool` steps → AC-29
 
@@ -111,3 +111,27 @@ _These are the steps the "Owed later" line above names for AC-19 to AC-30; the t
 
 ### Acceptance-criteria coverage (task 13)
 - AC-19 cookie gate, one ask, none on `/tool` or billing off · AC-20 the three states, fallback never confirmed · AC-21 claim, route, four key snapshot, no report · AC-22 avatar and chip · AC-23 menu, new tabs, lazy load · AC-24 Open the tool · AC-25 held width, `noscript`, no shift, the one island · AC-26 `/sign-out`, matcher, robots, leave warning · AC-27 small screens · AC-28 privacy words and entry · AC-29 the walk above, production after the deploy · AC-30 `/tool`'s file context
+
+## Tasks 14 to 16 as built (the sweep, the brand rerun, the records) · added 2026-11-26
+_The accessibility sweep (AC-16), the brand rerun (AC-17) and the records (AC-18). The sweep's checks are browser tests, so most steps below are commands; the `/sign-out` walk needs `pnpm dev` with the development keys and a signed in session, which the test build cannot give._
+
+### UI / manual
+- [x] `/sign-out` signed in on `pnpm dev`, Clerk's script requests held (`.playwright-mcp/a11y-sweep/sign-out-walk.mjs`) → while "Signing you out" shows: axe clean in forced colours at 1280, no sideways scroll and nothing clipped at 200% text; at the 10 second failure line: axe clean at 1280, at 320 and in forced colours, every target at least 24 by 24, the Tab walk reaching every control in page order with its ring, Go to the home page ringed in forced colours, and no sideways scroll at 320, at 320 with 200% text and at 1280 with 200% text → AC-16, child 0001 AC-26
+- [ ] `/privacy` at 320 pixels with 200% text → `clerk.redactnest.com` breaks inside its line, nothing scrolls sideways; each outside service's "privacy policy" link is at least 24 pixels tall → AC-16
+- [ ] `/security` at 305 pixels (a 320 window less a classic scrollbar) with 200% text → the title "Security" breaks inside the column, nothing scrolls sideways → AC-16
+- [ ] Signed in on `/`, Tab to the avatar, open the menu with Enter, walk it with the arrow keys, Home, End and a letter, with a screen reader on → it reads "Your account", the address, the plan line, then Account, Upgrade to Pro, Redact a PDF and Sign out; Escape returns to the avatar → AC-16, child 0001 AC-23
+- [ ] `/tool`, open a PDF and run a redaction with a screen reader on → each step reads its words and its state ("in progress", "not started", "done"); Tab never stops in the progress card → AC-16, child 0003 AC-31
+- [ ] Look at `src/app/opengraph-image.png`, the three guides' cards, `apple-icon.png` and `polar-product.png` → the white ground, the `#0f766e` tile and the home card's new eyebrow; no `product-review.png` anywhere → AC-17
+- [ ] Read `docs/design/design.md` and the new lines in specs 0003, 0007, 0011, 0012, 0013 and 0024 → each says what spec 0026 changed and points here, and none claims more than the code → AC-18
+
+**Walk results, 2026-11-26** (`pnpm dev` on bb3e7cd plus this change, Clerk's development instance, the walk account `walk-2611+clerk_test@redactnest.com`, signed in with code 424242; no PDF opened): every check above passed. At 1280 the controls hidden on purpose were the skip link (until it takes focus), the menu's own Open the tool and the Menu button, as on every other page. The page stayed on "Signing you out" through its checks (about half a second) and showed the failure line at its limit, since only Clerk's script was held; the session stayed signed in.
+
+### Commands
+- [ ] `pnpm exec playwright test tests/e2e/design-system.spec.ts -g "every control on every page|the progress steps|every page \(spec 0013|320 pixels with 200% text" --project=chromium` → pass → AC-16
+- [ ] `pnpm exec playwright test tests/e2e/design-system.spec.ts -g "320 CSS pixels in the" --project=chromium` → every tool state passes axe at 320 → AC-16
+- [ ] `pnpm exec playwright test tests/e2e/account-slot.spec.ts -g "the account menu by keyboard" --project=chromium` → pass → AC-16, child 0001 AC-23
+- [ ] `pnpm exec playwright test tests/e2e/legal-pages.spec.ts --project=chromium` → pass, with the prose and title changes → AC-16
+- [ ] `pnpm exec vitest run tests/unit/brand-files.test.ts tests/unit/brand-source.test.ts` → pass, the social alt text included → AC-17
+
+### Acceptance-criteria coverage (tasks 14 to 16)
+- AC-16 every page's axe, reflow, 200% text, Tab walk and targets; the tool's states at 320; the menu and steps walks; `/sign-out` on `pnpm dev` · AC-17 the rerun and the dropped shot · AC-18 `design.md` and the amendment lines
