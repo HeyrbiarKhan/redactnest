@@ -715,7 +715,7 @@ test.describe("the head tags", () => {
       }
       expect(await meta('meta[name="twitter:card"]')).toBe("summary_large_image");
       expect(await meta('meta[property="og:image:alt"]')).toBe(
-        "RedactNest. PDF redaction in your browser. Redaction that actually removes the text.",
+        "RedactNest. Runs in your browser. Never uploaded. Redaction that actually removes the text.",
       );
       await expect(page.locator('link[rel="manifest"]')).toHaveCount(0);
 
