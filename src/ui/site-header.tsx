@@ -149,13 +149,22 @@ export function SiteHeader({
     >
       {/*
         10 pixels between the parts, Sign in to the action included, and 40
-        from the lockup to the nav, as `Main.dc.html` spaces them.
+        from the lockup to the nav, as `Main.dc.html` spaces them, from `md`.
+        Narrower, the row tightens so it holds on one line: 16 pixels from the
+        lockup to the nav between `sm` and `md` (the nav's links 16 apart too),
+        so 640 pixels keeps 20 to spare, and 8 between the parts below `sm`,
+        so the lockup, Try it free and the menu button fit 320 (spec 0026,
+        AC-5 and child 0001, AC-27; feature 28).
       */}
       <PageContainer
         width="wide"
-        className="@container flex flex-wrap items-center gap-x-3 gap-y-2 py-3 sm:gap-x-2.5"
+        className="@container flex flex-wrap items-center gap-x-2 gap-y-2 py-3 sm:gap-x-2.5"
       >
-        <div className={hasMenu ? "sm:me-7.5" : "w-full sm:me-7.5 sm:w-auto"}>
+        <div
+          className={
+            hasMenu ? "sm:me-1.5 md:me-7.5" : "w-full sm:me-1.5 sm:w-auto md:me-7.5"
+          }
+        >
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- a real page load, see above */}
           <a href="/" className="inline-flex min-h-10 items-center rounded-item">
             <BrandLockup />

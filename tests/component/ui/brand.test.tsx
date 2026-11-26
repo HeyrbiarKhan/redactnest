@@ -151,6 +151,9 @@ describe("BrandLockup", () => {
       "tracking-[-0.01em]",
       "text-ink",
       "text-[1.0625rem]",
+      // The phone row's 16 pixel word below `sm` (`Header.dc.html`; spec
+      // 0026, child 0001, AC-27).
+      "max-sm:text-body",
       // A size down in a row under 10rem. Spec 0024, *The lockup at narrow widths*.
       "@max-[10rem]:text-body",
     );

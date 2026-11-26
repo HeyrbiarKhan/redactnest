@@ -373,10 +373,11 @@ test.describe("the header", () => {
   }
 
   /**
-   * Below `sm`, with billing on, the lockup and the menu button share one row
-   * and the links wait in the menu; the button opens it beneath the header,
-   * the links stacked in page order, so focus never moves back up the screen
-   * (feature 28, amending AC-7).
+   * Below `sm`, with billing on and signed out, the lockup, Try it free and
+   * the menu button share one row, in that order, and the nav and Sign in wait
+   * in the menu; the button opens it beneath the header, the links stacked in
+   * page order, so focus never moves back up the screen (feature 28, as spec
+   * 0026 child 0001 AC-27 amends AC-7).
    */
   test("folds the links into a menu at 320 pixels, with no sideways scroll", async ({
     page,
@@ -384,21 +385,30 @@ test.describe("the header", () => {
     await page.setViewportSize({ width: 320, height: 640 });
     await page.goto("/");
     const header = page.getByRole("banner");
-    const links = ["How it works", "Security", "Pricing", "Sign in", "Try it free"].map(
-      (name) => header.getByRole("link", { name, exact: true }),
+    const links = ["How it works", "Security", "Pricing", "Sign in"].map((name) =>
+      header.getByRole("link", { name, exact: true }),
     );
 
-    const lockup = await header
-      .getByRole("link", { name: "RedactNest", exact: true })
-      .boundingBox();
-    const button = await header
-      .getByRole("button", { name: "Menu", exact: true })
-      .boundingBox();
-    if (lockup === null || button === null) throw new Error("the row has no box");
-    expect(
-      Math.abs(lockup.y + lockup.height / 2 - (button.y + button.height / 2)),
-    ).toBeLessThan(2);
-    expect(button.x).toBeGreaterThan(lockup.x + lockup.width);
+    const row = [];
+    for (const control of [
+      header.getByRole("link", { name: "RedactNest", exact: true }),
+      header.getByRole("link", { name: "Try it free", exact: true }),
+      header.getByRole("button", { name: "Menu", exact: true }),
+    ]) {
+      const box = await control.boundingBox();
+      if (box === null) throw new Error("the row has no box");
+      row.push(box);
+    }
+    const [lockup] = row;
+    for (const box of row) {
+      expect(
+        Math.abs(box.y + box.height / 2 - (lockup.y + lockup.height / 2)),
+      ).toBeLessThan(2);
+    }
+    row.reduce((before, box) => {
+      expect(box.x).toBeGreaterThanOrEqual(before.x + before.width);
+      return box;
+    });
     for (const link of links) await expect(link).toBeHidden();
 
     await header.getByRole("button", { name: "Menu", exact: true }).click();
@@ -491,7 +501,8 @@ test.describe("the header", () => {
    * Feature 28, amending AC-7: a menu still open when the window widens past
    * `sm` (a phone turned sideways) keeps its button and shows its links in one
    * row beneath the header until it is closed; then the button goes and the
-   * links sit in the header's own row.
+   * links sit in the header's own row. Try it free never joins the menu: it
+   * stays in the header's row throughout (spec 0026, child 0001, AC-27).
    */
   test("keeps a menu left open as the window widens, its links in one row, until it is closed", async ({
     page,
@@ -501,12 +512,13 @@ test.describe("the header", () => {
     const header = page.getByRole("banner");
     const button = header.getByRole("button", { name: "Menu", exact: true });
     const lockup = header.getByRole("link", { name: "RedactNest", exact: true });
-    const links = ["How it works", "Security", "Pricing", "Sign in", "Try it free"].map(
-      (name) => header.getByRole("link", { name, exact: true }),
+    const action = header.getByRole("link", { name: "Try it free", exact: true });
+    const links = ["How it works", "Security", "Pricing", "Sign in"].map((name) =>
+      header.getByRole("link", { name, exact: true }),
     );
-    const middles = async () => {
+    const middles = async (of = links) => {
       const found: number[] = [];
-      for (const link of links) {
+      for (const link of of) {
         const box = await link.boundingBox();
         if (box === null) throw new Error("a link has no box");
         found.push(box.y + box.height / 2);
@@ -524,12 +536,17 @@ test.describe("the header", () => {
       expect(Math.abs(middle - (open[0] ?? 0))).toBeLessThan(2);
       expect(middle).toBeGreaterThan((bar?.y ?? 0) + (bar?.height ?? 0));
     }
+    const atOpen = await lockup.boundingBox();
+    const [actionAtOpen] = await middles([action]);
+    expect(
+      Math.abs((actionAtOpen ?? 0) - ((atOpen?.y ?? 0) + (atOpen?.height ?? 0) / 2)),
+    ).toBeLessThan(2);
 
     await button.click();
 
     await expect(button).toBeHidden();
     const home = await lockup.boundingBox();
-    const closed = await middles();
+    const closed = await middles([...links, action]);
     for (const middle of closed) {
       expect(Math.abs(middle - ((home?.y ?? 0) + (home?.height ?? 0) / 2))).toBeLessThan(
         2,

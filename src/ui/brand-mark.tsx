@@ -59,7 +59,11 @@ export type LockupSize = "md" | "lg";
  */
 const LOCKUP_SIZE: Readonly<Record<LockupSize, string>> = Object.freeze({
   // 17 pixels, the wordmark both `Header.dc.html` and `Main.dc.html` draw.
-  md: "text-[1.0625rem] @max-[10rem]:text-body",
+  // Below `sm`, where the header's menu shows, `text-body`: the phone row
+  // `Header.dc.html` draws (a 16 pixel word, a 28 pixel tile), so the lockup,
+  // Try it free and the menu button share one row at 320 pixels (spec 0026,
+  // child 0001, AC-27).
+  md: "text-[1.0625rem] max-sm:text-body @max-[10rem]:text-body",
   lg: "text-title",
 });
 

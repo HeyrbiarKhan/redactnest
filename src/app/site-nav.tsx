@@ -90,7 +90,7 @@ function currentIf(item: NavItem, current: NavItem | undefined) {
 export function SiteNav({ current }: { readonly current?: NavItem }) {
   return (
     <nav aria-label="Site">
-      <ul className="flex flex-col items-start gap-x-7 gap-y-1 sm:flex-row sm:flex-wrap sm:items-center">
+      <ul className="flex flex-col items-start gap-x-4 gap-y-1 sm:flex-row sm:flex-wrap sm:items-center md:gap-x-7">
         {current !== "tool" && (
           <li>
             <a href={HOW_IT_WORKS_PATH} className={NAV_LINK_CLASS}>
