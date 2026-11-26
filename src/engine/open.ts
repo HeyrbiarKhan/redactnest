@@ -4,6 +4,7 @@ import { PAGE_FINDINGS, type DocumentSummary, type PageFinding } from "@/worker/
 
 import { walkRoles } from "./allowlist";
 import { refuseAtTheDoor } from "./door";
+import { drawPageWith } from "./draw";
 import { EngineFailure } from "./failure";
 import { findMatchesIn, findTermsIn } from "./find";
 import { judgeGlyphs, type GlyphVerdict } from "./glyphs";
@@ -206,7 +207,7 @@ export async function openDocumentWith(
     // inside its visible area (spec 0004, INV-1, as spec 0006 rewords it).
     const trim = await trimToVisibleArea(mupdf, pdf, isCancelled);
 
-    return holdOpen(pdf, inspections, {
+    return holdOpen(mupdf, pdf, inspections, {
       pageCount,
       pages: inspections.map(({ findings }, index) =>
         Object.freeze({ findings: withTrim(findings, trim[index]) }),
@@ -261,6 +262,7 @@ function hasLayers(pdf: PDFDocument): boolean {
  * engine needs any of it but the findings the summary already carries (INV-8).
  */
 function holdOpen(
+  mupdf: MuPdf,
   doc: PDFDocument,
   inspections: readonly PageInspection[],
   summary: DocumentSummary,
@@ -282,6 +284,12 @@ function holdOpen(
       // guard that never fires in use (spec 0017, *API surface*).
       if (closed) throw new EngineFailure("unsupported");
       return findTermsIn(doc, inspections, options);
+    },
+    drawPage(pageIndex, options) {
+      // Spec 0026 child 0002, AC-49: the review copy, read only. A closed
+      // document has nothing to draw, and the worker answers no picture.
+      if (closed) throw new EngineFailure("unsupported");
+      return drawPageWith(mupdf, doc, pageIndex, options);
     },
     close() {
       if (closed) return;

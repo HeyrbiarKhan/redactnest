@@ -13,8 +13,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as homePage from "@/app/page";
 import HomePage from "@/app/page";
+import { planLines } from "@/app/pricing-cards";
+import { NAV_TEXT } from "@/app/site-nav";
 import { config } from "@/config";
-import { capLine, findsItems, HOME_TEXT, strippedItems } from "@/lib/home-text";
+import {
+  capLine,
+  closingLine,
+  findsItems,
+  HOME_TEXT,
+  NETWORK_ROWS,
+  strippedItems,
+} from "@/lib/home-text";
+import { DETECTOR_LABELS } from "@/lib/detectors";
+import { DROP_TEXT, FOUND_ITEMS_TITLE, LOCK_LINE, redactLabel } from "@/lib/flow-text";
+import { LEGAL } from "@/lib/legal";
+import { FREE_PLAN, PLAN_BADGE, PRO_PLAN } from "@/lib/plans";
 import { PRICING_PATH, TOOL_PATH } from "@/lib/routes";
 
 import { expectNoAxeViolations } from "../../setup/component";
@@ -67,36 +80,47 @@ describe("the hero (AC-10)", () => {
     const eyebrow = screen.getByTestId("home-eyebrow");
     const headline = screen.getByRole("heading", { level: 1 });
     expect(eyebrow).toHaveTextContent(HOME_TEXT.eyebrow);
-    expect(eyebrow).toHaveClass("eyebrow");
     expect(headline).toHaveTextContent(HOME_TEXT.headline);
-    expect(headline).toHaveClass("text-display");
+    // The mockup's 60 pixel headline from `lg` (`Main.dc.html`).
+    expect(headline).toHaveClass("text-hero");
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(
       eyebrow.compareDocumentPosition(headline) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(main().getByText(HOME_TEXT.lead)).toHaveClass("text-lead", "text-ink-muted");
+    expect(main().getByText(HOME_TEXT.lead)).toHaveClass("text-intro", "text-ink-muted");
   });
 
-  it("offers the tool as a real page load, and pricing beside it with billing on", () => {
+  /**
+   * Spec 0026, AC-8: the hero's way into the tool and its way to How it
+   * works, both plain links; the closing band repeats the hero's own button.
+   */
+  it("offers the tool as a real page load, and How it works beside it", () => {
     render(<HomePage />);
 
-    const primary = main().getByRole("link", { name: "Remove text from a PDF" });
-    expect(primary).toHaveAttribute("href", TOOL_PATH);
-    expect(primary.tagName).toBe("A");
-    // The header's button names it another way, so the page says it once (AC-30).
-    expect(main().queryByRole("link", { name: "Try it free" })).not.toBeInTheDocument();
-    const pricing = main().getByRole("link", { name: "See pricing" });
-    expect(pricing).toHaveAttribute("href", PRICING_PATH);
+    const primaries = main().getAllByRole("link", { name: "Remove text from a PDF" });
+    expect(primaries).toHaveLength(2);
+    for (const primary of primaries) {
+      expect(primary).toHaveAttribute("href", TOOL_PATH);
+      expect(primary.tagName).toBe("A");
+    }
+    // The header's button names it another way, so the page says it once
+    // (AC-30), apart from the Free card's own (spec 0026, AC-10).
+    const tryFree = main().getAllByRole("link", { name: "Try it free" });
+    expect(tryFree).toHaveLength(1);
+    expect(screen.getByTestId("pricing-cards")).toContainElement(tryFree[0] ?? null);
+    const how = main().getByRole("link", { name: "See how it works" });
+    expect(how).toHaveAttribute("href", "#how-it-works");
+    expect(screen.getByTestId("home-steps")).toHaveAttribute("id", "how-it-works");
+    expect(main().queryByRole("link", { name: "See pricing" })).not.toBeInTheDocument();
     expect(screen.getByTestId("home-caps")).toHaveTextContent(
       capLine(true, config.freePageCap, config.maxPages),
     );
   });
 
-  it("drops See pricing and names one cap with billing off", () => {
+  it("names one cap with billing off", () => {
     mocks.billingEnabled = false;
     render(<HomePage />);
 
-    expect(main().queryByRole("link", { name: "See pricing" })).not.toBeInTheDocument();
     expect(screen.getByTestId("home-caps")).toHaveTextContent(
       `Up to ${config.freePageCap} pages a document.`,
     );
@@ -124,34 +148,145 @@ describe("the hero (AC-10)", () => {
   });
 });
 
-describe("the product shot (AC-12)", () => {
-  it("shows the real capture with its alt text, its size known and loaded first", () => {
+/**
+ * The hero's product window, drawn in HTML in place of the screenshot (the
+ * owner's port of `Main.dc.html`, 2026-11-25): one picture to assistive
+ * technology, named by `shotAlt`, drawn in the tool's own words.
+ */
+describe("the product window (AC-12, as the port amends it)", () => {
+  it("is one picture named by its alt text, with no image file behind it", () => {
     render(<HomePage />);
 
     const shot = screen.getByRole("img", { name: HOME_TEXT.shotAlt });
-    expect(shot).toHaveAttribute("width", "2560");
-    expect(shot).toHaveAttribute("height", "1600");
-    expect(shot).toHaveAttribute("sizes", "(min-width: 64rem) 40rem, calc(100vw - 2rem)");
-    expect(shot).toHaveAttribute("loading", "eager");
-    expect(shot).toHaveAttribute("fetchpriority", "high");
-    // From our own origin: a path, never another host.
-    expect(shot.getAttribute("src")).toMatch(/^\//);
+    expect(shot).toBe(screen.getByTestId("home-window"));
+    expect(shot.tagName).toBe("DIV");
+    expect(screen.getByRole("main").querySelector("img")).toBeNull();
+  });
+
+  it("draws the tool's own words, from the records the tool reads", () => {
+    render(<HomePage />);
+
+    const shot = screen.getByTestId("home-window");
+    const ticked = HOME_TEXT.window.groups
+      .filter(({ ticked: on }) => on)
+      .reduce((sum, { count }) => sum + count, 0);
+    expect(shot).toHaveTextContent(FOUND_ITEMS_TITLE);
+    expect(shot).toHaveTextContent(redactLabel(ticked));
+    expect(shot).toHaveTextContent(LOCK_LINE);
+    for (const { kind } of HOME_TEXT.window.groups) {
+      expect(shot).toHaveTextContent(DETECTOR_LABELS[kind].label);
+    }
+  });
+
+  it("hangs the card titled Checked before you download off its corner", () => {
+    render(<HomePage />);
+
+    const card = screen.getByTestId("home-shot-card");
+    expect(card).toHaveTextContent(
+      `${HOME_TEXT.shotCard.title}${HOME_TEXT.shotCard.line}`,
+    );
+    expect(card).toHaveClass("lg:absolute", "shadow-popover");
   });
 });
 
-describe("the trio and the band (AC-10, AC-11)", () => {
-  it("lists the three features, each a heading and its line", () => {
+describe("the sections and the band (spec 0026, AC-8; spec 0013, AC-11)", () => {
+  it("heads each section in AC-8's order, and lists How it works as three steps", () => {
     render(<HomePage />);
 
     expect(
       screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent),
     ).toEqual([
-      ...HOME_TEXT.features.map((feature) => feature.title),
+      HOME_TEXT.steps.title,
+      HOME_TEXT.blackBox.title,
       HOME_TEXT.band.title,
+      HOME_TEXT.network.title,
+      HOME_TEXT.pricing.title,
+      HOME_TEXT.questions.title,
+      HOME_TEXT.closing,
     ]);
-    for (const feature of HOME_TEXT.features) {
-      expect(main().getByText(feature.body)).toBeInTheDocument();
+    const steps = within(screen.getByTestId("home-steps")).getAllByRole("listitem");
+    expect(steps).toHaveLength(3);
+    for (const [index, step] of HOME_TEXT.steps.items.entries()) {
+      expect(
+        within(steps[index] as HTMLElement).getByRole("heading", { level: 3 }),
+      ).toHaveTextContent(step.title);
+      expect(main().getByText(step.body)).toBeInTheDocument();
     }
+  });
+
+  /**
+   * Spec 0026, AC-10, as the owner's port of `Main.dc.html` amends it: the
+   * summary cards, each its price large, Pro's "Get Pro" a plain link to
+   * Pricing, where the seller, tax and terms lines stay. None with billing off.
+   */
+  it("shows the two plans with billing on, Get Pro a plain link to Pricing, and none with billing off", () => {
+    const { unmount } = render(<HomePage />);
+
+    const pricing = within(screen.getByTestId("home-pricing"));
+    expect(
+      pricing.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent),
+    ).toEqual([FREE_PLAN.name, PRO_PLAN.name]);
+    expect(pricing.getByText(PLAN_BADGE)).toBeInTheDocument();
+    expect(pricing.getByText(FREE_PLAN.price)).toBeInTheDocument();
+    expect(pricing.getByText(PRO_PLAN.price, { exact: false })).toHaveTextContent(
+      `${PRO_PLAN.price} ${PRO_PLAN.per}`,
+    );
+    expect(pricing.getByText(planLines().proSummary)).toBeInTheDocument();
+    const getPro = pricing.getByRole("link", { name: HOME_TEXT.pricing.getPro });
+    expect(getPro).toHaveAttribute("href", PRICING_PATH);
+    expect(getPro.tagName).toBe("A");
+    expect(pricing.queryByRole("link", { name: "Subscribe" })).not.toBeInTheDocument();
+    expect(pricing.queryByText(LEGAL.merchantLine)).not.toBeInTheDocument();
+    expect(pricing.queryByText(LEGAL.taxLine)).not.toBeInTheDocument();
+    unmount();
+
+    mocks.billingEnabled = false;
+    render(<HomePage />);
+    expect(screen.queryByTestId("home-pricing")).not.toBeInTheDocument();
+  });
+
+  /**
+   * Spec 0026, AC-9, as the port amends it: the network band's table lists
+   * every row with the paths it stands for, in the monospace stack the owner
+   * allowed there, the last row the visitor's file with none, and links to the
+   * security page's way to check. `network-list.spec.ts` holds the paths.
+   */
+  it("lists what the tool page fetches on the night band, each row with its paths", () => {
+    render(<HomePage />);
+
+    const band = screen.getByTestId("home-network");
+    expect(band).toHaveAttribute("data-band", "night");
+    expect(band).toHaveClass("bg-night");
+    const list = within(band).getByRole("list", { name: HOME_TEXT.network.listLabel });
+    expect(list.closest("[data-mono]")).toHaveClass("font-mono", "bg-night-raised");
+    const rows = within(band).getAllByTestId("network-row");
+    expect(rows.map((row) => row.getAttribute("data-paths"))).toEqual(
+      NETWORK_ROWS.map(({ paths }) => paths.join(" ")),
+    );
+    for (const [index, row] of rows.entries()) {
+      const { label, paths } = NETWORK_ROWS[index] ?? { label: "", paths: [] };
+      expect(row).toHaveTextContent(label);
+      // Each path whole, joined by commas; it breaks only after a slash.
+      if (paths.length > 0) expect(row).toHaveTextContent(paths.join(", "));
+    }
+    expect(rows.at(-1)).toHaveAttribute("data-paths", "");
+    expect(rows.at(-1)).toHaveTextContent("Your PDF");
+    expect(rows.at(-1)).toHaveClass("text-night-accent");
+    expect(
+      within(band).getByRole("link", { name: HOME_TEXT.network.link }),
+    ).toHaveAttribute("href", "/security#check-it");
+  });
+
+  it("compares a drawn box with RedactNest's removal, and links to how the check works", () => {
+    render(<HomePage />);
+
+    const section = within(screen.getByTestId("home-black-box"));
+    expect(section.getByText(HOME_TEXT.blackBox.eyebrow)).toBeInTheDocument();
+    expect(section.getByText("Contact: jane.doe@example.com")).toBeInTheDocument();
+    expect(section.getByRole("link", { name: HOME_TEXT.blackBox.link })).toHaveAttribute(
+      "href",
+      "/security#the-check",
+    );
   });
 
   /**
@@ -180,9 +315,9 @@ describe("the trio and the band (AC-10, AC-11)", () => {
   });
 
   /**
-   * After task 32, each card in your mockup's three parts: the header (its
-   * square tile, the `h3` and the subtitle), the list, then the close (a rule,
-   * the info icon and the closing line), in that order in the page.
+   * The owner's port of `Main.dc.html` (2026-11-25): each card its title and
+   * subtitle, its items as chips (which replace the tiles), then its note, in
+   * that order in the page.
    */
   it.each([
     [
@@ -198,12 +333,12 @@ describe("the trio and the band (AC-10, AC-11)", () => {
       HOME_TEXT.band.strips.note,
     ],
   ] as const)(
-    "opens %s on its tile, title and subtitle, and closes it on a rule and its line",
+    "opens %s on its title and subtitle, lists its chips, and closes on its note",
     (id, title, subtitle, line) => {
       render(<HomePage />);
 
       const card = screen.getByTestId(id);
-      expect(card).toHaveClass("p-7", "gap-6");
+      expect(card).toHaveClass("rounded-panel", "p-7", "bg-surface", "border-border");
       const heading = within(card).getByRole("heading", { level: 3, name: title });
       const sub = within(card).getByText(subtitle);
       const list = within(card).getByRole("list");
@@ -217,91 +352,45 @@ describe("the trio and the band (AC-10, AC-11)", () => {
           before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING,
         ).toBeTruthy();
       }
-      expect(sub).toHaveClass("text-small", "text-ink-muted");
-
-      // The header's tile: the large square, beside the heading's column.
-      const tile = heading.parentElement?.previousElementSibling;
-      expect(tile).toHaveAttribute("aria-hidden", "true");
-      expect(tile).toHaveClass("size-16", "rounded-xl", "bg-accent-soft", "text-accent");
-
-      // The close: a `border` rule above the info icon and the line.
-      expect(close).toHaveClass("text-small", "text-ink-muted");
-      const row = close.parentElement;
-      expect(row).toHaveClass("border-t", "border-border");
-      expect(row?.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
-      expect(row?.querySelector("svg")).toHaveClass("lucide-info", "text-accent");
+      expect(sub).toHaveClass("text-small", "text-ink-subtle");
+      expect(close).toHaveClass("text-small", "text-ink-subtle");
     },
   );
 
-  it("lists every detector in the Finds card, each a soft row with its icon tile", () => {
-    render(<HomePage />);
+  it("lists every detector in the Finds card as a chip, then Pro's own terms with billing on", () => {
+    const { unmount } = render(<HomePage />);
 
-    const finds = screen.getByTestId("home-finds");
-    const list = within(finds).getByRole("list");
+    const list = within(screen.getByTestId("home-finds")).getByRole("list");
     expect(list).toHaveAttribute("role", "list");
     const items = within(list).getAllByRole("listitem");
-    expect(items.map((item) => item.textContent)).toEqual(
-      findsItems().map(({ label }) => label),
-    );
-    for (const item of items) {
-      // `canvas`, not `subtle`, the checklist's hover tint.
-      expect(item).toHaveClass("bg-canvas", "rounded-xl", "text-ink");
-      expect(item).not.toHaveClass("bg-subtle");
-      const tile = item.firstElementChild;
-      expect(tile).toHaveAttribute("aria-hidden", "true");
-      expect(tile).toHaveClass("size-12", "rounded-xl", "bg-accent-soft");
-      // One icon, the detector's own, and no chevron after the words.
-      expect(item.querySelectorAll("svg")).toHaveLength(1);
+    expect(items.map((item) => item.textContent)).toEqual([
+      ...findsItems().map(({ label }) => label),
+      HOME_TEXT.band.finds.termsChip,
+    ]);
+    for (const item of items.slice(0, -1)) {
+      expect(item).toHaveClass("rounded-full", "bg-muted", "text-ink");
     }
+    expect(items.at(-1)).toHaveClass("bg-accent-faint", "text-accent-strong");
+    unmount();
+
+    mocks.billingEnabled = false;
+    render(<HomePage />);
+    const off = within(within(screen.getByTestId("home-finds")).getByRole("list"))
+      .getAllByRole("listitem")
+      .map((item) => item.textContent);
+    expect(off).toEqual(findsItems().map(({ label }) => label));
   });
 
-  /**
-   * Spec 0014, AC-12, the pin spec 0013's AC-11 owed: the Finds rows fold into
-   * two columns by the card's own width, as Strips does, 12 pixels apart with
-   * no rule, and no row splits across the two. jsdom lays nothing out, so the
-   * browser test reads the computed columns and this holds the classes.
-   */
-  it("sets the Finds rows in unruled columns by the card's own width", () => {
+  it("lists every claimed kind in the Strips card as a chip, as the Finds card's are", () => {
     render(<HomePage />);
 
-    const finds = screen.getByTestId("home-finds");
-    expect(finds).toHaveClass("@container");
-    const list = within(finds).getByRole("list");
-    expect(list).toHaveClass("@min-[26rem]:columns-2", "@min-[26rem]:gap-x-3");
-    expect(list.className).not.toMatch(/column-rule/u);
-    for (const item of within(list).getAllByRole("listitem")) {
-      expect(item).toHaveClass("break-inside-avoid");
-    }
-  });
-
-  /**
-   * Feature 26: each claimed kind on the Looks for card's own row, its check
-   * on the same square tile, and the list in the same unruled columns, so the
-   * two cards read as one pair.
-   */
-  it("ticks every claimed kind in one Strips list, each on the Looks for card's row", () => {
-    render(<HomePage />);
-
-    const strips = screen.getByTestId("home-strips");
-    // One list, so a screen reader hears them together.
-    const list = within(strips).getByRole("list");
-    expect(list).toHaveAttribute("role", "list");
+    const list = within(screen.getByTestId("home-strips")).getByRole("list");
     const items = within(list).getAllByRole("listitem");
     expect(items.map((item) => item.textContent)).toEqual([...strippedItems()]);
-    // Two columns once the card has room, decided by the card's own width.
-    expect(strips).toHaveClass("@container");
-    const findsList = within(screen.getByTestId("home-finds")).getByRole("list");
-    const findsRow = within(findsList).getAllByRole("listitem")[0];
-    expect(list.className).toBe(findsList.className);
-    expect(list.className).not.toMatch(/column-rule/u);
-    for (const item of items) {
-      expect(item.className).toBe(findsRow?.className);
-      expect(item.firstElementChild?.className).toBe(
-        findsRow?.firstElementChild?.className,
-      );
-      expect(item.querySelectorAll("svg")).toHaveLength(1);
-      expect(item.querySelector("svg")).toHaveClass("lucide-check");
-    }
+    const findsRow = within(
+      within(screen.getByTestId("home-finds")).getByRole("list"),
+    ).getAllByRole("listitem")[0];
+    for (const item of items) expect(item.className).toBe(findsRow?.className);
   });
 
   /** Nothing in the band acts: no chevron, link, button or tab stop. */
@@ -315,54 +404,40 @@ describe("the trio and the band (AC-10, AC-11)", () => {
     expect(band.querySelector(".lucide-chevron-right")).toBeNull();
   });
 
-  it("sets the band on the page's canvas, not a full width white strip", () => {
-    render(<HomePage />);
-
-    const band = screen.getByTestId("home-band");
-    expect(band).not.toHaveClass("bg-surface");
-    // The two cards are the white, each with the quiet edge.
-    for (const card of [
-      screen.getByTestId("home-finds"),
-      screen.getByTestId("home-strips"),
-    ]) {
-      expect(card).toHaveClass("bg-surface", "border", "border-border", "rounded-xl");
-    }
-  });
-
   /**
-   * The header icons spec 0013 names, and each Finds row's tile holding its
-   * detector's own icon, the checklist's, so a detector added by feature 12
-   * brings its icon with it.
+   * The questions (the owner's port, 2026-11-25): the browser's own
+   * disclosures, the first open, Pro's line only with billing on.
    */
-  it("heads Finds with ScanSearch and Strips with FileMinus", () => {
-    render(<HomePage />);
+  it("asks its questions as disclosures, the first open, Pro's line only with billing on", () => {
+    const { unmount } = render(<HomePage />);
 
-    for (const [id, icon] of [
-      ["home-finds", "lucide-scan-search"],
-      ["home-strips", "lucide-file-minus"],
-    ] as const) {
-      const heading = within(screen.getByTestId(id)).getByRole("heading", { level: 3 });
-      const tile = heading.parentElement?.previousElementSibling;
-      expect(tile?.querySelector("svg")).toHaveClass(icon);
-    }
+    const section = screen.getByTestId("home-questions");
+    const details = [...section.querySelectorAll("details")];
+    expect(details.map((item) => item.querySelector("summary")?.textContent)).toEqual(
+      HOME_TEXT.questions.items.map(({ question }) => question),
+    );
+    expect(details.map((item) => item.open)).toEqual([true, false, false, false]);
+    const names = HOME_TEXT.questions.items[1];
+    expect(details[1]).toHaveTextContent(`${names?.answer} ${names?.withPro}`);
+    unmount();
+
+    mocks.billingEnabled = false;
+    render(<HomePage />);
+    const off = screen.getByTestId("home-questions").querySelectorAll("details")[1];
+    expect(off?.querySelector("p")?.textContent).toBe(names?.answer);
   });
 
-  it("draws each detector's own icon in its Finds row", () => {
+  /** The closing card: its line with the free cap, the hero's own button, white. */
+  it("closes on the accent card, its caps line and the hero's way into the tool", () => {
     render(<HomePage />);
-    const rows = within(within(screen.getByTestId("home-finds")).getByRole("list"))
-      .getAllByRole("listitem")
-      .map((row) => row.querySelector("svg"));
 
-    findsItems().forEach(({ icon: Icon }, index) => {
-      const { container, unmount } = render(<Icon />);
-      const own = [...(container.querySelector("svg")?.classList ?? [])].filter((name) =>
-        name.startsWith("lucide-"),
-      );
-      unmount();
-
-      expect(own).not.toEqual([]);
-      expect(rows[index]).toHaveClass(...own);
-    });
+    const card = screen.getByTestId("home-closing");
+    expect(card).toHaveAttribute("data-band", "accent");
+    expect(card).toHaveClass("bg-accent", "rounded-band");
+    expect(card).toHaveTextContent(closingLine(true, config.freePageCap));
+    const button = within(card).getByRole("link", { name: HOME_TEXT.primary });
+    expect(button).toHaveAttribute("href", TOOL_PATH);
+    expect(button).toHaveClass("bg-surface", "text-accent");
   });
 
   it("passes axe", async () => {
@@ -381,15 +456,96 @@ describe("the trio and the band (AC-10, AC-11)", () => {
 describe("the main content's words (AC-13)", () => {
   /** Every word `home-text.ts` gives the page, for the build's billing state. */
   function homeWords(billingEnabled: boolean): string[] {
-    const { features, band } = HOME_TEXT;
+    const { steps, blackBox, band } = HOME_TEXT;
     return [
       HOME_TEXT.eyebrow,
       HOME_TEXT.headline,
       HOME_TEXT.lead,
       HOME_TEXT.primary,
-      ...(billingEnabled ? [HOME_TEXT.pricing] : []),
+      HOME_TEXT.howItWorks,
       capLine(billingEnabled, config.freePageCap, config.maxPages),
-      ...features.flatMap(({ title, body }) => [title, body]),
+      HOME_TEXT.shotCard.title,
+      HOME_TEXT.shotCard.line,
+      ...HOME_TEXT.trust.map(({ text }) => text),
+      // The drawn window: its made up values, then the tool's own words.
+      HOME_TEXT.window.file,
+      HOME_TEXT.window.title,
+      ...Object.values(HOME_TEXT.window.lines),
+      HOME_TEXT.window.found,
+      FOUND_ITEMS_TITLE,
+      LOCK_LINE,
+      redactLabel(
+        HOME_TEXT.window.groups.reduce(
+          (sum, { count, ticked }) => sum + (ticked ? count : 0),
+          0,
+        ),
+      ),
+      ...HOME_TEXT.window.groups.flatMap(({ kind, count }) => [
+        DETECTOR_LABELS[kind].label,
+        String(count),
+      ]),
+      String(HOME_TEXT.window.groups.reduce((sum, { count }) => sum + count, 0)),
+      steps.eyebrow,
+      steps.title,
+      steps.lead,
+      ...steps.drawing.rows.flatMap(({ value, page }) => [value, page]),
+      DROP_TEXT.title,
+      steps.drawing.badge,
+      steps.drawing.file,
+      steps.drawing.fileNote,
+      ...steps.items.flatMap(({ title, body }, index) => [
+        String(index + 1).padStart(2, "0"),
+        title,
+        body,
+      ]),
+      blackBox.eyebrow,
+      blackBox.title,
+      blackBox.body,
+      blackBox.link,
+      blackBox.caption,
+      ...blackBox.panels.flatMap(({ title, lines, readsLabel, reads }) => [
+        title,
+        ...lines.map(({ text }) => text),
+        readsLabel,
+        reads,
+      ]),
+      HOME_TEXT.closing,
+      closingLine(billingEnabled, config.freePageCap),
+      HOME_TEXT.questions.title,
+      ...HOME_TEXT.questions.items.flatMap(({ question, answer, withPro }) => [
+        question,
+        answer,
+        ...(withPro !== undefined && billingEnabled ? [withPro] : []),
+      ]),
+      HOME_TEXT.network.eyebrow,
+      HOME_TEXT.network.title,
+      HOME_TEXT.network.body,
+      HOME_TEXT.network.link,
+      HOME_TEXT.network.columns.name,
+      HOME_TEXT.network.columns.path,
+      ...NETWORK_ROWS.flatMap(({ label, what, paths }) => [
+        label,
+        what,
+        paths.join(", "),
+      ]),
+      ...(billingEnabled
+        ? [
+            HOME_TEXT.pricing.eyebrow,
+            HOME_TEXT.pricing.title,
+            FREE_PLAN.name,
+            PRO_PLAN.name,
+            PLAN_BADGE,
+            FREE_PLAN.price,
+            PRO_PLAN.price,
+            PRO_PLAN.per,
+            ...planLines().free,
+            planLines().proSummary,
+            NAV_TEXT.tryFree,
+            HOME_TEXT.pricing.getPro,
+            band.finds.termsChip,
+          ]
+        : []),
+      band.eyebrow,
       band.title,
       band.finds.title,
       band.finds.subtitle,

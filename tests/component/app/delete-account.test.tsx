@@ -118,10 +118,11 @@ describe("the two steps", () => {
       "border-transparent",
       "hover:bg-danger-strong",
     );
+    // Cancel is the redesign's quiet secondary (spec 0026, AC-4).
     expect(screen.getByRole("button", CANCEL)).toHaveClass(
-      "border-accent",
-      "text-accent-strong",
-      "hover:bg-accent-soft",
+      "border-border",
+      "text-ink",
+      "hover:bg-muted",
     );
     expect(screen.getByRole("button", CANCEL).className).not.toMatch(/danger/);
   });

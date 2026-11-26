@@ -16,8 +16,10 @@ import {
   leaveAccount,
   type LeavingClerk,
   SIGN_OUT_LIMIT_MS,
+  SIGN_OUT_PAGE_TEXT,
   SIGNING_OUT,
   SignOutControl,
+  SignOutNow,
 } from "@/app/(account)/sign-out";
 
 import { expectNoAxeViolations } from "../../setup/component";
@@ -420,5 +422,86 @@ describe("leaveAccount after deletion", () => {
     expect(await left).toBe(true);
     expect(mocks.loadDocument).toHaveBeenCalledWith("/");
     expect(stub.clerk.signOut).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The sign out page (spec 0026, child 0001, AC-26): it signs out as soon as
+ * its script runs, with the wait said in a polite region from the first
+ * render, and says so with a way home when Clerk does not load.
+ */
+describe("SignOutNow", () => {
+  it("says it is signing out from the first render, in a polite region, beside a spinner", () => {
+    mocks.signOut.mockImplementation(hangs);
+    render(<SignOutNow />);
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent(SIGNING_OUT);
+    expect(screen.getByTestId("spinner")).toBeInTheDocument();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("signs out with a callback once, then loads / as a new document", async () => {
+    mocks.signOut.mockImplementation(async (callback) => callback?.());
+    const { rerender } = render(<SignOutNow />);
+    rerender(<SignOutNow />);
+
+    await waitFor(() => expect(mocks.loadDocument).toHaveBeenCalledWith("/"));
+    expect(mocks.signOut).toHaveBeenCalledTimes(1);
+    expect(mocks.signOut.mock.calls[0]?.[0]).toBeTypeOf("function");
+  });
+
+  it("waits for Clerk's script, then signs out", async () => {
+    const clerk = clerkNotLoadedYet();
+    mocks.useClerk.mockReturnValue(clerk.clerk);
+    render(<SignOutNow />);
+    await act(settle);
+    expect(mocks.loadDocument).not.toHaveBeenCalled();
+
+    await act(async () => clerk.load());
+
+    await waitFor(() => expect(mocks.loadDocument).toHaveBeenCalledWith("/"));
+    expect(clerk.ended).toHaveBeenCalledTimes(1);
+  });
+
+  it("says it failed, with a plain link home, when Clerk's script fails to load", async () => {
+    const clerk = clerkNotLoadedYet();
+    mocks.useClerk.mockReturnValue(clerk.clerk);
+    render(<SignOutNow />);
+    await act(settle);
+
+    await act(async () => clerk.fail());
+
+    expect(await screen.findByText(SIGN_OUT_PAGE_TEXT.failed)).toHaveClass(
+      "text-danger-ink",
+    );
+    const home = screen.getByRole("link", { name: SIGN_OUT_PAGE_TEXT.home });
+    expect(home.tagName).toBe("A");
+    expect(home).toHaveAttribute("href", "/");
+    expect(screen.queryByTestId("spinner")).toBeNull();
+    expect(mocks.loadDocument).not.toHaveBeenCalled();
+  });
+
+  it("says it failed once signing out runs past its limit", async () => {
+    vi.useFakeTimers();
+    mocks.signOut.mockImplementation(hangs);
+    render(<SignOutNow />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SIGN_OUT_LIMIT_MS);
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(SIGN_OUT_PAGE_TEXT.failed);
+  });
+
+  it("passes axe, waiting and failed", async () => {
+    const clerk = clerkNotLoadedYet();
+    mocks.useClerk.mockReturnValue(clerk.clerk);
+    const { container } = render(<SignOutNow />);
+    await expectNoAxeViolations(container);
+
+    await act(async () => clerk.fail());
+    await screen.findByText(SIGN_OUT_PAGE_TEXT.failed);
+    await expectNoAxeViolations(container);
   });
 });

@@ -306,6 +306,34 @@ test("a document can be opened without anything being written down", async ({ pa
   ).toEqual([]);
 });
 
+/**
+ * Spec 0026 child 0002, AC-52. The same proof with the page preview drawn: the
+ * page's picture, its thumbnails, a zoom and another page through the rail,
+ * and still nothing is written down.
+ */
+test("the page preview, drawn and walked, writes nothing down", async ({ page }) => {
+  await watchStorage(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/tool");
+  await openDocument(page);
+
+  await expect(page.getByTestId("preview-canvas")).not.toHaveClass(/invisible/, {
+    timeout: ENGINE_TIMEOUT,
+  });
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  const thumbs = page.getByTestId("preview-thumb");
+  await thumbs.last().click();
+  await expect(page.getByTestId("preview-canvas")).not.toHaveClass(/invisible/);
+
+  const writes = await page.evaluate(() => window.__redactnestWrites ?? []);
+  expect(
+    writes,
+    `something wrote to browser storage:\n${writes
+      .map((write) => `${write.api}(${write.detail})`)
+      .join("\n")}`,
+  ).toEqual([]);
+});
+
 test("the proxies are really installed, so the test above can fail", async ({ page }) => {
   await watchStorage(page);
   await page.goto("/tool");
@@ -396,9 +424,11 @@ test("no request carries the document, its text or its name", async ({ page }) =
  * never asked for a font: a regression to a CDN stylesheet would show up as a
  * font request to someone else, not as no font request at all.
  *
- * Spec 0013, AC-29: the brand's icons and the home page's product shot are
- * held to it as well, and the shot is counted on `/` for the same reason the
- * fonts are, so an image moved to a CDN cannot pass as no image at all.
+ * Spec 0013, AC-29: the brand's icons are held to it as well. The home page's
+ * product shot was counted here too until the owner's port of `Main.dc.html`
+ * (2026-11-25) drew the hero's product window in HTML, so `/` asks for no
+ * picture now (`design-system.spec.ts` holds that the shot is never fetched);
+ * the origin check over every request is unchanged.
  */
 for (const path of PUBLIC_ROUTES) {
   test(`every request on ${path}, fonts included, stays on our own origin`, async ({
@@ -413,14 +443,6 @@ for (const path of PUBLIC_ROUTES) {
     const fonts = requests.filter((request) => request.resourceType() === "font");
 
     expect(fonts.length, "the page asked for no font file at all").toBeGreaterThan(0);
-    if (path === "/") {
-      const shots = requests.filter(
-        (request) =>
-          request.resourceType() === "image" &&
-          new URL(request.url()).pathname === "/_next/image",
-      );
-      expect(shots.length, "the home page asked for no product shot").toBeGreaterThan(0);
-    }
     for (const request of requests) {
       expect(new URL(request.url()).origin, `${request.url()} is a third party`).toBe(
         origin,
@@ -481,18 +503,25 @@ test("the tool route asks its own server only for the entitlement, and posts onl
   const requests = recordRequests(page);
 
   await page.goto("/tool");
-  await openDocument(page);
 
-  // Spec 0012, AC-9: the header now links to Pricing and Account. They are
-  // plain links, so hovering them prefetches neither, and the route's requests
-  // stay as they were.
+  // Spec 0012, AC-9, with spec 0026 AC-5's signed out header: Pricing and
+  // Sign in are plain links, so hovering them prefetches neither, and the
+  // route's requests stay as they were. With a document open the header
+  // holds the file bar and Sign in instead of the nav (child 0001, AC-30),
+  // so its links are hovered in both shapes.
   const header = page.getByRole("banner");
   await expect(
     header.getByRole("link", { name: "Pricing", exact: true }),
   ).toHaveAttribute("href", "/pricing");
   await expect(
-    header.getByRole("link", { name: "Account", exact: true }),
-  ).toHaveAttribute("href", "/account");
+    header.getByRole("link", { name: "Sign in", exact: true }),
+  ).toHaveAttribute("href", "/sign-in");
+  await hoverHeaderLinks(page);
+
+  await openDocument(page);
+  await expect(
+    header.getByRole("link", { name: "Sign in", exact: true }),
+  ).toHaveAttribute("href", "/sign-in");
   await hoverHeaderLinks(page);
 
   // AC-3. Everything else the route fetches is its own code and the engine, both

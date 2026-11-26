@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guide page template</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#fff}
+a{color:#0f766e}a:hover{color:#115e59}
+.wrap{max-width:1180px;margin:0 auto;padding:0 32px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;gap:8px;height:48px;padding:0 20px;border-radius:10px;font:600 15px Inter,sans-serif;text-decoration:none}
+.bp{background:#0f766e;color:#fff}
+.card{background:#fff;border:1px solid #e4e4e7;border-radius:16px}
+.p{margin:0;font-size:17px;line-height:1.7;color:#3f3f46}
+</style>
+</helmet>
+<div style="font-family: Inter, sans-serif; color: #09090b">
+<header style="border-bottom: 1px solid #f4f4f5"><div class="wrap" style="height: 64px; display: flex; align-items: center; gap: 40px">
+<span style="display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px"><span style="width: 30px; height: 30px; border-radius: 8px; background: #0f766e; display: grid; place-items: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 9h16M4 14h10M4 19h7"/></svg></span>RedactNest</span>
+<nav aria-label="Site" style="display: flex; gap: 28px; font-size: 14px; font-weight: 500"><a href="#" style="color: #52525b; text-decoration: none">How it works</a><a href="#" style="color: #52525b; text-decoration: none">Security</a><a href="#" style="color: #52525b; text-decoration: none">Pricing</a><a href="#" style="color: #09090b; text-decoration: none">Guides</a></nav>
+<div style="margin-left: auto; display: flex; gap: 10px"><a href="#" class="btn" style="height: 38px; font-size: 14px; color: #18181b">Sign in</a><a href="#" class="btn bp" style="height: 38px; font-size: 14px">Try it free</a></div>
+</div></header>
+
+<section style="background: radial-gradient(900px 400px at 50% 0%, #ecfdf5 0%, rgba(255,255,255,0) 70%)">
+<div class="wrap" style="padding-top: 72px; padding-bottom: 72px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 20px">
+<nav aria-label="Breadcrumb" style="font-size: 13px; color: #71717a"><a href="#" style="color: #71717a">Guides</a> / Redact a PDF</nav>
+<h1 style="margin: 0; font-size: 52px; line-height: 1.05; letter-spacing: -.035em; font-weight: 700; max-width: 760px">Redact a PDF without uploading it</h1>
+<p class="p" style="max-width: 620px; color: #52525b">RedactNest lists the emails, phone numbers, dates, card numbers, IBANs and ID numbers in your PDF, and you choose what goes.</p>
+<div style="display: flex; gap: 12px; align-items: center"><a href="#" class="btn bp">Redact a PDF now</a><span style="font-size: 14px; color: #71717a">Free up to 3 pages</span></div>
+</div>
+</section>
+
+<section class="wrap" style="padding-bottom: 96px">
+<div class="card" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden">
+<div style="padding: 32px; display: flex; flex-direction: column; gap: 14px; border-right: 1px solid #f4f4f5; position: relative">
+<div style="display: flex; align-items: center; gap: 12px"><span style="width: 40px; height: 40px; border-radius: 12px; background: #0f766e; color: #fff; display: grid; place-items: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></span><span style="font-size: 12px; font-weight: 600; color: #a1a1aa; letter-spacing: .06em">STEP 1</span></div>
+<h2 style="margin: 0; font-size: 19px; font-weight: 600">Open a PDF</h2>
+<p style="margin: 0; font-size: 15px; line-height: 1.6; color: #52525b">It opens and changes on your own device, inside the tab.</p>
+</div>
+<div style="padding: 32px; display: flex; flex-direction: column; gap: 14px; border-right: 1px solid #f4f4f5; background: #fafafa">
+<div style="display: flex; align-items: center; gap: 12px"><span style="width: 40px; height: 40px; border-radius: 12px; background: #0f766e; color: #fff; display: grid; place-items: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg></span><span style="font-size: 12px; font-weight: 600; color: #a1a1aa; letter-spacing: .06em">STEP 2</span></div>
+<h2 style="margin: 0; font-size: 19px; font-weight: 600">Tick what to remove</h2>
+<p style="margin: 0; font-size: 15px; line-height: 1.6; color: #52525b">Every match is listed with its page and the words around it.</p>
+</div>
+<div style="padding: 32px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 12px"><span style="width: 40px; height: 40px; border-radius: 12px; background: #0f766e; color: #fff; display: grid; place-items: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></svg></span><span style="font-size: 12px; font-weight: 600; color: #a1a1aa; letter-spacing: .06em">STEP 3</span></div>
+<h2 style="margin: 0; font-size: 19px; font-weight: 600">Download your new file</h2>
+<p style="margin: 0; font-size: 15px; line-height: 1.6; color: #52525b">Every page is checked first. If the check fails, you get no file.</p>
+</div>
+</div>
+</section>
+
+<section style="border-top: 1px solid #f4f4f5">
+<div class="wrap" style="padding-top: 88px; padding-bottom: 96px; display: grid; grid-template-columns: 240px minmax(0, 680px); gap: 72px; justify-content: center">
+<nav aria-label="On this page" style="display: flex; flex-direction: column; gap: 10px; font-size: 14px; align-self: start; position: sticky; top: 24px">
+<span style="font-size: 12px; font-weight: 600; color: #a1a1aa; letter-spacing: .06em">ON THIS PAGE</span>
+<a href="#" style="color: #09090b; text-decoration: none; font-weight: 500; border-left: 2px solid #0f766e; padding-left: 12px">What redacting should do</a>
+<a href="#" style="color: #71717a; text-decoration: none; padding-left: 14px">What it can miss</a>
+<a href="#" style="color: #71717a; text-decoration: none; padding-left: 14px">More guides</a>
+</nav>
+<article style="display: flex; flex-direction: column; gap: 20px">
+<h2 style="margin: 0; font-size: 30px; letter-spacing: -.02em; font-weight: 700">What redacting a PDF should do</h2>
+<p class="p">Redacting a PDF should take the words out, not only hide them. A box drawn over text can leave the words in the file, where they can still be copied or found.</p>
+<p class="p">In RedactNest, the selectable text you tick is taken out of the page, then marked where it was.</p>
+<div style="display: flex; gap: 14px; padding: 18px 20px; border-radius: 14px; background: #fffbeb; border: 1px solid #fde68a">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 18h.01"/></svg>
+<div style="font-size: 15px; line-height: 1.6; color: #78350f"><strong style="font-weight: 600">Scans are a picture.</strong> Words that are only part of a picture are not read, so they can stay in the new file.</div>
+</div>
+<p class="p">Look over the whole document before you share the new file, not only what RedactNest listed and you ticked. <a href="#">What it can miss</a></p>
+<h2 style="margin: 24px 0 0; font-size: 22px; font-weight: 700">More guides</h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+<a href="#" class="card" style="padding: 20px; text-decoration: none; color: #09090b; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 16px; font-weight: 600">Removing text from a PDF</span><span style="font-size: 14px; color: #71717a">Take words out for good →</span></a>
+<a href="#" class="card" style="padding: 20px; text-decoration: none; color: #09090b; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 16px; font-weight: 600">Black box redaction</span><span style="font-size: 14px; color: #71717a">Why a box isn't enough →</span></a>
+</div>
+</article>
+</div>
+</section>
+
+<section class="wrap" style="padding-bottom: 96px">
+<div style="border-radius: 24px; background: #0f766e; padding: 48px 56px; display: flex; align-items: center; justify-content: space-between; color: #fff">
+<div><h2 style="margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -.02em">Ready to redact?</h2><p style="margin: 8px 0 0; font-size: 16px; color: #ccfbf1">Free up to 3 pages. Your file stays on your device.</p></div>
+<a href="#" class="btn" style="background: #fff; color: #0f766e">Redact a PDF now</a>
+</div>
+</section>
+<footer style="border-top: 1px solid #f4f4f5"><div class="wrap" style="padding-top: 32px; padding-bottom: 32px; font-size: 13px; color: #71717a">Same footer as the home page (AGPL notice and source link kept).</div></footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2050}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

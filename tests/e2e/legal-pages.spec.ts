@@ -620,8 +620,8 @@ test.describe("the terms notice on /tool", () => {
       colour: getComputedStyle(element).color,
     }));
     expect(style.size).toBe("14px");
-    // `ink-muted`, #56616b.
-    expect(style.colour).toBe("rgb(86, 97, 107)");
+    // `ink-muted`, #52525b (spec 0026, AC-1).
+    expect(style.colour).toBe("rgb(82, 82, 91)");
   });
 
   test("goes once the file bar replaces the drop zone", async ({ page }) => {

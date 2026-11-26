@@ -16,6 +16,7 @@ import { config } from "@/config";
 import { countText } from "@/lib/count-text";
 import { countedKinds, lookedFor, TERM_GROUP_NOUN } from "@/lib/detectors";
 import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
+import type { StepState } from "@/lib/progress";
 import { PRICING_PATH, SIGN_IN_PATH } from "@/lib/routes";
 import { NOT_SEARCHED_REASONS, type NotSearchedReason } from "@/lib/session";
 import { TERM_MIN_CHARS, termHead, termLength, type TermRefusal } from "@/lib/term-text";
@@ -390,16 +391,52 @@ export const PHASE_TEXT: Readonly<Record<ProgressPhase, string>> = Object.freeze
   inspecting: "Reading each page",
   detecting: `Looking for ${lookedFor("conjunction")}`,
   redacting: "Removing what you ticked",
-  writing: "Writing your clean file",
-  verifying: "Checking every page of your clean file",
+  writing: "Writing your new file",
+  verifying: "Checking every page",
 });
 
-/** A run with nothing ticked removes nothing, so its first phase says so. */
-const STRIPPING = "Stripping hidden content";
+/**
+ * A run with nothing ticked removes nothing, so its first phase says what it
+ * does strip: the two kinds the home page names behind the self check's
+ * structure part (spec 0026, child 0003, AC-32; spec 0019, AC-12), and never
+ * "hidden content", which the code cannot promise in every case.
+ */
+const STRIPPING = "Stripping document info and attachments";
 
 export function phaseLine(phase: ProgressPhase, tickedCount: number): string {
   return phase === "redacting" && tickedCount === 0 ? STRIPPING : PHASE_TEXT[phase];
 }
+
+/**
+ * The open's steps, in the order the worker sends them (child 0003, AC-33).
+ * `checking-entitlement` is not one: it counts as the first step.
+ */
+export const OPEN_STEPS: readonly ProgressPhase[] = Object.freeze([
+  "loading-engine",
+  "opening",
+  "inspecting",
+  "detecting",
+]);
+
+/** The run's steps (AC-32). Stripping happens inside `redacting`, so it is no step of its own. */
+export const RUN_STEPS: readonly ProgressPhase[] = Object.freeze([
+  "redacting",
+  "writing",
+  "verifying",
+]);
+
+/** The progress card's title for each (AC-32, AC-33), draft words for the owner's read. */
+export const PROGRESS_TITLE = Object.freeze({
+  open: "Opening…",
+  run: "Redacting…",
+});
+
+/** Each step's state in words, read after its label, so a tick is never the only sign (AC-31). */
+export const STEP_STATE_TEXT: Readonly<Record<StepState, string>> = Object.freeze({
+  done: "done",
+  current: "in progress",
+  next: "not started",
+});
 
 /**
  * The full drop zone's helper (spec 0012, AC-5): what checking says until the
@@ -415,7 +452,25 @@ export function dropZoneHelper(answer: EntitlementSnapshot | null): string {
   return `Up to ${answer.pageCap} pages on ${plan.name}`;
 }
 
+/**
+ * The full drop zone's other words (spec 0026, AC-12): its title, the "or"
+ * between the drop and the button, and the line beside the caps saying where
+ * the file opens. Each says what the zone does, and none repeats the button.
+ */
+export const DROP_TEXT = Object.freeze({
+  title: "Drop a PDF to start",
+  or: "or",
+  device: "Opens on your device",
+});
+
 /* The action panel. */
+
+/**
+ * Untick every row that can be ticked, in the action panel beside the count
+ * line (spec 0026, AC-12). It stays in place and cannot run while nothing is
+ * ticked.
+ */
+export const UNTICK_ALL = "Untick all";
 
 /**
  * The count line above the main action (AC-6), or null when nothing was found
@@ -450,16 +505,32 @@ export function redactLabel(ticked: number): string {
  */
 export const LOCK_LINE = "Your file never leaves your browser.";
 
+/* The page preview (spec 0026 child 0002). */
+
 /**
- * The rail's three steps while nothing is open (AC-15). None repeats a button's
- * name, and none promises a "cleaned copy", which is only the button's label
- * when nothing is ticked.
+ * Every word the page preview shows (AC-55): the aside's name, the rail's,
+ * each thumbnail's name and visible label, the page bar, the zoom control,
+ * the page region's name and the failure line. Page numbers and counts go
+ * through `countText`, and nothing here carries document text, the file name
+ * or a coordinate. A thumbnail's name holds its visible label (WCAG 2.5.3).
  */
-export const IDLE_STEPS: readonly string[] = Object.freeze([
-  "Open a PDF",
-  "Tick what to remove",
-  "Download your new file",
-]);
+export const PREVIEW_TEXT = Object.freeze({
+  label: "Page preview",
+  rail: "Pages",
+  thumb: (page: number, mark: string | null, count: number): string =>
+    `Page ${countText(page)}${mark === null ? "" : ` · ${mark}`}` +
+    (count > 0 ? `, ${countText(count)} found` : ""),
+  thumbLabel: (page: number, mark: string | null): string =>
+    mark === null ? countText(page) : `${countText(page)} · ${mark}`,
+  pageOf: (page: number, total: number): string =>
+    `Page ${countText(page)} of ${countText(total)}`,
+  zoom: "Zoom",
+  zoomOut: "Zoom out",
+  zoomIn: "Zoom in",
+  level: (percent: number): string => `${percent}%`,
+  pageRegion: (page: number): string => `Page ${countText(page)}`,
+  failed: "RedactNest couldn't show this page. Its items are still listed.",
+});
 
 /** The found items column's card, and its count of every row found (AC-19). */
 export const FOUND_ITEMS_TITLE = "Found items";
@@ -481,6 +552,52 @@ export const RESULT_TERMS = Object.freeze({
   removed: "Removed",
   left: "Left in the file",
   stripped: "Also stripped",
+});
+
+/**
+ * The result card's three counts at a glance (spec 0026, AC-12), each a
+ * number from `ResultCounts` through `countText` over one of these labels:
+ * what the engine removed, what stayed in the file (left unticked or blocked),
+ * and how many kinds of hidden content went. The lines under them say which.
+ */
+export const RESULT_STATS = Object.freeze({
+  removed: "removed",
+  left: "left in",
+  stripped: "stripped",
+});
+
+/**
+ * A refusal's way to read why RedactNest stops rather than hand back a file
+ * it could not check (spec 0026, AC-12), a link to the security page.
+ */
+export const REFUSAL_WHY = "Why RedactNest stops";
+
+/**
+ * Which failures carry `REFUSAL_WHY`: the refusals the security page's "When
+ * it stops instead" explains, a file RedactNest judged it cannot safely open
+ * or a run it stopped rather than hand back. A cap is the plan's limit, not a
+ * stop, and a lost engine or an unreadable file from disk is nothing the page
+ * explains, so those have none. A record, so a new kind is a decision here.
+ */
+export const SHOWS_WHY: Readonly<Record<EngineErrorKind, boolean>> = Object.freeze({
+  "engine-unavailable": false,
+  encrypted: true,
+  "password-required": true,
+  corrupt: true,
+  unsupported: true,
+  "too-large": false,
+  "too-many-pages": false,
+  "file-unreadable": false,
+  "not-pdf": true,
+  "hidden-layers": true,
+  "redaction-incomplete": true,
+  "redaction-overreach": true,
+  "replacement-text": true,
+  "slanted-text": true,
+  "no-readable-text": true,
+  "edge-text": true,
+  "unreadable-structure": true,
+  "inline-picture": true,
 });
 
 /**

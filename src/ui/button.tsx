@@ -1,3 +1,4 @@
+import { cva } from "class-variance-authority";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import type {
@@ -15,11 +16,13 @@ import { Spinner } from "./spinner";
  * `danger` and `danger-secondary` are for destroying an account and nothing
  * else (spec 0013, INV-12): `danger` for the step that destroys it, and
  * `danger-secondary` for the button that opens that step. A failure stays a
- * `danger` callout or a `danger-ink` line, never a red button.
+ * `danger` callout or a `danger-ink` line, never a red button. `ghost` is a
+ * quiet action with no edge until the pointer is on it (Sign in, Start over);
+ * `link` is an action drawn as an underlined link (spec 0026, AC-4).
  */
 export type ButtonVariant =
-  "primary" | "secondary" | "link" | "danger" | "danger-secondary";
-export type ButtonSize = "md" | "lg";
+  "primary" | "secondary" | "ghost" | "link" | "danger" | "danger-secondary" | "inverse";
+export type ButtonSize = "default" | "md" | "lg" | "xl" | "icon";
 
 interface ButtonOwnProps {
   readonly variant?: ButtonVariant;
@@ -81,90 +84,91 @@ type AsPageLoad = Omit<ComponentPropsWithoutRef<"a">, keyof ButtonOwnProps | "hr
 
 export type ButtonProps = ButtonOwnProps & (AsButton | AsLink | AsPageLoad);
 
-/**
- * The filled and outlined shapes share a box. The edge on `primary` is
- * transparent rather than absent, because forced colours mode paints every
- * border in a system colour: a transparent one becomes the button's outline
- * there, where the fill it relied on is gone (AC-17).
- */
-const BOX = "inline-flex items-center justify-center gap-2 rounded-lg border text-center";
-
-/** One disabled look for every boxed variant, the danger ones included (AC-35). */
-const BOX_DISABLED = "disabled:border-border disabled:bg-subtle disabled:text-ink-muted";
+/** What the button looks like: one of the variants, or the disabled look an unavailable one takes. */
+type Look = ButtonVariant | "unavailable" | "unavailable-link";
 
 /**
- * How each variant looks at rest and disabled. The red ones take `danger-ink`
- * for the fill, the edge and the words, the one danger token that already
- * clears 4.5:1 as text, and white words on the fill are `on-accent`, the same
- * white (spec 0013, AC-35). The focus ring stays today's, because its offset
- * puts it on the card's `surface`, never on the red.
+ * The button's classes, by look, size and whether the pointer may change it
+ * (spec 0026, AC-4). Every class is a token utility. The boxed looks share one
+ * box; the edge on a filled one is transparent rather than absent, because
+ * forced colours mode paints every border in a system colour, so a
+ * transparent one becomes the button's outline there, where the fill it
+ * relied on is gone (spec 0003, AC-17). Fill, edge and ink only fade, never
+ * `transition-colors`, which also fades `outline-color` and would bring the
+ * focus ring in the text colour (spec 0003, AC-6).
  */
-const VARIANT: Readonly<Record<ButtonVariant, string>> = Object.freeze({
-  primary: cx(BOX, "border-transparent bg-accent text-on-accent", BOX_DISABLED),
-  secondary: cx(BOX, "border-accent bg-surface text-accent-strong", BOX_DISABLED),
-  // Always underlined, so a link is never told apart by colour alone (INV-8).
-  link: cx(
-    "inline-flex items-center gap-1.5 rounded-sm text-accent-strong",
-    "underline decoration-1 underline-offset-4",
-    "disabled:text-ink-muted",
-  ),
-  danger: cx(BOX, "border-transparent bg-danger-ink text-on-accent", BOX_DISABLED),
-  "danger-secondary": cx(
-    BOX,
-    "border-danger-ink bg-surface text-danger-ink",
-    BOX_DISABLED,
-  ),
+const buttonClasses = cva("transition-[background-color,border-color,color]", {
+  variants: {
+    look: {
+      primary: "border-transparent bg-accent text-on-accent shadow-card",
+      secondary: "border-border bg-surface text-ink shadow-card",
+      ghost: "border-transparent bg-transparent text-ink",
+      // White on an `accent` fill: the home page's closing card. Its words are
+      // `accent` on `surface` (5.47:1); the card rings it in `ink`.
+      inverse: "border-transparent bg-surface text-accent",
+      // Always underlined, so a link is never told apart by colour alone (INV-8).
+      link: "text-accent-strong underline decoration-1 underline-offset-4 disabled:text-ink-muted",
+      // `danger-ink` for the fill, the edge and the words, the one danger
+      // token that clears 4.5:1 as text; white words are `on-accent`, the same
+      // white (spec 0013, AC-35).
+      danger: "border-transparent bg-danger-ink text-on-accent",
+      "danger-secondary": "border-danger-ink bg-surface text-danger-ink",
+      // The disabled look without the `disabled:` prefix, since an
+      // unavailable button is never `disabled` (spec 0017, AC-18).
+      unavailable: "border-border bg-subtle text-ink-muted",
+      "unavailable-link": "text-ink-muted underline decoration-1 underline-offset-4",
+    },
+    shape: {
+      box: "inline-flex items-center justify-center gap-2 rounded-control border text-center font-semibold",
+      text: "inline-flex items-center gap-1.5 rounded-item font-medium",
+    },
+    /**
+     * Heights are minimums, never fixed, so a visitor's text spacing override
+     * grows the button rather than clipping its label (WCAG 1.4.12). 40px and
+     * 48px clear the 24px target floor with room to spare (spec 0003, AC-7).
+     */
+    size: {
+      default: "min-h-10 text-small",
+      // The home page's 44 pixel plan buttons, 15 pixel words (`Main.dc.html`).
+      md: "min-h-11 text-copy",
+      lg: "min-h-12 text-body",
+      // The home page's 50 pixel buttons, 22 pixels in from each side
+      // (`Main.dc.html`): the hero's two and the closing card's.
+      xl: "min-h-12.5 text-body",
+      // A 40 pixel square for a button whose words are visually hidden, such
+      // as the header's menu button (spec 0026, child 0001, AC-27).
+      icon: "min-h-10 min-w-10 text-small",
+    },
+    /** Under the pointer. A busy or unavailable button keeps its rest colours (spec 0013, AC-34). */
+    hover: { true: "", false: "" },
+    fullWidth: { true: "w-full", false: "" },
+  },
+  compoundVariants: [
+    // One disabled look for every boxed variant, the danger ones included (spec 0013, AC-35).
+    {
+      shape: "box",
+      look: ["primary", "secondary", "ghost", "danger", "danger-secondary", "inverse"],
+      class:
+        "disabled:border-border disabled:bg-subtle disabled:text-ink-muted disabled:shadow-none",
+    },
+    { shape: "box", size: "default", class: "px-4 py-2" },
+    { shape: "box", size: "md", class: "px-4.5 py-2" },
+    { shape: "box", size: "lg", class: "px-6 py-2.5" },
+    { shape: "box", size: "xl", class: "px-5.5 py-2.5" },
+    { shape: "box", size: "icon", class: "p-2" },
+    { hover: true, look: "primary", class: "hover:bg-accent-strong" },
+    { hover: true, look: ["secondary", "ghost"], class: "hover:bg-muted" },
+    { hover: true, look: "inverse", class: "hover:bg-accent-faint" },
+    { hover: true, look: "link", class: "hover:decoration-2" },
+    { hover: true, look: "danger", class: "hover:bg-danger-strong" },
+    { hover: true, look: "danger-secondary", class: "hover:bg-danger-bg" },
+  ],
 });
 
-/**
- * Under the pointer, kept apart so a busy button can leave it off and keep its
- * rest colours, since it will take no press (spec 0013, AC-34).
- */
-const HOVER: Readonly<Record<ButtonVariant, string>> = Object.freeze({
-  primary: "hover:bg-accent-strong",
-  secondary: "hover:bg-accent-soft",
-  link: "hover:decoration-2",
-  danger: "hover:bg-danger-strong",
-  "danger-secondary": "hover:bg-danger-bg",
-});
-
-/**
- * Heights are minimums, never fixed, so a visitor's text spacing override grows
- * the button rather than clipping its label (WCAG 1.4.12). 40px and 48px clear
- * the 24px target floor with room to spare (AC-7). The padding keeps the
- * natural height under each minimum (38px at `md`, 46px at `lg`, counting the
- * border), so the minimum is the height, not a floor it outgrows.
- */
-const BOXED_SIZE: Readonly<Record<ButtonSize, string>> = Object.freeze({
-  md: "min-h-10 px-4 py-2 text-small font-medium",
-  lg: "min-h-12 px-6 py-2.5 text-body font-semibold",
-});
-
-const SIZE: Readonly<Record<ButtonVariant, Readonly<Record<ButtonSize, string>>>> =
-  Object.freeze({
-    primary: BOXED_SIZE,
-    secondary: BOXED_SIZE,
-    // As tall as the other variants, so a link style button beside one (Start
-    // over in the file bar) is as easy a target and lines up with it (AC-7).
-    link: Object.freeze({
-      md: "min-h-10 text-small font-medium",
-      lg: "min-h-12 text-body font-medium",
-    }),
-    danger: BOXED_SIZE,
-    "danger-secondary": BOXED_SIZE,
-  });
-
-/**
- * An unavailable button's look: the disabled one, without the `disabled:`
- * prefix, since the button is never `disabled` (spec 0017, AC-18).
- */
-const UNAVAILABLE: Readonly<Record<ButtonVariant, string>> = Object.freeze({
-  primary: cx(BOX, "border-border bg-subtle text-ink-muted"),
-  secondary: cx(BOX, "border-border bg-subtle text-ink-muted"),
-  link: "inline-flex items-center gap-1.5 rounded-sm text-ink-muted underline decoration-1 underline-offset-4",
-  danger: cx(BOX, "border-border bg-subtle text-ink-muted"),
-  "danger-secondary": cx(BOX, "border-border bg-subtle text-ink-muted"),
-});
+function lookOf(variant: ButtonVariant, unavailable: boolean): Look {
+  if (!unavailable) return variant;
+  return variant === "link" ? "unavailable-link" : "unavailable";
+}
 
 /** A busy button's answer to every press: nothing, not even a form submit. */
 function dropPress(event: MouseEvent<HTMLButtonElement>) {
@@ -177,7 +181,7 @@ function dropPress(event: MouseEvent<HTMLButtonElement>) {
  */
 export function Button({
   variant = "primary",
-  size = "md",
+  size = "default",
   fullWidth = false,
   icon: Icon,
   busy = false,
@@ -187,13 +191,13 @@ export function Button({
   ...native
 }: ButtonProps) {
   const classes = cx(
-    unavailable ? UNAVAILABLE[variant] : VARIANT[variant],
-    !busy && !unavailable && HOVER[variant],
-    SIZE[variant][size],
-    // Fill and edge only. `transition-colors` fades `outline-color` too, so the
-    // focus ring would arrive in the text colour, white on a filled button (AC-6).
-    "transition-[background-color,border-color] duration-150 motion-reduce:transition-none",
-    fullWidth && "w-full",
+    buttonClasses({
+      look: lookOf(variant, unavailable),
+      shape: variant === "link" ? "text" : "box",
+      size,
+      hover: !busy && !unavailable,
+      fullWidth,
+    }),
     className,
   );
 

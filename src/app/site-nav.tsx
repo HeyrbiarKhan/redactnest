@@ -1,42 +1,100 @@
+import type { ReactNode } from "react";
+
 import { config } from "@/config";
+import { countText } from "@/lib/count-text";
 import { cx } from "@/lib/cx";
+import { NEW_TAB } from "@/lib/flow-text";
 import { LEGAL } from "@/lib/legal";
-import { ACCOUNT_PATH, PRICING_PATH, SECURITY_PATH, TOOL_PATH } from "@/lib/routes";
+import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
+import { HOW_IT_WORKS_PATH, PRICING_PATH, SECURITY_PATH, TOOL_PATH } from "@/lib/routes";
 import { SEARCH_PAGE_TEXT, SEARCH_PAGES } from "@/lib/search-pages";
 import { Button } from "@/ui/button";
 import { LinkGroup } from "@/ui/link-group";
-import { SiteHeader } from "@/ui/site-header";
+import { MENU_WHEN_NARROW, ROW_UNLESS_NARROW, SiteHeader } from "@/ui/site-header";
 
+import type { AccountMenuPlan } from "./account-menu";
+import { AccountSlot, type AccountSlotText } from "./account-slot";
 import { FOOTER_LINK_CLASS } from "./footer-link";
 
 /**
- * The words of the header's links and button, and of the footer's Product
- * group, in one place. Spec 0013, AC-7, AC-8 and AC-30.
+ * The words of the header's links and buttons, and of the footer's Product
+ * group, in one place. Spec 0013, AC-7, AC-8 and AC-30; spec 0026, AC-5.
  *
  * Each place that offers the tool names it its own way, so no page says the
  * same thing twice: `tryFree` is the header's button (and the 404's and
  * Pricing's Free card's, which follow it), and `redactPdf` is the footer's
  * Product link, which names the page by its title as the Legal links name
  * theirs. There is no nav item for the tool: the button is the way in.
- * `menu` names the button that holds those links on a small screen (feature
- * 28, amending AC-7). `security` is the footer's Product link to the security
- * page, named by its title too (spec 0018, AC-2).
+ * `menu` names the button that holds the nav on a small screen (feature 28).
+ * `security` is the header's and the footer's link to the security page,
+ * named by its title (spec 0018, AC-2). `howItWorks` is the header's link to
+ * the home page's section of that name, and `signIn` the header's way to sign
+ * in, a plain link (spec 0026, AC-5).
+ *
+ * Signed in (spec 0026, child 0001): `openTool` takes Try it free's place
+ * (AC-24), `yourAccount` names the avatar, the menu's trigger (AC-22), and
+ * `account`, `billing`, `upgrade` and `signOut` are the menu's items, with
+ * `redactPdf` the way to the tool there too (AC-23).
  */
 export const NAV_TEXT = Object.freeze({
+  howItWorks: "How it works",
   pricing: "Pricing",
-  account: "Account",
+  signIn: "Sign in",
   tryFree: "Try it free",
+  openTool: "Open the tool",
   redactPdf: "Redact a PDF",
   security: "Security",
   menu: "Menu",
+  yourAccount: "Your account",
+  account: "Account",
+  billing: "Billing",
+  upgrade: "Upgrade to Pro",
+  signOut: "Sign out",
+});
+
+/**
+ * The account menu's plan line, under the visitor's address (spec 0026,
+ * child 0001, AC-23): the plan's name and its page cap, the caps from
+ * `config` through `countText` and the names from `plans.ts`, so no number
+ * is written here. `unknown` is a genuine sign in whose plan check failed.
+ */
+export const ACCOUNT_MENU_PLAN: Readonly<Record<AccountMenuPlan, string>> = Object.freeze(
+  {
+    paid: `${PRO_PLAN.name} · ${countText(config.maxPages)} pages a document`,
+    free: `${FREE_PLAN.name} · ${countText(config.freePageCap)} pages a document`,
+    unknown: "Plan unknown right now",
+  },
+);
+
+/**
+ * Every word the account slot and its menu show, handed to the slot as a
+ * prop, so the words stay here and the client island never imports this
+ * module (which would pull the whole header into the page's script).
+ */
+const ACCOUNT_SLOT_TEXT: AccountSlotText = Object.freeze({
+  signIn: NAV_TEXT.signIn,
+  tryFree: NAV_TEXT.tryFree,
+  openTool: NAV_TEXT.openTool,
+  yourAccount: NAV_TEXT.yourAccount,
+  account: NAV_TEXT.account,
+  billing: NAV_TEXT.billing,
+  upgrade: NAV_TEXT.upgrade,
+  redactPdf: NAV_TEXT.redactPdf,
+  signOut: NAV_TEXT.signOut,
+  newTab: NEW_TAB,
+  proChip: PRO_PLAN.name,
+  plan: ACCOUNT_MENU_PLAN,
 });
 
 /**
  * Which page the visitor is on. `"tool"` names no item (none names the tool),
  * so on `/tool` nothing is marked current, and it hides the button, which
- * would point at the page itself (AC-7).
+ * would point at the page itself (AC-7), and the How it works link, which
+ * `/tool`'s header leaves out (spec 0026, child 0001, AC-30). `"account"`
+ * names no item either since the Account link moved into the account menu
+ * (child 0001, AC-23).
  */
-export type NavItem = "tool" | "pricing" | "account";
+export type NavItem = "tool" | "pricing" | "security" | "account";
 
 /**
  * A header link: `ink-muted` at rest, underlined on hover, and when it names
@@ -51,8 +109,8 @@ export type NavItem = "tool" | "pricing" | "account";
  * dropping it as it would a background.
  */
 const NAV_LINK_CLASS = cx(
-  "relative inline-flex min-h-10 items-center rounded-sm text-ink-muted",
-  "underline-offset-4 not-aria-[current=page]:hover:underline",
+  "relative inline-flex min-h-10 items-center rounded-item text-small font-medium text-ink-muted",
+  "underline-offset-4 transition-[color] hover:text-ink not-aria-[current=page]:hover:underline",
   "aria-[current=page]:font-semibold aria-[current=page]:text-ink",
   "aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-0 aria-[current=page]:after:bottom-0",
   "aria-[current=page]:after:border-b-2 aria-[current=page]:after:border-accent",
@@ -64,9 +122,10 @@ function currentIf(item: NavItem, current: NavItem | undefined) {
 }
 
 /**
- * The header's Site nav: Pricing, with billing on. Spec 0013, AC-7 and
- * AC-30, and spec 0012, AC-9. With billing off on this build there is nothing
- * to list, so there is no `nav` at all rather than an empty one.
+ * The header's Site nav: How it works, Security and, with billing on,
+ * Pricing (spec 0026, AC-5; spec 0012, AC-9). How it works is the home page's
+ * section, so it names no current page; `/tool`'s header leaves it out
+ * (child 0001, AC-30). There is no Guides item: the guides are in the footer.
  *
  * Plain links, never `next/link`, so nothing prefetches a page and `/tool`
  * sends no request beyond the entitlement (spec 0002, AC-3).
@@ -75,36 +134,38 @@ function currentIf(item: NavItem, current: NavItem | undefined) {
  * from `sm`, in the header's own row (feature 28).
  */
 export function SiteNav({ current }: { readonly current?: NavItem }) {
-  if (!config.billingEnabled) return null;
-
   return (
     <nav aria-label="Site">
-      <ul className="flex flex-col items-start gap-x-6 gap-y-1 sm:flex-row sm:flex-wrap sm:items-center">
+      <ul className="flex flex-col items-start gap-x-4 gap-y-1 sm:flex-row sm:flex-wrap sm:items-center md:gap-x-7">
+        {current !== "tool" && (
+          <li>
+            <a href={HOW_IT_WORKS_PATH} className={NAV_LINK_CLASS}>
+              {NAV_TEXT.howItWorks}
+            </a>
+          </li>
+        )}
         <li>
           <a
-            href={PRICING_PATH}
+            href={SECURITY_PATH}
             className={NAV_LINK_CLASS}
-            {...currentIf("pricing", current)}
+            {...currentIf("security", current)}
           >
-            {NAV_TEXT.pricing}
+            {NAV_TEXT.security}
           </a>
         </li>
+        {config.billingEnabled && (
+          <li>
+            <a
+              href={PRICING_PATH}
+              className={NAV_LINK_CLASS}
+              {...currentIf("pricing", current)}
+            >
+              {NAV_TEXT.pricing}
+            </a>
+          </li>
+        )}
       </ul>
     </nav>
-  );
-}
-
-/**
- * The header's Account link, after the nav (AC-7; spec 0012, AC-9). With
- * billing off on this build there is no account to show, so there is none.
- */
-export function AccountLink({ current }: { readonly current?: NavItem }) {
-  if (!config.billingEnabled) return null;
-
-  return (
-    <a href={ACCOUNT_PATH} className={NAV_LINK_CLASS} {...currentIf("account", current)}>
-      {NAV_TEXT.account}
-    </a>
   );
 }
 
@@ -118,27 +179,92 @@ export function AccountLink({ current }: { readonly current?: NavItem }) {
  * link is a real page load too, so spec 0007's leave warning still guards
  * ticked work.
  *
- * With billing on, the nav goes in with the menu button's words, so on a small
- * screen the header folds its links into a menu (feature 28). With billing off
- * there is no nav and no Account, so there is no menu either: the header is
- * the lockup and the button, as before.
+ * With billing on, the right side is the account slot (spec 0026, child
+ * 0001), the one client island this header carries: signed out, Sign in and
+ * Try it free; signed in, Open the tool and the avatar with its menu. It
+ * comes in two parts of one component, both reading one store: the row part
+ * in the action's place, and below `sm` the menu part after the nav, so the
+ * small screen menu holds Sign in or Open the tool while the row keeps Try it
+ * free or the avatar (AC-27). With billing off there is no slot, no cookie
+ * read and no request (AC-19).
+ *
+ * The nav is on every build, so on a small screen the header always folds it
+ * into a menu (feature 28). `file` replaces the nav on `/tool` while a
+ * document is open (AC-30): the file's name and page count with its two
+ * controls, a second row under the lockup below `sm`, and no menu.
+ *
+ * `sticky` is the home page's: the bar stays at the window's top from `lg`,
+ * as `Main.dc.html` draws it (`SiteHeader` says how focus stays clear of it).
+ * Never on `/tool`, where nothing but the action panel is sticky (spec 0026,
+ * AC-12).
  */
-export function PageHeader({ current }: { readonly current?: NavItem }) {
-  const action =
-    current === "tool" ? undefined : (
-      <Button href={TOOL_PATH} reload>
-        {NAV_TEXT.tryFree}
-      </Button>
-    );
+export function PageHeader({
+  current,
+  sticky = false,
+  file,
+}: {
+  readonly current?: NavItem;
+  readonly sticky?: boolean;
+  /** `/tool`'s file context while a document is open (AC-30); `ToolClient` passes it. */
+  readonly file?: ReactNode;
+}) {
+  const onTool = current === "tool";
 
-  if (!config.billingEnabled) return <SiteHeader action={action} />;
+  if (file !== undefined) {
+    return (
+      <SiteHeader
+        context={file}
+        action={
+          config.billingEnabled ? (
+            <AccountSlot part="whole" onTool={onTool} text={ACCOUNT_SLOT_TEXT} />
+          ) : undefined
+        }
+      />
+    );
+  }
+
+  if (!config.billingEnabled) {
+    return (
+      <SiteHeader
+        nav={
+          <>
+            <SiteNav current={current} />
+            {/* The menu's copy, on a row too narrow for the row's (see `ROW_UNLESS_NARROW`). */}
+            {!onTool && (
+              <span className={MENU_WHEN_NARROW}>
+                <Button href={TOOL_PATH} reload>
+                  {NAV_TEXT.tryFree}
+                </Button>
+              </span>
+            )}
+          </>
+        }
+        menuLabel={NAV_TEXT.menu}
+        action={
+          onTool ? undefined : (
+            <span className={ROW_UNLESS_NARROW}>
+              <Button href={TOOL_PATH} reload>
+                {NAV_TEXT.tryFree}
+              </Button>
+            </span>
+          )
+        }
+        sticky={sticky}
+      />
+    );
+  }
 
   return (
     <SiteHeader
-      nav={<SiteNav current={current} />}
+      nav={
+        <>
+          <SiteNav current={current} />
+          <AccountSlot part="menu" onTool={onTool} text={ACCOUNT_SLOT_TEXT} />
+        </>
+      }
       menuLabel={NAV_TEXT.menu}
-      account={<AccountLink current={current} />}
-      action={action}
+      action={<AccountSlot part="row" onTool={onTool} text={ACCOUNT_SLOT_TEXT} />}
+      sticky={sticky}
     />
   );
 }

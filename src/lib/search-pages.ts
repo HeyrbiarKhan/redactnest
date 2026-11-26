@@ -1,3 +1,4 @@
+import type { LucideIcon } from "lucide-react";
 /**
  * Every word on the search pages, in one place. Spec 0024, *Feature design*,
  * INV-2: one typed, frozen record per page over a closed set, like
@@ -37,7 +38,16 @@ import { lookedFor } from "@/lib/detectors";
 import { BLACK_BOX_PATH, REDACT_PDF_PATH, REMOVE_TEXT_PATH } from "@/lib/routes";
 import type { PageKind } from "@/telemetry/events";
 import type { CoverFigureProps, CoverPanel } from "@/ui/cover-figure";
-import type { FeatureItem } from "@/ui/feature-list";
+
+/**
+ * One of a search page's three cards (spec 0024, AC-3): an icon on its filled
+ * tile, a title and one line (spec 0026, AC-11).
+ */
+export interface FeatureItem {
+  readonly icon: LucideIcon;
+  readonly title: string;
+  readonly body: string;
+}
 
 /**
  * The search pages, a closed set whose order is the footer's and the
@@ -74,6 +84,12 @@ export interface SearchPageText {
   readonly headline: string;
   /** Its link in the footer's Guides group and in the other pages' More guides. */
   readonly navLabel: string;
+  /**
+   * The line under `navLabel` on the other pages' More guides cards: the
+   * guide's own topic, claiming nothing (the owner's lines, 2026-11-25). The
+   * arrow after it is drawn, not written.
+   */
+  readonly moreLine: string;
   /** Both buttons into the tool. */
   readonly primary: string;
   readonly lead: string;
@@ -115,8 +131,18 @@ const socialAltFor = (eyebrow: string, headline: string) =>
 /** The "More guides" heading over the links to the other search pages (AC-3). */
 export const MORE_GUIDES_TITLE = "More guides";
 
-/** The "How it works" heading over the tool's own steps (AC-3). */
-export const HOW_IT_WORKS_TITLE = "How it works";
+/**
+ * The closing band's heading and line (the owner's port of `Guide.dc.html`,
+ * 2026-11-25; spec 0026, AC-11). The heading claims nothing. The line is row
+ * M1 in substance, as the cards' own device lines are: the document is opened
+ * and changed in the page's worker on the visitor's device and no request
+ * carries it (spec 0002, INV-1; privacy claim C1; `/tool`'s
+ * `connect-src 'self'`). It repeats those cards' idea by the owner's read
+ * (2026-11-25), and names no plan, so the cap line stays the one place a plan
+ * is named (AC-8).
+ */
+export const CLOSING_TITLE = "Ready to redact?";
+export const CLOSING_LINE = "Your file stays on your device.";
 
 /**
  * The sentence that ends every answer section (AC-7), and its link's words.
@@ -187,6 +213,8 @@ export const SEARCH_PAGE_TEXT: Readonly<Record<SearchPageKind, SearchPageText>> 
       eyebrow: REDACT_PDF_EYEBROW,
       headline: REDACT_PDF_HEADLINE,
       navLabel: "Redacting a PDF",
+      /** The page's topic, how redacting works: no claim about a file. */
+      moreLine: "See how redacting works here",
       primary: "Redact a PDF now",
       /**
        * Row M4: what RedactNest looks for, with `lookedFor()`, so the page
@@ -272,6 +300,8 @@ export const SEARCH_PAGE_TEXT: Readonly<Record<SearchPageKind, SearchPageText>> 
       eyebrow: REMOVE_TEXT_EYEBROW,
       headline: REMOVE_TEXT_HEADLINE,
       navLabel: "Removing text from a PDF",
+      /** The page's own headline, shortened: its topic, no claim (row G1). */
+      moreLine: "Take text out, not just cover it",
       primary: "Remove text from a PDF",
       /**
        * Row M4, as on `/redact-pdf`: what RedactNest looks for, with
@@ -361,6 +391,8 @@ export const SEARCH_PAGE_TEXT: Readonly<Record<SearchPageKind, SearchPageText>> 
       eyebrow: BLACK_BOX_EYEBROW,
       headline: BLACK_BOX_HEADLINE,
       navLabel: "Black box redaction",
+      /** The page's topic, a question about PDFs in general (row G1). */
+      moreLine: "Why a box isn't enough",
       primary: "Redact a PDF properly",
       /**
        * Names the page's subject and claims nothing, so the copy and search

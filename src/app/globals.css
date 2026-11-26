@@ -16,34 +16,146 @@
 @theme {
   --color-*: initial;
 
-  --color-canvas: #f8f7f4;
+  /*
+   * White and grey surfaces, the teal accent kept (spec 0026, AC-1). `muted`
+   * holds chips, count badges and hover fills; `ink-subtle` is a caption on
+   * `canvas`, `surface` and `subtle` only, because on `muted` it measures 4.4.
+   */
+  --color-canvas: #ffffff;
   --color-surface: #ffffff;
-  --color-subtle: #f1efea;
-  --color-border: #e3e0d8;
-  --color-border-strong: #7d848b;
+  --color-subtle: #fafafa;
+  --color-muted: #f4f4f5;
+  --color-border: #e4e4e7;
+  --color-border-strong: #71717a;
 
-  --color-ink: #16232b;
-  --color-ink-muted: #56616b;
+  --color-ink: #09090b;
+  --color-ink-muted: #52525b;
+  --color-ink-subtle: #71717a;
 
-  --color-accent: #1f7a7a;
-  --color-accent-strong: #176465;
-  --color-accent-soft: #d5eeea;
+  --color-accent: #0f766e;
+  --color-accent-strong: #115e59;
+  --color-accent-soft: #ccfbf1;
+  --color-accent-faint: #f0fdfa;
   --color-on-accent: #ffffff;
-  --color-focus: #135556;
+  --color-focus: #115e59;
 
-  --color-warning-bg: #fdf3e2;
-  --color-warning-border: #efcf95;
-  --color-warning-icon: #a8520a;
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+  --color-warning-icon: #b45309;
+  --color-warning-ink: #78350f;
 
   --color-info-bg: #eaf3fb;
   --color-info-border: #c5dbef;
   --color-info-icon: #1c5e9e;
 
-  --color-danger-bg: #fceeec;
-  --color-danger-border: #f0c3bd;
-  --color-danger-icon: #b3261e;
-  --color-danger-ink: #a8231c;
-  --color-danger-strong: #8c1d18;
+  --color-danger-bg: #fef2f2;
+  --color-danger-border: #fecaca;
+  --color-danger-icon: #b91c1c;
+  --color-danger-ink: #b91c1c;
+  --color-danger-strong: #991b1b;
+
+  /*
+   * The home page's dark band (AC-9). `night-accent` is also the focus ring
+   * there, because `focus` measures 2.62 on `night`, under the 3:1 a ring needs.
+   */
+  --color-night: #09090b;
+  --color-night-ink: #fafafa;
+  --color-night-muted: #a1a1aa;
+  --color-night-accent: #5eead4;
+  --color-night-border: #27272a;
+  /*
+   * The band's table (`Main.dc.html`): its raised fill, and its column heads
+   * in `night-faint`, the nearest grey to the mockup's that clears 4.5:1 there.
+   */
+  --color-night-raised: #18181b;
+  --color-night-faint: #808089;
+
+  /*
+   * The home page's port of `Main.dc.html`. `glow` is the hero's radial wash
+   * and `glow-edge` its eyebrow chip's rim; `ink-soft` the mockup's quieter
+   * dark ink for chips, the trust strip and drawn page text, on light fills
+   * only; `accent-bright` the drawn highlight's edge; `border-soft` an unticked
+   * box in a drawing and `border-mid` a drawn drop zone's dashed edge, both
+   * decoration that joins no pairing, as is `accent-edge`, the black box
+   * section's removal panel's rim.
+   */
+  --color-glow: #ecfdf5;
+  --color-glow-edge: #d1fae5;
+  --color-ink-soft: #3f3f46;
+  --color-accent-bright: #14b8a6;
+  --color-border-soft: #d4d4d8;
+  --color-border-mid: #a1a1aa;
+  --color-accent-edge: #99f6e4;
+
+  /*
+   * Radii, from the mockups (AC-2): a menu item, a control, a card, and the
+   * home page's 16 pixel panels (its cards in `Main.dc.html`) and drawn
+   * product window. `rounded-full` is Tailwind's own and
+   * stays for pills. The defaults go, so a pasted `rounded-lg` makes no
+   * corner nobody chose.
+   */
+  --radius-*: initial;
+  --radius-item: 0.5rem;
+  --radius-control: 0.625rem;
+  --radius-card: 0.875rem;
+  --radius-panel: 1rem;
+  --radius-window: 1.125rem;
+  /* The home page's closing card. */
+  --radius-band: 1.5rem;
+
+  /*
+   * The header's account slot from `sm` (spec 0026, child 0001, AC-25): wide
+   * enough for Sign in and Try it free side by side, so the slot holds its
+   * place before the page knows who is signed in, and nothing in the row
+   * moves when it fills. A minimum, never a width, so larger text grows it.
+   * Measured 2026-11-26: Sign in and Try it free take 189 pixels, Open the
+   * tool and the avatar 175.
+   */
+  --spacing-account-slot: 12.25rem;
+
+  /*
+   * Shadows are depth, never a colour role and never behind text, so they are
+   * the one place a colour carries alpha (AC-2). Black, except the home
+   * page's window and Pro card, which `Main.dc.html` tints with the accent
+   * (the owner's call, 2026-11-25). `page` is the drawn page in that window.
+   */
+  --shadow-*: initial;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-page: 0 1px 3px rgb(0 0 0 / 0.1);
+  --shadow-popover: 0 12px 30px -10px rgb(0 0 0 / 0.18);
+  --shadow-window:
+    0 30px 60px -20px rgb(15 118 110 / 0.25), 0 12px 24px -12px rgb(0 0 0 / 0.12);
+  --shadow-plan: 0 20px 40px -20px rgb(15 118 110 / 0.35);
+  /* The page in `/tool`'s preview, as `ToolReview.dc.html` draws it (spec 0026 child 0002, AC-40). */
+  --shadow-sheet: 0 1px 3px rgb(0 0 0 / 0.1), 0 8px 24px -8px rgb(0 0 0 / 0.1);
+
+  /*
+   * One ease out curve. Every transition without a duration of its own takes
+   * `fast`; `duration-base` and `duration-slow` below are the other two.
+   */
+  --ease-*: initial;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --default-transition-duration: 120ms;
+  --default-transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* A menu or popover opening: a fade with a 4px rise (AC-2). */
+  --animate-rise-in: rise-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  /* A progress step's tick appearing (spec 0026, child 0003). */
+  --animate-tick-in: tick-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+
+  @keyframes tick-in {
+    from {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+  }
 
   /*
    * Nothing renders below 14px (INV-6), so the one size under it goes. Sizes
@@ -63,6 +175,26 @@
   --text-lead: 1.125rem;
   --text-lead--line-height: 1.75rem;
 
+  /* The home page's leads (`Main.dc.html`): the hero's, then a section's. */
+  --text-intro: 1.1875rem;
+  --text-intro--line-height: 1.6;
+  --text-lede: 1.0625rem;
+  --text-lede--line-height: 1.6;
+
+  /* A home page card's title and its line (`Main.dc.html`). */
+  --text-subhead: 1.1875rem;
+  --text-subhead--line-height: 1.25;
+  --text-subhead--font-weight: 600;
+  --text-subhead--letter-spacing: -0.01em;
+  --text-copy: 0.9375rem;
+  --text-copy--line-height: 1.55;
+
+  /* A plan card's price on the home page (`Main.dc.html`). */
+  --text-price: 2.5rem;
+  --text-price--line-height: 1.1;
+  --text-price--font-weight: 700;
+  --text-price--letter-spacing: -0.03em;
+
   --text-body: 1rem;
   --text-body--line-height: 1.5rem;
 
@@ -70,7 +202,37 @@
   --text-small--line-height: 1.25rem;
 
   --container-narrow: 44rem;
-  --container-wide: 72rem;
+  /*
+   * 1180 pixels with 32 pixel gutters from `lg`, the `.wrap` of the home and
+   * guide mockups (`Main.dc.html`, `Guide.dc.html`), so content runs 1116
+   * pixels wide at 1440.
+   */
+  --container-wide: 73.75rem;
+}
+
+/*
+ * The three motion durations (AC-2), static so they reach `:root` whether or
+ * not a utility names them.
+ */
+@theme static {
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+}
+
+@utility duration-fast {
+  --tw-duration: var(--duration-fast);
+  transition-duration: var(--duration-fast);
+}
+
+@utility duration-base {
+  --tw-duration: var(--duration-base);
+  transition-duration: var(--duration-base);
+}
+
+@utility duration-slow {
+  --tw-duration: var(--duration-slow);
+  transition-duration: var(--duration-slow);
 }
 
 /*
@@ -83,19 +245,155 @@
 }
 
 /*
- * The home headline. A utility rather than a theme size because it steps up at
- * `md`, and a size in viewport units would stop the visitor's own zoom from
- * scaling it (WCAG 1.4.4).
+ * The two large heading sizes (spec 0026, AC-3): `display` for the hero `h1`,
+ * `headline` for a section `h2`. Each is `title` below `sm` and steps up there
+ * through a breakpoint, never viewport units, so the visitor's own zoom still
+ * scales it (WCAG 1.4.4).
  */
 @utility text-display {
-  font-size: 2.5rem;
-  line-height: 1.05;
-  font-weight: 800;
-  letter-spacing: -0.025em;
+  font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+  font-weight: 700;
+  letter-spacing: -0.02em;
 
-  @variant md {
-    font-size: 3.5rem;
+  @variant sm {
+    font-size: 3.25rem;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
   }
+}
+
+/*
+ * The home page's `h1` (`Main.dc.html`): `display` up to `lg`, then the
+ * mockup's 60 pixels, tighter. The guides keep `display`'s 52.
+ */
+@utility text-hero {
+  font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+
+  @variant sm {
+    font-size: 3.25rem;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+  }
+
+  @variant lg {
+    font-size: 3.75rem;
+    line-height: 1.02;
+    letter-spacing: -0.04em;
+  }
+}
+
+@utility text-headline {
+  font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+
+  @variant sm {
+    font-size: 2.25rem;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+  }
+
+  /* The home page's 40 pixel section heading (`Main.dc.html`). */
+  @variant lg {
+    font-size: 2.5rem;
+  }
+}
+
+/*
+ * A window at least 36rem tall (spec 0026, AC-12, *Sticky foot*). `/tool`'s
+ * action panel sticks to the window's foot only here, so a short window, or a
+ * page zoomed until the window is short in `rem`, gets a static panel that
+ * can never sit over a block it would hide.
+ */
+@custom-variant tall (@media (min-height: 36rem));
+
+/*
+ * Focus never hidden when it moves (spec 0026, AC-12; WCAG 2.2, 2.4.11).
+ * Wherever `/tool`'s action panel floats at the window's foot (the tool's own
+ * `lg`, a tall window, a panel on the page), every focusable control in the
+ * column, a heading focus moves to by script included, keeps the panel's room
+ * below it, so focus by keyboard or by script scrolls it clear above the
+ * panel. The panel's own controls are left out: they are what floats. The
+ * tool grid's `focusin` fallback holds the same line in an engine that ignores
+ * the margin.
+ */
+@container tool (min-width: 61rem) {
+  @media (min-height: 36rem) {
+    [data-testid="tool-grid"][data-panel]
+      :is(a[href], button, input, select, textarea, summary, [tabindex]):not(
+        [data-testid="action-panel"] *
+      ):not([data-testid="area-preview"] *) {
+      scroll-margin-bottom: var(--tool-panel-room);
+    }
+  }
+}
+
+/*
+ * The page preview's frame (spec 0026 child 0002, AC-38). While the tool
+ * grid carries `data-preview`, `/tool` is drawn full window under its static
+ * header: `main` loses its padding, the container its cap and gutters, and
+ * the title is hidden visually but stays the page's `h1`. Unlayered, so these
+ * outrank Tailwind's utilities with no `!important`.
+ *
+ * The grid is at least the window tall, so with a short list the last row
+ * takes the slack and the action panel rests at the window's foot. It paints
+ * the right column itself, as one `surface` panel with a `border` on its left
+ * 26.25rem from the grid's right, because the column's blocks are separate
+ * grid items (B is `display: contents`). Each block is set in from the
+ * column's edges, 14 pixels apart, as the mockup's column is, but the action
+ * panel, the column's flat foot, which runs flush to both sides (the owner's
+ * call, 2026-11-26).
+ */
+main[data-tool-main]:has([data-preview]) {
+  padding-block: 0;
+}
+
+main[data-tool-main]:has([data-preview]) [data-tool-frame] {
+  max-width: none;
+  padding-inline: 0;
+  gap: 0;
+}
+
+main[data-tool-main]:has([data-preview]) [data-tool-title] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+[data-testid="tool-grid"][data-preview] {
+  min-height: 100dvh;
+  column-gap: 0;
+  row-gap: 0.875rem;
+  background-image: linear-gradient(
+    to right,
+    transparent calc(100% - 26.25rem),
+    var(--color-border) calc(100% - 26.25rem),
+    var(--color-border) calc(100% - 26.25rem + 1px),
+    var(--color-surface) calc(100% - 26.25rem + 1px)
+  );
+}
+
+[data-testid="tool-grid"][data-preview]
+  > :not([data-testid="area-preview"], [data-testid="area-rail"]),
+[data-testid="tool-grid"][data-preview]
+  > [data-testid="area-rail"]
+  > :not([data-testid="action-panel"]) {
+  margin-inline: 1.25rem;
+}
+
+[data-testid="tool-grid"][data-preview] > [data-testid="area-document"] {
+  margin-top: 1.25rem;
 }
 
 /* Built and tested now, first placed by feature 15. */
@@ -126,6 +424,38 @@
   }
 
   /*
+   * On the home page's `night` band the ring takes `night-accent`: `focus`
+   * measures 2.62:1 on `night`, under the 3:1 a ring needs (spec 0026, AC-9;
+   * WCAG 1.4.11). Scoped by the band's own `data-band`, so no other ring moves.
+   */
+  [data-band="night"] :focus-visible {
+    outline-color: var(--color-night-accent);
+  }
+
+  /*
+   * On the home page's closing card the ring takes `ink`: `focus` measures
+   * 1.39:1 on `accent`, and the card's wash brightens to `accent-bright`
+   * behind its button, where `on-accent` measures 2.49:1. `ink` clears 3:1 on
+   * both (WCAG 1.4.11). Scoped by the card's own `data-band`.
+   */
+  [data-band="accent"] :focus-visible {
+    outline-color: var(--color-ink);
+  }
+
+  /*
+   * A sticky header never covers what has focus (WCAG 2.4.11, technique C43).
+   * From `lg`, where `SiteHeader`'s `sticky` holds, the page keeps the bar's
+   * height clear at its top: 4rem and its 1 pixel edge, plus half a rem so a
+   * focus ring and its offset clear the edge too. Focus moved by keyboard or
+   * by script, and an in page link such as How it works, all stop below it.
+   */
+  @media (width >= 64rem) {
+    :root:has(header[data-sticky]) {
+      scroll-padding-top: calc(4.5rem + 1px);
+    }
+  }
+
+  /*
    * The legal pages' On this page links glide to their heading (spec 0013,
    * AC-25), and the security page's, in the same frame (spec 0018, AC-3). Only
    * where `main` carries `data-smooth-scroll`, which that frame alone sets, so
@@ -150,6 +480,25 @@
  * lost and `forced-color-adjust: none` kept the tint. An unlayered rule beats
  * every layered one.
  */
+/*
+ * The home page's `night` band in forced colours: the band's fill is dropped
+ * for the system's Canvas, so its light inks would sit on it unreadable to
+ * anything that reads the authored colour. Its words take the system's text
+ * and link colours instead, as forced colours would paint them (spec 0026,
+ * AC-9 and AC-16).
+ */
+@media (forced-colors: active) {
+  [data-band="night"] *,
+  [data-band="accent"] * {
+    color: CanvasText;
+  }
+
+  [data-band="night"] a,
+  [data-band="accent"] a {
+    color: LinkText;
+  }
+}
+
 @media (forced-colors: active) {
   mark {
     forced-color-adjust: none;
@@ -159,9 +508,27 @@
 }
 
 /*
+ * Reduced motion, for every transition and animation on the site from one
+ * rule (spec 0026, AC-2; spec 0003, AC-16): each becomes an instant change and
+ * the spinner stops turning. No component opts out or needs its own
+ * `motion-reduce:` class. Outside every layer, so it beats every utility
+ * without an `!important`, which stays the cursor rule's alone.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation: none;
+    transition: none;
+    scroll-behavior: auto;
+  }
+}
+
+/*
  * Every cursor on the site, from one rule (spec 0013, AC-33 and INV-10). The
  * pointer on whatever can be clicked: links, buttons, a disclosure's summary,
- * a select, a checkbox or radio, and a label wrapping one, which is how every
+ * a menu item (the account menu's, spec 0026, AC-15), a select, a checkbox or
+ * radio, and a label wrapping one, which is how every
  * checklist row and select all row takes its whole width as the target.
  * `not-allowed` on whatever is disabled, a blocked row's label included. Each
  * pointer selector leaves out what the second set matches, so the two never
@@ -180,6 +547,7 @@ summary:not([aria-disabled="true"]),
 select:enabled:not([aria-disabled="true"]),
 input:is([type="checkbox"], [type="radio"]):enabled:not([aria-disabled="true"]),
 [role="button"]:not(:disabled):not([aria-disabled="true"]),
+[role="menuitem"]:not([aria-disabled="true"]),
 label:has(input:is([type="checkbox"], [type="radio"]):enabled):not(
     :has(input:is([type="checkbox"], [type="radio"]):disabled)
   ):not([aria-disabled="true"]) {

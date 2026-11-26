@@ -28,7 +28,7 @@ interface CheckboxProps {
  * checkbox is the one the visitor's colours are guaranteed to reach (AC-17).
  *
  * Disabled, it takes the disabled button's look (spec 0003): the `subtle`
- * fill, a `border` edge, and the tick in `ink-muted`, which is 5.51:1 on
+ * fill, a `border` edge, and the tick in `ink-muted`, which is 7.41:1 on
  * `subtle`. The accent fill applies only while enabled, so a disabled box can
  * never look like one that still acts.
  */
@@ -59,7 +59,7 @@ export function Checkbox({
         checked={checked}
         disabled={disabled}
         onChange={(event) => onCheckedChange(event.target.checked)}
-        className="peer size-6 appearance-none rounded-md border border-border-strong bg-surface transition-[background-color,border-color] duration-150 enabled:checked:border-accent enabled:checked:bg-accent enabled:indeterminate:border-accent enabled:indeterminate:bg-accent disabled:border-border disabled:bg-subtle motion-reduce:transition-none forced-colors:appearance-auto"
+        className="peer size-6 appearance-none rounded-item border border-border-strong bg-surface transition-[background-color,border-color] enabled:checked:border-accent enabled:checked:bg-accent enabled:indeterminate:border-accent enabled:indeterminate:bg-accent disabled:border-border disabled:bg-subtle forced-colors:appearance-auto"
       />
       <Check
         aria-hidden="true"

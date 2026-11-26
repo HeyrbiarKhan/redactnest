@@ -32,6 +32,7 @@ const RAW = {
   NEXT_PUBLIC_MATCH_CONTEXT_CHARS: process.env.NEXT_PUBLIC_MATCH_CONTEXT_CHARS,
   NEXT_PUBLIC_MAX_CUSTOM_TERMS: process.env.NEXT_PUBLIC_MAX_CUSTOM_TERMS,
   NEXT_PUBLIC_MAX_TERM_CHARS: process.env.NEXT_PUBLIC_MAX_TERM_CHARS,
+  NEXT_PUBLIC_PREVIEW_MAX_PIXELS: process.env.NEXT_PUBLIC_PREVIEW_MAX_PIXELS,
   NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   NEXT_PUBLIC_SOURCE_URL: process.env.NEXT_PUBLIC_SOURCE_URL,
   // Whether billing is on (spec 0012, AC-23). Only its presence is read here;
@@ -276,6 +277,24 @@ const TERM_CHARS_CEILING = 200;
 const maxCustomTerms = readInt("NEXT_PUBLIC_MAX_CUSTOM_TERMS", 50, 1, TERM_LIST_CEILING);
 const maxTermChars = readInt("NEXT_PUBLIC_MAX_TERM_CHARS", 100, 2, TERM_CHARS_CEILING);
 
+/**
+ * Spec 0026 child 0002, *Configuration required*. The most device pixels one
+ * page picture in the preview may hold: 8,388,608 by default, about 32 MB. A
+ * memory limit, like the context ceiling above, so its floor keeps a typo
+ * from asking for a page nobody can read, and its ceiling (16,777,216, the
+ * largest canvas area Safari allows) from asking for a picture no browser can
+ * show.
+ */
+const PREVIEW_PIXELS_FLOOR = 1_048_576;
+const PREVIEW_PIXELS_CEILING = 16_777_216;
+
+const previewMaxPixels = readInt(
+  "NEXT_PUBLIC_PREVIEW_MAX_PIXELS",
+  8_388_608,
+  PREVIEW_PIXELS_FLOOR,
+  PREVIEW_PIXELS_CEILING,
+);
+
 if (freePageCap > maxPages) {
   throw new ConfigError(
     `NEXT_PUBLIC_FREE_PAGE_CAP (${freePageCap}) cannot exceed NEXT_PUBLIC_MAX_PAGES (${maxPages}).`,
@@ -340,6 +359,12 @@ export const config = Object.freeze({
   maxCustomTerms,
   /** The longest custom term, in characters as a person sees them (AC-4, AC-27). */
   maxTermChars,
+  /**
+   * The most device pixels one page picture in the preview may hold (spec
+   * 0026 child 0002, AC-45). A page wider than this at its zoom is drawn at
+   * the cap and stretched the rest of the way.
+   */
+  previewMaxPixels,
   /** Canonical origin, for metadata and the sitemap. */
   siteUrl: readUrl("NEXT_PUBLIC_SITE_URL", "http://localhost:3000", true),
   /**

@@ -133,8 +133,9 @@ describe("BrandLockup", () => {
     const lockup = container.firstElementChild;
     expect(lockup).toHaveTextContent(/^RedactNest$/);
     expect(container.querySelector("img")).toBeNull();
-    // The mark comes first, in the accent, and says nothing.
-    expect(lockup?.firstElementChild).toHaveClass("text-accent");
+    // The mark comes first, in `on-accent` on an `accent` tile (spec 0026,
+    // AC-7), and says nothing.
+    expect(lockup?.firstElementChild).toHaveClass("bg-accent", "text-on-accent");
     expect(lockup?.firstElementChild?.querySelector("svg")).toHaveAttribute(
       "aria-hidden",
       "true",
@@ -146,9 +147,13 @@ describe("BrandLockup", () => {
 
     expect(container.firstElementChild).toHaveClass(
       "font-bold",
-      "tracking-[-0.02em]",
+      // The mockups' 17 pixel word, tracked -0.01em (spec 0026, `Main.dc.html`).
+      "tracking-[-0.01em]",
       "text-ink",
-      "text-heading",
+      "text-[1.0625rem]",
+      // The phone row's 16 pixel word below `sm` (`Header.dc.html`; spec
+      // 0026, child 0001, AC-27).
+      "max-sm:text-body",
       // A size down in a row under 10rem. Spec 0024, *The lockup at narrow widths*.
       "@max-[10rem]:text-body",
     );
@@ -158,9 +163,11 @@ describe("BrandLockup", () => {
     const { container } = render(<BrandLockup size="lg" />);
 
     expect(container.firstElementChild).toHaveClass("text-title");
+    // The tile and the mark inside it are both in `em` of the word's size.
+    expect(container.firstElementChild?.firstElementChild).toHaveClass("size-[1.765em]");
     const svg = container.querySelector("svg");
-    expect(svg).toHaveAttribute("width", "1.4em");
-    expect(svg).toHaveAttribute("height", "1.4em");
+    expect(svg).toHaveAttribute("width", "1.1em");
+    expect(svg).toHaveAttribute("height", "1.1em");
   });
 
   it("names a link around it RedactNest", () => {

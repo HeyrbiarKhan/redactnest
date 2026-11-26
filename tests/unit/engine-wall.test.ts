@@ -66,6 +66,7 @@ const MUPDF = /Only src\/engine may touch mupdf/;
 const ENGINE = /may import @\/engine/;
 const SECOND_WORKER = /A second Worker means/;
 const STORAGE = /Nothing is written to browser storage/;
+const CANVAS_EXPORT = /A page picture never leaves its canvas/;
 const OPACITY = /No alpha modifier on a colour utility/;
 const ARBITRARY_COLOUR = /No arbitrary colour value/;
 const UI_IMPORT = /src\/ui is presentation only/;
@@ -273,6 +274,63 @@ describe("writing to browser storage", () => {
       ).toContainEqual(expect.stringMatching(STORAGE));
     },
   );
+});
+
+/**
+ * Spec 0026 child 0002, AC-51. A page picture never leaves its canvas: no data
+ * URL, no blob, no pixels read back and no bitmap taken out, in any zone,
+ * whether called, saved or reached through a string key.
+ */
+describe("turning a canvas into something that can travel", () => {
+  it.each([
+    ["a data URL", "export const go = (c: HTMLCanvasElement) => c.toDataURL();\n"],
+    ["a blob", "export const go = (c: HTMLCanvasElement) => c.toBlob(() => {});\n"],
+    [
+      "an offscreen blob",
+      "export const go = (c: OffscreenCanvas) => c.convertToBlob();\n",
+    ],
+    [
+      "the pixels read back",
+      "export const go = (x: CanvasRenderingContext2D) => x.getImageData(0, 0, 1, 1);\n",
+    ],
+    [
+      "a bitmap taken out",
+      "export const go = (c: OffscreenCanvas) => c.transferToImageBitmap();\n",
+    ],
+    [
+      "a saved reference",
+      "export const go = (c: HTMLCanvasElement) => c.toDataURL.call(c);\n",
+    ],
+    [
+      "a string key",
+      'export const go = (c: HTMLCanvasElement) => c["toBlob"](() => {});\n',
+    ],
+  ])("is rejected as %s", async (_form, code) => {
+    expect(await wallErrors(ROUTE, code)).toContainEqual(
+      expect.stringMatching(CANVAS_EXPORT),
+    );
+  });
+
+  it.each([ROUTE, LIBRARY, ENGINE_MODULE, WORKER, CLIENT, PRIMITIVE, TOOL_PAGE])(
+    "is rejected in %s, because no zone gets to relax this one",
+    async (path) => {
+      expect(
+        await wallErrors(
+          path,
+          "export const go = (c: HTMLCanvasElement) => c.toDataURL();\n",
+        ),
+      ).toContainEqual(expect.stringMatching(CANVAS_EXPORT));
+    },
+  );
+
+  it("leaves the one way a picture is shown alone", async () => {
+    expect(
+      await wallErrors(
+        ROUTE,
+        "export const go = (x: ImageBitmapRenderingContext, p: ImageBitmap) => x.transferFromImageBitmap(p);\n",
+      ),
+    ).toEqual([]);
+  });
 });
 
 /**
@@ -510,6 +568,34 @@ describe("rendering the tool page's client anywhere but the tool page", () => {
       expect.stringMatching(MUPDF),
     );
   });
+
+  /**
+   * Spec 0026 child 0001, AC-25: the account slot's own zone restates the
+   * walls it replaces for its two files, the tool client ban, the engine
+   * wall and the billing walls among them.
+   */
+  it.each(["src/app/account-slot.tsx", "src/app/account-menu.tsx"])(
+    "is rejected in %s, whose zone restates the walls",
+    async (path) => {
+      expect(
+        await wallErrors(
+          path,
+          'import { ToolClient } from "./tool/tool-client";\nexport const x = ToolClient;\n',
+        ),
+      ).toContainEqual(expect.stringMatching(TOOL_CLIENT));
+      expect(await wallErrors(path, IMPORTS_MUPDF)).toContainEqual(
+        expect.stringMatching(MUPDF),
+      );
+      expect(
+        await wallErrors(
+          path,
+          'import { billing } from "@/config/billing";\nexport const b = billing;\n',
+        ),
+      ).toContainEqual(
+        expect.stringMatching(/may import @\/billing or @\/config\/billing/),
+      );
+    },
+  );
 });
 
 /**
@@ -1137,21 +1223,29 @@ describe("the telemetry walls", () => {
     );
   });
 
-  it.each([ENGINE_MODULE, DETECTOR, WORKER, CLIENT, PROTOCOL, PRIMITIVE])(
-    "keeps all of @/telemetry out of %s",
-    async (path) => {
-      for (const code of [
-        CLIENT_REPORT,
-        CATALOG,
-        'export type M = typeof import("@/telemetry/events");\n',
-        'export const m = await import("@/telemetry/client");\n',
-      ]) {
-        expect(await wallErrors(path, code)).toContainEqual(
-          expect.stringMatching(NO_COUNTS),
-        );
-      }
-    },
-  );
+  // Spec 0026 child 0001, AC-21 and AC-25: the account slot and its menu hold
+  // the visitor's address, so they may make no count at all.
+  it.each([
+    ENGINE_MODULE,
+    DETECTOR,
+    WORKER,
+    CLIENT,
+    PROTOCOL,
+    PRIMITIVE,
+    "src/app/account-slot.tsx",
+    "src/app/account-menu.tsx",
+  ])("keeps all of @/telemetry out of %s", async (path) => {
+    for (const code of [
+      CLIENT_REPORT,
+      CATALOG,
+      'export type M = typeof import("@/telemetry/events");\n',
+      'export const m = await import("@/telemetry/client");\n',
+    ]) {
+      expect(await wallErrors(path, code)).toContainEqual(
+        expect.stringMatching(NO_COUNTS),
+      );
+    }
+  });
 
   it.each([PAGE, LIBRARY, "src/app/tool/tool-client.tsx", TELEMETRY_MODULE])(
     "lets %s report from the browser and read the catalog",

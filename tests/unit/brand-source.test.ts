@@ -82,19 +82,35 @@ describe("the red buttons (AC-35, INV-12)", () => {
   });
 });
 
-/** A shadow above Tailwind's quiet `shadow-xs` and `shadow-sm`. */
-const LARGE_SHADOW = /(^|[\s:!"'`])shadow-(md|lg|xl|2xl)\b/g;
+/**
+ * A shadow above a card's quiet `shadow-card`: the home page's drawn window,
+ * the card hanging off it and the account menu's popover (spec 0026, AC-2, as
+ * the owner's port of `Main.dc.html` amends it, 2026-11-25).
+ */
+const LARGE_SHADOW = /(^|[\s:!"'`])shadow-(popover|window|plan)\b/g;
 
-describe("the one larger shadow (AC-12)", () => {
-  it("frames the product shot on the home page, and nothing else on the site", () => {
+const DROPDOWN_MENU = "src/ui/dropdown-menu.tsx";
+const HOME_WINDOW = "src/app/home-window.tsx";
+const PRICING_CARDS = "src/app/pricing-cards.tsx";
+
+describe("the larger shadows (spec 0013, AC-12, as spec 0026 amends it)", () => {
+  it("frame the home page's window, its card and its Pro card, and the account menu, and nothing else", () => {
     const uses = FILES.flatMap((file) =>
       [...source(file).matchAll(LARGE_SHADOW)].map(([match]) => [file, match.trim()]),
     );
 
-    expect(uses).toEqual([[HOME_PAGE, "shadow-lg"]]);
+    expect(uses).toEqual(
+      expect.arrayContaining([
+        [HOME_WINDOW, "shadow-window"],
+        [HOME_PAGE, "shadow-popover"],
+        [PRICING_CARDS, "shadow-plan"],
+        [DROPDOWN_MENU, "shadow-popover"],
+      ]),
+    );
+    expect(uses).toHaveLength(4);
   });
 
-  it.each([['"shadow-md"'], ['"hover:shadow-xl"'], ['"p-4 shadow-2xl"']])(
+  it.each([['"shadow-popover"'], ['"hover:shadow-window"'], ['"p-4 shadow-window"']])(
     "would catch %s",
     (code) => {
       expect(code).toMatch(LARGE_SHADOW);
@@ -102,7 +118,7 @@ describe("the one larger shadow (AC-12)", () => {
   );
 
   it("leaves a card's quiet shadow alone", () => {
-    expect('"rounded-xl shadow-xs"').not.toMatch(LARGE_SHADOW);
+    expect('"rounded-card shadow-card"').not.toMatch(LARGE_SHADOW);
   });
 });
 
@@ -206,5 +222,54 @@ describe("the one cursor rule in globals.css (AC-33, INV-10)", () => {
         );
       }
     }
+  });
+});
+
+/**
+ * The home page's sticky header never covers what has focus (WCAG 2.4.11,
+ * technique C43; spec 0003, AC-14, as the port of `Main.dc.html` amends it).
+ * `SiteHeader`'s `sticky` holds from `lg` (64rem) and marks the bar
+ * `data-sticky`; from the same width the page keeps the bar's height, 4rem
+ * and its edge plus room for a focus ring, clear at its top.
+ */
+describe("the sticky header's scroll padding", () => {
+  it("keeps the bar's height clear from lg whenever a sticky header is on the page", () => {
+    const rules = rulesHolding("scroll-padding-top");
+
+    expect(rules).toEqual([
+      {
+        selector: ":root:has(header[data-sticky])",
+        within: ["@layer base", "@media (width >= 64rem)"],
+      },
+    ]);
+    expect(CSS).toMatch(/scroll-padding-top:\s*calc\(4\.5rem \+ 1px\);/);
+  });
+
+  it("is keyed to the same width the header sticks from", () => {
+    const header = source("src/ui/site-header.tsx");
+
+    // The rendered class list holds `lg:sticky` and no other position
+    // (`tests/component/ui/layout.test.tsx`); here, the same breakpoint.
+    expect(header).toContain('"border-muted lg:sticky lg:top-0');
+  });
+});
+
+describe("the one reduced motion rule in globals.css (spec 0026, AC-2)", () => {
+  const rules = rulesHolding("animation: none");
+
+  it("is one rule, under prefers-reduced-motion and outside every layer", () => {
+    expect(rules).toHaveLength(1);
+    expect(rules[0]?.within).toEqual(["@media (prefers-reduced-motion: reduce)"]);
+  });
+
+  it("stops every transition and animation on every element and pseudo element", () => {
+    expect(selectorList(rules[0]?.selector ?? "")).toEqual(["*", "::before", "::after"]);
+    expect(rulesHolding("transition: none")).toEqual(rules);
+  });
+
+  it("leaves no component opting out on its own", () => {
+    expect(FILES.filter((file) => /motion-(reduce|safe):/.test(source(file)))).toEqual(
+      [],
+    );
   });
 });

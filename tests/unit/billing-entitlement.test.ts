@@ -185,6 +185,7 @@ describe("rule 1: billing off", () => {
       pageCap: 3,
       maxFileBytes: 4242,
       account: "none",
+      email: null,
     });
   });
 });
@@ -233,6 +234,7 @@ describe("rules 3 to 6: a genuine token reaches Polar with its sub, and nothing 
       pageCap: 50,
       maxFileBytes: 4242,
       account: "signed-in",
+      email: null,
     });
     expect(polar.calls).toEqual([USER]);
   });
@@ -506,6 +508,75 @@ describe("rules 6 and 7: what Polar says", () => {
     for (const answer of answers) {
       if (answer.tier === "paid") expect(answer.account).toBe("signed-in");
     }
+  });
+});
+
+/**
+ * Spec 0026 child 0001, AC-21: the session token's `email` claim, read on both
+ * paths, narrowed, and returned only with a genuine token's answer. It never
+ * decides anything: a missing or malformed claim is `null`, and the plan check
+ * answers exactly as it would without it.
+ */
+describe("the email claim", () => {
+  const ADDRESS = "ada@example.com";
+
+  it("comes back with a live token's answer", async () => {
+    const { answer } = await check({
+      __session: token(claims(FRESH, { email: ADDRESS })),
+    });
+    expect(answer).toEqual({
+      tier: "paid",
+      pageCap: 50,
+      maxFileBytes: 4242,
+      account: "signed-in",
+      email: ADDRESS,
+    });
+  });
+
+  it("comes back with an expired token's answer once it is proven genuine", async () => {
+    const { answer } = await check({
+      __session: token(claims(6 * DAY, { email: ADDRESS })),
+    });
+    expect(answer).toMatchObject({ account: "signed-in", email: ADDRESS });
+  });
+
+  it("comes back with an unknown answer, whose token was genuine", async () => {
+    const { answer } = await check(
+      { __session: token(claims(FRESH, { email: ADDRESS })) },
+      fakePolar(() => Promise.reject(polarError(500))),
+    );
+    expect(answer).toMatchObject({ account: "unknown", email: ADDRESS });
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["a number", 42],
+    ["empty", ""],
+    ["without an @", "ada.example.com"],
+    ["with two @", "ada@lovelace@example.com"],
+    ["longer than 320 characters", `${"a".repeat(310)}@example.com`],
+    ["an object", { address: ADDRESS }],
+  ])("is null when the claim is %s, and the answer stands", async (_name, value) => {
+    const { answer, polar } = await check({
+      __session: token(claims(FRESH, { email: value })),
+    });
+    expect(answer).toMatchObject({ tier: "paid", account: "signed-in", email: null });
+    expect(polar.calls).toEqual([USER]);
+  });
+
+  it("is null for every answer whose token was not genuine", async () => {
+    const forged = await check({
+      __session: token(claims(FRESH, { email: ADDRESS }), STRANGER.privateKey),
+    });
+    const stale = await check({
+      __session: token(claims(SESSION_TRUST_MS + DAY, { email: ADDRESS })),
+    });
+    const none = await check({ __client_uat: "1791033000" });
+    for (const { answer } of [forged, stale, none]) {
+      expect(answer.email).toBeNull();
+    }
+    expect(forged.answer.account).toBe("sign-in-needed");
+    expect(stale.answer.account).toBe("sign-in-needed");
   });
 });
 

@@ -15,7 +15,6 @@ import "@/config/billing";
 import "@/config/telemetry";
 import { HOME_TEXT } from "@/lib/home-text";
 import { LEGAL } from "@/lib/legal";
-import { BrandLockup } from "@/ui/brand-mark";
 import { SiteFooter } from "@/ui/site-footer";
 import { SkipLink } from "@/ui/skip-link";
 
@@ -70,8 +69,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 `div`, never a `p`, because the footer's one paragraph is the
                 licence notice (spec 0013, AC-8).
               */}
-              <BrandLockup />
-              <div>{LEGAL.brandLine}</div>
+              {/* The word alone, as `Main.dc.html` draws it; the header carries the mark. */}
+              <div className="text-body font-bold text-ink">{LEGAL.tradingName}</div>
+              <div className="text-ink-subtle">{LEGAL.brandLine}</div>
             </>
           }
           groups={

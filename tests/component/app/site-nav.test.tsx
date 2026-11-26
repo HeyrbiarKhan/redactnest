@@ -1,27 +1,39 @@
 /**
  * The header's links, the header every page shows, and the footer's Product
- * group. Spec 0013, AC-7 and AC-8; spec 0012, AC-9, AC-23 and INV-10.
+ * group. Spec 0026, AC-5; spec 0013, AC-7 and AC-8; spec 0012, AC-9, AC-23
+ * and INV-10.
  *
  * Plain links on every page, `/tool` included, so nothing prefetches an
  * account page and `/tool` sends no request beyond the entitlement:
  * `next/link` throws here if the nav ever reaches for it. With billing off on
- * this build there is no Pro and no account, so only the lockup and the
- * button remain, and no empty `nav`. The browser suite (`tests/e2e/shell.spec.ts`) proves that hovering
- * them requests nothing.
+ * this build there is no Pro and no account, so the nav loses Pricing and the
+ * header loses Sign in. The browser suite (`tests/e2e/shell.spec.ts`) proves
+ * that hovering them requests nothing.
+ *
+ * With billing on, the right side is the account slot (spec 0026, child
+ * 0001), whose signed in shapes `account-slot.test.tsx` covers. Here no
+ * `__client_uat` cookie is set, so the slot shows the signed out shape at once.
  */
 
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-  AccountLink,
+  ACCOUNT_MENU_PLAN,
   GuidesNav,
   NAV_TEXT,
   PageHeader,
   ProductNav,
   SiteNav,
 } from "@/app/site-nav";
-import { ACCOUNT_PATH, PRICING_PATH, SECURITY_PATH, TOOL_PATH } from "@/lib/routes";
+import { config } from "@/config";
+import {
+  HOW_IT_WORKS_PATH,
+  PRICING_PATH,
+  SECURITY_PATH,
+  SIGN_IN_PATH,
+  TOOL_PATH,
+} from "@/lib/routes";
 import { SEARCH_PAGE_TEXT, SEARCH_PAGES } from "@/lib/search-pages";
 import { SiteHeader } from "@/ui/site-header";
 
@@ -63,65 +75,102 @@ function linksIn(element: HTMLElement) {
 describe("NAV_TEXT", () => {
   it("holds the header's words", () => {
     expect(NAV_TEXT).toEqual({
+      howItWorks: "How it works",
       pricing: "Pricing",
-      account: "Account",
+      signIn: "Sign in",
       tryFree: "Try it free",
+      openTool: "Open the tool",
       redactPdf: "Redact a PDF",
       security: "Security",
       menu: "Menu",
+      yourAccount: "Your account",
+      account: "Account",
+      billing: "Billing",
+      upgrade: "Upgrade to Pro",
+      signOut: "Sign out",
     });
     expect(Object.isFrozen(NAV_TEXT)).toBe(true);
   });
 
-  /** covers: AC-30. The button is the way in; no nav item names the tool. */
-  it("has no word for a Redact nav item", () => {
+  /**
+   * covers: child 0001, AC-23. The plan line's names come from `plans.ts` and
+   * its caps from `config`, through `countText`, so no number is written here.
+   */
+  it("holds the account menu's plan line for each plan", () => {
+    expect(ACCOUNT_MENU_PLAN).toEqual({
+      paid: `Pro · ${config.maxPages.toLocaleString("en-GB")} pages a document`,
+      free: `Free · ${config.freePageCap.toLocaleString("en-GB")} pages a document`,
+      unknown: "Plan unknown right now",
+    });
+    expect(Object.isFrozen(ACCOUNT_MENU_PLAN)).toBe(true);
+  });
+
+  /** covers: spec 0013, AC-30, and spec 0026, AC-5. No nav item names the tool or the guides. */
+  it("has no word for a Redact nav item, nor a Guides one", () => {
     expect(NAV_TEXT).not.toHaveProperty("redact");
+    expect(NAV_TEXT).not.toHaveProperty("guides");
   });
 });
 
 describe("with billing on", () => {
-  /** covers: AC-7, AC-30 */
-  it("links Pricing alone in a nav named Site", () => {
+  /** covers: spec 0026, AC-5 */
+  it("links How it works, Security and Pricing in a nav named Site", () => {
     render(<SiteNav />);
     const nav = screen.getByRole("navigation", { name: "Site" });
 
-    expect(linksIn(nav)).toEqual([["Pricing", PRICING_PATH]]);
+    expect(linksIn(nav)).toEqual([
+      ["How it works", HOW_IT_WORKS_PATH],
+      ["Security", SECURITY_PATH],
+      ["Pricing", PRICING_PATH],
+    ]);
+    expect(HOW_IT_WORKS_PATH).toBe("/#how-it-works");
   });
 
-  /** covers: AC-7. Account follows the nav, outside it. */
-  it("shows Account as its own link, pointing at /account", () => {
-    render(<AccountLink />);
+  /** covers: child 0001, AC-30. On `/tool` the nav holds Security and Pricing. */
+  it("leaves How it works out on the tool", () => {
+    render(<SiteNav current="tool" />);
 
-    expect(screen.getByRole("link", { name: "Account" })).toHaveAttribute(
-      "href",
-      ACCOUNT_PATH,
-    );
+    expect(linksIn(screen.getByRole("navigation", { name: "Site" }))).toEqual([
+      ["Security", SECURITY_PATH],
+      ["Pricing", PRICING_PATH],
+    ]);
   });
 
-  /** covers: AC-7. Page order: lockup, nav, Account, then the button. */
-  it("puts the lockup, the nav, Account and the button in page order", () => {
+  /** covers: AC-5. Sign in is a plain link into the account group. */
+  it("shows Sign in as a plain link, pointing at /sign-in", () => {
+    render(<PageHeader />);
+
+    const link = screen.getByRole("link", { name: "Sign in" });
+    expect(link.tagName).toBe("A");
+    expect(link).toHaveAttribute("href", SIGN_IN_PATH);
+  });
+
+  /** covers: AC-5. Page order: lockup, nav, Sign in, then the button. */
+  it("puts the lockup, the nav, Sign in and the button in page order", () => {
     render(<PageHeader />);
     const banner = screen.getByRole("banner");
 
     expect(linksIn(banner)).toEqual([
       ["RedactNest", "/"],
+      ["How it works", HOW_IT_WORKS_PATH],
+      ["Security", SECURITY_PATH],
       ["Pricing", PRICING_PATH],
-      ["Account", ACCOUNT_PATH],
+      ["Sign in", SIGN_IN_PATH],
       ["Try it free", TOOL_PATH],
     ]);
-    // No link names the tool but the button (AC-30).
-    for (const name of ["Redact", "Redact a PDF"]) {
+    // No link names the tool but the button (spec 0013, AC-30).
+    for (const name of ["Redact", "Redact a PDF", "Guides"]) {
       expect(within(banner).queryByRole("link", { name })).toBeNull();
     }
-    // Account sits after the nav, never inside it.
+    // Sign in sits after the nav, never inside it.
     expect(
       within(screen.getByRole("navigation", { name: "Site" })).queryByRole("link", {
-        name: "Account",
+        name: "Sign in",
       }),
     ).not.toBeInTheDocument();
   });
 
-  /** covers: AC-7, INV-4. The button is a real page load into the tool. */
+  /** covers: AC-5, spec 0003 INV-4. The button is a real page load into the tool. */
   it("offers Try it free as a plain link everywhere but the tool", () => {
     const { unmount } = render(<PageHeader current="pricing" />);
     const button = screen.getByRole("link", { name: "Try it free" });
@@ -133,10 +182,10 @@ describe("with billing on", () => {
     expect(screen.queryByRole("link", { name: "Try it free" })).not.toBeInTheDocument();
   });
 
-  /** covers: AC-7. `aria-current` on the current page's item, and only there. */
+  /** covers: AC-5. `aria-current` on the current page's item, and only there. */
   it.each([
     ["pricing", "Pricing"],
-    ["account", "Account"],
+    ["security", "Security"],
   ] as const)("marks %s's item as the current page", (current, name) => {
     render(<PageHeader current={current} />);
 
@@ -151,10 +200,10 @@ describe("with billing on", () => {
   });
 
   /**
-   * covers: AC-7. Sign in, sign up, home, the legal pages and the 404 pass
-   * nothing; the tool passes `"tool"`, which no item names.
+   * covers: AC-5. Home, the legal pages and the 404 pass nothing; the tool
+   * passes `"tool"` and the account pages `"account"`, which no item names.
    */
-  it.each([undefined, "tool"] as const)(
+  it.each([undefined, "tool", "account"] as const)(
     "marks nothing current when the page is %s",
     (current) => {
       render(<PageHeader current={current} />);
@@ -165,11 +214,11 @@ describe("with billing on", () => {
     },
   );
 
-  /** covers: AC-7. At least 40 pixels tall, and no underline until hovered. */
-  it("gives every item a 40 pixel target and no underline at rest", () => {
-    render(<PageHeader current="tool" />);
+  /** covers: spec 0013, AC-7. At least 40 pixels tall, and no underline until hovered. */
+  it("gives every nav item a 40 pixel target and no underline at rest", () => {
+    render(<PageHeader />);
 
-    for (const name of ["Pricing", "Account"]) {
+    for (const name of ["How it works", "Security", "Pricing"]) {
       const link = screen.getByRole("link", { name });
       expect(link).toHaveClass("min-h-10", "not-aria-[current=page]:hover:underline");
       expect(link).not.toHaveClass("underline");
@@ -183,30 +232,36 @@ describe("with billing on", () => {
   });
 });
 
-describe("with billing off on this build (AC-7; spec 0012, AC-23)", () => {
-  it("renders no nav at all, rather than an empty one", () => {
+describe("with billing off on this build (AC-5; spec 0012, AC-23)", () => {
+  it("keeps How it works and Security in the nav, without Pricing", () => {
     mocks.billingEnabled = false;
-    const { container } = render(<SiteNav />);
+    render(<SiteNav />);
 
-    expect(container).toBeEmptyDOMElement();
+    expect(linksIn(screen.getByRole("navigation", { name: "Site" }))).toEqual([
+      ["How it works", HOW_IT_WORKS_PATH],
+      ["Security", SECURITY_PATH],
+    ]);
   });
 
-  it("shows no Account link", () => {
+  /** covers: child 0001, AC-19. No slot at all, so no cookie read and no request. */
+  it("shows no Sign in and no account slot", () => {
     mocks.billingEnabled = false;
-    const { container } = render(<AccountLink />);
+    render(<PageHeader />);
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByRole("link", { name: "Sign in" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("account-slot")).not.toBeInTheDocument();
   });
 
-  it("leaves the header the lockup and the button, with no nav", () => {
+  it("leaves the header the lockup, the nav and the button", () => {
     mocks.billingEnabled = false;
     render(<PageHeader />);
 
     expect(linksIn(screen.getByRole("banner"))).toEqual([
       ["RedactNest", "/"],
+      ["How it works", HOW_IT_WORKS_PATH],
+      ["Security", SECURITY_PATH],
       ["Try it free", TOOL_PATH],
     ]);
-    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
   });
 });
 
@@ -287,10 +342,38 @@ describe("SiteHeader with the real nav", () => {
       <SiteHeader
         nav={<SiteNav />}
         menuLabel={NAV_TEXT.menu}
-        account={<AccountLink />}
+        account={<a href={SIGN_IN_PATH}>{NAV_TEXT.signIn}</a>}
+        action={<a href={TOOL_PATH}>{NAV_TEXT.tryFree}</a>}
       />,
     );
 
     await expectNoAxeViolations(container);
+  });
+});
+
+/**
+ * Child 0001, AC-30: `/tool`'s header with a document open, the file context
+ * in the nav's place, no nav and no menu.
+ */
+describe("the header with a file context (AC-30)", () => {
+  it("holds the context where the nav was, with no nav and no menu", () => {
+    render(<PageHeader current="tool" file={<p>letter.pdf</p>} />);
+    const banner = screen.getByRole("banner");
+
+    expect(within(banner).getByText("letter.pdf")).toBeInTheDocument();
+    expect(within(banner).queryByRole("navigation")).toBeNull();
+    expect(within(banner).queryByRole("button", { name: "Menu" })).toBeNull();
+    // Billing on: the right side is the slot's, Sign in for a signed out visitor.
+    expect(linksIn(banner)).toEqual([
+      ["RedactNest", "/"],
+      ["Sign in", SIGN_IN_PATH],
+    ]);
+  });
+
+  it("leaves the right side empty with billing off", () => {
+    mocks.billingEnabled = false;
+    render(<PageHeader current="tool" file={<p>letter.pdf</p>} />);
+
+    expect(linksIn(screen.getByRole("banner"))).toEqual([["RedactNest", "/"]]);
   });
 });

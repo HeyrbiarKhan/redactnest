@@ -6,6 +6,7 @@ import {
   CONCEALED_TEXT,
   CROOKED_LINE,
   DOWNLOAD_WARNING_TITLE,
+  FINDING_MARK,
   FINDING_TONE,
   findingLine,
   isPartly,
@@ -13,7 +14,9 @@ import {
   noteLines,
   OPEN_WARNING_TITLE,
   pageList,
+  pageMark,
   pagesWith,
+  pageWarningLines,
   PARTLY_REASON,
   removedOffPageLine,
   showsAdvice,
@@ -190,6 +193,65 @@ describe("the warning lines", () => {
     expect(warningLines(summaryOf(["machine-read-text"], ["off-page-content"]))).toEqual(
       [],
     );
+  });
+});
+
+/**
+ * Spec 0026 child 0002, AC-40 and AC-41: the preview's words for one page,
+ * taken from the lines above, so the preview adds no words of its own.
+ */
+describe("the preview's words for one page", () => {
+  const summary = summaryOf(
+    [],
+    ["scanned", "unreadable-text", "machine-read-text"],
+    ["machine-read-text", "off-page-content"],
+    ["covered-text", "bare-picture"],
+    ["blank"],
+  );
+
+  it("gives each warning on the page, in PAGE_FINDINGS order, in its one page form", () => {
+    expect(pageWarningLines(summary, 2)).toEqual([
+      findingLine(summaryOf([], ["scanned"]), "scanned"),
+      findingLine(summaryOf([], ["unreadable-text"]), "unreadable-text"),
+    ]);
+    expect(pageWarningLines(summary, 4)).toEqual([
+      findingLine(summaryOf([], [], [], ["covered-text"]), "covered-text"),
+      findingLine(summaryOf([], [], [], ["bare-picture"]), "bare-picture"),
+    ]);
+  });
+
+  it("names only that page, though another page carries the same warning", () => {
+    const twice = summaryOf(["scanned"], ["scanned"]);
+    expect(findingLine(twice, "scanned")).toMatch(/^Pages 1 and 2 /);
+    expect(pageWarningLines(twice, 2)).toEqual([
+      findingLine(summaryOf([], ["scanned"]), "scanned"),
+    ]);
+  });
+
+  it("is empty for a page with notes only, a blank page, and a page out of range", () => {
+    expect(pageWarningLines(summary, 1)).toEqual([]);
+    expect(pageWarningLines(summary, 3)).toEqual([]);
+    expect(pageWarningLines(summary, 5)).toEqual([]);
+    expect(pageWarningLines(summary, 9)).toEqual([]);
+  });
+
+  it("marks every warning and nothing else, as a record over PageFinding", () => {
+    expect(Object.keys(FINDING_MARK).sort()).toEqual([...PAGE_FINDINGS].sort());
+    for (const finding of PAGE_FINDINGS) {
+      if (WARNING_FINDINGS.includes(finding)) {
+        expect(FINDING_MARK[finding]).toMatch(/^[a-z ]+$/);
+      } else {
+        expect(FINDING_MARK[finding]).toBeNull();
+      }
+    }
+  });
+
+  it("marks a page by its first warning in PAGE_FINDINGS order", () => {
+    expect(pageMark(summary, 1)).toBeNull();
+    expect(pageMark(summary, 2)).toBe("scan");
+    expect(pageMark(summary, 3)).toBeNull();
+    expect(pageMark(summary, 4)).toBe("covered");
+    expect(pageMark(summary, 5)).toBeNull();
   });
 });
 

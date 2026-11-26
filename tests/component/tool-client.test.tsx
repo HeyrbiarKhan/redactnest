@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToolClient } from "@/app/tool/tool-client";
 import { config } from "@/config";
-import { IDLE_STEPS, PHASE_TEXT } from "@/lib/flow-text";
+import { PHASE_TEXT } from "@/lib/flow-text";
 import {
   asMatchId,
   EngineError,
@@ -91,6 +91,13 @@ vi.mock("@/lib/entitlement", () => ({
     mocks.answerListeners.add(listener);
     return () => mocks.answerListeners.delete(listener);
   },
+  // The header's account slot (spec 0026 child 0001): signed out here.
+  browserSignedIn: () => false,
+  // One object, as the store keeps it, so it can be a snapshot.
+  readIdentity: (
+    (identity) => () =>
+      identity
+  )(Object.freeze({ state: "pending", email: null })),
 }));
 
 // Every other value is the real config; whether billing is on is the test's.
@@ -169,6 +176,7 @@ function openedSession(jobId = "job"): OpenedSession {
     matches: [],
     redact: vi.fn(),
     findTerms: vi.fn(),
+    draw: vi.fn(),
     cancel: vi.fn(),
     release: vi.fn(),
   };
@@ -952,11 +960,10 @@ describe("the plan, said out loud (spec 0012, AC-5 and AC-6)", () => {
 
       expect(card).not.toHaveClass("sr-only");
       expect(card).toHaveClass(
-        "rounded-xl",
+        "rounded-control",
         "border",
         "border-info-border",
         "bg-info-bg",
-        "p-5",
       );
       expect(card.querySelector("svg")).toBeNull();
       expect(card.querySelector(".sr-only:not(a .sr-only)")).toBeNull();
@@ -1399,9 +1406,7 @@ describe("the redaction path (spec 0004)", () => {
 
     expect(screen.queryByTestId("redact")).not.toBeInTheDocument();
     expect(screen.getByTestId("cancel")).toBeInTheDocument();
-    expect(screen.getByTestId("progress")).toHaveTextContent(
-      "Checking every page of your clean file…",
-    );
+    expect(screen.getByTestId("progress")).toHaveTextContent("Checking every page…");
   });
 
   it("shows what was removed, left and stripped, and a Download button, when the run completes", async () => {
@@ -2372,6 +2377,14 @@ describe("the redact flow (spec 0007)", () => {
     return Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
   }
 
+  /** The grid's template from `lg`, as `toolGridAreas` set it (spec 0026, AC-12). */
+  function templateOf(grid: HTMLElement): { columns: string; areas: string } {
+    return {
+      columns: grid.style.getPropertyValue("--tool-columns"),
+      areas: grid.style.getPropertyValue("--tool-areas"),
+    };
+  }
+
   function box(name: string): HTMLElement {
     return screen.getByRole("checkbox", { name });
   }
@@ -2616,50 +2629,70 @@ describe("the redact flow (spec 0007)", () => {
     });
 
     /**
-     * AC-14 and AC-16: one template while nothing is open, another with a
-     * file. From `reviewing` on, the polite region heads the rail column over
-     * B, and B's row takes the rest of the list's height.
+     * Spec 0026, AC-12: A beside B while nothing is open; with a document on
+     * the page, one centred column of the areas that hold something, with B
+     * shown as `contents` so its head and its panel are placed apart. The
+     * template travels as custom properties (`toolGridAreas`), which jsdom
+     * keeps on the grid's style; `design-system.spec.ts` measures the boxes.
      */
-    it("lays A beside B while nothing is open, then A across the top with C left of the region and B", async () => {
+    it("stacks A over B while nothing is open, then one column of L and C with B as contents", async () => {
       const run = controllable();
       mocks.openSession.mockResolvedValue(run.session);
       render(<ToolClient />);
       const grid = screen.getByTestId("tool-grid");
       expect(grid).toHaveClass(
-        "@min-[61rem]:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]",
-        "@min-[61rem]:[grid-template-areas:'a_b']",
+        "@min-[61rem]:[grid-template-columns:var(--tool-columns)]",
+        "@min-[61rem]:[grid-template-areas:var(--tool-areas)]",
+        "@min-[61rem]:justify-center",
       );
+      expect(templateOf(grid)).toEqual({
+        columns: "minmax(0, 44rem)",
+        areas: "'a' 'b'",
+      });
+      expect(screen.getByTestId("area-rail")).toHaveClass("@min-[61rem]:[grid-area:b]");
+      expect(screen.getByTestId("area-rail")).not.toHaveClass("@min-[61rem]:contents");
 
       await chooseFile(pdfFile());
       await screen.findByTestId("review");
-      expect(grid).toHaveClass(
-        "@min-[61rem]:[grid-template-areas:'a_a'_'c_l'_'c_b']",
-        "@min-[61rem]:grid-rows-[auto_auto_1fr]",
+      // Billing is off and nothing was refused, so B's head is empty and
+      // hidden; the file bar is in the header (spec 0026 child 0001, AC-30),
+      // so A is empty and hidden too, with no row.
+      expect(templateOf(grid)).toEqual({
+        columns: "minmax(0, 44rem)",
+        areas: "'l' 'c'",
+      });
+      expect(screen.getByTestId("area-document")).not.toBeVisible();
+      expect(screen.getByTestId("area-rail-head")).not.toBeVisible();
+      expect(screen.getByTestId("area-rail")).toHaveClass("@min-[61rem]:contents");
+      expect(screen.getByTestId("area-rail")).not.toHaveClass(
+        "@min-[61rem]:[grid-area:b]",
       );
-      expect(grid).not.toHaveClass("@min-[61rem]:[grid-template-areas:'a_b']");
+      expect(screen.getByTestId("area-rail-head")).toHaveClass(
+        "@min-[61rem]:[grid-area:h]",
+      );
       expect(screen.getByTestId("area-live")).toHaveClass("@min-[61rem]:[grid-area:l]");
       expect(screen.getByTestId("area-live")).toContainElement(
         screen.getByRole("region", { name: "Document opened" }),
       );
+      // Measured again at the preview's 26.25rem column (spec 0026 child 0002).
+      expect(grid.style.getPropertyValue("--tool-panel-room")).toBe("17rem");
     });
 
-    /** AC-15: the idle rail, in order. */
-    it("holds the plan card, the three steps and the lock line in the idle rail", () => {
+    /**
+     * AC-15, as the empty state's port has it (`ToolStates.dc.html`, the
+     * owner's call, 2026-11-26): the drop zone alone, then under it the plan
+     * card and the lock line, with no steps.
+     */
+    it("holds the plan card and the lock line in the idle rail, with no steps", () => {
       mocks.billingEnabled = true;
       render(<ToolClient />);
       answerWith(FREE);
 
       const rail = screen.getByTestId("area-rail");
-      const steps = within(rail).getByRole("list");
-      expect(
-        within(steps)
-          .getAllByRole("listitem")
-          .map((item) => item.textContent),
-      ).toEqual(["1Open a PDF", "2Tick what to remove", "3Download your new file"]);
+      expect(within(rail).queryByRole("list")).toBeNull();
       const order = [
         screen.getByTestId("area-live"),
         screen.getByTestId("plan-card"),
-        steps,
         screen.getByTestId("lock-line"),
       ];
       for (let at = 1; at < order.length; at += 1) {
@@ -2668,7 +2701,9 @@ describe("the redact flow (spec 0007)", () => {
       expect(screen.getByTestId("lock-line")).toHaveTextContent(
         "Your file never leaves your browser.",
       );
-      expect(rail.lastElementChild).toBe(screen.getByTestId("lock-line"));
+      expect(screen.getByTestId("area-rail-head").lastElementChild).toBe(
+        screen.getByTestId("lock-line"),
+      );
     });
 
     /**
@@ -2680,18 +2715,12 @@ describe("the redact flow (spec 0007)", () => {
      * jsdom lays nothing out, so this holds the classes and
      * `design-system.spec.ts` measures the boxes.
      */
-    it("centres the idle steps and the lock line until the grid is wide, after a failed open too", async () => {
+    it("centres the idle lock line at every width, after a failed open too", async () => {
       mocks.openSession.mockRejectedValue(new EngineError("corrupt"));
       render(<ToolClient />);
       const expectCentred = () => {
-        expect(within(screen.getByTestId("area-rail")).getByRole("list")).toHaveClass(
-          "mx-auto",
-          "w-fit",
-          "@min-[61rem]:mx-0",
-          "@min-[61rem]:w-auto",
-        );
-        expect(screen.getByTestId("lock-line")).toHaveClass(
-          "justify-center",
+        expect(screen.getByTestId("lock-line")).toHaveClass("justify-center");
+        expect(screen.getByTestId("lock-line")).not.toHaveClass(
           "@min-[61rem]:justify-start",
         );
       };
@@ -2720,7 +2749,7 @@ describe("the redact flow (spec 0007)", () => {
       await screen.findByTestId("progress");
 
       const line = screen.getByTestId("lock-line");
-      expect(screen.getByTestId("area-rail").lastElementChild).toBe(line);
+      expect(screen.getByTestId("area-rail-head").lastElementChild).toBe(line);
       expect(line.className).not.toMatch(/justify-/);
     });
 
@@ -2761,42 +2790,62 @@ describe("the redact flow (spec 0007)", () => {
       const grid = screen.getByTestId("tool-grid");
       const polite = screen.getByTestId("area-live");
       expect(polite).toHaveClass("sr-only");
-      expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_b']");
+      expect(templateOf(grid).areas).toBe("'a' 'b'");
 
       await chooseFile(pdfFile());
 
       expect(polite).toHaveTextContent("Checking your plan…");
       expect(polite).not.toHaveClass("sr-only");
-      expect(grid).toHaveClass(
-        "@min-[61rem]:[grid-template-areas:'a_l'_'a_b']",
-        "@min-[61rem]:grid-rows-[auto_1fr]",
-      );
+      expect(templateOf(grid).areas).toBe("'a' 'l' 'b'");
+      expect(grid.style.getPropertyValue("--tool-rows")).toBe("none");
     });
 
     /**
-     * AC-16 and AC-17: the lock line rides inside the action panel, the
-     * rail's last block, sticky from `lg` only; the result card takes the
-     * panel's place, never sticky, with the lock line after it.
+     * Spec 0026, AC-12: the lock line rides inside the action panel, B's last
+     * block after its head, placed in C's area at its end and sticky to the
+     * window's foot from `lg` in a tall window only, with C keeping the room
+     * it rests in; the result card takes the head, never sticky, with the
+     * lock line after it.
      */
-    it("carries the lock line in the sticky action panel, and after the result card", async () => {
+    it("carries the lock line in the action panel at the list's foot, and after the result card", async () => {
       const run = controllable();
       await openFlow(run.session);
       const rail = screen.getByTestId("area-rail");
+      const head = screen.getByTestId("area-rail-head");
       const panel = screen.getByTestId("action-panel");
 
       expect(rail.lastElementChild).toBe(panel);
+      expect(head.nextElementSibling).toBe(panel);
       expect(panel).toContainElement(screen.getByTestId("lock-line"));
       expect(screen.getAllByTestId("lock-line")).toHaveLength(1);
-      expect(panel).toHaveClass("@min-[61rem]:sticky", "@min-[61rem]:top-6");
-      expect(panel.className).not.toMatch(/(^|\s)(sticky|top-6)(\s|$)/);
+      expect(panel).toHaveClass(
+        "@min-[61rem]:[grid-area:c]",
+        "@min-[61rem]:self-end",
+        "@min-[61rem]:tall:sticky",
+        "@min-[61rem]:tall:bottom-0",
+        "bg-surface",
+        "border-border",
+      );
+      expect(panel.className).not.toMatch(/(^|\s)(sticky|bottom-0|top-6)(\s|$)/);
+      expect(panel.className).not.toMatch(/shadow/);
+      expect(screen.getByTestId("area-found")).toHaveClass(
+        "@min-[61rem]:pb-[var(--tool-panel-room)]",
+      );
+      expect(screen.getByTestId("tool-grid")).toHaveAttribute("data-panel");
 
       await userEvent.setup().click(screen.getByTestId("redact"));
       await run.finish();
 
       const result = screen.getByTestId("result");
       expect(result.className).not.toMatch(/sticky/);
-      expect(rail.lastElementChild).toBe(screen.getByTestId("lock-line"));
+      expect(head).toContainElement(result);
+      expect(head.lastElementChild).toBe(screen.getByTestId("lock-line"));
       expect(before(result, screen.getByTestId("lock-line"))).toBe(true);
+      expect(screen.getByTestId("area-found")).not.toHaveClass(
+        "@min-[61rem]:pb-[var(--tool-panel-room)]",
+      );
+      expect(screen.getByTestId("tool-grid")).not.toHaveAttribute("data-panel");
+      expect(templateOf(screen.getByTestId("tool-grid")).areas).toBe("'l' 'h' 'c'");
     });
 
     /** AC-19: one card, titled Found items, counting every row found. */
@@ -2813,7 +2862,9 @@ describe("the redact flow (spec 0007)", () => {
     /**
      * Spec 0013, AC-16, with billing on, so the plan card takes its place:
      * file bar, document card, plan card, run refusal, action panel, then the
-     * list, each in its own area. The test above runs with billing off.
+     * list, each in its own area. The test above runs with billing off. The
+     * file bar is in the header, first in the page (spec 0026 child 0001,
+     * AC-30).
      */
     it("reads file bar, document, plan card, refusal, action panel, then the list, with billing on (AC-16)", async () => {
       mocks.billingEnabled = true;
@@ -2835,7 +2886,8 @@ describe("the redact flow (spec 0007)", () => {
         expect(before(order[at - 1], order[at])).toBe(true);
       }
       const [fileBar, document, plan, refusal, panel, list] = order;
-      expect(screen.getByTestId("area-document")).toContainElement(fileBar);
+      expect(screen.getByRole("banner")).toContainElement(fileBar);
+      expect(screen.getByTestId("area-document")).not.toBeVisible();
       // The document card in the polite region, which heads the rail column.
       expect(screen.getByTestId("area-live")).toContainElement(document);
       const rail = screen.getByTestId("area-rail");
@@ -2843,6 +2895,8 @@ describe("the redact flow (spec 0007)", () => {
         expect(rail).toContainElement(block);
       }
       expect(rail.lastElementChild).toBe(panel);
+      expect(screen.getByTestId("area-rail-head")).toContainElement(refusal);
+      expect(templateOf(screen.getByTestId("tool-grid")).areas).toBe("'l' 'h' 'c'");
       expect(screen.getByTestId("area-found")).toContainElement(list);
     });
 
@@ -2858,7 +2912,9 @@ describe("the redact flow (spec 0007)", () => {
       const lost = screen.getByTestId("lost");
       expect(rail).toContainElement(lost);
       expect(before(screen.getByTestId("plan-card"), lost)).toBe(true);
-      expect(rail.lastElementChild).toBe(screen.getByTestId("lock-line"));
+      expect(screen.getByTestId("area-rail-head").lastElementChild).toBe(
+        screen.getByTestId("lock-line"),
+      );
       expect(screen.getAllByTestId("lock-line")).toHaveLength(1);
       // Nothing left to review, so no list and no action panel.
       expect(screen.queryByTestId("area-found")).not.toBeInTheDocument();
@@ -2866,9 +2922,9 @@ describe("the redact flow (spec 0007)", () => {
     });
 
     /**
-     * AC-15: after a failed open the page is laid out as at idle, A beside B,
+     * AC-15: after a failed open the page is laid out as at idle, A over B,
      * the failure above the full drop zone in A, and the rail still showing
-     * the three steps and the lock line.
+     * the lock line, with no steps (the owner's call, 2026-11-26).
      */
     it("lays a failed open out as idle, the failure in the document area (AC-15)", async () => {
       mocks.openSession.mockRejectedValue(new EngineError("corrupt"));
@@ -2877,7 +2933,7 @@ describe("the redact flow (spec 0007)", () => {
 
       const error = await screen.findByTestId("error");
       const grid = screen.getByTestId("tool-grid");
-      expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_b']");
+      expect(templateOf(grid).areas).toBe("'a' 'b'");
       expect([...grid.children].map((area) => area.getAttribute("data-testid"))).toEqual([
         "area-document",
         "area-live",
@@ -2885,27 +2941,31 @@ describe("the redact flow (spec 0007)", () => {
       ]);
       expect(screen.getByTestId("area-document")).toContainElement(error);
       const rail = screen.getByTestId("area-rail");
-      expect(within(rail).getAllByRole("listitem")).toHaveLength(IDLE_STEPS.length);
-      expect(rail.lastElementChild).toBe(screen.getByTestId("lock-line"));
+      expect(within(rail).queryByRole("list")).toBeNull();
+      expect(screen.getByTestId("area-rail-head").lastElementChild).toBe(
+        screen.getByTestId("lock-line"),
+      );
     });
 
     /**
-     * AC-16, as feature 26 changes it: while a file opens, the file bar takes
-     * A, the list is not there yet, and the spinner and the phase line sit in
-     * the left column, in the polite region, rather than in the rail beside an
-     * empty column.
+     * AC-16, as feature 26 changes it: while a file opens, the list is not
+     * there yet, and the spinner and the phase line sit in the polite region,
+     * rather than in the rail beside an empty column. The file bar is in the
+     * header, so A is empty and hidden (spec 0026 child 0001, AC-30).
      */
-    it("lays the page out for a document while it opens, the phase line left of the rail (AC-16)", async () => {
+    it("lays the page out for a document while it opens, the phase line under the file bar (AC-16)", async () => {
       mocks.openSession.mockImplementation(hangsAt("opening"));
       render(<ToolClient />);
       await chooseFile(pdfFile());
       const progress = await screen.findByTestId("progress");
 
       const grid = screen.getByTestId("tool-grid");
-      expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_a'_'l_b']");
-      expect(screen.getByTestId("area-document")).toContainElement(
-        screen.getByTestId("file-bar"),
-      );
+      expect(templateOf(grid)).toEqual({
+        columns: "minmax(0, 44rem)",
+        areas: "'l' 'h'",
+      });
+      expect(screen.getByRole("banner")).toContainElement(screen.getByTestId("file-bar"));
+      expect(screen.getByTestId("area-document")).not.toBeVisible();
       const polite = screen.getByTestId("area-live");
       expect(polite).toContainElement(progress);
       expect(polite).not.toHaveClass("sr-only");
@@ -2921,7 +2981,7 @@ describe("the redact flow (spec 0007)", () => {
      * node from the first phase to the document card, and focus stays on the
      * file bar's button while the line changes beside it.
      */
-    it("says each phase of an open once, in the same region left of the rail, with focus left on the file bar (AC-16, AC-20)", async () => {
+    it("says each phase of an open once, in the same region under the file bar, with focus left on the file bar (AC-16, AC-20)", async () => {
       let report: ((phase: ProgressPhase) => void) | undefined;
       let land: (session: OpenedSession) => void = () => {};
       mocks.openSession.mockImplementation(
@@ -2950,9 +3010,10 @@ describe("the redact flow (spec 0007)", () => {
       ] as const) {
         await act(async () => report?.(phase));
         expect(screen.getByTestId("area-live")).toBe(polite);
-        expect(polite.textContent).toBe(`${PHASE_TEXT[phase]}…`);
+        // The region's line; the progress card beside it is `aria-live="off"`.
+        expect(screen.getByTestId("progress").textContent).toBe(`${PHASE_TEXT[phase]}…`);
         expect(screen.getAllByTestId("progress")).toHaveLength(1);
-        expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_a'_'l_b']");
+        expect(templateOf(grid).areas).toBe("'l' 'h'");
         expect(chooseAnother()).toHaveFocus();
       }
 
@@ -2983,7 +3044,8 @@ describe("the redact flow (spec 0007)", () => {
       await fireEngineLost();
 
       const lost = await screen.findByTestId("lost");
-      expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_a'_'l_b']");
+      // L is quiet, so it leaves the template; the head holds the callout.
+      expect(templateOf(grid).areas).toBe("'h'");
       expect(screen.getByTestId("area-rail")).toContainElement(lost);
       expect(screen.getByTestId("area-live")).toBe(polite);
       expect(polite).toBeEmptyDOMElement();
@@ -3010,14 +3072,14 @@ describe("the redact flow (spec 0007)", () => {
       const grid = screen.getByTestId("tool-grid");
       const polite = screen.getByTestId("area-live");
       const documentCard = screen.getByRole("region", { name: "Document opened" });
-      const REVIEW = "@min-[61rem]:[grid-template-areas:'a_a'_'c_l'_'c_b']";
       const user = userEvent.setup();
 
       await user.click(screen.getByTestId("redact"));
       await run.progress("redacting");
 
       const progress = screen.getByTestId("progress");
-      expect(grid).toHaveClass(REVIEW);
+      // Billing off: the head is empty while the run works.
+      expect(templateOf(grid).areas).toBe("'l' 'c'");
       expect(screen.getByTestId("area-live")).toBe(polite);
       expect(polite).toContainElement(progress);
       expect(screen.getByRole("region", { name: "Document opened" })).toBe(documentCard);
@@ -3025,17 +3087,119 @@ describe("the redact flow (spec 0007)", () => {
       expect(screen.getAllByTestId("progress")).toHaveLength(1);
 
       await run.finish();
-      expect(grid).toHaveClass(REVIEW);
+      expect(templateOf(grid).areas).toBe("'l' 'h' 'c'");
       expect(screen.getByTestId("area-live")).toBe(polite);
       expect(screen.queryByTestId("progress")).not.toBeInTheDocument();
 
       await user.click(screen.getByTestId("download"));
       await user.click(screen.getByTestId("redact-another"));
 
-      expect(grid).toHaveClass("@min-[61rem]:[grid-template-areas:'a_b']");
+      expect(templateOf(grid).areas).toBe("'a' 'b'");
       expect(screen.getByTestId("area-live")).toBe(polite);
       expect(polite).toBeEmptyDOMElement();
       expect(polite).toHaveClass("sr-only");
+    });
+
+    /**
+     * Spec 0026, AC-12, *B in two parts*: B's head is rendered from the first
+     * render in every step, so splitting B never remounts it or the plan
+     * card's region, and B carries no role, which `display: contents` could
+     * drop.
+     */
+    it("keeps B, its head and the plan card's region the same nodes from idle to complete", async () => {
+      mocks.billingEnabled = true;
+      const run = controllable();
+      mocks.openSession.mockResolvedValue(run.session);
+      render(<ToolClient />);
+      answerWith(FREE);
+      const rail = screen.getByTestId("area-rail");
+      const head = screen.getByTestId("area-rail-head");
+      const plan = screen.getByRole("status");
+      const same = () => {
+        expect(screen.getByTestId("area-rail")).toBe(rail);
+        expect(screen.getByTestId("area-rail-head")).toBe(head);
+        expect(screen.getByRole("status")).toBe(plan);
+        expect(rail.firstElementChild).toBe(head);
+        expect(head).toContainElement(plan);
+        expect(head).toBeVisible();
+        expect(rail).not.toHaveAttribute("role");
+        expect(rail).not.toHaveAttribute("aria-label");
+      };
+      same();
+
+      await chooseFile(pdfFile());
+      await screen.findByTestId("review");
+      same();
+
+      await userEvent.setup().click(screen.getByTestId("redact"));
+      await run.finish();
+      expect(screen.getByTestId("result")).toBeInTheDocument();
+      same();
+    });
+
+    /** Spec 0026, AC-12: Untick all, in the action panel beside the count. */
+    it("unticks every row with Untick all, keeps focus on it, and leaves it unavailable", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      const user = userEvent.setup();
+      const untick = screen.getByRole("button", { name: "Untick all" });
+      expect(screen.getByTestId("action-panel")).toContainElement(untick);
+      expect(untick).not.toHaveAttribute("aria-disabled", "true");
+
+      await user.click(untick);
+
+      expect(screen.getByTestId("tick-count")).toHaveTextContent(
+        "Nothing is ticked, so nothing will be removed.",
+      );
+      expect(screen.getByTestId("redact")).toHaveTextContent("Make a cleaned copy");
+      expect(untick).toHaveFocus();
+      expect(untick).toHaveAttribute("aria-disabled", "true");
+
+      await user.click(box("ann@example.com"));
+      expect(untick).not.toHaveAttribute("aria-disabled", "true");
+      await user.click(screen.getByTestId("redact"));
+      // No tick can change while a run works, so it goes.
+      expect(screen.queryByTestId("untick-all")).not.toBeInTheDocument();
+      await run.finish();
+    });
+
+    /** Spec 0026, AC-12: a refusal links to why RedactNest stops; a lost worker does not. */
+    it("links a run refusal to why RedactNest stops, and a lost worker to nothing", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      await userEvent.setup().click(screen.getByTestId("redact"));
+      await run.refuse("slanted-text");
+
+      const link = within(screen.getByTestId("run-refusal")).getByRole("link", {
+        name: "Why RedactNest stops",
+      });
+      expect(link).toHaveAttribute("href", "/security#when-it-stops");
+
+      await fireEngineLost();
+      expect(
+        within(screen.getByTestId("lost")).queryByRole("link"),
+      ).not.toBeInTheDocument();
+    });
+
+    /** Spec 0026, AC-12: the result card's three counts and the file's name. */
+    it("shows the three counts at a glance and the file's name under Download", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      await userEvent.setup().click(screen.getByTestId("redact"));
+      await run.finish();
+
+      const stats = screen.getByTestId("result-stats");
+      // Two emails removed; the phone left unticked and the blocked email
+      // left in; document info stripped.
+      expect([...stats.children].map((pair) => pair.textContent)).toEqual([
+        "removed2",
+        "left in2",
+        "stripped1",
+      ]);
+      expect(screen.getByTestId("output-name")).toHaveTextContent(/^report.*\.pdf$/);
+      expect(
+        within(screen.getByTestId("result")).getByRole("heading", { level: 2 }),
+      ).toHaveTextContent(/^Your redacted file is ready$/);
     });
 
     /**
@@ -3081,7 +3245,7 @@ describe("the redact flow (spec 0007)", () => {
       await user.click(screen.getByTestId("redact"));
       await run.progress("redacting");
       expect(screen.getByTestId("progress")).toHaveTextContent(
-        "Stripping hidden content…",
+        "Stripping document info and attachments…",
       );
       // One phase line, in the polite region.
       expect(screen.getAllByTestId("progress")).toHaveLength(1);
@@ -3188,32 +3352,39 @@ describe("the redact flow (spec 0007)", () => {
   });
 
   /**
-   * Spec 0013, AC-16 and AC-20, feature 28: the *Opening phase line*
-   * scenario. While a document opens, the polite region holds the left
-   * column, so its line is stacked, a large spinner over centred words, and
-   * the region centres it down the room beside the rail. Every other phase
-   * line keeps the small spinner beside its words. jsdom computes no layout,
-   * so the form is proved by its classes here and measured in
-   * `design-system.spec.ts`.
+   * Spec 0026, child 0003, AC-31 to AC-35: while a document opens or a run
+   * works, the progress card in L shows the steps over the phases the worker
+   * already sends. It sits inside the polite region's area but is
+   * `aria-live="off"`, so the region still says only the phase line, once per
+   * phase, which is visually hidden while the card shows the same words.
    */
-  describe("the opening phase line (spec 0013, AC-16, AC-20)", () => {
-    // `items-center` is in both forms: across in the column, down in the row.
-    const STACKED_ONLY = ["flex-col", "text-center"] as const;
+  describe("the progress card (spec 0026, child 0003)", () => {
+    /** Each step as a screen reader reads it: its label, then its state. */
+    const stepsOf = () =>
+      within(screen.getByTestId("progress-steps"))
+        .getAllByRole("listitem")
+        .map((item) => item.textContent);
 
-    function expectStacked(progress: HTMLElement): void {
-      expect(progress).toHaveClass(...STACKED_ONLY, "items-center");
-      expect(within(progress).getByTestId("spinner")).toHaveClass("size-10");
-      expect(screen.getByTestId("area-live")).toHaveClass("justify-center");
+    /** What the polite region says, leaving out the card it does not announce. */
+    const said = (polite: HTMLElement) => {
+      const copy = polite.cloneNode(true) as HTMLElement;
+      for (const quiet of copy.querySelectorAll('[aria-live="off"]')) quiet.remove();
+      return copy.textContent ?? "";
+    };
+
+    function expectCard(title: string): HTMLElement {
+      const card = screen.getByTestId("progress-card");
+      const polite = screen.getByTestId("area-live");
+      expect(polite).toContainElement(card);
+      expect(card).toHaveAttribute("aria-live", "off");
+      expect(card).toHaveTextContent(title);
+      // The region's own copy of the line is there, hidden from the eye only.
+      expect(screen.getByTestId("progress")).toHaveClass("sr-only");
+      expect(screen.getAllByTestId("progress")).toHaveLength(1);
+      return card;
     }
 
-    function expectRow(progress: HTMLElement): void {
-      for (const stacked of STACKED_ONLY) expect(progress).not.toHaveClass(stacked);
-      expect(progress).toHaveClass("items-center");
-      expect(within(progress).getByTestId("spinner")).toHaveClass("size-5");
-      expect(screen.getByTestId("area-live")).not.toHaveClass("justify-center");
-    }
-
-    it("stacks a large spinner over the line, centred in the region, in every phase of an open", async () => {
+    it("shows the open's steps, the latest phase current, in every phase of an open (AC-33, AC-34)", async () => {
       let report: ((phase: ProgressPhase) => void) | undefined;
       mocks.openSession.mockImplementation(
         ({ onProgress }: { onProgress?: (phase: ProgressPhase) => void }) => {
@@ -3224,40 +3395,80 @@ describe("the redact flow (spec 0007)", () => {
       render(<ToolClient />);
       await chooseFile(pdfFile());
 
-      for (const phase of [
-        "loading-engine",
-        "opening",
-        "inspecting",
-        "detecting",
-      ] as const) {
+      const phases = ["loading-engine", "opening", "inspecting", "detecting"] as const;
+      for (const [at, phase] of phases.entries()) {
         await act(async () => report?.(phase));
 
-        const progress = screen.getByTestId("progress");
-        expect(progress).toHaveTextContent(`${PHASE_TEXT[phase]}…`);
-        expectStacked(progress);
-        // The spinner first, then the words, so the line sits under it.
-        expect(progress.firstElementChild).toBe(within(progress).getByTestId("spinner"));
-        expect(progress.lastElementChild).toHaveTextContent(`${PHASE_TEXT[phase]}…`);
+        expectCard("Opening…");
+        expect(screen.getByTestId("progress")).toHaveTextContent(`${PHASE_TEXT[phase]}…`);
+        expect(stepsOf()).toEqual(
+          phases.map(
+            (step, index) =>
+              `${PHASE_TEXT[step]}, ${index < at ? "done" : index === at ? "in progress" : "not started"}`,
+          ),
+        );
       }
     });
 
-    it("drops the region's centring once the review opens", async () => {
-      await openFlow(controllable().session);
+    it("shows a skipped phase as done once a later one arrives (AC-34)", async () => {
+      mocks.openSession.mockImplementation(hangsAt("opening"));
+      render(<ToolClient />);
+      await chooseFile(pdfFile());
+      await screen.findByTestId("progress-card");
 
-      expect(screen.queryByTestId("progress")).not.toBeInTheDocument();
-      expect(screen.getByTestId("area-live")).not.toHaveClass("justify-center");
+      expect(stepsOf().slice(0, 2)).toEqual([
+        `${PHASE_TEXT["loading-engine"]}, done`,
+        `${PHASE_TEXT.opening}, in progress`,
+      ]);
     });
 
-    it("keeps the small spinner beside a run's line, at the head of the rail", async () => {
+    it("shows the run's three steps, and a run with nothing ticked strips first (AC-32)", async () => {
       const run = controllable();
       await openFlow(run.session);
+      const user = userEvent.setup();
+
+      await user.click(screen.getByTestId("redact"));
+      await run.progress("redacting");
+      expectCard("Redacting…");
+      expect(stepsOf()).toEqual([
+        "Removing what you ticked, in progress",
+        "Writing your new file, not started",
+        "Checking every page, not started",
+      ]);
+
+      await run.progress("verifying");
+      expect(stepsOf()).toEqual([
+        "Removing what you ticked, done",
+        "Writing your new file, done",
+        "Checking every page, in progress",
+      ]);
+      // Two of three steps done: the bar is never full for a run still working.
+      const bar = screen
+        .getByTestId("progress-steps")
+        .querySelector<HTMLElement>('[aria-hidden="true"] > div');
+      expect(bar?.style.width).toBe("67%");
+
+      // AC-35: Cancel where it was, and the card gives way at once.
+      await user.click(screen.getByTestId("cancel"));
+      expect(screen.queryByTestId("progress-card")).not.toBeInTheDocument();
+
+      await user.click(box("ann@example.com"));
+      await user.click(box("bob@example.com"));
+      await user.click(screen.getByTestId("redact"));
+      await run.progress("redacting");
+      expect(stepsOf()[0]).toBe("Stripping document info and attachments, in progress");
+    });
+
+    it("leaves no card once the review opens, nor after a run completes (AC-35)", async () => {
+      const run = controllable();
+      await openFlow(run.session);
+      expect(screen.queryByTestId("progress-card")).not.toBeInTheDocument();
 
       await userEvent.setup().click(screen.getByTestId("redact"));
-      await run.progress("redacting");
-
-      const progress = screen.getByTestId("progress");
-      expect(progress).toHaveTextContent("Removing what you ticked…");
-      expectRow(progress);
+      await run.progress("writing");
+      expect(screen.getByTestId("progress-card")).toBeInTheDocument();
+      await run.finish();
+      expect(screen.queryByTestId("progress-card")).not.toBeInTheDocument();
     });
 
     it("keeps the small spinner beside the reload line of a document not loaded at /tool", () => {
@@ -3266,18 +3477,18 @@ describe("the redact flow (spec 0007)", () => {
 
       const progress = screen.getByTestId("progress");
       expect(progress).toHaveTextContent("Loading the tool…");
-      for (const stacked of STACKED_ONLY) expect(progress).not.toHaveClass(stacked);
+      expect(progress).not.toHaveClass("sr-only");
       expect(within(progress).getByTestId("spinner")).toHaveClass("size-5");
+      expect(screen.queryByTestId("progress-card")).not.toBeInTheDocument();
     });
 
     /**
-     * A file chosen while "Checking your plan" shows: the plan check is the
-     * idle row form, over the rail, then the first phase arrives stacked. The
-     * region's words are held in order, each once. The `progress` node is not
-     * held: an open replaces it today (AC-16, Follow-up), so this case neither
-     * pins that gap nor fails once it is closed.
+     * A file chosen while "Checking your plan" shows: the page is still idle,
+     * so the plan check is the visible row line and no card; then the first
+     * phase brings the card. The region says each line once, in that order,
+     * and never a step's state (AC-31).
      */
-    it("says Checking your plan in the row form, then the first phase stacked, each once and in that order", async () => {
+    it("says Checking your plan as a row, then the first phase with the card, each once and in that order", async () => {
       let answer: (snapshot: EntitlementSnapshot) => void = () => {};
       mocks.getEntitlement.mockImplementation(
         ({ onWaiting }: { onWaiting?: () => void }) => {
@@ -3298,19 +3509,20 @@ describe("the redact flow (spec 0007)", () => {
       const polite = screen.getByTestId("area-live");
       const heard: string[] = [];
       const observer = new MutationObserver(() => {
-        const words = polite.textContent ?? "";
+        const words = said(polite);
         if (words !== "" && words !== heard.at(-1)) heard.push(words);
       });
       observer.observe(polite, { childList: true, subtree: true, characterData: true });
 
       await chooseFile(pdfFile());
-      expectRow(screen.getByTestId("progress"));
+      expect(screen.getByTestId("progress")).not.toHaveClass("sr-only");
+      expect(screen.queryByTestId("progress-card")).not.toBeInTheDocument();
 
       await act(async () => answer(FREE));
       await act(async () => report?.("loading-engine"));
       observer.disconnect();
 
-      expectStacked(screen.getByTestId("progress"));
+      expectCard("Opening…");
       expect(heard).toEqual(["Checking your plan…", `${PHASE_TEXT["loading-engine"]}…`]);
     });
   });

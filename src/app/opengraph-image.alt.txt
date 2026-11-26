@@ -1,1 +1,1 @@
-RedactNest. PDF redaction in your browser. Redaction that actually removes the text.
+RedactNest. Runs in your browser. Never uploaded. Redaction that actually removes the text.

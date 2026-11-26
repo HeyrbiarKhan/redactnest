@@ -675,13 +675,44 @@ describe("the security page", () => {
     const hidden = sectionText(SECURITY_SECTIONS.hiddenData);
     expect(hidden).not.toContain("such as a photo’s camera details, can stay.");
     expect(hidden.split("can take apart").length - 1).toBe(1);
-    expect(SECURITY_CHANGES[0].date).toBe("2026-11-25");
-    expect(SECURITY_CHANGES[0].summary).toContain(
+    const pictureEntry = SECURITY_CHANGES.find((entry) => entry.date === "2026-11-25");
+    expect(pictureEntry?.summary).toContain(
       "the check fails any file in which such a picture still holds a part it would drop",
     );
-    expect(SECURITY_CHANGES[0].summary).toContain(
+    expect(pictureEntry?.summary).toContain(
       "They can still stay in a picture it leaves as stored.",
     );
+  });
+
+  /**
+   * covers: spec 0026 child 0002, AC-56. After the worker paragraph, the
+   * preview's three things: the worker draws the pictures and the boxes, no
+   * step of the page puts them in a link or sends them, and nothing drawn
+   * goes back to the worker. "When it ends" says the page lets go of the
+   * pictures, and the newest change entry, dated the build day, says both.
+   */
+  it("says what the page preview draws, where it goes, and when it ends", () => {
+    render(<SecurityPage />);
+    const browser = sectionText(SECURITY_SECTIONS.inYourBrowser);
+    const worker = browser.indexOf("runs inside that worker too.");
+    const preview = browser.indexOf(
+      "On a wide screen, while you review, the worker also",
+    );
+    expect(worker).toBeGreaterThan(-1);
+    expect(preview).toBeGreaterThan(worker);
+    expect(browser).toContain("with a box where each item you can tick sits");
+    expect(browser).toContain(
+      "No step of the page puts those pictures or boxes in a link or sends them anywhere",
+    );
+    expect(browser).toContain("Nothing the page draws goes back to the worker");
+    expect(
+      browser.indexOf("The page lets go of the pictures of your pages"),
+    ).toBeGreaterThan(browser.indexOf("When it ends"));
+    expect(browser).toContain(
+      "when a run finishes, when you start over or open another PDF, and when you leave the page",
+    );
+    expect(SECURITY_CHANGES[0].date).toBe("2026-11-26");
+    expect(SECURITY_CHANGES[0].summary).toContain("Added the page preview");
   });
 
   /**

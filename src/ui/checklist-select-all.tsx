@@ -46,10 +46,9 @@ export function ChecklistSelectAll({
       <label
         htmlFor={id}
         className={cx(
-          "flex items-center gap-3 rounded-lg px-3 py-3",
+          "flex items-center gap-3 rounded-control px-3 py-3",
           // The cursor comes from the one rule in `globals.css` (spec 0013, AC-33).
-          !disabled &&
-            "transition-colors duration-150 hover:bg-canvas motion-reduce:transition-none",
+          !disabled && "transition-colors hover:bg-subtle",
         )}
       >
         <Checkbox

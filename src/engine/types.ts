@@ -12,6 +12,8 @@ import type {
   TermRemoval,
 } from "@/worker/protocol";
 
+import type { DrawnPage, DrawOptions } from "./draw";
+
 /**
  * What reading one page found, before the trim adds its two findings. Spec
  * 0006, *Data model sketch*.
@@ -237,6 +239,14 @@ export interface OpenDocument {
    * first part of a match across its end (INV-8).
    */
   findTerms(options: FindOptions): Promise<readonly FoundMatch[]>;
+  /**
+   * Draw page `pageIndex` (zero based) of this review copy as a picture, for
+   * the page preview (spec 0026 child 0002, AC-49). Reads the prepared and
+   * trimmed page and edits nothing, so it may run beside a review search and
+   * never touches a run's working copy. Throws `EngineFailure("unsupported")`
+   * on any failure, which the worker answers with no picture.
+   */
+  drawPage(pageIndex: number, options: DrawOptions): DrawnPage;
   /**
    * Release the native memory MuPDF holds.
    *

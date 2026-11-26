@@ -33,12 +33,13 @@ describe("the component test harness", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "Redaction that actually removes the text",
     );
-    // Scoped to `main`, because the header carries the same link (spec 0013, AC-7).
-    expect(
-      within(screen.getByRole("main")).getByRole("link", {
-        name: "Remove text from a PDF",
-      }),
-    ).toHaveAttribute("href", "/tool");
+    // Scoped to `main`, because the header carries the same link (spec 0013,
+    // AC-7); the hero's and the closing band's (spec 0026, AC-8).
+    for (const link of within(screen.getByRole("main")).getAllByRole("link", {
+      name: "Remove text from a PDF",
+    })) {
+      expect(link).toHaveAttribute("href", "/tool");
+    }
   });
 
   it("handles a real user interaction", async () => {

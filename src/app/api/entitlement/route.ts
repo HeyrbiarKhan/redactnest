@@ -20,6 +20,11 @@
  * `src/billing`, which reads the cookie locally and asks Polar only for a user
  * a genuine token names. Clerk's proxy never runs here (INV-1), and this route
  * never sets a cookie of its own (INV-5).
+ *
+ * Spec 0026 child 0001, AC-21: the answer also carries `email`, the address
+ * the visitor's own session token names, so the header can show who is signed
+ * in. It goes back to the browser that sent the token and nowhere else: the
+ * report below is handed the event's name alone, and nothing here logs.
  */
 
 import { cookies, headers } from "next/headers";

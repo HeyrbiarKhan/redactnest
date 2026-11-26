@@ -1,3 +1,5 @@
+import type { PageRect } from "@/worker/protocol";
+
 import type { Quad } from "./types";
 
 /**
@@ -311,6 +313,46 @@ export function quadBounds(quad: Quad): readonly [number, number, number, number
   const xs = [quad[0], quad[2], quad[4], quad[6]];
   const ys = [quad[1], quad[3], quad[5], quad[7]];
   return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+}
+
+/**
+ * A page's frame, `[x0, y0, x1, y1]`: what `page.getBounds()` gives, in the
+ * page space the target quads are in (turned and cropped as the page shows).
+ */
+export type PageFrame = readonly [number, number, number, number];
+
+/** Clamp to 0 to 1. A value that is not finite never reaches here. */
+function unit(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+/**
+ * Spec 0026 child 0002, AC-50. Each target quad as one display box on a drawn
+ * page: the quad's upright bounds, less the frame's origin, over the frame's
+ * size, each value clamped to 0 to 1. A quad with a corner that is not finite,
+ * or a frame with no area, gives no box, so nothing the preview draws can be
+ * wider than the page. Display only: these never travel back to the worker.
+ */
+export function quadRects(frame: PageFrame, quads: readonly Quad[]): readonly PageRect[] {
+  const [fx0, fy0, fx1, fy1] = frame;
+  const frameWidth = fx1 - fx0;
+  const frameHeight = fy1 - fy0;
+  if (!Number.isFinite(frameWidth) || !Number.isFinite(frameHeight)) return [];
+  if (frameWidth <= 0 || frameHeight <= 0) return [];
+
+  const rects: PageRect[] = [];
+  for (const quad of quads) {
+    if (!quad.every(Number.isFinite)) continue;
+    const [x0, y0, x1, y1] = quadBounds(quad);
+    const left = unit((x0 - fx0) / frameWidth);
+    const top = unit((y0 - fy0) / frameHeight);
+    const right = unit((x1 - fx0) / frameWidth);
+    const bottom = unit((y1 - fy0) / frameHeight);
+    rects.push(
+      Object.freeze({ x: left, y: top, width: right - left, height: bottom - top }),
+    );
+  }
+  return Object.freeze(rects);
 }
 
 /** The distance from `point` to the segment running from `a` to `b`. */

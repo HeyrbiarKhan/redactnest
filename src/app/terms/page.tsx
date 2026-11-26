@@ -21,7 +21,8 @@ import { ChangeList, ContactLink, LegalPage, SectionHeading } from "../legal-pag
  * licence that is (INV-10).
  *
  * Prerendered static, with no client component and no script of its own
- * (INV-7).
+ * (INV-7), but the shared header's account slot on a billing on build (spec
+ * 0026, child 0001, AC-25).
  */
 export const dynamic = "force-static";
 

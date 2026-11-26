@@ -222,6 +222,55 @@ export function findingLine(
 }
 
 /**
+ * The warning lines for one page alone, for the page preview's bar (spec 0026
+ * child 0002, AC-40): one per warning finding the page carries, in
+ * `PAGE_FINDINGS` order, each `FINDING_TEXT`'s `one` form naming that page,
+ * so the preview adds no words of its own. Empty for a page with no warning
+ * or a page the summary does not hold.
+ */
+export function pageWarningLines(
+  summary: DocumentSummary,
+  page: number,
+): readonly string[] {
+  const findings = summary.pages[page - 1]?.findings ?? [];
+  return WARNING_FINDINGS.flatMap((finding) => {
+    if (finding === "blank" || !findings.includes(finding)) return [];
+    return [FINDING_TEXT[finding].one(pageList([page]))];
+  });
+}
+
+/**
+ * The short word a thumbnail in the preview's rail carries for a page's first
+ * warning finding (spec 0026 child 0002, AC-41): "2 · scan". A record over
+ * `PageFinding`, so a finding added without a decision fails `pnpm
+ * typecheck`; `null` for the notes and `blank`, which mark no page. Drafts
+ * for the owner's read.
+ */
+export const FINDING_MARK: Readonly<Record<PageFinding, string | null>> = Object.freeze({
+  "covered-text": "covered",
+  "hidden-text": "hidden",
+  scanned: "scan",
+  "drawn-only": "no text",
+  "unreadable-text": "unreadable",
+  "bare-picture": "picture",
+  "off-page-picture": "off page",
+  "marked-descriptions": "descriptions",
+  "machine-read-text": null,
+  "off-page-content": null,
+  blank: null,
+});
+
+/**
+ * The mark for page `page` (one based): `FINDING_MARK` for its first warning
+ * finding in `PAGE_FINDINGS` order, or `null` when it carries none (AC-41).
+ */
+export function pageMark(summary: DocumentSummary, page: number): string | null {
+  const findings = summary.pages[page - 1]?.findings ?? [];
+  const first = WARNING_FINDINGS.find((finding) => findings.includes(finding));
+  return first === undefined ? null : FINDING_MARK[first];
+}
+
+/**
  * One line per warning present, in `PAGE_FINDINGS` order, each naming its
  * pages (AC-20). A page carrying two warnings is named in both lines.
  */
@@ -289,6 +338,13 @@ export const OPEN_WARNING_TITLE = "Some pages can't be fully checked";
  */
 export const ADVICE =
   "Run this file through text recognition (OCR) first, then open the result here. That may let RedactNest read those pages.";
+
+/**
+ * The control after the warning lines at open that shows the advice
+ * (`ToolReview.dc.html`, the owner's call, 2026-11-26), so each warning
+ * reads as one line until it is asked for.
+ */
+export const ADVICE_LINK = "What to do";
 
 /** The download warning's title (AC-22). */
 export const DOWNLOAD_WARNING_TITLE = "Not every page was checked";

@@ -24,7 +24,10 @@ test.describe("getting to the tool", () => {
     await page.goto("/");
 
     await expect(
-      page.getByRole("main").getByRole("link", { name: "Remove text from a PDF" }),
+      page
+        .getByRole("main")
+        .getByRole("link", { name: "Remove text from a PDF" })
+        .first(),
     ).toBeVisible();
   });
 
@@ -35,6 +38,7 @@ test.describe("getting to the tool", () => {
     await page
       .getByRole("main")
       .getByRole("link", { name: "Remove text from a PDF" })
+      .first()
       .focus();
     await page.keyboard.press("Enter");
 
@@ -66,7 +70,8 @@ test.describe("every way into the tool is a real page load", () => {
         }
       });
 
-      await page.getByRole(landmark).getByRole("link", { name }).click();
+      // The hero's, the first of the main content's two (spec 0026, AC-8).
+      await page.getByRole(landmark).getByRole("link", { name }).first().click();
       await expect(page).toHaveURL(/\/tool$/);
 
       expect(documentLoads).toContain("/tool");
@@ -164,7 +169,8 @@ test.describe("every way into the tool is a real page load", () => {
       ["banner", "Try it free"],
       ["main", "Remove text from a PDF"],
     ] as const) {
-      await page.getByRole(landmark).getByRole("link", { name }).hover();
+      for (const link of await page.getByRole(landmark).getByRole("link", { name }).all())
+        await link.hover();
     }
     await page.waitForLoadState("networkidle");
 
@@ -173,12 +179,12 @@ test.describe("every way into the tool is a real page load", () => {
 });
 
 /**
- * Spec 0012, AC-9 and INV-10. Every page's header links to Pricing and Account
- * as plain links, so nothing prefetches Pricing, an account page or the page
+ * Spec 0012, AC-9 and INV-10. Every page's header links to Pricing and, for a
+ * visitor not signed in, Sign in (spec 0026, AC-5) as plain links, so nothing prefetches Pricing, an account page or the page
  * that starts a checkout. `next/link` prefetches on sight and again on hover,
  * so both get their chance before the count is read, as for the tool above.
  */
-test.describe("the header's Pricing and Account links", () => {
+test.describe("the header's Pricing and Sign in links", () => {
   for (const path of ["/", "/tool", "/pricing", "/privacy", "/terms"]) {
     test(`are plain links on ${path} that prefetch nothing`, async ({ page }) => {
       const prefetched: string[] = [];
@@ -196,7 +202,7 @@ test.describe("the header's Pricing and Account links", () => {
       const header = page.getByRole("banner");
       for (const [name, href] of [
         ["Pricing", "/pricing"],
-        ["Account", "/account"],
+        ["Sign in", "/sign-in"],
       ] as const) {
         const link = header.getByRole("link", { name, exact: true });
         await expect(link).toHaveAttribute("href", href);
@@ -348,7 +354,7 @@ test.describe("the header", () => {
     await page.goto("/");
     const header = page.getByRole("banner");
 
-    for (const name of ["Pricing", "Account"]) {
+    for (const name of ["How it works", "Security", "Pricing", "Sign in"]) {
       const box = await header.getByRole("link", { name, exact: true }).boundingBox();
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(40);
     }
@@ -367,57 +373,73 @@ test.describe("the header", () => {
   }
 
   /**
-   * Below `sm`, with billing on, the lockup and the menu button share one row
-   * and the links wait in the menu; the button opens it beneath the header,
-   * the links stacked in page order, so focus never moves back up the screen
-   * (feature 28, amending AC-7).
+   * Below `sm`, with billing on and signed out, the lockup and the menu button
+   * share one row, and the nav and Sign in wait in the menu; the button opens
+   * it beneath the header, the links stacked in page order, so focus never
+   * moves back up the screen (feature 28, as spec 0026 child 0001 AC-27
+   * amends AC-7). On a row narrower than 20.5rem (a 360 pixel window) Try it
+   * free waits there too, last, because beside the lockup and the button it
+   * left 5 pixels at 320 on Windows and wrapped the button on Linux, whose
+   * Inter is wider (`ROW_UNLESS_NARROW`). The row is held by boxes against
+   * boxes, so a font's width can only fail it by really wrapping it.
    */
-  test("folds the links into a menu at 320 pixels, with no sideways scroll", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 320, height: 640 });
-    await page.goto("/");
-    const header = page.getByRole("banner");
-    const links = ["Pricing", "Account", "Try it free"].map((name) =>
-      header.getByRole("link", { name, exact: true }),
-    );
+  // 305 is 320 less a classic scrollbar (spec 0024, *The lockup at narrow widths*).
+  for (const width of [320, 305]) {
+    test(`folds the links into a menu at ${width} pixels, with no sideways scroll`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 640 });
+      await page.goto("/");
+      const header = page.getByRole("banner");
+      const links = ["How it works", "Security", "Pricing", "Sign in", "Try it free"].map(
+        (name) => header.getByRole("link", { name, exact: true }),
+      );
 
-    const lockup = await header
-      .getByRole("link", { name: "RedactNest", exact: true })
-      .boundingBox();
-    const button = await header
-      .getByRole("button", { name: "Menu", exact: true })
-      .boundingBox();
-    if (lockup === null || button === null) throw new Error("the row has no box");
-    expect(
-      Math.abs(lockup.y + lockup.height / 2 - (button.y + button.height / 2)),
-    ).toBeLessThan(2);
-    expect(button.x).toBeGreaterThan(lockup.x + lockup.width);
-    for (const link of links) await expect(link).toBeHidden();
+      const row = [];
+      for (const control of [
+        header.getByRole("link", { name: "RedactNest", exact: true }),
+        header.getByRole("button", { name: "Menu", exact: true }),
+      ]) {
+        const box = await control.boundingBox();
+        if (box === null) throw new Error("the row has no box");
+        row.push(box);
+      }
+      const [lockup] = row;
+      for (const box of row) {
+        expect(
+          Math.abs(box.y + box.height / 2 - (lockup.y + lockup.height / 2)),
+        ).toBeLessThan(2);
+      }
+      row.reduce((before, box) => {
+        expect(box.x).toBeGreaterThanOrEqual(before.x + before.width);
+        return box;
+      });
+      for (const link of links) await expect(link).toBeHidden();
 
-    await header.getByRole("button", { name: "Menu", exact: true }).click();
-    const bar = await header.boundingBox();
-    const tops: number[] = [];
-    for (const link of links) {
-      await expect(link).toBeVisible();
-      tops.push((await link.boundingBox())?.y ?? Number.NaN);
-    }
-    for (const top of tops) {
-      expect(top).toBeGreaterThanOrEqual((bar?.y ?? 0) + (bar?.height ?? 0));
-    }
-    tops.reduce((above, top) => {
-      expect(top).toBeGreaterThan(above);
-      return top;
+      await header.getByRole("button", { name: "Menu", exact: true }).click();
+      const bar = await header.boundingBox();
+      const tops: number[] = [];
+      for (const link of links) {
+        await expect(link).toBeVisible();
+        tops.push((await link.boundingBox())?.y ?? Number.NaN);
+      }
+      for (const top of tops) {
+        expect(top).toBeGreaterThanOrEqual((bar?.y ?? 0) + (bar?.height ?? 0));
+      }
+      tops.reduce((above, top) => {
+        expect(top).toBeGreaterThan(above);
+        return top;
+      });
+
+      const scroll = await page.evaluate(() => ({
+        width: document.documentElement.scrollWidth,
+        viewport: document.documentElement.clientWidth,
+      }));
+      expect(scroll.width).toBeLessThanOrEqual(scroll.viewport);
     });
+  }
 
-    const scroll = await page.evaluate(() => ({
-      width: document.documentElement.scrollWidth,
-      viewport: document.documentElement.clientWidth,
-    }));
-    expect(scroll.width).toBeLessThanOrEqual(scroll.viewport);
-  });
-
-  /** From `sm`, the lockup, the nav, Account and the button on one row, the button last. */
+  /** From `sm`, the lockup, the nav, Sign in and the button on one row, the button last. */
   for (const width of [640, 1280]) {
     test(`sits on one row with the button at the right at ${width} pixels`, async ({
       page,
@@ -427,7 +449,14 @@ test.describe("the header", () => {
       const header = page.getByRole("banner");
 
       const boxes = [];
-      for (const name of ["RedactNest", "Pricing", "Account", "Try it free"]) {
+      for (const name of [
+        "RedactNest",
+        "How it works",
+        "Security",
+        "Pricing",
+        "Sign in",
+        "Try it free",
+      ]) {
         const box = await header.getByRole("link", { name, exact: true }).boundingBox();
         if (box === null) throw new Error(`${name} has no box`);
         boxes.push(box);
@@ -445,8 +474,8 @@ test.describe("the header", () => {
 
   /**
    * Feature 28, amending AC-7: the open menu marks the current page as the
-   * row does, and on `/tool`, which offers no Try it free, holds Pricing and
-   * Account only.
+   * row does, and on `/tool`, which offers no Try it free and no How it works
+   * (spec 0026, child 0001, AC-30), holds Security, Pricing and Sign in only.
    */
   test("marks the current page in the open menu, and holds no Try it free on the tool", async ({
     page,
@@ -468,7 +497,7 @@ test.describe("the header", () => {
 
     await page.goto("/tool");
     await header.getByRole("button", { name: "Menu", exact: true }).click();
-    await expect(menu.getByRole("link")).toHaveText(["Pricing", "Account"]);
+    await expect(menu.getByRole("link")).toHaveText(["Security", "Pricing", "Sign in"]);
     for (const link of await menu.getByRole("link").all())
       await expect(link).toBeVisible();
     await expect(menu.locator('[aria-current="page"]')).toHaveCount(0);
@@ -478,7 +507,11 @@ test.describe("the header", () => {
    * Feature 28, amending AC-7: a menu still open when the window widens past
    * `sm` (a phone turned sideways) keeps its button and shows its links in one
    * row beneath the header until it is closed; then the button goes and the
-   * links sit in the header's own row.
+   * links sit in the header's own row. Try it free never joins the menu on a
+   * row this wide (20.5rem or more, `ROW_UNLESS_NARROW`): it stays in the
+   * header's row throughout (spec 0026, child 0001, AC-27), and
+   * so does Sign in from `sm`, where the account slot's row shows it and its
+   * menu part is hidden.
    */
   test("keeps a menu left open as the window widens, its links in one row, until it is closed", async ({
     page,
@@ -488,12 +521,14 @@ test.describe("the header", () => {
     const header = page.getByRole("banner");
     const button = header.getByRole("button", { name: "Menu", exact: true });
     const lockup = header.getByRole("link", { name: "RedactNest", exact: true });
-    const links = ["Pricing", "Account", "Try it free"].map((name) =>
+    const action = header.getByRole("link", { name: "Try it free", exact: true });
+    const signIn = header.getByRole("link", { name: "Sign in", exact: true });
+    const links = ["How it works", "Security", "Pricing"].map((name) =>
       header.getByRole("link", { name, exact: true }),
     );
-    const middles = async () => {
+    const middles = async (of = links) => {
       const found: number[] = [];
-      for (const link of links) {
+      for (const link of of) {
         const box = await link.boundingBox();
         if (box === null) throw new Error("a link has no box");
         found.push(box.y + box.height / 2);
@@ -511,12 +546,18 @@ test.describe("the header", () => {
       expect(Math.abs(middle - (open[0] ?? 0))).toBeLessThan(2);
       expect(middle).toBeGreaterThan((bar?.y ?? 0) + (bar?.height ?? 0));
     }
+    const atOpen = await lockup.boundingBox();
+    for (const middle of await middles([signIn, action])) {
+      expect(
+        Math.abs(middle - ((atOpen?.y ?? 0) + (atOpen?.height ?? 0) / 2)),
+      ).toBeLessThan(2);
+    }
 
     await button.click();
 
     await expect(button).toBeHidden();
     const home = await lockup.boundingBox();
-    const closed = await middles();
+    const closed = await middles([...links, signIn, action]);
     for (const middle of closed) {
       expect(Math.abs(middle - ((home?.y ?? 0) + (home?.height ?? 0) / 2))).toBeLessThan(
         2,
@@ -535,7 +576,7 @@ test.describe("the header", () => {
     await page.goto("/pricing");
     const header = page.getByRole("banner");
     const current = header.getByRole("link", { name: "Pricing", exact: true });
-    const other = header.getByRole("link", { name: "Account", exact: true });
+    const other = header.getByRole("link", { name: "Security", exact: true });
     const token = (role: string) =>
       page.evaluate((name) => {
         const probe = document.createElement("span");
@@ -681,7 +722,7 @@ test.describe("the head tags", () => {
       }
       expect(await meta('meta[name="twitter:card"]')).toBe("summary_large_image");
       expect(await meta('meta[property="og:image:alt"]')).toBe(
-        "RedactNest. PDF redaction in your browser. Redaction that actually removes the text.",
+        "RedactNest. Runs in your browser. Never uploaded. Redaction that actually removes the text.",
       );
       await expect(page.locator('link[rel="manifest"]')).toHaveCount(0);
 
@@ -872,7 +913,7 @@ test.describe("the sitemap and the robots file", () => {
     expect(xml).not.toMatch(/<lastmod>|<changefreq>|<priority>/);
   });
 
-  test("/robots.txt allows everything but /api/ and names the sitemap", async ({
+  test("/robots.txt allows everything but /api/ and /sign-out, and names the sitemap", async ({
     request,
   }) => {
     const response = await request.get("/robots.txt");
@@ -882,6 +923,8 @@ test.describe("the sitemap and the robots file", () => {
     expect(text).toMatch(/User-Agent: \*/i);
     expect(text).toMatch(/^Allow: \/$/m);
     expect(text).toMatch(/^Disallow: \/api\/$/m);
+    // Spec 0026 child 0001, AC-26: an action, not a page.
+    expect(text).toMatch(/^Disallow: \/sign-out$/m);
     expect(text).toContain("Sitemap: https://redactnest.test/sitemap.xml");
     expect(text).not.toMatch(/account|sign-in|sign-up/);
   });

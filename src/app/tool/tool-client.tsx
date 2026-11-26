@@ -1,14 +1,19 @@
 "use client";
 
+import { CircleCheck } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
+  type FocusEvent,
+  type ReactNode,
   type RefObject,
 } from "react";
 
@@ -26,18 +31,23 @@ import {
   subscribeEntitlement,
 } from "@/lib/entitlement";
 import {
+  DROP_TEXT,
   dropZoneHelper,
   failureText,
-  IDLE_STEPS,
   isTickCaused,
   LOST_TEXT,
   makeWaitsLine,
+  OPEN_STEPS,
   PHASE_TEXT,
   phaseLine,
+  PROGRESS_TITLE,
   redactLabel,
   refusalLines,
   RUN_REFUSAL_LEAD,
+  RUN_STEPS,
   runRefusalText,
+  SHOWS_WHY,
+  STEP_STATE_TEXT,
   TERMS_LOCKED_TEXT,
   TERMS_TEXT,
   termsFailedLine,
@@ -48,6 +58,7 @@ import {
 } from "@/lib/flow-text";
 import {
   ADVICE,
+  ADVICE_LINK,
   ALL_CLEAR,
   isPartly,
   noteLines,
@@ -55,6 +66,7 @@ import {
   showsAdvice,
   warningLines,
 } from "@/lib/page-findings";
+import { stepStates } from "@/lib/progress";
 import { TOOL_PATH } from "@/lib/routes";
 import {
   canMake,
@@ -78,6 +90,7 @@ import {
   type EngineLimits,
   type EntitlementSnapshot,
   type MatchId,
+  type PageDrawnMessage,
   type TermId,
   type TermQuery,
 } from "@/worker/protocol";
@@ -86,6 +99,7 @@ import {
   openSession,
   releaseEngine,
   warmEngine,
+  type DrawAsk,
   type OpenedSession,
   type TermSearch,
 } from "@/worker/client";
@@ -93,17 +107,24 @@ import { Button } from "@/ui/button";
 import { Callout } from "@/ui/callout";
 import { Card } from "@/ui/card";
 import { DropZone } from "@/ui/drop-zone";
+import { PageContainer } from "@/ui/page-container";
+import { ProgressSteps } from "@/ui/progress-steps";
 import { Spinner } from "@/ui/spinner";
-import { StepList } from "@/ui/step-list";
 
+import { PageHeader } from "../site-nav";
 import { ActionPanel } from "./action-panel";
 import { FailureCallout } from "./failure-callout";
 import { LockLine } from "./lock-line";
+import { NoteBox, WarningBox } from "./notice-box";
+import { PagePreview, type PreviewHandle } from "./page-preview";
+import { coversFocus, PANEL_ROOM } from "./panel-room";
 import { NewTabLink, PlanLine } from "./plan-line";
+import { previewSupported, readPreviewFit, subscribePreviewFit } from "./preview-fit";
 import { ResultCard } from "./result-card";
 import { ReviewChecklist, type TermGroupTerm } from "./review-checklist";
 import { TermsNotice } from "./terms-notice";
 import { TermsPanel, type TermChip, type TermFocus } from "./terms-panel";
+import { toolGridAreas } from "./tool-grid";
 
 /**
  * Did this session lose its worker before the engine had finished loading?
@@ -196,6 +217,9 @@ function focusAfter(previous: ToolSession, next: ToolSession): FocusTarget | nul
 const NEVER_CHANGES = () => () => {};
 const SERVER_SNAPSHOT = () => null;
 
+/** The server's answer for the preview's fit and support: no preview (AC-37). */
+const NO_PREVIEW = () => false;
+
 /**
  * The prerendered HTML is only ever used by a document the browser loaded at
  * `/tool`, so that is the honest server answer for both the load and the
@@ -276,6 +300,27 @@ export function ToolClient() {
   );
 
   const [session, dispatch] = useReducer(sessionReducer, IDLE as ToolSession);
+
+  /*
+   * Spec 0026 child 0002, AC-37. Whether the page preview may show: the
+   * window fits (heard on a resize and on a root size change alike), and the
+   * browser can show a transferred picture, probed once. Both answer `false`
+   * on the server, so the prerendered page holds no preview.
+   */
+  const previewFit = useSyncExternalStore(
+    subscribePreviewFit,
+    readPreviewFit,
+    NO_PREVIEW,
+  );
+  const previewCan = useSyncExternalStore(NEVER_CHANGES, previewSupported, NO_PREVIEW);
+
+  /**
+   * Where the run in flight began (AC-37): `true` for Redact, from review,
+   * `false` for Make it again, from `complete`. Set as `runRedaction`
+   * dispatches, and read only while `redacting`, so in every other state it
+   * says nothing. Session state, never in the reducer, which knows no layout.
+   */
+  const [runFromReview, setRunFromReview] = useState(false);
 
   /**
    * The page's answer to which plan applies, for the helper and the plan line
@@ -687,6 +732,7 @@ export function ToolClient() {
     const attempt = attemptRef.current;
     const current = () => attemptRef.current === attempt;
 
+    setRunFromReview(start === "redact-started");
     dispatch({ type: start });
 
     try {
@@ -711,6 +757,39 @@ export function ToolClient() {
         dispatch({ type: "failed", failure: error.errorKind });
       }
     }
+  }, []);
+
+  /**
+   * Spec 0026 child 0002, AC-48. The one stable callback the preview draws
+   * through: it reads the opened session from its ref when called, never in
+   * render, so the draw carries that session's own job. With no session open
+   * it answers no picture, as the client would.
+   */
+  const drawPage = useCallback((ask: DrawAsk): Promise<PageDrawnMessage> => {
+    const opened = openedRef.current;
+    if (opened === null) {
+      return Promise.resolve({
+        id: "",
+        jobId: "",
+        kind: "page-drawn",
+        page: ask.page,
+        purpose: ask.purpose,
+        picture: null,
+        boxes: [],
+      });
+    }
+    return opened.draw(ask);
+  }, []);
+
+  /**
+   * The preview's pick (AC-43): a row's checkbox took focus or changed its
+   * tick. Handed to every row through the checklist, stable, and routed to the
+   * preview's own state, so a pick renders no row again. Nothing while the
+   * preview is not on the page.
+   */
+  const previewRef = useRef<PreviewHandle>(null);
+  const handlePick = useCallback((id: MatchId) => {
+    previewRef.current?.pick(id);
   }, []);
 
   /** AC-17. The worker notices within a page; the checklist comes back now. */
@@ -741,6 +820,41 @@ export function ToolClient() {
   /** A group's select all, as one action and one render (spec 0007, AC-7). */
   const handleTicksSet = useCallback((ids: readonly MatchId[], on: boolean) => {
     dispatch({ type: "ticks-set", ids, on });
+  }, []);
+
+  /**
+   * The action panel's Untick all (spec 0026, AC-12): every row that can be
+   * ticked, unticked as one action and one render, by the same rule as a
+   * group's select all. Focus stays on the button.
+   */
+  const handleUntickAll = useCallback(() => {
+    const live = sessionRef.current;
+    if (live.state === "idle") return;
+    const ids = live.matches.filter((m) => m.blocked === null).map((m) => m.id);
+    dispatch({ type: "ticks-set", ids, on: false });
+  }, []);
+
+  /**
+   * Focus never hidden when it moves (spec 0026, AC-12; WCAG 2.2, 2.4.11), for
+   * an engine that ignores the column's scroll margin. The browser scrolls a
+   * newly focused control into view after `focusin` fires, so the check waits
+   * a frame and reads the boxes where they ended up. Only while the action
+   * panel floats (its computed `position`), and only when its box covers the
+   * focused control's (`coversFocus`); `scrollIntoView` with `nearest` then
+   * honours the scroll margin and lifts the control clear. It moves no focus.
+   */
+  const handleColumnFocus = useCallback((event: FocusEvent<HTMLDivElement>) => {
+    const grid = event.currentTarget;
+    const control = event.target;
+    requestAnimationFrame(() => {
+      const panel = grid.querySelector<HTMLElement>('[data-testid="action-panel"]');
+      if (panel === null || panel.contains(control)) return;
+      if (document.activeElement !== control) return;
+      if (getComputedStyle(panel).position !== "sticky") return;
+      if (coversFocus(control.getBoundingClientRect(), panel.getBoundingClientRect())) {
+        control.scrollIntoView({ block: "nearest", behavior: "instant" });
+      }
+    });
   }, []);
 
   /**
@@ -1132,9 +1246,11 @@ export function ToolClient() {
   // warms the engine or asks for the entitlement.
   if (guard === "reload") {
     return (
-      <div aria-live="polite" className="flex flex-col gap-6">
-        <StatusLine text="Loading the tool" />
-      </div>
+      <ToolFrame>
+        <div aria-live="polite" className="flex flex-col gap-6">
+          <StatusLine text="Loading the tool" />
+        </div>
+      </ToolFrame>
     );
   }
 
@@ -1142,35 +1258,39 @@ export function ToolClient() {
   // automatically, because a reload here would load this same wrong URL again.
   if (guard === "wrong-url") {
     return (
-      <Callout
-        tone="danger"
-        data-testid="wrong-url"
-        title="This page cannot open a document"
-        headingLevel={2}
-        action={
-          <Button variant="secondary" href={TOOL_PATH} reload>
-            Open the tool
-          </Button>
-        }
-      >
-        <p>The tool only works at its own address.</p>
-      </Callout>
+      <ToolFrame>
+        <Callout
+          tone="danger"
+          data-testid="wrong-url"
+          title="This page cannot open a document"
+          headingLevel={2}
+          action={
+            <Button variant="secondary" href={TOOL_PATH} reload>
+              Open the tool
+            </Button>
+          }
+        >
+          <p>The tool only works at its own address.</p>
+        </Callout>
+      </ToolFrame>
     );
   }
 
   if (support && !support.supported) {
     return (
-      <Callout
-        tone="danger"
-        role="alert"
-        data-testid="unsupported"
-        title="RedactNest cannot run in this browser"
-        headingLevel={2}
-      >
-        {support.missing.map((gap) => (
-          <p key={gap}>{SUPPORT_GAP_TEXT[gap]}</p>
-        ))}
-      </Callout>
+      <ToolFrame>
+        <Callout
+          tone="danger"
+          role="alert"
+          data-testid="unsupported"
+          title="RedactNest cannot run in this browser"
+          headingLevel={2}
+        >
+          {support.missing.map((gap) => (
+            <p key={gap}>{SUPPORT_GAP_TEXT[gap]}</p>
+          ))}
+        </Callout>
+      </ToolFrame>
     );
   }
 
@@ -1191,112 +1311,180 @@ export function ToolClient() {
       : null;
   // Nothing worth hearing yet, so the polite region is hidden and takes no room.
   const quiet = !reviewable && phaseText === null;
-  // The polite region sits in the left column, where the list will be, while a
-  // document opens or the worker is lost (`toolGridAreas`), so the phase line
-  // holds that column rather than heading it (feature 28).
-  const holdsColumn = compact && !reviewable;
+  // Spec 0026, child 0003: while a document opens or a run works, the steps
+  // over the phases the worker already sends, from the latest phase alone.
+  // The plan wait inside an open counts as the open's first step (AC-33).
+  const tickedCount = live === null ? 0 : live.ticked.size;
+  const progress =
+    phaseText === null
+      ? null
+      : session.state === "opening"
+        ? {
+            title: PROGRESS_TITLE.open,
+            ...stepStates(
+              checkingEntitlement ? "checking-entitlement" : session.phase,
+              OPEN_STEPS,
+            ),
+          }
+        : session.state === "redacting"
+          ? { title: PROGRESS_TITLE.run, ...stepStates(session.phase, RUN_STEPS) }
+          : null;
+  const runRefused = session.state === "reviewing" && session.runFailure !== null;
+  /*
+   * Spec 0026 child 0002, AC-37: the preview shows while reviewing, and
+   * through a run started from review, wherever the window fits and the
+   * browser can show a picture. Everywhere else it is not rendered at all.
+   */
+  const preview =
+    previewFit &&
+    previewCan &&
+    live !== null &&
+    live.summary !== null &&
+    (live.state === "reviewing" || (live.state === "redacting" && runFromReview))
+      ? live
+      : null;
+  // B's head holds something in every step but one: reviewing with billing
+  // off and no refusal, when the action panel is all B shows (AC-12, *Rows*).
+  const headHolds = config.billingEnabled || !acting || runRefused;
+  /*
+   * Spec 0026 child 0001, AC-30: with a document on the page, the file's name
+   * and page count, Choose another PDF and Start over sit in the header, in
+   * the nav's place, with their test ids, names and spec 0007 focus moves.
+   * A then holds nothing, so it is hidden and has no row (AC-12, *Rows*). The
+   * name is header text only: never a title, a URL or a landmark's label.
+   */
+  const fileContext =
+    live !== null && compact ? (
+      <DropZone
+        compact
+        look="header"
+        fileName={live.file.name}
+        pageCount={live.summary?.pageCount ?? null}
+        buttonLabel="Choose another PDF"
+        accept="application/pdf"
+        onFile={(file) => void handleFile(file)}
+        onWarm={warm}
+        buttonRef={chooseRef}
+        action={
+          <Button variant="link" data-testid="start-over" onClick={handleStartOver}>
+            Start over
+          </Button>
+        }
+      />
+    ) : undefined;
+  const template = toolGridAreas(compact, {
+    document: !compact,
+    live: !quiet,
+    head: headHolds,
+    found: reviewable,
+    preview: preview !== null,
+  });
+  const gridStyle = {
+    "--tool-columns": template.columns,
+    "--tool-rows": template.rows,
+    "--tool-areas": template.areas,
+    ...(compact && { "--tool-panel-room": PANEL_ROOM }),
+  } as CSSProperties;
 
   /*
-   * Spec 0013, AC-14 to AC-17, with feature 26's move of the phase line. One
-   * grid of four areas, always rendered in the same order with the same keys,
-   * so no live region remounts when a file is chosen and a phone reads them
-   * top to bottom: A, the document (the full drop zone, or the file bar); L,
-   * the polite region; B, the rail; C, the found items, from `reviewing` on.
-   * Only the area template changes from `lg` (`toolGridAreas`).
+   * Spec 0013, AC-14 and AC-15, laid out as spec 0026 AC-12 has it. One grid
+   * of four areas, always rendered in the same order with the same keys, so
+   * no live region remounts when a file is chosen and a phone reads them top
+   * to bottom: A, the document (the full drop zone, or the file bar); L, the
+   * polite region; B, its head and then the action panel; C, the found items,
+   * from `reviewing` on. Only the template changes from `lg`
+   * (`toolGridAreas`): A beside B while nothing is open, and one centred
+   * column once a document is on the page, with B's head between L and C and
+   * the action panel floating at C's foot.
    *
    * `lg` here is a container query, 61rem of this column, which is a 1024
    * pixel window less the page's gutters at the default text size. A media
-   * query reads `rem` as the browser's default size, so it would keep two
-   * columns and a sticky panel at 200% text; a container query reads the
-   * page's own root size, so enlarged text gets one column and nothing sticky
-   * (AC-17, INV-6; WCAG 1.4.4 and 1.4.10).
+   * query reads `rem` as the browser's default size, so it would keep the
+   * wide layout and a sticky panel at 200% text; a container query reads the
+   * page's own root size, so enlarged text gets the stacked page and nothing
+   * sticky (WCAG 1.4.4 and 1.4.10). The container is named `tool` for the
+   * column's scroll margin rule in `globals.css`.
    */
   return (
-    <div className="@container">
-      <div
-        data-testid="tool-grid"
-        className={cx(
-          "grid gap-6 @min-[61rem]:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]",
-          toolGridAreas(compact, reviewable, quiet),
-        )}
-      >
+    <ToolFrame file={fileContext}>
+      <div className="@container/tool">
         <div
-          key="a"
-          data-testid="area-document"
-          className="flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:a]"
+          data-testid="tool-grid"
+          data-panel={acting ? "" : undefined}
+          data-preview={preview !== null ? "" : undefined}
+          style={gridStyle}
+          onFocus={handleColumnFocus}
+          className={
+            "grid gap-6 @min-[61rem]:justify-center " +
+            "@min-[61rem]:[grid-template-columns:var(--tool-columns)] " +
+            "@min-[61rem]:[grid-template-rows:var(--tool-rows)] " +
+            "@min-[61rem]:[grid-template-areas:var(--tool-areas)]"
+          }
         >
-          {/*
+          <div
+            key="a"
+            data-testid="area-document"
+            hidden={compact}
+            className="flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:a]"
+          >
+            {/*
           Spec 0007, AC-15. An open that failed says so above the full drop
           zone, so the next file is one drop away. Nothing of the failed
           document is held beyond its name and its frozen caps.
         */}
-          {session.state === "failed" && (
-            <OpenFailure
-              session={session}
-              titleRef={failureRef}
-              onRecheck={handleRecheck}
-            />
-          )}
-
-          {live !== null && compact ? (
-            <DropZone
-              compact
-              fileName={live.file.name}
-              pageCount={live.summary?.pageCount ?? null}
-              buttonLabel="Choose another PDF"
-              accept="application/pdf"
-              onFile={(file) => void handleFile(file)}
-              onWarm={warm}
-              buttonRef={chooseRef}
-              action={
-                <Button variant="link" data-testid="start-over" onClick={handleStartOver}>
-                  Start over
-                </Button>
-              }
-            />
-          ) : (
-            <div className="flex flex-col gap-3">
-              <DropZone
-                title="Drop a PDF here, or choose one"
-                helper={dropZoneHelper(planAnswer)}
-                buttonLabel="Choose a PDF"
-                accept="application/pdf"
-                onFile={(file) => void handleFile(file)}
-                onWarm={warm}
-                buttonRef={chooseRef}
+            {session.state === "failed" && (
+              <OpenFailure
+                session={session}
+                titleRef={failureRef}
+                onRecheck={handleRecheck}
               />
-              {/*
+            )}
+
+            {compact ? null : (
+              <div className="flex flex-col gap-3">
+                <DropZone
+                  title={DROP_TEXT.title}
+                  or={DROP_TEXT.or}
+                  helper={dropZoneHelper(planAnswer)}
+                  note={DROP_TEXT.device}
+                  buttonLabel="Choose a PDF"
+                  accept="application/pdf"
+                  onFile={(file) => void handleFile(file)}
+                  onWarm={warm}
+                  buttonRef={chooseRef}
+                />
+                {/*
               Spec 0011, AC-5. Choosing a PDF is agreeing to the terms, so the
               line sits under the full drop zone and goes with it once the file
               bar takes its place. Outside the polite region, so it is never
               announced as news.
             */}
-              <TermsNotice />
-              {/*
+                <TermsNotice />
+                {/*
               Spec 0017, AC-6. The tab's list outlives the job, so while the
               full zone shows and the list holds terms, one line says how many
               are kept, with Remove all. It adds and searches nothing.
             */}
-              {terms.length > 0 && (
-                <p
-                  data-testid="terms-kept"
-                  className="flex flex-wrap items-center gap-x-3 text-small text-ink"
-                >
-                  <span>{TERMS_TEXT.kept(terms.length)}</span>
-                  <Button
-                    variant="link"
-                    data-testid="terms-kept-remove-all"
-                    onClick={handleRemoveKeptTerms}
+                {terms.length > 0 && (
+                  <p
+                    data-testid="terms-kept"
+                    className="flex flex-wrap items-center gap-x-3 text-small text-ink"
                   >
-                    {TERMS_TEXT.removeAll}
-                  </Button>
-                </p>
-              )}
-            </div>
-          )}
-        </div>
+                    <span>{TERMS_TEXT.kept(terms.length)}</span>
+                    <Button
+                      variant="link"
+                      data-testid="terms-kept-remove-all"
+                      onClick={handleRemoveKeptTerms}
+                    >
+                      {TERMS_TEXT.removeAll}
+                    </Button>
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
 
-        {/*
+          {/*
           Spec 0003, AC-12, and spec 0007, AC-4. The polite region holds only
           what is worth hearing as it changes: the opened document card, heard
           once with the open and then left alone, and the one phase line while
@@ -1311,255 +1499,337 @@ export function ToolClient() {
           the head of the rail once it holds the document card, without ever
           remounting it or moving focus (feature 26).
 
-          While it holds the left column, its line sits in the middle of the
-          room beside the rail, which the grid stretches it to fill from `lg`
-          (feature 28). Only classes change on the region, so it keeps its
-          node as the area moves. Its line does not keep its node: a file
-          chosen while Checking your plan shows replaces that line, the region
-          is empty and hidden for a moment, and the first phase arrives in a
-          new node. Each line is heard once (spec 0013, AC-16).
+          With a document on the page it sits under the file bar, sized to
+          what it holds (spec 0026, AC-12). Only classes change on the region,
+          so it keeps its node as the area moves. Its line does not keep its
+          node: a file chosen while Checking your plan shows replaces that
+          line, the region is empty and hidden for a moment, and the first
+          phase arrives in a new node. Each line is heard once (spec 0013,
+          AC-16).
         */}
-        <div
-          key="l"
-          data-testid="area-live"
-          aria-live="polite"
-          className={cx(
-            "flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:l]",
-            holdsColumn && "justify-center",
-            quiet && "sr-only",
-          )}
-        >
-          {reviewable && <OpenedDocument session={session} />}
-          {phaseText !== null && <StatusLine text={phaseText} stacked={holdsColumn} />}
-        </div>
+          <div
+            key="l"
+            data-testid="area-live"
+            aria-live="polite"
+            className={cx(
+              "flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:l]",
+              quiet && "sr-only",
+            )}
+          >
+            {reviewable && <OpenedDocument session={session} />}
+            {phaseText !== null && (
+              <StatusLine text={phaseText} visuallyHidden={progress !== null} />
+            )}
+            {/*
+            Child 0003, AC-31: the progress card, inside the polite region's
+            area but `aria-live="off"`, so a step's tick is never announced on
+            top of the phase line, which the region still says exactly as
+            before. The card shows the same line, so the region's own copy is
+            visually hidden while it does.
+          */}
+            {progress !== null && phaseText !== null && (
+              <Card look="state" data-testid="progress-card" aria-live="off">
+                <ProgressSteps
+                  data-testid="progress-steps"
+                  title={progress.title}
+                  line={phaseText}
+                  steps={progress.steps.map(({ phase, state }) => ({
+                    label: phaseLine(phase, tickedCount),
+                    state,
+                  }))}
+                  fraction={progress.fraction}
+                  stateText={STEP_STATE_TEXT}
+                />
+              </Card>
+            )}
+          </div>
 
-        <div
-          key="b"
-          data-testid="area-rail"
-          className="flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:b]"
-        >
           {/*
+          B, in two parts (spec 0026, AC-12): its head, rendered from the first
+          render in every step so neither it nor the plan card's region inside
+          it ever remounts, then the action panel while acting. From `lg` with
+          a document on the page B is `display: contents`, so the grid places
+          the two apart: the head in its own area between L and C, the panel
+          at C's foot. Otherwise B is a column, as the rail always was. B has
+          no role, name or landmark and must gain none, because some browsers
+          drop the role of an element shown as `contents`.
+        */}
+          <div
+            key="b"
+            data-testid="area-rail"
+            className={cx(
+              "flex min-w-0 flex-col gap-6",
+              compact ? "@min-[61rem]:contents" : "@min-[61rem]:[grid-area:b]",
+            )}
+          >
+            <div
+              data-testid="area-rail-head"
+              hidden={!headHolds}
+              className="flex min-w-0 flex-col gap-6 @min-[61rem]:[grid-area:h]"
+            >
+              {/*
           Spec 0012, AC-5, as spec 0013 places it (AC-18): the plan card, after
           the drop zone and after the document card, and only on a build that
           sells Pro.
         */}
-          {config.billingEnabled && (
-            <PlanLine
-              answer={planAnswer}
-              checking={planChecking}
-              onTryAgain={() => void handleTryAgain()}
-              lineRef={planLineRef}
-            />
-          )}
+              {config.billingEnabled && (
+                <PlanLine
+                  answer={planAnswer}
+                  checking={planChecking}
+                  onTryAgain={() => void handleTryAgain()}
+                  lineRef={planLineRef}
+                />
+              )}
 
-          {/*
-          AC-15: while nothing is open, what happens next, in three steps.
-          Where the areas stack the list is centred as a block, so its circles
-          stay in one line with the joins between them; beside the drop zone
-          it fills the rail as before (feature 28).
-        */}
-          {!compact && (
-            <StepList
-              steps={IDLE_STEPS}
-              className="mx-auto w-fit @min-[61rem]:mx-0 @min-[61rem]:w-auto"
-            />
-          )}
+              {session.state === "lost" && (
+                <FailureCallout
+                  data-testid="lost"
+                  title={LOST_TEXT.title}
+                  body={LOST_TEXT.body}
+                  action={
+                    <Button
+                      ref={retryRef}
+                      variant="secondary"
+                      fullWidth
+                      data-testid="retry"
+                      onClick={handleRetry}
+                    >
+                      Try again
+                    </Button>
+                  }
+                />
+              )}
 
-          {session.state === "lost" && (
-            <FailureCallout
-              data-testid="lost"
-              title={LOST_TEXT.title}
-              body={LOST_TEXT.body}
-              action={
-                <Button
-                  ref={retryRef}
-                  variant="secondary"
-                  data-testid="retry"
-                  onClick={handleRetry}
-                >
-                  Try again
-                </Button>
-              }
-            />
-          )}
-
-          {/*
+              {/*
           Spec 0007, AC-14. A refused run keeps the review, so the refusal sits
           before the action it asks to change, and stays through tick changes.
         */}
-          {session.state === "reviewing" && session.runFailure !== null && (
-            <FailureCallout
-              data-testid="run-refusal"
-              lead={RUN_REFUSAL_LEAD}
-              titleRef={refusalRef}
-              {...runRefusalText(
-                session.runFailure,
-                session.entitlement,
-                session.ticked.size,
-              )}
-              action={
-                isTickCaused(session.runFailure) ? undefined : (
-                  <Button
-                    variant="secondary"
-                    data-testid="refusal-choose"
-                    onClick={() => chooseRef.current?.click()}
-                  >
-                    Choose another PDF
-                  </Button>
-                )
-              }
-            />
-          )}
-
-          {/*
-          AC-16 and AC-17: the rail's last block, carrying the lock line, and
-          sticky from `lg` so it stays in reach beside a long list.
-        */}
-          {acting && (
-            <ActionPanel
-              line={tickCountLine(
-                session.ticked.size,
-                session.matches.filter((match) => match.blocked === null).length,
-                session.matches.length,
-              )}
-              label={redactLabel(session.ticked.size)}
-              running={session.state === "redacting"}
-              waiting={
-                termView === null
-                  ? null
-                  : makeWaitsLine(
-                      termView.searching,
-                      termView.notSearched,
-                      TERMS_LOCKED_TEXT[session.entitlement.account].recheck !== null,
+              {session.state === "reviewing" && session.runFailure !== null && (
+                <FailureCallout
+                  data-testid="run-refusal"
+                  why={SHOWS_WHY[session.runFailure]}
+                  lead={RUN_REFUSAL_LEAD}
+                  titleRef={refusalRef}
+                  {...runRefusalText(
+                    session.runFailure,
+                    session.entitlement,
+                    session.ticked.size,
+                  )}
+                  action={
+                    isTickCaused(session.runFailure) ? undefined : (
+                      <Button
+                        variant="secondary"
+                        fullWidth
+                        data-testid="refusal-choose"
+                        onClick={() => chooseRef.current?.click()}
+                      >
+                        Choose another PDF
+                      </Button>
                     )
-              }
-              onRedact={() => void runRedaction("redact-started")}
-              onCancel={handleCancel}
-              redactRef={redactRef}
-              cancelRef={cancelRef}
-            />
-          )}
+                  }
+                />
+              )}
 
-          {session.state === "complete" && counts !== null && outputForm !== null && (
-            <ResultCard
-              counts={counts}
-              terms={termView?.results}
-              setAside={termView?.setAside}
-              summary={session.summary}
-              outputForm={outputForm}
-              downloaded={session.downloaded}
-              onDownload={handleDownload}
-              onRedactAnother={handleStartOver}
-              onMakeAgain={() => void runRedaction("rerun")}
-              headingRef={resultRef}
-              redactAnotherRef={redactAnotherRef}
-            />
-          )}
+              {session.state === "complete" && counts !== null && outputForm !== null && (
+                <ResultCard
+                  counts={counts}
+                  terms={termView?.results}
+                  setAside={termView?.setAside}
+                  summary={session.summary}
+                  outputForm={outputForm}
+                  downloaded={session.downloaded}
+                  onDownload={handleDownload}
+                  onRedactAnother={handleStartOver}
+                  onMakeAgain={() => void runRedaction("rerun")}
+                  outputName={session.outputName}
+                  headingRef={resultRef}
+                  redactAnotherRef={redactAnotherRef}
+                />
+              )}
+
+              {/*
+          Inside the action panel while it shows; at the rail's foot otherwise.
+          While nothing is open it is centred under the drop zone's column at
+          every width (`ToolStates.dc.html`, the owner's call, 2026-11-26);
+          once a document is open it stays as it was (feature 28).
+        */}
+              {!acting && <LockLine className={compact ? undefined : "justify-center"} />}
+            </div>
+
+            {/*
+          The action panel, after the head: B's last block, carrying the lock
+          line. In the page it comes before the list, so it is reached first
+          at every width; from `lg` it is drawn at the list's foot and floats
+          at the window's foot over a long list (spec 0026, AC-12).
+        */}
+            {acting && (
+              <ActionPanel
+                line={tickCountLine(
+                  session.ticked.size,
+                  session.matches.filter((match) => match.blocked === null).length,
+                  session.matches.length,
+                )}
+                label={redactLabel(session.ticked.size)}
+                running={session.state === "redacting"}
+                waiting={
+                  termView === null
+                    ? null
+                    : makeWaitsLine(
+                        termView.searching,
+                        termView.notSearched,
+                        TERMS_LOCKED_TEXT[session.entitlement.account].recheck !== null,
+                      )
+                }
+                anyTicked={session.ticked.size > 0}
+                onRedact={() => void runRedaction("redact-started")}
+                onCancel={handleCancel}
+                onUntickAll={handleUntickAll}
+                redactRef={redactRef}
+                cancelRef={cancelRef}
+                flat={preview !== null}
+              />
+            )}
+          </div>
 
           {/*
-          Inside the action panel while it shows; at the rail's foot otherwise.
-          In the idle rail it is centred under the steps where the areas stack,
-          and only there: once a document is open it stays as it was (feature
-          28).
-        */}
-          {!acting && (
-            <LockLine
-              className={
-                compact ? undefined : "justify-center @min-[61rem]:justify-start"
-              }
-            />
-          )}
-        </div>
-
-        {/*
         Spec 0005, AC-13, and spec 0013, AC-19. The found items, outside the
         live region for the same reason the failure is: a list read out as it
         appears would drown the phase line. Shown for every step that has a
         document open to review.
       */}
-        {reviewable && (
-          <div
-            key="c"
-            data-testid="area-found"
-            className="min-w-0 @min-[61rem]:[grid-area:c]"
-          >
-            <ReviewChecklist
-              matches={session.matches}
-              ticked={session.ticked}
-              running={session.state === "redacting"}
-              partly={session.summary !== null && isPartly(session.summary)}
-              onToggle={handleToggle}
-              onTicksSet={handleTicksSet}
-              terms={termView?.groups}
-              termActions={{
-                onSetAside: handleSetAside,
-                onRemove: handleRemoveTerm,
-                onTryAgain: handleTryAgainTerms,
-                onRecheck:
-                  TERMS_LOCKED_TEXT[session.entitlement.account].recheck === null
-                    ? null
-                    : handleTermsRecheck,
-                searching: termView?.searching ?? false,
-              }}
-              panel={
-                // Spec 0017, AC-1 and AC-2: with billing on, Pro gets the
-                // panel and Free the locked one; with billing off, none.
-                config.billingEnabled && termView !== null ? (
-                  <TermsPanel
-                    terms={termView.chips}
-                    locked={
-                      session.entitlement.tier === "paid"
-                        ? null
-                        : TERMS_LOCKED_TEXT[session.entitlement.account]
-                    }
-                    partly={session.summary !== null && isPartly(session.summary)}
-                    running={session.state === "redacting"}
-                    searching={termView.searching}
-                    status={[
-                      ...(searchLine === null ? [] : [searchLine.text]),
-                      ...refusedLines.map(({ text }) => text),
-                    ]}
-                    onAdd={handleAddTerms}
-                    onRemove={handleRemoveTerm}
-                    onRemoveAll={handleRemoveAllTerms}
-                    onRecheck={handleTermsRecheck}
-                    fieldRef={termFieldRef}
-                    focusRef={termFocusRef}
-                  />
-                ) : undefined
-              }
+          {reviewable && (
+            <div
+              key="c"
+              data-testid="area-found"
+              className={cx(
+                "min-w-0 @min-[61rem]:[grid-area:c]",
+                // The panel's room at the list's end, where it rests (AC-12).
+                acting && "@min-[61rem]:pb-[var(--tool-panel-room)]",
+              )}
+            >
+              <ReviewChecklist
+                matches={session.matches}
+                ticked={session.ticked}
+                running={session.state === "redacting"}
+                partly={session.summary !== null && isPartly(session.summary)}
+                onToggle={handleToggle}
+                onTicksSet={handleTicksSet}
+                onPick={handlePick}
+                flat={preview !== null}
+                terms={termView?.groups}
+                termActions={{
+                  onSetAside: handleSetAside,
+                  onRemove: handleRemoveTerm,
+                  onTryAgain: handleTryAgainTerms,
+                  onRecheck:
+                    TERMS_LOCKED_TEXT[session.entitlement.account].recheck === null
+                      ? null
+                      : handleTermsRecheck,
+                  searching: termView?.searching ?? false,
+                }}
+                panel={
+                  // Spec 0017, AC-1 and AC-2: with billing on, Pro gets the
+                  // panel and Free the locked one; with billing off, none.
+                  config.billingEnabled && termView !== null ? (
+                    <TermsPanel
+                      terms={termView.chips}
+                      locked={
+                        session.entitlement.tier === "paid"
+                          ? null
+                          : TERMS_LOCKED_TEXT[session.entitlement.account]
+                      }
+                      partly={session.summary !== null && isPartly(session.summary)}
+                      running={session.state === "redacting"}
+                      searching={termView.searching}
+                      status={[
+                        ...(searchLine === null ? [] : [searchLine.text]),
+                        ...refusedLines.map(({ text }) => text),
+                      ]}
+                      onAdd={handleAddTerms}
+                      onRemove={handleRemoveTerm}
+                      onRemoveAll={handleRemoveAllTerms}
+                      onRecheck={handleTermsRecheck}
+                      fieldRef={termFieldRef}
+                      focusRef={termFocusRef}
+                    />
+                  ) : undefined
+                }
+              />
+            </div>
+          )}
+
+          {/*
+          P, the page preview (spec 0026 child 0002, AC-39): a fifth area, after
+          C in the page, so it is reached last and changes no order before it,
+          though the frame draws it on the left. Keyed by the job, so a second
+          document's preview never inherits the first one's pictures, and
+          gone, with its one cleanup, whenever AC-37 stops holding.
+        */}
+          {preview !== null && preview.summary !== null && (
+            <PagePreview
+              key={preview.jobId}
+              ref={previewRef}
+              summary={preview.summary}
+              matches={preview.matches}
+              ticked={preview.ticked}
+              running={preview.state === "redacting"}
+              draw={drawPage}
             />
-          </div>
-        )}
+          )}
+        </div>
       </div>
-    </div>
+    </ToolFrame>
   );
 }
 
 /**
- * The tool grid's areas from `lg` (spec 0013, AC-14 to AC-16). While nothing
- * is open, A sits beside B, with L over B only while it has something to say.
- * With a document on the page, A runs across the top. Until there is a list
- * to review (a file opening, or a lost worker), L takes the list's place left
- * of B, so the spinner and the phase line fill the column the drop zone held
- * rather than leaving it empty (feature 26). From `reviewing` on, C takes the
- * left and L heads the rail column over B.
+ * The page around the tool: the header, then `main` with the page's title
+ * (spec 0026, child 0001, AC-30). `ToolClient` renders the header itself
+ * because it alone holds the session, so with a document on the page the
+ * header can carry the file context in the nav's place; `page.tsx` renders
+ * `ToolClient` alone. Every link out of the header is a real page load, so
+ * spec 0007's leave warning still guards ticked work.
  *
- * A row L shares with A or C is sized to L alone (`auto`), and B's row takes
- * the rest (`1fr`), so no space opens between L and B, and B still spans the
- * full height beside the list for the sticky action panel (AC-17). A hidden L
- * is out of the flow, so the template leaves it out rather than keep an empty
- * row and its gap.
+ * `main` is the skip link's target (spec 0003, AC-14): focusable so the link
+ * can move focus here, and the one element allowed to drop its outline,
+ * because it is a place focus lands rather than a control. Its three data
+ * attributes are the page preview's hooks (spec 0026 child 0002, AC-38):
+ * while the tool grid carries `data-preview`, one rule in `globals.css` lifts
+ * `main`'s padding and the container's cap and gutters, and hides the title
+ * visually, so the frame fills the window under the header. The title stays
+ * the page's `h1`, centred over the tool's one centred column (AC-12).
  */
-function toolGridAreas(compact: boolean, reviewable: boolean, quiet: boolean): string {
-  if (!compact) {
-    return quiet
-      ? "@min-[61rem]:[grid-template-areas:'a_b']"
-      : "@min-[61rem]:grid-rows-[auto_1fr] @min-[61rem]:[grid-template-areas:'a_l'_'a_b']";
-  }
-  return reviewable
-    ? "@min-[61rem]:grid-rows-[auto_auto_1fr] @min-[61rem]:[grid-template-areas:'a_a'_'c_l'_'c_b']"
-    : "@min-[61rem]:[grid-template-areas:'a_a'_'l_b']";
+function ToolFrame({
+  file,
+  children,
+}: {
+  readonly file?: ReactNode;
+  readonly children: ReactNode;
+}) {
+  return (
+    <>
+      {/* Nothing current, and no Try it free on its own page (spec 0013, AC-7). */}
+      <PageHeader current="tool" file={file} />
+      <main
+        id="main"
+        tabIndex={-1}
+        data-tool-main=""
+        className="flex-1 bg-subtle py-10 focus:outline-none sm:py-14"
+      >
+        {/*
+          Wide, for the tool grid (spec 0013, AC-14). The lock line ends the
+          column, inside the action panel or under the drop zone, where the
+          file is.
+        */}
+        <PageContainer width="wide" className="flex flex-col gap-8" data-tool-frame="">
+          <h1 data-tool-title="" className="text-center text-title text-ink">
+            Redact a PDF
+          </h1>
+          {children}
+        </PageContainer>
+      </main>
+    </>
+  );
 }
 
 /**
@@ -1585,6 +1855,7 @@ function OpenFailure({
   return (
     <FailureCallout
       data-testid="error"
+      why={SHOWS_WHY[session.failure ?? "unsupported"]}
       titleRef={titleRef}
       {...text}
       actions={
@@ -1606,23 +1877,27 @@ function OpenFailure({
 }
 
 /**
- * The phase text, with a spinner that carries no meaning of its own.
+ * The phase text, with a spinner that carries no meaning of its own: what the
+ * polite region says as each phase arrives (spec 0013, AC-16 and AC-20).
  *
- * `stacked` while it holds the left column as a document opens: the large
- * spinner centred, the line centred under it (spec 0013, AC-16, feature 28).
- * Otherwise the small spinner beside the line, at the head of the rail. The
- * same three nodes either way, so a change of form is never news.
+ * `visuallyHidden` while the progress card shows the same line, so the eye
+ * reads it once and a screen reader still hears it from the region (spec
+ * 0026, child 0003, AC-31). The same three nodes either way, so a change of
+ * form is never news.
  */
-function StatusLine({ text, stacked = false }: { text: string; stacked?: boolean }) {
+function StatusLine({
+  text,
+  visuallyHidden = false,
+}: {
+  text: string;
+  visuallyHidden?: boolean;
+}) {
   return (
     <p
       data-testid="progress"
-      className={cx(
-        "flex text-ink",
-        stacked ? "flex-col items-center gap-4 py-10 text-center" : "items-center gap-3",
-      )}
+      className={cx("flex items-center gap-3 text-ink", visuallyHidden && "sr-only")}
     >
-      <Spinner size={stacked ? "lg" : "md"} />
+      <Spinner size="md" />
       <span>{text}…</span>
     </p>
   );
@@ -1630,15 +1905,21 @@ function StatusLine({ text, stacked = false }: { text: string; stacked?: boolean
 
 /**
  * The opened document card. Spec 0006, AC-19 to AC-21: the all clear line
- * when no page carries a warning, otherwise the warning callout naming each
- * page RedactNest cannot fully check; then, after the warnings, an untitled
- * note callout for what is worth knowing but changes nothing. Inside the
- * polite live region, so all of it is heard once, with the open, and it stays
- * mounted through the run so it is not heard again. The page count is the file
- * bar's (spec 0007, AC-3). The words come from `src/lib/page-findings`, the
- * same helpers the name and the download warning read (INV-5).
+ * when no page carries a warning, otherwise the warning naming each page
+ * RedactNest cannot fully check; then, after the warnings, an untitled note
+ * for what is worth knowing but changes nothing. Inside the polite live
+ * region, so all of it is heard once, with the open, and it stays mounted
+ * through the run so it is not heard again. The page count is the file bar's
+ * (spec 0007, AC-3). The words come from `src/lib/page-findings`, the same
+ * helpers the name and the download warning read (INV-5).
+ *
+ * Drawn flat, as `ToolReview.dc.html` draws the warning at the column's head
+ * (the owner's call, 2026-11-26): the region keeps its name and its `h2`,
+ * visually hidden, and the warning's title stays its `h3`, visually hidden,
+ * so each warning reads as one line; the advice waits behind "What to do".
  */
 function OpenedDocument({ session }: { session: LiveSession }) {
+  const headingId = useId();
   const { summary } = session;
   if (!summary) return null;
 
@@ -1646,32 +1927,37 @@ function OpenedDocument({ session }: { session: LiveSession }) {
   const notes = noteLines(summary, session.matches);
 
   return (
-    <Card title="Document opened">
+    <section aria-labelledby={headingId} className="flex flex-col gap-2.5">
+      <h2 id={headingId} className="sr-only">
+        Document opened
+      </h2>
       {!partly && (
-        <p data-testid="all-clear" className="text-ink-muted">
-          {ALL_CLEAR}
+        <p
+          data-testid="all-clear"
+          className="flex items-start gap-2 text-small text-ink-muted"
+        >
+          <CircleCheck
+            aria-hidden="true"
+            className="mt-0.5 size-4 shrink-0 text-accent"
+            strokeWidth={2}
+          />
+          <span>{ALL_CLEAR}</span>
         </p>
       )}
       {partly && (
-        <Callout
-          tone="warning"
+        <WarningBox
           title={OPEN_WARNING_TITLE}
-          headingLevel={3}
+          titleHidden
+          lines={warningLines(summary)}
+          more={
+            showsAdvice(summary)
+              ? { label: ADVICE_LINK, text: ADVICE, "data-testid": "page-advice" }
+              : undefined
+          }
           data-testid="page-warnings"
-        >
-          {warningLines(summary).map((line) => (
-            <p key={line}>{line}</p>
-          ))}
-          {showsAdvice(summary) && <p data-testid="page-advice">{ADVICE}</p>}
-        </Callout>
+        />
       )}
-      {notes.length > 0 && (
-        <Callout tone="info" data-testid="page-notes">
-          {notes.map((line) => (
-            <p key={line}>{line}</p>
-          ))}
-        </Callout>
-      )}
-    </Card>
+      {notes.length > 0 && <NoteBox lines={notes} data-testid="page-notes" />}
+    </section>
   );
 }

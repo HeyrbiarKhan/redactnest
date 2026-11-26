@@ -18,6 +18,7 @@ const CONFIG_KEYS = [
   "NEXT_PUBLIC_MATCH_CONTEXT_CHARS",
   "NEXT_PUBLIC_MAX_CUSTOM_TERMS",
   "NEXT_PUBLIC_MAX_TERM_CHARS",
+  "NEXT_PUBLIC_PREVIEW_MAX_PIXELS",
   "NEXT_PUBLIC_SITE_URL",
   "NEXT_PUBLIC_SOURCE_URL",
   "NEXT_PUBLIC_VERCEL_GIT_PROVIDER",
@@ -175,6 +176,39 @@ describe("the custom terms caps", () => {
   ])("refuse a term length cap that is %s", async (_label, value) => {
     await expect(loadConfig({ NEXT_PUBLIC_MAX_TERM_CHARS: value })).rejects.toThrow(
       /NEXT_PUBLIC_MAX_TERM_CHARS/,
+    );
+  });
+});
+
+/**
+ * Spec 0026 child 0002, *Configuration required*. The preview's picture cap is
+ * a memory limit, read like every other cap, with a floor and a ceiling so a
+ * typo can ask neither for a page nobody can read nor for a picture no browser
+ * can show.
+ */
+describe("the preview's picture cap", () => {
+  it("defaults to 8,388,608 device pixels", async () => {
+    const config = await loadConfig({});
+    expect(config.previewMaxPixels).toBe(8_388_608);
+  });
+
+  it("reads a value that is set, from the floor to the ceiling", async () => {
+    expect(
+      (await loadConfig({ NEXT_PUBLIC_PREVIEW_MAX_PIXELS: "1048576" })).previewMaxPixels,
+    ).toBe(1_048_576);
+    expect(
+      (await loadConfig({ NEXT_PUBLIC_PREVIEW_MAX_PIXELS: "16777216" })).previewMaxPixels,
+    ).toBe(16_777_216);
+  });
+
+  it.each([
+    ["below the floor", "1048575"],
+    ["past the ceiling", "16777217"],
+    ["not a number", "lots"],
+    ["a float", "8388608.5"],
+  ])("refuses a cap that is %s", async (_label, value) => {
+    await expect(loadConfig({ NEXT_PUBLIC_PREVIEW_MAX_PIXELS: value })).rejects.toThrow(
+      /NEXT_PUBLIC_PREVIEW_MAX_PIXELS/,
     );
   });
 });

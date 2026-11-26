@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   asMatchId,
@@ -11,6 +11,10 @@ import {
   PAGE_FINDINGS,
   SANITIZED_KINDS,
   type EngineErrorKind,
+  type MatchBox,
+  type PageDrawnMessage,
+  type PageRect,
+  type RequestMessage,
 } from "@/worker/protocol";
 
 /**
@@ -318,5 +322,41 @@ describe("minting a match id", () => {
     ["one with punctuation", "page:2/match:11"],
   ])("leaves %s untouched", (_label, value) => {
     expect(asMatchId(value)).toBe(value);
+  });
+});
+
+/** Does `T` hold a `U` anywhere inside it? Distributes over unions first. */
+type Carries<T, U> = T extends unknown ? CarryProbe<T, U> : never;
+
+type CarryProbe<T, U> = [T] extends [U]
+  ? true
+  : T extends readonly (infer Element)[]
+    ? Carries<Element, U>
+    : T extends object
+      ? Carries<T[keyof T], U>
+      : false;
+
+type Holds<T, U> = true extends Carries<T, U> ? "holds it" : "never holds it";
+
+/**
+ * Spec 0002, INV-2, as spec 0026 child 0002 amends it: boxes and rectangles
+ * travel from the worker for display only, and nothing drawn ever travels
+ * back. No request the page can send holds a `PageRect` or a `MatchBox`, so a
+ * run names matches by `MatchId` alone and a stale or tampered box can never
+ * cause a wrong removal. Checked at `pnpm typecheck`.
+ */
+describe("geometry never travels to the worker", () => {
+  it("holds no rectangle and no box in any request", () => {
+    expectTypeOf<Holds<RequestMessage, PageRect>>().toEqualTypeOf<"never holds it">();
+    expectTypeOf<Holds<RequestMessage, MatchBox>>().toEqualTypeOf<"never holds it">();
+  });
+
+  /** The canary: the probe finds them where they do travel. */
+  it("would find a rectangle in a drawn page and inside a box", () => {
+    expectTypeOf<Holds<PageDrawnMessage, PageRect>>().toEqualTypeOf<"holds it">();
+    expectTypeOf<Holds<PageDrawnMessage, MatchBox>>().toEqualTypeOf<"holds it">();
+    expectTypeOf<
+      Holds<RequestMessage | { boxes: readonly MatchBox[] }, PageRect>
+    >().toEqualTypeOf<"holds it">();
   });
 });

@@ -49,6 +49,13 @@ export const BLACK_BOX_PATH = "/black-box-redaction";
 export const HOME_PATH = "/";
 
 /**
+ * The home page's How it works section: its `id`, and the header's link to it
+ * from every page, a plain `a` (spec 0026, AC-5 and AC-8).
+ */
+export const HOW_IT_WORKS_ID = "how-it-works";
+export const HOW_IT_WORKS_PATH = `${HOME_PATH}#${HOW_IT_WORKS_ID}`;
+
+/**
  * Pricing and the account pages (spec 0012). Every link to one of these is a
  * plain `a` (`Button`'s `reload`), never `next/link`, so nothing prefetches an
  * account page or the one that starts a checkout, and `/tool` sends no request
@@ -64,8 +71,31 @@ export const BILLING_PATH = "/account/billing";
 export const WELCOME_PATH = "/account/welcome";
 
 /**
+ * The page that signs a visitor out, so the header's menu can offer Sign out
+ * without Clerk's script on the page it sits on (spec 0026, child 0001,
+ * AC-26). In the account group, so Clerk loads there and nowhere else; kept
+ * out of the sitemap and disallowed in `robots.ts`.
+ */
+export const SIGN_OUT_PATH = "/sign-out";
+
+/**
  * Where every page posts its counts and failure reports (spec 0016, AC-4).
  * Our own origin, so `/tool`'s `connect-src 'self'` already allows it, and the
  * route passes each event on server to server.
  */
 export const TELEMETRY_PATH = "/api/telemetry";
+
+/** The plan check the tool asks of its own server (spec 0012, AC-1). */
+export const ENTITLEMENT_PATH = "/api/entitlement";
+
+/**
+ * What else `/tool` fetches from its own origin, named for the home page's
+ * network band (spec 0026, AC-9), which `tests/e2e/network-list.spec.ts`
+ * holds to every request a full run makes: the engine, served from
+ * `public/engine` (`scripts/sync-engine.mjs`); Next's own built files, the
+ * page's scripts, styles and self hosted font; and the icons `src/app`'s icon
+ * files serve.
+ */
+export const ENGINE_PREFIX = "/engine/";
+export const NEXT_FILES_PREFIX = "/_next/";
+export const ICON_PATHS = Object.freeze(["/favicon.ico", "/icon.svg", "/apple-icon.png"]);

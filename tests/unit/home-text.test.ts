@@ -20,10 +20,16 @@ import { DETECTOR_KINDS, SANITIZED_KINDS } from "@/worker/protocol";
 
 describe("the hero (AC-10)", () => {
   it("says what the spec settled, word for word", () => {
-    expect(HOME_TEXT.eyebrow).toBe("PDF redaction in your browser");
+    expect(HOME_TEXT.eyebrow).toBe("Runs in your browser. Never uploaded.");
     expect(HOME_TEXT.headline).toBe("Redaction that actually removes the text");
     expect(HOME_TEXT.primary).toBe("Remove text from a PDF");
-    expect(HOME_TEXT.pricing).toBe("See pricing");
+    expect(HOME_TEXT.howItWorks).toBe("See how it works");
+    // Spec 0026, AC-8, as the port amends it: the mockup's title, then the
+    // self check named by its result, row M3.
+    expect(HOME_TEXT.shotCard).toEqual({
+      title: "Checked before you download",
+      line: "No pass, no file",
+    });
   });
 
   /**
@@ -41,28 +47,54 @@ describe("the hero (AC-10)", () => {
     expect(HOME_TEXT.lead).not.toMatch(/\bfinds\b/i);
   });
 
-  it("gives the trio its three icons, titles and lines, in order", () => {
-    expect(
-      HOME_TEXT.features.map(({ icon, title, body }) => [icon.displayName, title, body]),
-    ).toEqual([
+  /** Spec 0026, AC-8: How it works, three cards in the order of the tool. */
+  it("gives How it works its three titles and lines, in order", () => {
+    expect(HOME_TEXT.steps.eyebrow).toBe("How it works");
+    expect(HOME_TEXT.steps.title).toBe("Three steps to a redacted PDF");
+    // The owner's line (2026-11-25), rows M1 and the free answer.
+    expect(HOME_TEXT.steps.lead).toBe("No upload, no queue, no account for small files.");
+    expect(HOME_TEXT.steps.items.map(({ title, body }) => [title, body])).toEqual([
+      ["Open a PDF", "Drop it on the page, or choose it from your files."],
       [
-        "Laptop",
-        "Stays on your device",
-        "Never uploaded to us or to anyone else, and nothing is stored.",
-      ],
-      // Spec 0019, AC-12: two kinds, each held by the structure check, never
-      // hidden data as a whole. As built: "selectable", since a ticked word's
-      // scan ink further out than the padded area stays.
-      [
-        "Eraser",
-        "Removed, not covered",
-        "Selectable text you tick is taken out of the page, and document info and attachments are stripped.",
+        "Tick what to remove",
+        "Each item found is listed with the words around it. A tick at the start is only a suggestion.",
       ],
       [
-        "ShieldCheck",
-        "Checked before you download",
+        "Download your new file",
         "Every page of the new file is checked. If RedactNest can't vouch for it, you get no file.",
       ],
+    ]);
+  });
+
+  /**
+   * The trust strip (the owner's port of `Main.dc.html`, 2026-11-25): four
+   * claims, each with its icon, in the mockup's order.
+   */
+  it("gives the trust strip its four claims and icons, in order", () => {
+    expect(HOME_TEXT.trust.map(({ icon, text }) => [icon.displayName, text])).toEqual([
+      ["Monitor", "Processed in your browser tab"],
+      // Lucide names `Trash2` "Trash" in its display name.
+      ["Trash", "Removed, not covered"],
+      ["Shield", "Every file checked before download"],
+      ["Code", "Open source (AGPL), so you can check it"],
+    ]);
+  });
+
+  /**
+   * Spec 0026, AC-8, row M2: "selectable" and "the page", never "the file",
+   * and removed first, then marked.
+   */
+  it("says the black box section's claim behind the self check's text part", () => {
+    // The mockup's eyebrow; "Removed, not covered" is the trust strip's.
+    expect(HOME_TEXT.blackBox.eyebrow).toBe("Why it matters");
+    expect(HOME_TEXT.blackBox.title).toBe("A black box is not redaction");
+    expect(HOME_TEXT.blackBox.body).toContain(
+      "RedactNest takes the selectable text you tick out of the page first, then marks where it was.",
+    );
+    expect(HOME_TEXT.blackBox.body).not.toMatch(/out of the file|from the file\b(?!:)/);
+    expect(HOME_TEXT.blackBox.panels.map(({ reads }) => reads)).toEqual([
+      "Contact: jane.doe@example.com",
+      "Contact:",
     ]);
   });
 });
@@ -167,15 +199,18 @@ describe("the finds and strips cards (AC-11)", () => {
    */
   it("holds the words around the two lists", () => {
     expect(HOME_TEXT.band).toEqual({
+      eyebrow: "What it covers",
       title: "What RedactNest looks for and strips",
       finds: {
         title: "Looks for",
         subtitle: "Sensitive details we can detect in your files.",
+        // The owner's line (2026-11-25), shown only with billing on, row M6.
+        termsChip: "+ Your own terms with Pro",
         line: "No selectable text wholly inside a page's visible area is removed unless you tick it.",
       },
       strips: {
         title: "Strips",
-        subtitle: "Whenever a file carries them:",
+        subtitle: "Whenever a file carries them",
         note: "Comments and form fields are flattened into the page: what showed stays, and the comments and fields themselves are removed, with a note's hidden text and any attached file.",
       },
     });
@@ -217,41 +252,86 @@ describe("the pictures' words (AC-5, AC-12)", () => {
 
   it("describes the social card without naming a detector", () => {
     expect(HOME_TEXT.socialAlt).toBe(
-      `RedactNest. ${HOME_TEXT.eyebrow}. ${HOME_TEXT.headline}.`,
+      `RedactNest. ${HOME_TEXT.eyebrow} ${HOME_TEXT.headline}.`,
     );
     expect(HOME_TEXT.socialAlt).not.toMatch(/email|phone/i);
   });
 });
 
-describe("AC-30: each thing said once", () => {
+describe("AC-30: browser, outside the main content's named places", () => {
   /**
-   * The document's privacy is "in your browser" in the eyebrow alone, and the
-   * social card's alt text, which describes that eyebrow. Every other word on
-   * the page says it another way, once, or not at all.
+   * The social card's alt text describes the eyebrow, so it says browser
+   * too; the found and stripped lists never do. Where the main content says
+   * it is the table below.
    */
-  it("says browser only in the eyebrow and the social card's alt text", () => {
-    // The site line is the head's description, outside the main content this
-    // rule counts (spec 0024, AC-11), as the social card's alt text is.
-    const { eyebrow, socialAlt } = HOME_TEXT;
-    const rest = Object.entries(HOME_TEXT).filter(
-      ([key]) => !["eyebrow", "socialAlt", "siteLine"].includes(key),
-    );
-
-    expect(eyebrow).toMatch(/browser/);
-    expect(socialAlt).toMatch(/browser/);
-    expect(JSON.stringify(rest)).not.toMatch(/browser/i);
+  it("says browser in the social card's alt text, and in no found or stripped item", () => {
+    expect(HOME_TEXT.eyebrow).toMatch(/browser/);
+    expect(HOME_TEXT.socialAlt).toMatch(/browser/);
     for (const item of [...strippedItems(), ...findsItems().map(({ label }) => label)]) {
       expect(item).not.toMatch(/browser/i);
     }
   });
+});
 
-  it("says never uploaded only in the first trio card", () => {
-    const [first] = HOME_TEXT.features;
+/**
+ * AC-30, as the owner's port of `Main.dc.html` amends it (2026-11-25): each
+ * of the page's claims is said in the places the owner read and named, and
+ * nowhere else. Spec 0013, INV-11 asks the owner's read for a line that
+ * repeats an idea, so a new repeat fails here until this table names it.
+ * Each list holds every place in `HOME_TEXT` (by its path) that says the
+ * idea, once per time it is said there. The site line is the head's and the
+ * social card's alt text describes the eyebrow, both outside the main
+ * content (spec 0024, AC-11). The drawn window's lock line is the tool's own
+ * `LOCK_LINE`, which the page's test counts.
+ */
+describe("AC-30: each claim said only in its named places", () => {
+  /** Every string in the main content's words, with the path it sits at. */
+  function places(value: unknown, path: string): [string, string][] {
+    if (typeof value === "string") return [[path, value]];
+    if (typeof value === "object" && value !== null) {
+      return Object.entries(value).flatMap(([key, inner]) =>
+        places(inner, path === "" ? key : `${path}.${key}`),
+      );
+    }
+    return [];
+  }
+  const MAIN = places(HOME_TEXT, "").filter(
+    ([path]) => !["siteLine", "socialAlt"].includes(path),
+  );
 
-    expect(first?.body).toMatch(/never uploaded/i);
-    // The site line is the head's, outside the main content (spec 0024, AC-11).
-    const main = Object.entries(HOME_TEXT).filter(([key]) => key !== "siteLine");
-    expect(JSON.stringify(main).match(/uploaded/gi)).toHaveLength(1);
+  /** Each place a pattern is said, once per time it is said there. */
+  const saidAt = (pattern: RegExp) =>
+    MAIN.flatMap(([path, text]) => (text.match(pattern) ?? []).map(() => path)).sort();
+
+  it.each([
+    [
+      "in your browser",
+      /browser/gi,
+      ["eyebrow", "questions.items.0.answer", "trust.0.text"],
+    ],
+    [
+      "never uploaded",
+      /upload/gi,
+      ["eyebrow", "questions.items.0.answer", "questions.items.0.question", "steps.lead"],
+    ],
+    ["removed, not covered", /not covered/gi, ["trust.1.text"]],
+    [
+      "checked before you download",
+      /checked before (you )?download/gi,
+      ["shotCard.title", "trust.2.text"],
+    ],
+  ] as const)("says %s only in its named places", (_claim, pattern, named) => {
+    expect(saidAt(pattern)).toEqual([...named].sort());
+  });
+
+  it("would catch a repeat the table does not name", () => {
+    const extra = [...MAIN, ["band.extra", "Checked before you download, again"]];
+    const said = extra
+      .flatMap(([path, text]) =>
+        (text?.match(/checked before (you )?download/gi) ?? []).map(() => path),
+      )
+      .sort();
+    expect(said).not.toEqual(["shotCard.title", "trust.2.text"]);
   });
 });
 

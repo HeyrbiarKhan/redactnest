@@ -9,7 +9,7 @@ import { PageContainer } from "@/ui/page-container";
 import { Prose } from "@/ui/prose";
 
 import { FOOTER_LINK_CLASS } from "./footer-link";
-import { PageHeader } from "./site-nav";
+import { type NavItem, PageHeader } from "./site-nav";
 
 /**
  * The frame both legal pages share, and the security page too (spec 0018,
@@ -48,17 +48,23 @@ import { PageHeader } from "./site-nav";
  * All of it is CSS: no script, so the pages stay static (spec 0011, INV-7).
  *
  * A server component with no script of its own, so neither page collects
- * anything (INV-7). The header's button is a real page load (`reload`), never
+ * anything (INV-7). The shared header's account slot is the one script on a
+ * billing on build, and it reads a cookie and collects nothing (spec 0026,
+ * child 0001, AC-25). The header's button is a real page load (`reload`), never
  * `next/link`, so the tool opens under its own content security policy (spec
- * 0003, INV-10). Nothing in the header is current here (spec 0013, AC-7).
+ * 0003, INV-10). The header marks `current` when the page has a nav item of
+ * its own (Security, spec 0026, AC-5), and nothing on the privacy and terms
+ * pages (spec 0013, AC-7).
  */
 export function LegalPage({
   title,
+  current,
   changes,
   sections,
   children,
 }: {
   readonly title: string;
+  readonly current?: NavItem;
   readonly changes: PolicyChanges;
   /** The page's section record, which its h2s and the list both read. */
   readonly sections: PolicySections;
@@ -66,7 +72,7 @@ export function LegalPage({
 }) {
   return (
     <>
-      <PageHeader />
+      <PageHeader current={current} />
       {/* The skip link's target, allowed to drop its outline (spec 0003, AC-14). */}
       <main
         id="main"
@@ -75,9 +81,16 @@ export function LegalPage({
         className="flex-1 py-10 focus:outline-none sm:py-14"
       >
         <PageContainer width="wide" className="@container">
-          <div className="grid gap-10 @min-[61rem]:grid-cols-[minmax(0,14rem)_minmax(0,44rem)] @min-[61rem]:gap-x-16 @min-[61rem]:[grid-template-areas:'._head'_'nav_text']">
+          {/*
+            Below `lg` one column that never grows past the container
+            (`grid-cols-1`), and a title that breaks a word too long for a line
+            alone, as the home page's headline does: "Security" at 200% text is
+            wider than a 305 pixel window's line (spec 0024, AC-14; spec 0026,
+            AC-16).
+          */}
+          <div className="grid grid-cols-1 gap-10 @min-[61rem]:grid-cols-[minmax(0,14rem)_minmax(0,44rem)] @min-[61rem]:gap-x-16 @min-[61rem]:[grid-template-areas:'._head'_'nav_text']">
             <div className="flex max-w-narrow flex-col gap-2 border-b border-border pb-8 @min-[61rem]:[grid-area:head]">
-              <h1 className="text-title text-ink">{title}</h1>
+              <h1 className="text-title text-ink wrap-break-word">{title}</h1>
               <p data-testid="last-updated" className="text-ink-muted">
                 Last updated <PolicyDate date={lastUpdated(changes)} />
               </p>

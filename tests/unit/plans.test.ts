@@ -25,7 +25,19 @@ describe("PRO_PLAN", () => {
 
   /** covers: INV-8. A cap here could drift from `config`, the one source. */
   it("holds a name and a price, and no cap", () => {
-    expect(Object.keys(PRO_PLAN)).toEqual(["name", "priceLine"]);
+    expect(Object.keys(PRO_PLAN)).toEqual(["name", "priceLine", "price", "per"]);
+  });
+
+  /**
+   * The home page's large figure and the words beside it (the owner's port
+   * of `Main.dc.html`, 2026-11-25) say the price line's price, so a change to
+   * one is a change to both.
+   */
+  it("shows the home page the price line's own figure, per month", () => {
+    expect(PRO_PLAN.price).toBe("$19");
+    expect(PRO_PLAN.priceLine.startsWith(`${PRO_PLAN.price} `)).toBe(true);
+    expect(PRO_PLAN.priceLine).toMatch(/a month$/);
+    expect(PRO_PLAN.per).toBe("/ month");
   });
 });
 
@@ -34,9 +46,10 @@ describe("FREE_PLAN", () => {
     expect(FREE_PLAN.name).toBe("Free");
   });
 
-  /** covers: INV-8 */
-  it("holds a name only, with no price and no cap", () => {
-    expect(Object.keys(FREE_PLAN)).toEqual(["name"]);
+  /** covers: INV-8. Its price is the home page's large figure, and no cap. */
+  it("holds a name and its price, $0, and no cap", () => {
+    expect(Object.keys(FREE_PLAN)).toEqual(["name", "price"]);
+    expect(FREE_PLAN.price).toBe("$0");
   });
 });
 

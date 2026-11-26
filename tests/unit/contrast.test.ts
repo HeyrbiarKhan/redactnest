@@ -25,18 +25,22 @@ const TOKENS = Object.freeze([
   "canvas",
   "surface",
   "subtle",
+  "muted",
   "border",
   "border-strong",
   "ink",
   "ink-muted",
+  "ink-subtle",
   "accent",
   "accent-strong",
   "accent-soft",
+  "accent-faint",
   "on-accent",
   "focus",
   "warning-bg",
   "warning-border",
   "warning-icon",
+  "warning-ink",
   "info-bg",
   "info-border",
   "info-icon",
@@ -45,6 +49,20 @@ const TOKENS = Object.freeze([
   "danger-icon",
   "danger-ink",
   "danger-strong",
+  "night",
+  "night-ink",
+  "night-muted",
+  "night-accent",
+  "night-border",
+  "glow",
+  "glow-edge",
+  "ink-soft",
+  "accent-bright",
+  "border-soft",
+  "border-mid",
+  "accent-edge",
+  "night-raised",
+  "night-faint",
 ]);
 
 /** 4.5:1 for text, 3:1 for icons, control edges and the focus ring (WCAG 1.4.3, 1.4.11). */
@@ -91,8 +109,51 @@ const CONTRACT: readonly Pairing[] = Object.freeze([
   ...pairings(["on-accent"], ["danger-ink", "danger-strong"], TEXT),
   { foreground: "focus", background: "surface", minimum: TEXT },
   { foreground: "warning-icon", background: "warning-bg", minimum: GRAPHIC },
+  // The ring around "What to do" inside `/tool`'s page warning, which its
+  // offset puts on the warning's `warning-bg` fill (spec 0026, AC-12).
+  { foreground: "focus", background: "warning-bg", minimum: GRAPHIC },
   { foreground: "info-icon", background: "info-bg", minimum: GRAPHIC },
   { foreground: "danger-icon", background: "danger-bg", minimum: GRAPHIC },
+  // The redesign's pairings (spec 0026, AC-1). Chips, count badges and hover
+  // fills sit on `muted`; a ticked row on `accent-faint`; captions take
+  // `ink-subtle`, never on `muted`; links take `accent` as text; the tool page
+  // sits on `subtle`, so the ring and the checkbox edge are held there too.
+  ...pairings(["ink", "ink-muted"], ["muted", "accent-faint"], TEXT),
+  ...pairings(["ink-subtle"], ["canvas", "surface", "subtle"], TEXT),
+  ...pairings(["accent"], ["canvas", "surface", "subtle", "accent-faint"], TEXT),
+  ...pairings(["accent"], ["muted"], GRAPHIC),
+  ...pairings(["accent-strong"], ["accent-faint"], TEXT),
+  ...pairings(["border-strong"], ["subtle", "accent-faint"], GRAPHIC),
+  ...pairings(["focus"], ["subtle", "muted", "accent-faint"], GRAPHIC),
+  { foreground: "warning-ink", background: "warning-bg", minimum: TEXT },
+  // The network band on `night` (AC-9): its words, its link and the ring
+  // around that link, which takes `night-accent` there because `focus` fails.
+  ...pairings(["night-ink", "night-muted", "night-accent"], ["night"], TEXT),
+  // The home page's port of `Main.dc.html` (2026-11-25). The hero's words,
+  // caps line and buttons' ring over the `glow` wash; `ink-soft` for chips,
+  // the trust strip and drawn page text on the light fills; a count in
+  // `ink-subtle` on the drawn window's ticked `accent-faint` row. `glow-edge`,
+  // `accent-bright` and `border-soft` are edges in drawings and join none.
+  ...pairings(["ink", "ink-muted", "ink-subtle"], ["glow"], TEXT),
+  { foreground: "focus", background: "glow", minimum: GRAPHIC },
+  ...pairings(["ink-soft"], ["canvas", "surface", "subtle", "glow"], TEXT),
+  { foreground: "ink-subtle", background: "accent-faint", minimum: TEXT },
+  // The black box section's tinted look: the box laid over text in red, its
+  // chip and its copy (`CoverFigure`'s `tinted`).
+  { foreground: "danger-strong", background: "danger-bg", minimum: TEXT },
+  // The network band's table on its raised fill: its rows, the visitor's
+  // file in the accent, and the column heads in `night-faint`.
+  ...pairings(["night-muted", "night-accent", "night-faint"], ["night-raised"], TEXT),
+  // The closing card on `accent`: its line in `accent-soft`, its heading in
+  // `on-accent` (held above), its button's words in `accent` on `surface`
+  // (held above), and the ring around that button in `ink`, on `accent` and
+  // on the `accent-bright` wash behind it.
+  { foreground: "accent-soft", background: "accent", minimum: TEXT },
+  ...pairings(["ink"], ["accent", "accent-bright"], GRAPHIC),
+  // The page preview's rail (spec 0026 child 0002, AC-41): a warning page's
+  // mark, an exclamation in `on-accent` on a `warning-icon` disc, held as a
+  // graphic, since it is decorative and the button's name says it.
+  { foreground: "on-accent", background: "warning-icon", minimum: GRAPHIC },
 ]);
 
 /**
@@ -144,7 +205,7 @@ describe("the ratio function", () => {
     const ratio = contrast(valueOf("focus"), valueOf("accent"));
 
     expect(ratio).toBeLessThan(GRAPHIC);
-    expect(ratio).toBeCloseTo(1.68, 1);
+    expect(ratio).toBeCloseTo(1.39, 1);
   });
 });
 
@@ -202,4 +263,24 @@ describe("the contrast contract (AC-2)", () => {
       minimum,
     );
   });
+});
+
+/**
+ * Two pairings the spec keeps out of the contract because they fail, so a
+ * component that reaches for one is caught here rather than by eye
+ * (spec 0026, AC-1).
+ */
+describe("the pairings that stay out of the contract", () => {
+  it.each([
+    ["ink-subtle", "muted", TEXT],
+    ["focus", "night", GRAPHIC],
+  ] as const)(
+    "%s on %s falls short of %s:1, and is not in the contract",
+    (fg, bg, min) => {
+      expect(contrast(valueOf(fg), valueOf(bg))).toBeLessThan(min);
+      expect(
+        CONTRACT.some((pair) => pair.foreground === fg && pair.background === bg),
+      ).toBe(false);
+    },
+  );
 });

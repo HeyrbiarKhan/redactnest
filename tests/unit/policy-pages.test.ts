@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -126,8 +126,10 @@ const HOME_FILES = [
   "src/ui/site-header.tsx",
   "src/ui/brand-mark.tsx",
   "src/ui/link-group.tsx",
-  "src/ui/feature-list.tsx",
   "src/ui/icon-circle.tsx",
+  "src/ui/cover-figure.tsx",
+  "src/ui/card.tsx",
+  "src/app/pricing-cards.tsx",
   "src/ui/page-container.tsx",
   "src/ui/button.tsx",
 ];
@@ -152,8 +154,10 @@ const SEARCH_FILES = [
   "src/ui/cover-figure.tsx",
   "src/lib/search-pages.ts",
   "src/app/site-nav.tsx",
-  "src/ui/feature-list.tsx",
-  "src/ui/step-list.tsx",
+  "src/app/footer-link.ts",
+  "src/ui/icon-circle.tsx",
+  "src/ui/link-group.tsx",
+  "src/ui/callout.tsx",
   "src/ui/prose.tsx",
   "src/ui/page-container.tsx",
   "src/ui/button.tsx",
@@ -174,4 +178,104 @@ describe("the search pages", () => {
       );
     },
   );
+});
+
+/**
+ * The header's one island. Spec 0026, child 0001, AC-25, narrowing spec 0011
+ * INV-7, spec 0012 AC-13, spec 0013 AC-13, spec 0018 AC-11 and spec 0024
+ * INV-5: the shared header carries the account slot onto these pages on a
+ * billing on build, and nothing else client side.
+ *
+ * The lists above read each listed file's own directive. This walks every
+ * page's static imports through `src`, the way the bundler does, and stops at
+ * each client module it reaches, so a client component pulled in anywhere
+ * below a page fails here by name. `account-slot.tsx` is the one allowed, and
+ * the walk does not enter it (its menu loads with `import()`, for a signed in
+ * visitor alone). The pages' own files are still held to no directive above.
+ */
+const STATIC_PAGES = [
+  "src/app/page.tsx",
+  "src/app/pricing/page.tsx",
+  "src/app/privacy/page.tsx",
+  "src/app/terms/page.tsx",
+  "src/app/security/page.tsx",
+  "src/app/redact-pdf/page.tsx",
+  "src/app/remove-text-from-pdf/page.tsx",
+  "src/app/black-box-redaction/page.tsx",
+  "src/app/not-found.tsx",
+];
+
+const ACCOUNT_SLOT = "src/app/account-slot.tsx";
+
+/**
+ * `import ... from "x"` and `export ... from "x"`, never `import("x")`, and
+ * never `import type`, which the compiler erases.
+ */
+const STATIC_IMPORT = /^\s*(?:import|export)\s(?!type\s)[^;]*?from\s+["']([^"']+)["']/gm;
+const SIDE_EFFECT_IMPORT = /^\s*import\s+["']([^"']+)["']/gm;
+
+/** A specifier inside `src` as a file path, or null for a package. */
+function resolveSource(from: string, specifier: string): string | null {
+  const base = specifier.startsWith("@/")
+    ? join("src", specifier.slice(2))
+    : specifier.startsWith(".")
+      ? join(from, "..", specifier)
+      : null;
+  if (base === null) return null;
+  for (const candidate of [
+    base,
+    `${base}.ts`,
+    `${base}.tsx`,
+    join(base, "index.ts"),
+    join(base, "index.tsx"),
+  ]) {
+    const path = join(ROOT, candidate);
+    if (existsSync(path) && statSync(path).isFile())
+      return candidate.replaceAll("\\", "/");
+  }
+  throw new Error(`${from} imports ${specifier}, which resolves to no file`);
+}
+
+/** Every client module a page reaches by static import, without entering one. */
+function clientModulesFrom(entry: string): string[] {
+  const seen = new Set<string>();
+  const clients = new Set<string>();
+  const queue = [entry];
+  while (queue.length > 0) {
+    const file = queue.shift() as string;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const source = readFileSync(join(ROOT, file), "utf8");
+    if (file !== entry && USE_CLIENT.test(source)) {
+      clients.add(file);
+      continue;
+    }
+    for (const pattern of [STATIC_IMPORT, SIDE_EFFECT_IMPORT]) {
+      for (const [, specifier] of source.matchAll(pattern)) {
+        const next = resolveSource(file, specifier as string);
+        if (next !== null && /\.tsx?$/.test(next)) queue.push(next);
+      }
+    }
+  }
+  return [...clients].sort();
+}
+
+describe("the header's one island (spec 0026, child 0001, AC-25)", () => {
+  /** covers: child 0001, AC-25 */
+  it.each(STATIC_PAGES)("%s reaches no client module but the account slot", (page) => {
+    expect(clientModulesFrom(page)).toEqual([ACCOUNT_SLOT]);
+  });
+
+  it("finds the island through the header, so the walk is reading imports", () => {
+    expect(clientModulesFrom("src/app/site-nav.tsx")).toEqual([ACCOUNT_SLOT]);
+    expect(readFileSync(join(ROOT, ACCOUNT_SLOT), "utf8")).toMatch(USE_CLIENT);
+  });
+
+  it("loads the menu with import(), so no page reaches it statically", () => {
+    const slot = readFileSync(join(ROOT, ACCOUNT_SLOT), "utf8");
+    expect(slot).toMatch(/import\(\s*["']\.\/account-menu["']\s*\)/);
+    expect([...slot.matchAll(STATIC_IMPORT)].map(([, from]) => from)).not.toContain(
+      "./account-menu",
+    );
+  });
 });

@@ -20,8 +20,10 @@
  */
 
 import {
+  CANVAS_SIDE_MAX,
   EngineFailure,
   openDocument,
+  quadRects,
   redactDocument,
   RunCancelled,
   type FoundMatch,
@@ -35,9 +37,13 @@ import { foldTerm, prepareTerm, termRefusal } from "@/lib/term-text";
 import {
   asMatchId,
   countPagesByFinding,
+  DRAW_PURPOSES,
   type DocumentSummary,
+  type DrawPurpose,
   type EngineLimits,
   type ErrorMessage,
+  type MatchBox,
+  type PageDrawnMessage,
   type ProgressMessage,
   type ProgressPhase,
   type RedactedMessage,
@@ -57,7 +63,14 @@ import {
  * needs `dom`. This names only what this file actually calls.
  */
 interface WorkerScope {
-  postMessage(message: ResponseMessage, transfer?: readonly ArrayBuffer[]): void;
+  /**
+   * The transfer list takes a drawn page's picture beside a run's output
+   * (spec 0026 child 0002, AC-48): both move, neither is copied.
+   */
+  postMessage(
+    message: ResponseMessage,
+    transfer?: readonly (ArrayBuffer | ImageBitmap)[],
+  ): void;
   addEventListener(
     type: "message",
     listener: (event: MessageEvent<RequestMessage>) => void,
@@ -487,6 +500,124 @@ async function runSearch(
 }
 
 /**
+ * A draw request's fields, narrowed from `unknown`, or `null` at any doubt.
+ * Spec 0026 child 0002, AC-48: a page in the document's range, a known
+ * purpose, a positive whole `width` no wider than a canvas may be, and a
+ * positive whole `maxPixels`.
+ */
+function drawFields(
+  request: unknown,
+  pageCount: number,
+): { page: number; purpose: DrawPurpose; width: number; maxPixels: number } | null {
+  if (typeof request !== "object" || request === null) return null;
+  const { page, purpose, width, maxPixels } = request as Record<string, unknown>;
+  if (!Number.isInteger(page) || (page as number) < 1 || (page as number) > pageCount) {
+    return null;
+  }
+  if (!(DRAW_PURPOSES as readonly unknown[]).includes(purpose)) return null;
+  if (!Number.isInteger(width) || (width as number) < 1) return null;
+  if ((width as number) > CANVAS_SIDE_MAX) return null;
+  if (!Number.isInteger(maxPixels) || (maxPixels as number) < 1) return null;
+  return {
+    page: page as number,
+    purpose: purpose as DrawPurpose,
+    width: width as number,
+    maxPixels: maxPixels as number,
+  };
+}
+
+/**
+ * Every tickable row's boxes on one page, for a page draw's reply. Spec 0026
+ * child 0002, AC-50: only ids in this session's own target map, which are
+ * exactly the rows that can be ticked, and only rectangles, as fractions of
+ * the drawn page. No quad corner, offset or text of a target crosses.
+ */
+function boxesOn(
+  session: EngineSession,
+  pageIndex: number,
+  frame: readonly [number, number, number, number],
+): readonly MatchBox[] {
+  const boxes: MatchBox[] = [];
+  for (const [id, target] of session.targets) {
+    if (target.page !== pageIndex) continue;
+    const rects = quadRects(frame, target.quads);
+    if (rects.length > 0) boxes.push({ id, rects });
+  }
+  return boxes;
+}
+
+/**
+ * Draw one page for the preview. Spec 0026 child 0002, AC-48.
+ *
+ * Answered at once, outside the session's run queue: a draw reads only the
+ * review copy, which a run never touches (spec 0004, INV-1) and a review
+ * search only reads, so it waits for neither. It never consults the cancelled
+ * set, because the page never cancels a draw. Every doubt, a session that is
+ * gone, a worker with no `createImageBitmap` and any throw answers with no
+ * picture and no boxes, never an `error`, so a draw can never fail a session.
+ */
+async function handleDraw(
+  request: Extract<RequestMessage, { kind: "draw" }>,
+): Promise<void> {
+  const { id, jobId } = request;
+  const answer = (
+    page: number,
+    purpose: DrawPurpose,
+    picture: ImageBitmap | null,
+    boxes: readonly MatchBox[],
+  ): void => {
+    const message: PageDrawnMessage = {
+      id,
+      jobId,
+      kind: "page-drawn",
+      page,
+      purpose,
+      picture,
+      boxes,
+    };
+    scope.postMessage(message, picture ? [picture] : []);
+  };
+  const echoPage = typeof request.page === "number" ? request.page : 0;
+  const echoPurpose: DrawPurpose = request.purpose === "thumbnail" ? "thumbnail" : "page";
+
+  const session = sessions.get(jobId);
+  const fields = session ? drawFields(request, session.doc.summary.pageCount) : null;
+  if (
+    !session ||
+    !fields ||
+    typeof createImageBitmap !== "function" ||
+    typeof ImageData !== "function"
+  ) {
+    answer(echoPage, echoPurpose, null, []);
+    return;
+  }
+
+  let picture: ImageBitmap | null = null;
+  try {
+    const drawn = session.doc.drawPage(fields.page - 1, {
+      width: fields.width,
+      maxPixels: fields.maxPixels,
+    });
+    const boxes =
+      fields.purpose === "page" ? boxesOn(session, fields.page - 1, drawn.frame) : [];
+    picture = await createImageBitmap(
+      new ImageData(drawn.pixels, drawn.width, drawn.height),
+    );
+    // A replacement may have ended the session while the picture was made:
+    // its rows are gone, so nothing of it is sent.
+    if (sessions.get(jobId) !== session) {
+      picture.close();
+      answer(fields.page, fields.purpose, null, []);
+      return;
+    }
+    answer(fields.page, fields.purpose, picture, boxes);
+  } catch {
+    picture?.close();
+    answer(fields.page, fields.purpose, null, []);
+  }
+}
+
+/**
  * Did a run's trim reach the open's decisions, page by page? Which pages had
  * something removed, and which draw a picture reaching outside the visible
  * area, are exactly what the summary's `off-page-content` and
@@ -520,6 +651,10 @@ scope.addEventListener("message", (event: MessageEvent<RequestMessage>) => {
       // INV-8: this aborts one operation. It never ends the session, so the
       // document stays open and the visitor lands back where they were.
       cancelled.add(request.id);
+      break;
+    case "draw":
+      // Spec 0026 child 0002, AC-48: at once, outside the run queue.
+      void handleDraw(request);
       break;
   }
 });

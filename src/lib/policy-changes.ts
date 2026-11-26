@@ -23,6 +23,14 @@ export interface PolicyChange {
 export type PolicyChanges = readonly [PolicyChange, ...PolicyChange[]];
 
 export const PRIVACY_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
+  // Spec 0026 child 0002, AC-56: C3 names the pictures of your pages; and
+  // child 0001, AC-28: C5 and C6 for the signed in header. One entry for the
+  // day both were built, a literal.
+  Object.freeze({
+    date: "2026-11-26",
+    summary:
+      "Added the page preview: the pictures of your pages the tool shows you while you review stay on your device, like your document. Added the signed in header: when you have signed in, every page shows your email address and plan, which our server sends only to your own browser. A page reads Clerk’s sign in time cookie in your browser to decide whether to ask, and Clerk’s sign in token now holds your email address.",
+  }),
   Object.freeze({
     date: "2026-11-14",
     summary:
@@ -50,6 +58,14 @@ export const TERMS_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
  * so a change to what it says adds an entry here the same way.
  */
 export const SECURITY_CHANGES: PolicyChanges = Object.freeze<PolicyChanges>([
+  // Spec 0026 child 0002, AC-56: dated the day it was built, a literal; move
+  // it to the merge day if that is later. Says what the code does: the worker
+  // draws, nothing drawn goes back, and the page lets go at the review's end.
+  Object.freeze({
+    date: "2026-11-26",
+    summary:
+      "Added the page preview: on a wide screen, while you review, the worker draws pictures of your pages with a box over each item you can tick. Nothing the page draws goes back to the worker, and the page lets go of the pictures when the review ends.",
+  }),
   // Spec 0025, AC-11: dated the day it merges, a literal. 2026-11-18 holds
   // spec 0020's entry and the list runs strictly newest first; written on
   // 2026-11-24 and moved to 2026-11-25, so move it to the merge day if that is

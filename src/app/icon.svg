@@ -9,8 +9,8 @@
     the site itself is light only.
   -->
   <style>
-    path { fill: #1f7a7a; }
-    @media (prefers-color-scheme: dark) { path { fill: #d5eeea; } }
+    path { fill: #0f766e; }
+    @media (prefers-color-scheme: dark) { path { fill: #ccfbf1; } }
   </style>
   <path d="M22.5 13H41.5A5.5 5.5 0 0 1 41.5 24H22.5A5.5 5.5 0 0 1 22.5 13Z"/>
   <path d="M4.642 36.453A33 33 0 0 0 59.358 36.453A3 3 0 0 0 54.384 33.098A27 27 0 0 1 9.616 33.098A3 3 0 0 0 4.642 36.453Z"/>

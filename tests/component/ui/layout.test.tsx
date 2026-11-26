@@ -109,7 +109,7 @@ describe("Card", () => {
 
     expect(screen.getByTestId("plain")).toHaveClass("p-5", "gap-4");
     expect(screen.getByTestId("plain")).not.toHaveClass("p-7", "gap-6");
-    expect(screen.getByTestId("spacious")).toHaveClass("p-7", "gap-6", "rounded-xl");
+    expect(screen.getByTestId("spacious")).toHaveClass("p-7", "gap-6", "rounded-card");
     expect(screen.getByTestId("spacious")).not.toHaveClass("p-5", "gap-4");
   });
 
@@ -247,11 +247,12 @@ describe("SiteHeader", () => {
   });
 
   /**
-   * Feature 28, amending AC-7: with a nav, the nav, the account link and the
-   * action sit in the browser's own popover, which the menu button opens; from
-   * `sm` the popover has no box, so they sit in the header's row.
+   * Feature 28, as spec 0026 child 0001, AC-27 amends it: with a nav, the nav
+   * and the account part sit in the browser's own popover, which the menu
+   * button opens, while the action stays in the row at every width; from `sm`
+   * the popover has no box, so they sit in the header's row.
    */
-  it("puts the nav, the account link and the action in a menu its button opens", () => {
+  it("puts the nav and the account part in a menu its button opens, the action beside it", () => {
     render(
       <SiteHeader
         nav={
@@ -276,11 +277,19 @@ describe("SiteHeader", () => {
       within(menu as HTMLElement)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["Pricing", "Account", "Try it free"]);
-    // The button comes before the menu, so Tab goes from it into the links.
+    ).toEqual(["Pricing", "Account"]);
+    // The action is outside the menu, between it and the button, so from `sm`
+    // the row reads lockup, nav, account, action in page order. Below `sm` the
+    // browser places an open popover's links right after the button that
+    // opened it in the tab order, whatever their place in the page.
+    const action = screen.getByRole("link", { name: "Try it free" });
+    expect(menu).not.toContainElement(action);
     expect(
-      button.compareDocumentPosition(menu as HTMLElement) &
+      (menu as HTMLElement).compareDocumentPosition(action) &
         Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      action.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
@@ -340,10 +349,36 @@ describe("SiteHeader", () => {
     );
   });
 
-  it("is never sticky, so it can never cover what has focus", () => {
+  /**
+   * By default the bar is static, so it can never cover what has focus (spec
+   * 0003, AC-14). The regex's word edges are written as escapes: the line
+   * this replaces held two literal backspace characters, so it matched
+   * nothing and held nothing.
+   */
+  it("is static unless the page asks, so by default it can never cover what has focus", () => {
     render(<SiteHeader />);
 
-    expect(screen.getByRole("banner").className).not.toMatch(/(sticky|fixed)/);
+    expect(screen.getByRole("banner").className).not.toMatch(/\b(sticky|fixed)\b/);
+    expect(screen.getByRole("banner")).not.toHaveAttribute("data-sticky");
+  });
+
+  /**
+   * The home page's sticky bar (spec 0003, AC-14, as the port of
+   * `Main.dc.html` amends it): sticky only from `lg`, where the row is one
+   * 4rem line, and marked `data-sticky`, which the scroll padding rule in
+   * `globals.css` keys on, so focus always stops below it (WCAG 2.4.11,
+   * technique C43). `tests/e2e/design-system.spec.ts` walks the focus.
+   */
+  it("sticks only from lg when asked, marked for the scroll padding that keeps focus clear", () => {
+    render(<SiteHeader sticky />);
+    const banner = screen.getByRole("banner");
+
+    expect(banner).toHaveAttribute("data-sticky");
+    const positioned = banner.className
+      .split(/\s+/)
+      .filter((name) => /(^|:)(sticky|fixed)$/.test(name));
+    expect(positioned).toEqual(["lg:sticky"]);
+    // The scroll padding rule itself is read in `tests/unit/brand-source.test.ts`.
   });
 
   it("passes axe", async () => {
@@ -413,12 +448,15 @@ describe("SiteFooter", () => {
     const grid = screen.getByText("PDF redaction in your browser.").parentElement
       ?.parentElement;
     expect(grid?.parentElement).toBe(footer);
+    // The mockup's 2fr 1fr 1fr 1fr at 1440 pixels (`Main.dc.html`): the brand
+    // to the groups' 676 pixels, the brand still floored at its content.
     expect(grid).toHaveClass(
       "@container",
       "grid",
       "md:grid-cols-[minmax(min-content,1fr)_auto]",
+      "xl:grid-cols-[minmax(min-content,1fr)_minmax(0,1.657fr)]",
     );
-    expect(grid).not.toHaveClass("md:grid-cols-[minmax(0,1fr)_auto]");
+    expect(grid?.className).not.toMatch(/md:grid-cols-\[minmax\(0,1fr\)/);
     expect(footer).not.toHaveClass("@container");
   });
 
@@ -472,6 +510,32 @@ describe("LinkGroup", () => {
       </LinkGroup>,
     );
 
+    await expectNoAxeViolations(container);
+  });
+
+  /**
+   * Spec 0026, AC-11: the guide pages' On this page look keeps the group's
+   * semantics, its label in small capitals and its links on a rail, with no
+   * link marked as the reader's place (that would need a script).
+   */
+  it("in its contents look keeps the nav, the hidden label and the list, on a rail", async () => {
+    const { container } = render(
+      <LinkGroup label="On this page" look="contents">
+        <li>
+          <a href="#answer">The answer</a>
+        </li>
+      </LinkGroup>,
+    );
+
+    const nav = screen.getByRole("navigation", { name: "On this page" });
+    const label = nav.firstElementChild;
+    expect(label).toHaveAttribute("aria-hidden", "true");
+    expect(label?.tagName).toBe("DIV");
+    expect(label).toHaveClass("uppercase", "text-small", "text-ink-subtle");
+    const list = within(nav).getByRole("list");
+    expect(list).toHaveAttribute("role", "list");
+    expect(list).toHaveClass("border-s-2", "border-muted");
+    expect(container.querySelector("[aria-current]")).toBeNull();
     await expectNoAxeViolations(container);
   });
 });
@@ -534,10 +598,14 @@ describe("the decorative pieces", () => {
     expect(circle?.querySelector("svg")).toHaveClass("size-5");
   });
 
-  /** Spec 0013, AC-11: the circles and the square tiles of the home page's cards. */
+  /**
+   * Spec 0013, AC-11: the circles and the square tiles of the home page's
+   * cards, and `sm`, the guide pages' 40 pixel step tile (spec 0026, AC-11).
+   */
   it.each([
-    ["md", "size-12", "size-5", "rounded-xl"],
-    ["lg", "size-16", "size-7", "rounded-xl"],
+    ["sm", "size-10", "size-5", "rounded-control"],
+    ["md", "size-12", "size-5", "rounded-control"],
+    ["lg", "size-16", "size-7", "rounded-control"],
   ] as const)(
     "at %s is %s with a %s icon, and its square shape is %s",
     (size, box, glyph, square) => {
@@ -559,12 +627,14 @@ describe("the decorative pieces", () => {
     },
   );
 
-  it("hides the spinner, and stops it under reduced motion", () => {
+  it("hides the spinner, and turns it", () => {
     const { container } = render(<Spinner />);
 
     const svg = container.querySelector("svg");
     expect(svg).toHaveAttribute("aria-hidden", "true");
-    expect(svg).toHaveClass("animate-spin", "motion-reduce:animate-none");
+    // Reduced motion stops it through the one rule in `globals.css` (spec 0026,
+    // AC-2), held by `brand-source.test.ts`; no component opts out on its own.
+    expect(svg).toHaveClass("animate-spin");
   });
 
   it("gives an empty state a muted icon, a title and one helper line", () => {

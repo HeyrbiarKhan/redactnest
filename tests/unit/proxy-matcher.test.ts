@@ -43,6 +43,7 @@ describe("the matcher", () => {
       "/sign-up/(.*)",
       "/account",
       "/account/(.*)",
+      "/sign-out",
     ]);
   });
 
@@ -57,6 +58,8 @@ describe("the matcher", () => {
     "/account/billing",
     "/account/welcome",
     "/account?notice=already-pro",
+    // Spec 0026 child 0001, AC-26: the sign out page loads Clerk.
+    "/sign-out",
   ])("covers %s", (url) => {
     expect(matches(url)).toBe(true);
   });
@@ -71,6 +74,7 @@ describe("the matcher", () => {
     "/terms",
     "/accounts",
     "/sign-inx",
+    "/sign-outx",
     "/api/account",
     "/engine/mupdf.js",
     "/licence.txt",

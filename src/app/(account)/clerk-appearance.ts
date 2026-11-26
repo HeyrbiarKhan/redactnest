@@ -96,7 +96,9 @@ export const CLERK_APPEARANCE = Object.freeze({
     colorRing: "var(--color-focus)",
     fontFamily: "var(--font-sans)",
     fontSize: "1rem",
-    borderRadius: "0.5rem",
+    // The controls' radius, `--radius-control` in `@theme` (spec 0026, AC-2
+    // and AC-13), written out because Clerk derives its smaller radii from it.
+    borderRadius: "0.625rem",
   }),
   /*
    * No logo in Clerk's card (spec 0013, AC-23): the panel beside it carries the

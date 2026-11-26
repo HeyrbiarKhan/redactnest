@@ -58,20 +58,34 @@ export type LockupSize = "md" | "lg";
  * no page does. `md` steps down a size in a narrow row (see `BrandLockup`).
  */
 const LOCKUP_SIZE: Readonly<Record<LockupSize, string>> = Object.freeze({
-  md: "text-heading @max-[10rem]:text-body",
+  // 17 pixels, the wordmark both `Header.dc.html` and `Main.dc.html` draw.
+  // Below `sm`, where the header's menu shows, `text-body`: the phone row
+  // `Header.dc.html` draws (a 16 pixel word, a 28 pixel tile), so the lockup,
+  // Try it free and the menu button share one row at 320 pixels (spec 0026,
+  // child 0001, AC-27).
+  md: "text-[1.0625rem] max-sm:text-body @max-[10rem]:text-body",
   lg: "text-title",
 });
 
 /**
- * The mark and the wordmark together. Spec 0013, AC-2.
+ * The mark and the wordmark together. Spec 0013, AC-2, as spec 0026, AC-7
+ * amends it: the mark sits in `on-accent` inside a rounded `accent` tile
+ * (5.47:1), as the mockups draw it. The tile is sized in `em` like the mark,
+ * so the two keep their proportion at every size. In forced colours the
+ * tile's fill is dropped and the mark takes the system's text colour, so it
+ * stays as visible as the word beside it.
  *
  * The wordmark is live text in Inter 700 with tight tracking, never an image,
  * so it scales with the visitor's font size and is read as the word it is.
  * The mark is sized in `em` from the same text, about 1.25 times its cap
  * height, so the two stay in proportion at every size and zoom.
  *
- * At `md` it steps down from `text-heading` to `text-body` in a row narrower
- * than 10rem. The full lockup is about 9rem wide (9.1 on Linux), so a
+ * The mockups' proportions, in `em` of the word: a 30 pixel tile with 8
+ * pixel corners and 10 pixels to the word at 17 pixels, the word tracked
+ * -0.01em (spec 0026, `Main.dc.html`).
+ *
+ * At `md` it steps down from 17 pixels to `text-body` in a row narrower
+ * than 10rem. The full lockup is about 8rem wide (9.1 at 20 pixels on Linux), so a
  * narrower row cannot hold it with room: at 320 pixels with 200% text it
  * reached the window's edge. The query reads the nearest `@container`, which
  * `SiteHeader` and `SiteFooter` set on their rows, and it is in rem like the
@@ -82,12 +96,12 @@ export function BrandLockup({ size = "md" }: { readonly size?: LockupSize }) {
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-[0.3em] font-bold tracking-[-0.02em] text-ink",
+        "inline-flex items-center gap-[0.59em] font-bold tracking-[-0.01em] text-ink",
         LOCKUP_SIZE[size],
       )}
     >
-      <span className="text-accent">
-        <BrandMark size="1.4em" className="block" />
+      <span className="inline-flex size-[1.765em] shrink-0 items-center justify-center rounded-item bg-accent text-on-accent">
+        <BrandMark size="1.1em" className="block" />
       </span>
       RedactNest
     </span>

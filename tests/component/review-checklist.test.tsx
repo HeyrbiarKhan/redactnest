@@ -303,19 +303,101 @@ describe("the coverage note and the empty state", () => {
     expect(container.querySelector("[role]")).toBeNull();
   });
 
-  /** Spec 0013, AC-19: titled Found items, with a neutral count of every row. */
+  /**
+   * Spec 0013, AC-19: titled Found items, with a count of every row, drawn
+   * as `ToolReview.dc.html` draws it: the bare number in `ink-subtle`, its
+   * noun heard but not shown, never a bare number to a screen reader.
+   */
   it("titles the card Found items, with a count of every row found", () => {
     show();
 
     const card = screen.getByRole("region", { name: "Found items" });
-    const badge = within(card).getByText(/found items?$/);
-    expect(badge).toHaveClass("bg-subtle", "text-ink-muted");
+    const noun = within(card).getByText(/found items?$/);
+    expect(noun).toHaveClass("sr-only");
+    const badge = noun.parentElement as HTMLElement;
+    expect(badge).toHaveTextContent(/^\d[\d,]* found items?$/);
+    expect(badge).toHaveClass("text-ink-subtle");
+    expect(badge).not.toHaveClass("bg-muted");
   });
+
+  /**
+   * Spec 0026, AC-12 (task 18), spec 0005, AC-14 and spec 0013, AC-19: the
+   * note shows on the first render, first in the Found items card, before
+   * the custom terms panel and the groups, in each of its three wordings,
+   * and nothing on the page hides it. d67ff4d put it behind "What it looks
+   * for"; the owner's call (2026-11-26) brought it back, because the note is
+   * what stops a visitor believing names were removed.
+   */
+  it.each([
+    { wording: "the detectors' note", partly: false, searched: false },
+    { wording: "the note for the pages it could read", partly: true, searched: false },
+    { wording: "the note with a searched term", partly: false, searched: true },
+  ])(
+    "shows $wording on the first render, first in the card, with no control that hides it",
+    ({ partly, searched }) => {
+      const acme = asTermId("acme");
+      const { container } = render(
+        <ReviewChecklist
+          matches={[...MATCHES, match("a1", "term", "Acme Ltd", { term: acme })]}
+          ticked={new Set([asMatchId("p1")])}
+          running={false}
+          partly={partly}
+          onToggle={() => {}}
+          onTicksSet={() => {}}
+          panel={<div data-testid="terms-panel" />}
+          terms={[
+            {
+              id: acme,
+              text: "Acme Ltd",
+              state: searched ? { state: "searched" } : { state: "searching" },
+            },
+          ]}
+        />,
+      );
+
+      const note = screen.getByTestId("coverage");
+      expect(note).toBeVisible();
+      expect(note).toHaveTextContent(
+        searched
+          ? coverageNoteWithTerms(1, partly)
+          : partly
+            ? COVERAGE_NOTE_PARTLY
+            : COVERAGE_NOTE,
+      );
+
+      // First in the card: only the heading row comes before it.
+      const card = screen.getByRole("region", { name: "Found items" });
+      expect(card.children[0]).toContainElement(
+        within(card).getByRole("heading", { name: "Found items" }),
+      );
+      expect(card.children[1]).toBe(note);
+      for (const after of [
+        screen.getByTestId("terms-panel"),
+        ...container.querySelectorAll("details"),
+      ]) {
+        expect(
+          note.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+      }
+
+      // Nothing hides it: no toggle, no control, no hidden box around it.
+      expect(screen.queryByTestId("coverage-toggle")).toBeNull();
+      expect(screen.queryByRole("button", { name: "What it looks for" })).toBeNull();
+      expect(container.querySelector("[aria-controls], [aria-expanded]")).toBeNull();
+      expect(note.closest("[hidden]")).toBeNull();
+    },
+  );
 
   it("says nothing was found, and that a cleaned copy is still on offer, when there is nothing", () => {
     show({ matches: [] });
 
-    expect(screen.getByTestId("coverage")).toBeInTheDocument();
+    // The note shows above the empty state (spec 0026, AC-12, task 18).
+    const note = screen.getByTestId("coverage");
+    expect(note).toBeVisible();
+    expect(
+      note.compareDocumentPosition(screen.getByText(NOTHING_FOUND.title)) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.getByText(NOTHING_FOUND.title)).toBeVisible();
     expect(screen.getByText(NOTHING_FOUND.helper)).toBeVisible();
     expect(NOTHING_FOUND.helper).toBe(
@@ -802,7 +884,9 @@ describe("custom term groups (spec 0017)", () => {
       running: true,
     });
 
-    for (const button of screen.getAllByRole("button")) expect(button).toBeDisabled();
+    const buttons = screen.getAllByRole("button");
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) expect(button).toBeDisabled();
   });
 
   it("shows Nothing found only when no row of any kind exists (AC-14)", () => {

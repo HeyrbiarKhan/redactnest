@@ -75,7 +75,15 @@ test("names a scanned page at open and at download, and the file partly redacted
     "Page 2 is a scanned image. Text in the image can't be found or removed.",
     { timeout: ENGINE_TIMEOUT },
   );
-  await expect(page.getByTestId("page-advice")).toBeVisible();
+  // The advice waits behind "What to do", so each warning reads as one line
+  // (the owner's call, 2026-11-26), and shows once it is asked for.
+  const advice = page.getByTestId("page-advice");
+  await expect(advice).toBeHidden();
+  const whatToDo = warning.getByRole("button", { name: "What to do" });
+  await expect(whatToDo).toHaveAttribute("aria-expanded", "false");
+  await whatToDo.click();
+  await expect(whatToDo).toHaveAttribute("aria-expanded", "true");
+  await expect(advice).toBeVisible();
   await expect(warning).not.toContainText("Page 3");
 
   await page.getByTestId("redact").click();

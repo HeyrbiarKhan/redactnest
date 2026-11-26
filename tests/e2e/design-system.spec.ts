@@ -276,20 +276,6 @@ async function expectNoHorizontalScroll(page: Page): Promise<void> {
   expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
 }
 
-/** A list's CSS columns as the browser computes them (spec 0013, AC-11). */
-async function columnsOf(
-  list: Locator,
-): Promise<{ count: string; gap: string; rule: string }> {
-  return list.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return {
-      count: style.columnCount,
-      gap: style.columnGap,
-      rule: style.columnRuleStyle,
-    };
-  });
-}
-
 /** A box whose content spills past it, which is what clipping looks like. */
 async function expectContained(box: Locator): Promise<void> {
   const size = await box.evaluate((element) => ({
@@ -343,6 +329,8 @@ interface TargetBox {
   readonly tag: string;
   readonly width: number;
   readonly height: number;
+  /** A link drawn inline inside a sentence, with other words on its line. */
+  readonly inSentence: boolean;
 }
 
 /** Every element a visitor can reach or press, with the box it occupies. */
@@ -356,6 +344,8 @@ async function targetBoxes(page: Page): Promise<TargetBox[]> {
       .filter((element) => element.tagName !== "MAIN")
       .map((element) => {
         const rect = element.getBoundingClientRect();
+        const own = element.textContent?.trim() ?? "";
+        const around = element.parentElement?.textContent?.trim() ?? "";
         return {
           name:
             element.dataset.testid ??
@@ -365,6 +355,10 @@ async function targetBoxes(page: Page): Promise<TargetBox[]> {
           tag: element.tagName.toLowerCase(),
           width: rect.width,
           height: rect.height,
+          inSentence:
+            element.tagName === "A" &&
+            getComputedStyle(element).display === "inline" &&
+            around.length > own.length,
         };
       }),
   );
@@ -377,15 +371,27 @@ async function targetBoxes(page: Page): Promise<TargetBox[]> {
  * the skip link until it is focused, on the tool page the file input, which
  * is not a tab stop at all, and at these desktop widths the header's Menu
  * button, which shows only below `sm`, where the links fold into its menu
- * (feature 28). Anything else hidden that way is a control nobody can see.
+ * (feature 28), with the account slot's own Sign in for that menu, since from
+ * `sm` the slot's row shows it (spec 0026 child 0001, AC-27). Anything else
+ * hidden that way is a control nobody can see.
+ *
+ * `sentences` applies WCAG 2.5.8's inline exception, which spec 0003 AC-7
+ * cites and axe's own `target-size` rule applies: a link drawn inline inside
+ * a sentence is sized by the text's line, so it is passed over here. It is for
+ * pages of prose (the legal pages, `/security`, the guides' answers); the
+ * tool's and the home page's own checks leave it off, so every control there
+ * still measures 24 by 24.
  */
 async function expectTargetSizes(
   page: Page,
-  hiddenOnPurpose: readonly string[] = ["#main", "file-input", "Menu"],
+  hiddenOnPurpose: readonly string[] = ["#main", "file-input", "Menu", "/sign-in"],
+  { sentences = false }: { readonly sentences?: boolean } = {},
 ): Promise<void> {
   const boxes = await targetBoxes(page);
   const hidden = boxes.filter((box) => box.width <= 1 || box.height <= 1);
-  const shown = boxes.filter((box) => box.width > 1 && box.height > 1);
+  const shown = boxes.filter(
+    (box) => box.width > 1 && box.height > 1 && !(sentences && box.inSentence),
+  );
 
   expect(hidden.map((box) => box.name).sort()).toEqual([...hiddenOnPurpose].sort());
 
@@ -436,6 +442,20 @@ async function expectRingAtOnce(target: Locator): Promise<void> {
 }
 
 /**
+ * Spec 0026 child 0001, AC-30: with a document open, the file bar's buttons
+ * sit in the header, and the account slot's Sign in follows them before
+ * `main`, for a visitor who is signed out on a billing on build.
+ */
+async function tabPastTheHeaderSignIn(page: Page): Promise<void> {
+  await page.keyboard.press("Tab");
+  const signIn = page
+    .getByRole("banner")
+    .getByRole("link", { name: "Sign in", exact: true });
+  await expect(signIn).toBeFocused();
+  await expectFocusRing(signIn);
+}
+
+/**
  * Spec 0013, AC-16: the plan card sits in the rail between the file bar and
  * the action panel, so an anonymous visitor's two links come next.
  */
@@ -456,6 +476,22 @@ async function tabPastThePlanCard(page: Page): Promise<void> {
  * the wrong place or left unreachable fails here without the list being kept
  * by hand.
  */
+/**
+ * A browser that cannot show a transferred picture, so `/tool` never shows
+ * the page preview (spec 0026 child 0002, AC-37) and keeps AC-12's column at
+ * every width. For the checks that hold that column and its walk; the
+ * preview's own frame, walk and axe pass are `preview.spec.ts` and the
+ * "page preview, drawn" tests below.
+ */
+async function withoutPreview(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "createImageBitmap", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+}
+
 async function expectKeyboardWalk(page: Page): Promise<void> {
   const stops = await page.locator("main").evaluate((main) => {
     const reachable = [
@@ -538,14 +574,15 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "RedactNest" })).toBeFocused();
 
-    // Spec 0013, AC-7 and AC-20: Pricing and Account sit in the header on
-    // every page, /tool included, because the test build has billing on. No
-    // item names the tool, and /tool shows no Try it free button.
+    // Spec 0026, AC-5: Security and Pricing in the header's nav, then Sign
+    // in, because the test build has billing on and nobody is signed in. On
+    // /tool no item names the tool, How it works is left out (child 0001,
+    // AC-30), and there is no Try it free button.
     const header = page.getByRole("banner");
-    await page.keyboard.press("Tab");
-    await expect(header.getByRole("link", { name: "Pricing" })).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(header.getByRole("link", { name: "Account" })).toBeFocused();
+    for (const name of ["Security", "Pricing", "Sign in"]) {
+      await page.keyboard.press("Tab");
+      await expect(header.getByRole("link", { name })).toBeFocused();
+    }
 
     // Spec 0013, AC-15 and AC-20: the drop zone's button, the terms notice's
     // two links under it, then the plan card in the rail beside it.
@@ -587,9 +624,10 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     ).toBeFocused();
   });
 
-  // Spec 0007, AC-5, as spec 0013 AC-16 amends it: the file bar's two buttons
-  // first, then the rail (the plan card, then the action panel's main action),
-  // then the found items' group summary and each row.
+  // Spec 0007, AC-5, as spec 0026 AC-12 amends it: the file bar's two buttons
+  // first, now in the header (child 0001, AC-30), then the header's Sign in,
+  // then B (the plan card, then the action panel's Untick all and main
+  // action), then the found items' group summary and each row.
   test("Start over, Redact and the checklist are reached and ringed like every other control", async ({
     page,
   }) => {
@@ -601,8 +639,13 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("start-over")).toBeFocused();
     await expectFocusRing(page.getByTestId("start-over"));
+    await tabPastTheHeaderSignIn(page);
 
     await tabPastThePlanCard(page);
+    // Spec 0026, AC-12: Untick all beside the count, then Redact.
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("untick-all")).toBeFocused();
+    await expectFocusRing(page.getByTestId("untick-all"));
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("redact")).toBeFocused();
     await expectFocusRing(page.getByTestId("redact"));
@@ -629,10 +672,11 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
   });
 
   /**
-   * Spec 0006, AC-27. The warnings add no tab stop: the walk over a flagged
-   * document is the walk over any other, and the warning is read in the card.
+   * Spec 0006, AC-27. The walk over a flagged document is the walk over any
+   * other but one stop: the warning's "What to do", which shows the advice
+   * (the owner's call, 2026-11-26), ringed like every other control.
    */
-  test("walks a flagged document the same way, past the warning to Redact", async ({
+  test("walks a flagged document the same way, through What to do to Redact", async ({
     page,
   }) => {
     await page.goto("/tool");
@@ -645,7 +689,18 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
 
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("start-over")).toBeFocused();
+    await tabPastTheHeaderSignIn(page);
+    await page.keyboard.press("Tab");
+    const whatToDo = page
+      .getByTestId("page-warnings")
+      .getByRole("button", { name: "What to do" });
+    await expect(whatToDo).toBeFocused();
+    await expectFocusRing(whatToDo);
     await tabPastThePlanCard(page);
+    // Spec 0026, AC-12: Untick all beside the count, then Redact.
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("untick-all")).toBeFocused();
+    await expectFocusRing(page.getByTestId("untick-all"));
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("redact")).toBeFocused();
     await expectFocusRing(page.getByTestId("redact"));
@@ -672,9 +727,12 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await expectRingAtOnce(page.getByTestId("start-over"));
   });
 
-  // Spec 0007, AC-22: every step state, walked control by control.
+  // Spec 0007, AC-22: every step state, walked control by control, in AC-12's
+  // column. With the preview a focused row picks its page, which moves the
+  // rail's one tab stop as AC-41 has it, so that walk is its own test.
   for (const [state, reach] of TOOL_STATES) {
     test(`reaches every control in order in the ${state} state`, async ({ page }) => {
+      await withoutPreview(page);
       await page.goto("/tool");
       await reach(page);
 
@@ -733,7 +791,10 @@ test.describe("target sizes on the tool page (AC-7)", () => {
       await page.goto("/tool");
       await reach(page);
 
-      await expectTargetSizes(page);
+      // With a document on the page the header holds the file bar in the
+      // nav's place, so no menu and no menu Sign in (child 0001, AC-30).
+      const open = (await page.getByRole("banner").getByTestId("file-bar").count()) > 0;
+      await expectTargetSizes(page, open ? ["#main", "file-input"] : undefined);
     });
   }
 
@@ -748,8 +809,10 @@ test.describe("target sizes on the tool page (AC-7)", () => {
 });
 
 /**
- * Spec 0013, AC-14 to AC-17. The areas as a wide window draws them, and the
- * action panel sticky beside the list only there.
+ * Spec 0013, AC-14 and AC-15, and spec 0026, AC-12. The areas as a wide
+ * window draws them: A beside B while nothing is open, one centred column
+ * with a document on the page, and the action panel floating at the window's
+ * foot only there.
  */
 test.describe("the tool page's layout (spec 0013)", () => {
   const box = (page: Page, testId: string) =>
@@ -770,56 +833,10 @@ test.describe("the tool page's layout (spec 0013)", () => {
       .getByTestId(testId)
       .evaluate((element) => element.lastElementChild?.getBoundingClientRect().bottom);
 
-  /** Each idle step's circle and the line it draws to the next (AC-15). */
-  const stepLines = (page: Page) =>
-    page.evaluate(() =>
-      [...document.querySelectorAll('[data-testid="area-rail"] ol > li')].map((li) => {
-        const after = getComputedStyle(li, "::after");
-        const step = li.getBoundingClientRect();
-        const circle = (li.firstElementChild as Element).getBoundingClientRect();
-        const width = parseFloat(after.borderLeftWidth);
-        return {
-          drawn: after.content !== "none" && after.borderLeftStyle === "solid",
-          width: after.borderLeftWidth,
-          colour: after.borderLeftColor,
-          length: parseFloat(after.height),
-          height: step.height,
-          top: step.top + parseFloat(after.top),
-          bottom: step.bottom - parseFloat(after.bottom),
-          centre: step.left + parseFloat(after.left) + width / 2,
-          circle: {
-            left: circle.left,
-            top: circle.top,
-            bottom: circle.bottom,
-            centre: circle.left + circle.width / 2,
-          },
-          rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
-        };
-      }),
-    );
-
   /**
-   * AC-15: a 2 pixel line on every step but the last, at least 16 pixels
-   * long, centred under its circle and 0.25rem clear of it and of the next.
-   */
-  const expectStepsJoined = async (page: Page) => {
-    const steps = await stepLines(page);
-    expect(steps.map((step) => step.drawn)).toEqual([true, true, false]);
-    for (const [index, step] of steps.slice(0, -1).entries()) {
-      const next = steps[index + 1];
-      expect(step.width).toBe("2px");
-      expect(step.length).toBeGreaterThanOrEqual(16);
-      expect(step.top - step.circle.bottom).toBeCloseTo(step.rem * 0.25, 0);
-      expect((next?.circle.top ?? 0) - step.bottom).toBeCloseTo(step.rem * 0.25, 0);
-      expect(Math.abs(step.centre - step.circle.centre)).toBeLessThanOrEqual(0.5);
-    }
-    return steps;
-  };
-
-  /**
-   * The idle rail's column, its steps list, and the lock line's drawn content
-   * (the lock and the words), which `justify-center` moves while the line's
-   * own box keeps the column's width.
+   * The idle rail's column and the lock line's drawn content (the lock and the
+   * words), which `justify-center` moves while the line's own box keeps the
+   * column's width.
    */
   const idleRail = (page: Page) =>
     page.getByTestId("area-rail").evaluate((rail) => {
@@ -827,13 +844,13 @@ test.describe("the tool page's layout (spec 0013)", () => {
         const { left, right, top, bottom } = element.getBoundingClientRect();
         return { left, right, top, bottom };
       };
-      const list = rail.querySelector(":scope > ol");
-      const lock = rail.querySelector(':scope > [data-testid="lock-line"]');
-      if (list === null || lock === null) throw new Error("the rail is not idle");
+      // The lock line lives in B's head (spec 0026, AC-12).
+      const head = rail.querySelector(':scope > [data-testid="area-rail-head"]');
+      const lock = head?.querySelector(':scope > [data-testid="lock-line"]') ?? null;
+      if (lock === null) throw new Error("the rail is not idle");
       const drawn = [...lock.children].map(rect);
       return {
         rail: rect(rail),
-        list: rect(list),
         lock: rect(lock),
         lockContent: {
           left: Math.min(...drawn.map((part) => part.left)),
@@ -852,7 +869,13 @@ test.describe("the tool page's layout (spec 0013)", () => {
         line.getBoundingClientRect().left,
     );
 
-  test("sets the drop zone left of the rail while nothing is open, and first in the page", async ({
+  /**
+   * The empty state (`ToolStates.dc.html`, the owner's call, 2026-11-26): the
+   * drop zone alone, first in the page, in one column no wider than 44rem and
+   * centred, with the rail under it holding the plan card and the lock line,
+   * and no steps.
+   */
+  test("stacks the drop zone over the rail in one centred column while nothing is open", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -861,72 +884,33 @@ test.describe("the tool page's layout (spec 0013)", () => {
 
     const zone = await box(page, "area-document");
     const rail = await box(page, "area-rail");
-    expect(zone.right).toBeLessThanOrEqual(rail.left);
-    expect(zone.top).toBe(rail.top);
+    expect(zone.bottom).toBeLessThanOrEqual(rail.top);
+    expectNear(zone.left, rail.left);
+    expectNear(zone.right, rail.right);
+    expect(zone.right - zone.left).toBeLessThanOrEqual(704);
+    const grid = await box(page, "tool-grid");
+    expectNear(middle(zone).x, middle(grid).x);
 
     const railArea = page.getByTestId("area-rail");
     await expect(railArea.getByTestId("plan-card")).toBeVisible();
-    await expect(railArea.getByRole("list")).toHaveText(
-      /Open a PDF.*Tick what to remove.*Download your new file/,
-    );
+    await expect(railArea.getByRole("list")).toHaveCount(0);
     await expect(railArea.getByTestId("lock-line")).toHaveText(
       "Your file never leaves your browser.",
     );
   });
 
   /**
-   * Spec 0013, AC-15. The idle steps' line: 2 pixels of `border-strong`,
-   * centred under the circles, 0.25rem clear of each, none after the last;
-   * at least 16 pixels long, so it reads as a join rather than a tick (the
-   * pseudo element's computed `height`, which Chromium resolves to the drawn
-   * length); a border, so forced colours keep it; on the step's own box, so it
-   * grows when the words wrap at 200% text.
-   */
-  test("joins the idle steps with a line between each pair of circles", async ({
-    page,
-  }) => {
-    const expectJoined = () => expectStepsJoined(page);
-
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("/tool");
-    await planAnswered(page);
-    const [first] = await expectJoined();
-    // `border-strong`, #7D848B.
-    expect(first?.colour).toBe("rgb(125, 132, 139)");
-
-    await page.emulateMedia({ forcedColors: "active" });
-    await expectJoined();
-    await page.emulateMedia({ forcedColors: "none" });
-
-    // At 200% text on a phone a step's words wrap, so its box outgrows its
-    // circle, and the line still runs from that circle to the next.
-    await page.setViewportSize({ width: 320, height: 640 });
-    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
-    const wrapped = await expectJoined();
-    expect(
-      wrapped.some(
-        (step) =>
-          step.drawn && step.height > step.circle.bottom - step.circle.top + step.rem,
-      ),
-    ).toBe(true);
-  });
-
-  /**
-   * Spec 0013, AC-15, as feature 28 builds it. Where the areas stack (below
-   * the grid's own `lg`, a container query, so 200% text on a wide window
-   * counts too), the idle steps list sits centred in the column as a block,
-   * its steps still at the start inside it, so the circles keep one left edge
-   * and the joins still meet them; the lock line is centred under it. The
-   * widths are those verify walked, each well clear of the grid's switch.
+   * The empty state's lock line is centred under the drop zone's column at
+   * every width, the areas stacked or not (the owner's call, 2026-11-26).
+   * The widths are those verify walked, each well clear of the grid's switch.
    */
   for (const [label, width, doubled] of [
     ["at 390 pixels", 390, false],
     ["at 800 pixels", 800, false],
+    ["at 1280 pixels", 1280, false],
     ["at 1280 pixels with 200% text", 1280, true],
   ] as const) {
-    test(`centres the idle steps and the lock line where the areas stack, ${label}`, async ({
-      page,
-    }) => {
+    test(`centres the idle lock line under the drop zone, ${label}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 });
       await page.goto("/tool");
       if (doubled) {
@@ -934,36 +918,13 @@ test.describe("the tool page's layout (spec 0013)", () => {
       }
       await planAnswered(page);
 
-      // Stacked: the drop zone above the rail, not beside it.
       expect((await box(page, "area-document")).bottom).toBeLessThanOrEqual(
         (await box(page, "area-rail")).top,
       );
-      const { rail, list, lockContent } = await idleRail(page);
-      expectNear(middle(list).x, middle(rail).x);
-      // A block narrower than the column, not a full width list.
-      expect(list.right - list.left).toBeLessThan(rail.right - rail.left - 1);
-
-      const steps = await expectStepsJoined(page);
-      for (const step of steps) expectNear(step.circle.left, steps[0]?.circle.left ?? 0);
-
+      const { rail, lockContent } = await idleRail(page);
       expectNear(middle(lockContent).x, middle(rail).x);
-      expect(lockContent.top).toBeGreaterThanOrEqual(list.bottom);
     });
   }
-
-  test("keeps the idle steps and the lock line at the start of the rail beside the drop zone", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("/tool");
-    await planAnswered(page);
-
-    const { rail, list, lockContent } = await idleRail(page);
-    expectNear(list.left, rail.left);
-    expectNear(list.right, rail.right);
-    expectNear(lockContent.left, rail.left);
-    expect(await lockIndent(page.getByTestId("lock-line"))).toBeLessThanOrEqual(1);
-  });
 
   /**
    * AC-15 and AC-16: only the idle rail centres. With a document open where
@@ -1027,16 +988,51 @@ test.describe("the tool page's layout (spec 0013)", () => {
     expect(await lockIndent(lockLine)).toBeLessThanOrEqual(1);
   });
 
-  test("draws the found items left of the rail, while the rail comes first in the page", async ({
+  /**
+   * Spec 0026, AC-12, *One column*: from `lg` while reviewing, each block that
+   * holds something (L, B's head, C) stacks top to bottom in that order,
+   * centred and no wider than 44rem, with the plan card below the document
+   * card and above the Found items card. In the page, B still comes before C.
+   * A is empty and hidden: the file bar is in the header (child 0001, AC-30).
+   */
+  test("stacks the document card, B's head and the list in one centred column", async ({
     page,
   }) => {
+    // AC-12's column holds wherever the preview does not show (child 0002).
+    await withoutPreview(page);
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/tool");
+    await planAnswered(page);
     await reviewBothGroups(page);
 
-    const list = await box(page, "area-found");
-    const rail = await box(page, "area-rail");
-    expect(list.right).toBeLessThanOrEqual(rail.left);
+    const grid = await box(page, "tool-grid");
+    await expect(page.getByTestId("area-document")).toBeHidden();
+    await expect(page.getByRole("banner").getByTestId("file-bar")).toBeVisible();
+    const blocks = [
+      await box(page, "area-live"),
+      await box(page, "area-rail-head"),
+      await box(page, "area-found"),
+    ];
+    const rem = await page.evaluate(() =>
+      parseFloat(getComputedStyle(document.documentElement).fontSize),
+    );
+    for (const block of blocks) {
+      expect(block.right - block.left).toBeLessThanOrEqual(44 * rem + 0.5);
+      expectNear(middle(block).x, middle(grid).x);
+      expectNear(block.left, blocks[0]?.left ?? 0);
+    }
+    for (let at = 1; at < blocks.length; at += 1) {
+      expect(blocks[at]?.top ?? 0).toBeGreaterThanOrEqual(blocks[at - 1]?.bottom ?? 0);
+    }
+
+    const [documentCard, plan, list] = [
+      await rectOf(page.getByRole("region", { name: "Document opened" })),
+      await rectOf(page.getByTestId("plan-card")),
+      await rectOf(page.getByTestId("checklist")),
+    ];
+    expect(plan.top).toBeGreaterThanOrEqual(documentCard.bottom);
+    expect(list.top).toBeGreaterThanOrEqual(plan.bottom);
+
     const railFirst = await page.evaluate(() => {
       const rail = document.querySelector('[data-testid="area-rail"]');
       const list = document.querySelector('[data-testid="area-found"]');
@@ -1049,78 +1045,25 @@ test.describe("the tool page's layout (spec 0013)", () => {
     expect(railFirst).toBe(true);
   });
 
-  test("keeps the action panel sticky at 1280 pixels, and static at 900 and at 200% text", async ({
+  /** AC-12, *The plan card*: at `complete` the result card sits above the list. */
+  test("puts the result card above the list at complete, never sticky", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("/tool");
-    await openDocument(page);
-    expect(await position(page, "action-panel")).toBe("sticky");
-    expect(
-      await page
-        .getByTestId("action-panel")
-        .evaluate((element) => getComputedStyle(element).top),
-    ).toBe("24px");
-
-    await page.setViewportSize({ width: 900, height: 800 });
-    expect(await position(page, "action-panel")).toBe("static");
-
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
-    expect(await position(page, "action-panel")).toBe("static");
-  });
-
-  test("keeps Redact in view beside a long list as the page scrolls", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto("/tool");
-    await reviewManyRows(page);
-
-    await page.getByTestId("area-found").evaluate((element) => {
-      element.scrollIntoView({ block: "end" });
-    });
-    await expect(page.getByTestId("redact")).toBeInViewport();
-  });
-
-  test("never makes the result card sticky", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/tool");
     await completeARun(page);
 
     expect(await position(page, "result")).toBe("static");
-  });
-
-  /** AC-16: from lg, with a document open, A runs across both columns. */
-  test("runs the file bar across both columns above the list and the rail", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("/tool");
-    await reviewBothGroups(page);
-
-    const [document, list, live, rail] = [
-      await box(page, "area-document"),
-      await box(page, "area-found"),
-      await box(page, "area-live"),
-      await box(page, "area-rail"),
-    ];
-    expect(document.left).toBe(list.left);
-    expect(document.right).toBe(rail.right);
-    expect(document.top).toBeLessThan(Math.min(list.top, rail.top));
-    // The polite region, holding the document card, heads the rail column.
-    expect(live.left).toBe(rail.left);
-    expect(live.right).toBe(rail.right);
-    expect(live.top).toBe(list.top);
-    expect(live.top).toBeLessThan(rail.top);
+    const [result, list] = [await box(page, "result"), await box(page, "area-found")];
+    expect(result.bottom).toBeLessThanOrEqual(list.top);
   });
 
   /**
-   * AC-16, as feature 26 changes it: while a file opens, the spinner and the
-   * phase line sit in the left column under the file bar, where the list will
-   * be, beside the rail rather than in it over an empty column.
+   * AC-12: while a document opens, L heads the column, sized to what it
+   * holds, and B's head (the plan card and the lock line) follows it. The
+   * file bar is in the header (child 0001, AC-30), so A is hidden.
    */
-  test("draws the phase line left of the rail while a document opens", async ({
+  test("draws the phase line at the column's head while a document opens, with no stretch", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -1128,27 +1071,30 @@ test.describe("the tool page's layout (spec 0013)", () => {
     await planAnswered(page);
     await openingHeld(page);
 
-    const [document, live, rail] = [
-      await box(page, "area-document"),
-      await box(page, "area-live"),
-      await box(page, "area-rail"),
+    const live = page.getByTestId("area-live");
+    await expect(page.getByTestId("area-document")).toBeHidden();
+    const [bar, area, line, head] = [
+      await rectOf(page.getByRole("banner").getByTestId("file-bar")),
+      await rectOf(live),
+      await rectOf(live.getByTestId("progress-card")),
+      await box(page, "area-rail-head"),
     ];
-    await expect(page.getByTestId("area-live").getByTestId("progress")).toBeVisible();
-    expect(live.left).toBe(document.left);
-    expect(live.right).toBeLessThanOrEqual(rail.left);
-    expect(live.top).toBe(rail.top);
-    expect(document.top).toBeLessThan(live.top);
+    expect(area.top).toBeGreaterThanOrEqual(bar.bottom);
+    expectNear(area.left, head.left);
+    // L is sized to the progress card it holds (child 0003).
+    expectNear(area.bottom - area.top, line.bottom - line.top);
+    expect(head.top).toBeGreaterThanOrEqual(area.bottom);
   });
 
   /**
-   * AC-14 and AC-16, feature 28: the *Opening layout* scenario. While a
-   * document opens, the polite region holds the left column, so a 40 pixel
-   * spinner is centred across it with the line centred under it: beside the
-   * rail at 1280, and between the file bar and the rail at 900, where the
-   * areas stack.
+   * Child 0003, AC-31 and AC-33: while a document opens, the progress card
+   * heads the column above B's head, the full column's width, with the open's
+   * four steps, and the polite region's own copy of the line hidden from the
+   * eye. At 1280 and at 900. The file bar is in the header (child 0001,
+   * AC-30), above it all.
    */
   for (const width of [1280, 900] as const) {
-    test(`centres a 40 pixel spinner across the left column, the line under it, while a document opens at ${width} pixels`, async ({
+    test(`shows the open's steps in a card at the column's head while a document opens at ${width} pixels`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height: 800 });
@@ -1157,68 +1103,38 @@ test.describe("the tool page's layout (spec 0013)", () => {
       await openingHeld(page);
 
       const live = page.getByTestId("area-live");
-      const progress = live.getByTestId("progress");
-      const spinner = progress.getByTestId("spinner");
-      const [area, turning, words, fileBar, rail] = [
+      const card = live.getByTestId("progress-card");
+      await expect(card).toHaveAttribute("aria-live", "off");
+      await expect(card).toContainText("Opening…");
+      await expect(card.getByRole("listitem")).toHaveCount(4);
+      await expect(card.getByRole("listitem").first()).toContainText(
+        "Loading the PDF engine, in progress",
+      );
+      const [area, panel, fileBar, head] = [
         await rectOf(live),
-        await rectOf(spinner),
-        await rectOf(progress.locator("span")),
-        await rectOf(page.getByTestId("file-bar")),
-        await rectOf(page.getByTestId("area-rail")),
+        await rectOf(card),
+        await rectOf(page.getByRole("banner").getByTestId("file-bar")),
+        await rectOf(page.getByTestId("area-rail-head")),
       ];
-      expect(await cssSize(spinner)).toEqual({ width: "40px", height: "40px" });
-      expectNear(middle(turning).x, middle(area).x);
-      expectNear(middle(words).x, middle(area).x);
-      // The line under the spinner: below its centre by at least half its size.
-      expect(words.top).toBeGreaterThanOrEqual(middle(turning).y + 20);
+      expectNear(panel.left, head.left);
+      expectNear(panel.right, head.right);
       expect(fileBar.bottom).toBeLessThanOrEqual(area.top);
-      if (width === 1280) {
-        expect(area.right).toBeLessThanOrEqual(rail.left);
-      } else {
-        expect(area.bottom).toBeLessThanOrEqual(rail.top);
-      }
+      expect(area.bottom).toBeLessThanOrEqual(head.top);
+      // The line is still in the polite region, for a screen reader only.
+      const line = await rectOf(live.getByTestId("progress"));
+      expect(line.bottom - line.top).toBeLessThanOrEqual(1);
     });
   }
 
   /**
-   * AC-16, feature 28: from `lg` the grid stretches the region to the rail's
-   * height, and the region centres its line in that room. The rail is made
-   * taller than the line here, as verify's walk did, so the centring has room
-   * to show; at its own height the rail can be about the line's.
+   * Spec 0013, AC-15, in the empty state's one column (the owner's call,
+   * 2026-11-26). While a chosen file waits for the plan, the page is still
+   * idle, so the full drop zone stays first and "Checking your plan" sits
+   * between it and the rail, one grid gap from each. The entitlement request
+   * is held, so the line stays up for the wait budget rather than flashing
+   * past.
    */
-  test("centres the opening line down the room beside a rail taller than it", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("/tool");
-    await planAnswered(page);
-    await page.addStyleTag({
-      content: '[data-testid="area-rail"] { min-height: 40rem; }',
-    });
-    await openingHeld(page);
-
-    const live = page.getByTestId("area-live");
-    const [area, line, rail] = [
-      await rectOf(live),
-      await rectOf(live.getByTestId("progress")),
-      await rectOf(page.getByTestId("area-rail")),
-    ];
-    // The rail really is the taller, or the centring proves nothing.
-    expect(rail.bottom - rail.top).toBeGreaterThan(line.bottom - line.top + 100);
-    expect(area.top).toBe(rail.top);
-    expect(area.bottom).toBe(rail.bottom);
-    expectNear(middle(line).y, middle(area).y);
-  });
-
-  /**
-   * AC-15 and AC-16, as feature 26 lays them out: while a chosen file waits
-   * for the plan, the page is still idle, so the full drop zone stays left and
-   * "Checking your plan" heads the right column, level with the zone. The
-   * region's row is its own height, so the rail starts one grid gap under it
-   * however tall the zone beside them is. The entitlement request is held, so
-   * the line stays up for the wait budget rather than flashing past.
-   */
-  test("heads the rail with the plan check, beside the drop zone, while a chosen file waits", async ({
+  test("puts the plan check between the drop zone and the rail while a chosen file waits", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -1235,45 +1151,207 @@ test.describe("the tool page's layout (spec 0013)", () => {
       await box(page, "area-rail"),
     ];
     await expect(page.getByTestId("drop-area")).toBeVisible();
-    expect(document.right).toBeLessThanOrEqual(live.left);
+    const gap = await rowGap(page);
+    expect(live.left).toBe(document.left);
+    expect(live.right).toBe(document.right);
     expect(live.left).toBe(rail.left);
-    expect(live.right).toBe(rail.right);
-    expect(live.top).toBe(document.top);
-    expect(rail.top - ((await contentBottom(page, "area-live")) ?? 0)).toBe(
-      await rowGap(page),
-    );
+    expect(live.top - document.bottom).toBe(gap);
+    expect(rail.top - ((await contentBottom(page, "area-live")) ?? 0)).toBe(gap);
   });
 
   /**
-   * AC-16 and AC-17, as feature 26 lays them out: beside a list taller than
-   * the window, the document card's row is its own height and the rail's row
-   * takes the rest, so the rail starts one grid gap under the card rather than
-   * where a share of the list's height would push it, and still runs down
-   * beside the whole list for the sticky action panel.
+   * AC-12, *Sticky foot*: over a long list at 1280 by 720, the action panel
+   * floats at the window's foot with Redact in view; scrolled to the list's
+   * end it rests under the last row, covering none.
    */
-  test("starts the rail one gap under the document card beside a long list", async ({
+  test("floats the action panel at the window's foot over a long list, and rests it under the last row", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto("/tool");
     await reviewManyRows(page);
 
-    const [list, live, rail] = [
-      await box(page, "area-found"),
-      await box(page, "area-live"),
-      await box(page, "area-rail"),
-    ];
+    const panel = page.getByTestId("action-panel");
+    const list = await box(page, "area-found");
     expect(list.bottom - list.top).toBeGreaterThan(720);
-    expect(live.top).toBe(list.top);
-    expect(rail.top - ((await contentBottom(page, "area-live")) ?? 0)).toBe(
-      await rowGap(page),
+
+    // The list's middle in the middle of the window.
+    await page.evaluate(
+      (y) => window.scrollTo(0, y),
+      list.top + (list.bottom - list.top) / 2 - 360,
     );
-    expect(rail.bottom).toBe(list.bottom);
+    expect(await position(page, "action-panel")).toBe("sticky");
+    expect(await panel.evaluate((element) => getComputedStyle(element).bottom)).toBe(
+      "0px",
+    );
+    expectNear((await rectOf(panel)).bottom, 720);
+    await expect(page.getByTestId("redact")).toBeInViewport();
+
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const lastRow = await rectOf(page.getByTestId("checklist").locator("label").last());
+    expect((await rectOf(panel)).top).toBeGreaterThanOrEqual(lastRow.bottom);
+  });
+
+  test("keeps Redact in view beside a long list as the page scrolls", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/tool");
+    await reviewManyRows(page);
+
+    await page.getByTestId("area-found").evaluate((element) => {
+      element.scrollIntoView({ block: "end" });
+    });
+    await expect(page.getByTestId("redact")).toBeInViewport();
   });
 
   /**
-   * AC-14 and AC-16: below lg, and at 200% text in a wide window, one column
-   * in page order, so a phone reads the file bar, then the rail, then the list.
+   * AC-12: sticky only from `lg` in a window at least 36rem tall, so a short
+   * window, a narrower one and 200% text each get a static panel, and nothing
+   * on the page is sticky.
+   */
+  for (const [label, width, height, doubled] of [
+    ["at 1280 by 500 pixels", 1280, 500, false],
+    ["at 900 pixels", 900, 800, false],
+    ["at 1280 pixels with 200% text", 1280, 800, true],
+  ] as const) {
+    test(`keeps the action panel static and nothing sticky ${label}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height });
+      await page.goto("/tool");
+      if (doubled) {
+        await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+      }
+      await openDocument(page);
+
+      expect(await position(page, "action-panel")).toBe("static");
+      const sticky = await page.evaluate(
+        () =>
+          [...document.querySelectorAll("body *")].filter(
+            (element) => getComputedStyle(element).position === "sticky",
+          ).length,
+      );
+      expect(sticky).toBe(0);
+    });
+  }
+
+  /**
+   * AC-12, *The panel's room*: in the tallest form this test can hold (a
+   * paid answer, the count line with Untick all, the waits line wrapped, the
+   * `lg` button and the lock line), the panel fits in `--tool-panel-room`, so
+   * C's padding and the scroll margins always clear it. A custom term search
+   * runs in the worker and cannot be held from here, so the waits line is
+   * added as the page would draw it, in `makeWaitsLine`'s searching words,
+   * its one fixed sentence.
+   */
+  test("fits the action panel's tallest form in its room", async ({ page }) => {
+    await page.route("**/api/entitlement", (route) =>
+      route.fulfill({
+        json: {
+          tier: "paid",
+          pageCap: 50,
+          maxFileBytes: 26_214_400,
+          account: "signed-in",
+        },
+      }),
+    );
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/tool");
+    await reviewManyRows(page);
+
+    const panel = page.getByTestId("action-panel");
+    await expect(panel.getByTestId("untick-all")).toBeVisible();
+    await panel.evaluate((element) => {
+      const waits = document.createElement("p");
+      waits.className = "text-small text-ink";
+      waits.textContent = "Your custom terms are still being searched, so the run waits.";
+      element.insertBefore(waits, element.querySelector('[data-testid="redact"]'));
+    });
+    const [height, room] = await panel.evaluate((element) => {
+      const grid = element.closest('[data-testid="tool-grid"]') as HTMLElement;
+      const probe = document.createElement("div");
+      probe.style.height = getComputedStyle(grid).getPropertyValue("--tool-panel-room");
+      grid.append(probe);
+      const measured = probe.getBoundingClientRect().height;
+      probe.remove();
+      return [element.getBoundingClientRect().height, measured];
+    });
+    expect(room).toBeGreaterThan(0);
+    expect(height).toBeLessThanOrEqual(room);
+  });
+
+  /**
+   * AC-12, *Focus never hidden when it moves* (WCAG 2.2, 2.4.11): at 1280 by
+   * 720 with a long list, Tab from the file bar, across the plan card, through more than two
+   * windows of rows, and each focused control in the column stays clear
+   * above the floating panel.
+   */
+  test("never lets the floating panel cover a control focus moves to", async ({
+    page,
+  }) => {
+    test.setTimeout(ENGINE_TIMEOUT + 120_000);
+    await page.route("**/api/entitlement", (route) =>
+      route.fulfill({
+        json: {
+          tier: "paid",
+          pageCap: 50,
+          maxFileBytes: 26_214_400,
+          account: "signed-in",
+        },
+      }),
+    );
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/tool");
+    await page
+      .getByTestId("file-input")
+      .setInputFiles(resolve("tests/fixtures/detect-dense.pdf"));
+    await expect(
+      page.getByRole("checkbox", { name: "staff.0000@example.com", exact: true }),
+    ).toBeVisible({ timeout: ENGINE_TIMEOUT + 60_000 });
+    expect(await position(page, "action-panel")).toBe("sticky");
+
+    // From the file bar, so the walk crosses the plan card and the panel first.
+    await page.getByTestId("start-over").focus();
+    let travelled = 0;
+    let start: number | null = null;
+    for (let step = 0; step < 80; step += 1) {
+      await page.keyboard.press("Tab");
+      const seen = await page.evaluate(
+        () =>
+          new Promise<{ inPanel: boolean; bottom: number; panelTop: number; y: number }>(
+            (done) =>
+              // Two frames: the browser's own focus scroll, then the fallback.
+              requestAnimationFrame(() =>
+                requestAnimationFrame(() => {
+                  const active = document.activeElement as HTMLElement;
+                  const panel = document.querySelector(
+                    '[data-testid="action-panel"]',
+                  ) as HTMLElement;
+                  done({
+                    inPanel: panel.contains(active),
+                    bottom: active.getBoundingClientRect().bottom,
+                    panelTop: panel.getBoundingClientRect().top,
+                    y: window.scrollY,
+                  });
+                }),
+              ),
+          ),
+      );
+      if (!seen.inPanel) {
+        expect(seen.bottom).toBeLessThanOrEqual(seen.panelTop);
+        start ??= seen.y;
+        travelled = seen.y - start;
+      }
+    }
+    // More than two windows' worth of rows walked.
+    expect(travelled).toBeGreaterThan(2 * 720);
+  });
+
+  /**
+   * AC-14, below `lg`, and at 200% text in a wide window: one column in page
+   * order, so a phone reads the file bar (in the header, child 0001, AC-30),
+   * then B, then the list.
    */
   for (const [label, width, doubled] of [
     ["at 900 pixels", 900, false],
@@ -1289,16 +1367,16 @@ test.describe("the tool page's layout (spec 0013)", () => {
       }
       await reviewBothGroups(page);
 
+      await expect(page.getByTestId("area-document")).toBeHidden();
       const [document, live, rail, list] = [
-        await box(page, "area-document"),
+        await rectOf(page.getByRole("banner").getByTestId("file-bar")),
         await box(page, "area-live"),
         await box(page, "area-rail"),
         await box(page, "area-found"),
       ];
-      expect(live.left).toBe(document.left);
-      expect(rail.left).toBe(document.left);
-      expect(list.left).toBe(document.left);
-      expect(document.top).toBeLessThan(live.top);
+      expect(rail.left).toBe(live.left);
+      expect(list.left).toBe(live.left);
+      expect(document.bottom).toBeLessThanOrEqual(live.top);
       expect(live.top).toBeLessThan(rail.top);
       expect(rail.top).toBeLessThan(list.top);
     });
@@ -1319,15 +1397,15 @@ test.describe("the tool page's layout (spec 0013)", () => {
       await planAnswered(page);
       await openingHeld(page);
 
+      await expect(page.getByTestId("area-document")).toBeHidden();
       const [document, live, rail] = [
-        await box(page, "area-document"),
+        await rectOf(page.getByRole("banner").getByTestId("file-bar")),
         await box(page, "area-live"),
         await box(page, "area-rail"),
       ];
       await expect(page.getByTestId("area-live").getByTestId("progress")).toBeVisible();
-      expect(live.left).toBe(document.left);
-      expect(rail.left).toBe(document.left);
-      expect(document.top).toBeLessThan(live.top);
+      expect(rail.left).toBe(live.left);
+      expect(document.bottom).toBeLessThanOrEqual(live.top);
       expect(live.top).toBeLessThan(rail.top);
       const railArea = page.getByTestId("area-rail");
       await expect(railArea.getByTestId("plan-card")).toBeVisible();
@@ -1346,9 +1424,11 @@ test.describe("reflow and zoom on the tool page (AC-15)", () => {
     await expectNoHorizontalScroll(page);
   });
 
-  // Spec 0007, AC-21 and AC-22: every step state reflows at 320px.
+  // Spec 0007, AC-21 and AC-22: every step state reflows at 320px. Spec 0026,
+  // AC-16: and passes axe there, as it does at desktop width and in forced
+  // colours.
   for (const [state, reach] of TOOL_STATES) {
-    test(`needs no sideways scroll at 320 CSS pixels in the ${state} state`, async ({
+    test(`needs no sideways scroll at 320 CSS pixels in the ${state} state, and axe reports nothing`, async ({
       page,
     }) => {
       await page.setViewportSize({ width: 320, height: 640 });
@@ -1356,6 +1436,7 @@ test.describe("reflow and zoom on the tool page (AC-15)", () => {
       await reach(page);
 
       await expectNoHorizontalScroll(page);
+      await expectNoAxeViolations(page);
     });
   }
 
@@ -1604,6 +1685,11 @@ test.describe("the checklist on the tool page (spec 0005, AC-13)", () => {
     await page.goto("/tool");
     await openDocument(page);
 
+    // Shown on open, with nothing that hides it (spec 0026, AC-12, task 18:
+    // the owner's call, 2026-11-26, keeping spec 0005 AC-14 and spec 0013
+    // AC-19).
+    await expect(page.getByTestId("coverage")).toBeVisible();
+    await expect(page.getByTestId("coverage-toggle")).toHaveCount(0);
     await expect(page.getByTestId("coverage")).toHaveText(
       /RedactNest looked for email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers\. Anything else, such as names and addresses, stays in the file\./,
     );
@@ -1663,8 +1749,8 @@ test.describe("the checklist on the tool page (spec 0005, AC-13)", () => {
 
     // The control: the system highlight is not the tint, so a mark that kept
     // `accent-soft` cannot pass by the two happening to match.
-    expect(colours.tint.trim()).toBe("#d5eeea");
-    expect(colours.expected.background).not.toBe("rgb(213, 238, 234)");
+    expect(colours.tint.trim()).toBe("#ccfbf1");
+    expect(colours.expected.background).not.toBe("rgb(204, 251, 241)");
     expect(colours.actual).toEqual(colours.expected);
   });
 
@@ -1695,21 +1781,64 @@ test.describe("the checklist on the tool page (spec 0005, AC-13)", () => {
 });
 
 test.describe("the fonts the page uses (AC-4)", () => {
+  /**
+   * Inter everywhere (spec 0003, INV-6), except the places the owner's port
+   * of `Main.dc.html` sets in the monospace stack (2026-11-25): the black
+   * box section's two copies of the page's text, then the network band's
+   * table. Each carries `data-mono`, and the list of them is exact, so a
+   * new monospace place fails here until it is named.
+   */
+  const MONO_PLACES: Readonly<Record<string, readonly string[]>> = {
+    "/": ["home-black-box", "home-black-box", "home-network"],
+    "/tool": [],
+  };
+
   for (const path of ["/", "/tool"]) {
-    test(`renders every piece of text on ${path} in Inter`, async ({ page }) => {
+    test(`renders every piece of text on ${path} in Inter, but the named monospace places`, async ({
+      page,
+    }) => {
       await page.goto(path);
 
-      const families = await page.evaluate(() => [
-        ...new Set(
-          [...document.querySelectorAll("body *")].map((element) =>
-            getComputedStyle(element).fontFamily.split(",")[0]?.trim(),
-          ),
-        ),
-      ]);
+      const families = await page.evaluate(() => {
+        const inter = new Set<string>();
+        const mono = new Set<string>();
+        for (const element of document.querySelectorAll("body *")) {
+          const first = getComputedStyle(element).fontFamily.split(",")[0]?.trim() ?? "";
+          (element.closest("[data-mono]") ? mono : inter).add(first);
+        }
+        const places = [...document.querySelectorAll("[data-mono]")].map((element) =>
+          element.closest("[data-testid^='home-']")?.getAttribute("data-testid"),
+        );
+        return { inter: [...inter], mono: [...mono], places };
+      });
       // `next/font` names the self hosted face after the family it wraps.
-      expect(families.every((family) => family?.includes("Inter"))).toBe(true);
+      expect(families.inter.every((family) => family.includes("Inter"))).toBe(true);
+      expect(families.mono.every((family) => family === "ui-monospace")).toBe(true);
+      expect(families.places).toEqual(MONO_PLACES[path]);
     });
   }
+
+  /**
+   * The home page too, its drawings included: they are hidden from assistive
+   * technology but seen, and the brief sets the mockup's 9 to 13 pixel words
+   * at 14 (the owner's port of `Main.dc.html`, 2026-11-25).
+   */
+  test("renders nothing smaller than 14px on the home page, drawings included", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+
+    const smallest = await page.evaluate(() =>
+      Math.min(
+        ...[...document.querySelectorAll("body *")]
+          .filter((element) => element.textContent?.trim())
+          .filter((element) => !element.closest(".sr-only"))
+          .map((element) => Number.parseFloat(getComputedStyle(element).fontSize)),
+      ),
+    );
+    expect(smallest).toBeGreaterThanOrEqual(14);
+  });
 
   test("renders nothing smaller than 14px", async ({ page }) => {
     await page.goto("/tool");
@@ -1743,13 +1872,25 @@ test.describe("the page skeleton (AC-14)", () => {
       await expect(page.locator("main")).toHaveAttribute("tabindex", "-1");
     });
 
-    test(`${path} keeps the header static, so it scrolls away`, async ({ page }) => {
+    /**
+     * Every page's header scrolls away, but the home page's from `lg`, which
+     * the owner's port of `Main.dc.html` keeps at the window's top (spec
+     * 0003, AC-14, as it amends it); the home page's own test walks the
+     * focus clear of it.
+     */
+    test(`${path} keeps the header static, so it scrolls away${path === "/" ? ", below lg" : ""}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1000, height: 800 });
       await page.goto(path);
 
-      const position = await page
-        .getByRole("banner")
-        .evaluate((element) => getComputedStyle(element).position);
-      expect(position).toBe("static");
+      const position = () =>
+        page
+          .getByRole("banner")
+          .evaluate((element) => getComputedStyle(element).position);
+      expect(await position()).toBe("static");
+      await page.setViewportSize({ width: 1280, height: 800 });
+      expect(await position()).toBe(path === "/" ? "sticky" : "static");
     });
   }
 });
@@ -1765,14 +1906,17 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       "Redaction that actually removes the text",
     );
     await expect(page.getByTestId("home-eyebrow")).toHaveText(
-      "PDF redaction in your browser",
+      "Runs in your browser. Never uploaded.",
     );
     const main = page.getByRole("main");
     await expect(main).toContainText(
       "RedactNest looks for email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers in your PDF and lets you tick what to remove.",
     );
-    // Spec 0013, AC-30: said once. "in your browser" is the eyebrow's alone.
-    await expect(main).not.toContainText("Your file never leaves your browser.");
+    // Spec 0013, AC-30, as the port of `Main.dc.html` amends it: the tool's
+    // own lock line shows only inside the drawn window, as the tool draws it.
+    const lock = "Your file never leaves your browser.";
+    expect((await main.textContent())?.split(lock)).toHaveLength(2);
+    await expect(page.getByTestId("home-window")).toContainText(lock);
     // The build's own caps, with billing on (`playwright.config.ts`).
     await expect(page.getByTestId("home-caps")).toHaveText(
       "Free up to 3 pages a document. Pro goes up to 50.",
@@ -1782,40 +1926,129 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       [page.getByRole("banner"), "Try it free"],
       [main, "Remove text from a PDF"],
     ] as const) {
-      await expect(region.getByRole("link", { name })).toHaveAttribute("href", "/tool");
+      for (const link of await region.getByRole("link", { name }).all())
+        await expect(link).toHaveAttribute("href", "/tool");
     }
-    await expect(main.getByRole("link", { name: "See pricing" })).toHaveAttribute(
+    await expect(main.getByRole("link", { name: "See how it works" })).toHaveAttribute(
       "href",
-      "/pricing",
+      "#how-it-works",
     );
+    // Spec 0026, AC-8: the sections in order, the pricing cards with billing on.
     await expect(main.getByRole("heading", { level: 2 })).toHaveText([
-      "Stays on your device",
-      "Removed, not covered",
-      "Checked before you download",
+      "Three steps to a redacted PDF",
+      "A black box is not redaction",
       "What RedactNest looks for and strips",
+      "Watch your network tab while you redact",
+      "Free to start, Pro for longer files",
+      "Questions",
+      "Redact your next PDF",
     ]);
     await expect(main.getByRole("heading", { level: 3 })).toHaveText([
+      "Open a PDF",
+      "Tick what to remove",
+      "Download your new file",
       "Looks for",
       "Strips",
+      "Free",
+      "Pro",
     ]);
   });
 
   /**
-   * Spec 0013, AC-11. Two white cards on the page's canvas, after your mockup
-   * (`docs/design/references/05-finds-and-strips.png`): each a tile beside its
-   * heading and subtitle, a list, then a rule and its closing line. Side by
-   * side and equal height from `md`, Looks for first when stacked. Spec 0019,
-   * AC-12, gives the heading, the first card's title and the closing lines.
+   * The home page's sticky header (spec 0003, AC-14, as the port of
+   * `Main.dc.html` amends it; WCAG 2.4.11, technique C43). From `lg` the bar
+   * stays at the window's top, and no focus stop below it ever lands under
+   * it, walking forward and back, nor does the How it works heading after
+   * its in page link. Below `lg` it scrolls away as every other header does.
    */
-  test("shows what it looks for and strips as two cards, side by side from md", async ({
+  test("keeps the header at the top from lg, and never over what has focus", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+    const header = page.getByRole("banner");
+
+    await page.mouse.wheel(0, 2400);
+    await expect
+      .poll(() => header.evaluate((el) => el.getBoundingClientRect().top))
+      .toBe(0);
+    const bar = await header.evaluate((el) => el.getBoundingClientRect().bottom);
+
+    /**
+     * Each focus stop below the bar, in page order: everything a Tab reaches
+     * outside the header, the skip link aside (it floats above the bar).
+     * Before each Shift+Tab the page is scrolled so the stop it moves to sits
+     * under the bar, the one case where a browser that thinks the stop is in
+     * view would not scroll at all. Without the scroll padding, measured on
+     * this page, five stops stayed under the bar.
+     */
+    const STOPS = 'a[href], button:not([disabled]), summary, [tabindex="0"]';
+    const count = await page.evaluate(
+      (selector) =>
+        [...document.querySelectorAll(selector)].filter(
+          (el) =>
+            !el.closest("header") &&
+            el.getAttribute("href") !== "#main" &&
+            el.getClientRects().length > 0,
+        ).length,
+      STOPS,
+    );
+    expect(count).toBeGreaterThan(15);
+    for (let index = 1; index < count; index += 1) {
+      await page.evaluate(
+        ([selector, at]) => {
+          const stops = [...document.querySelectorAll<HTMLElement>(selector)].filter(
+            (el) =>
+              !el.closest("header") &&
+              el.getAttribute("href") !== "#main" &&
+              el.getClientRects().length > 0,
+          );
+          const [target, next] = [stops[at - 1], stops[at]];
+          if (!target || !next) throw new Error(`no stop ${at}`);
+          window.scrollBy(0, target.getBoundingClientRect().top - 10);
+          next.focus({ preventScroll: true });
+        },
+        [STOPS, index] as const,
+      );
+      await page.keyboard.press("Shift+Tab");
+      const top = await page.evaluate(
+        () => document.activeElement?.getBoundingClientRect().top ?? 0,
+      );
+      // The ring is drawn 4 pixels outside the box, and stays clear too.
+      expect(top - 4, `stop ${index}`).toBeGreaterThanOrEqual(bar);
+    }
+
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.getByRole("main").getByRole("link", { name: "See how it works" }).click();
+    const heading = page.getByRole("heading", { level: 2 }).first();
+    await expect
+      .poll(() => heading.evaluate((el) => el.getBoundingClientRect().top))
+      .toBeGreaterThanOrEqual(bar);
+
+    await page.setViewportSize({ width: 1000, height: 900 });
+    await page.evaluate(() => window.scrollTo(0, 1200));
+    await expect
+      .poll(() => header.evaluate((el) => el.getBoundingClientRect().bottom))
+      .toBeLessThan(0);
+  });
+
+  /**
+   * Spec 0013, AC-11, as the owner's port of `Main.dc.html` amends it
+   * (2026-11-25): two white cards on the page's canvas, each its title and
+   * subtitle, its items as chips in place of the tiles, then its note. Side
+   * by side and equal height from `md`, Looks for first when stacked. Spec
+   * 0019, AC-12, gives the heading, the first card's title and the notes.
+   */
+  test("shows what it looks for and strips as two cards of chips, side by side from md", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/");
 
     const band = page.getByTestId("home-band");
     const finds = page.getByTestId("home-finds");
     const strips = page.getByTestId("home-strips");
+    // With billing on (`playwright.config.ts`), Pro's own terms close the list.
     await expect(finds.getByRole("listitem")).toHaveText([
       "Email addresses",
       "Phone numbers",
@@ -1824,12 +2057,13 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       "Bank account numbers (IBAN)",
       "US Social Security numbers",
       "UK National Insurance numbers",
+      "+ Your own terms with Pro",
     ]);
     await expect(finds).toContainText("Sensitive details we can detect in your files.");
     await expect(finds).toContainText(
       "No selectable text wholly inside a page's visible area is removed unless you tick it.",
     );
-    await expect(strips).toContainText("Whenever a file carries them:");
+    await expect(strips).toContainText("Whenever a file carries them");
     // Spec 0019, AC-12: no XMP metadata while a picture can carry it.
     await expect(strips.getByRole("listitem")).toHaveText([
       "Document info",
@@ -1842,129 +2076,47 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     await expect(strips).toContainText(
       "Comments and form fields are flattened into the page: what showed stays, and the comments and fields themselves are removed, with a note's hidden text and any attached file.",
     );
-    // Every item carries its icon on a tile hidden from assistive technology,
-    // and nothing in the band acts: no chevron, link, button or tab stop.
+    // Each item a pill of words, no icon; nothing in the band acts.
     for (const card of [finds, strips]) {
       for (const item of await card.getByRole("listitem").all()) {
-        await expect(item.locator('[aria-hidden="true"] svg')).toHaveCount(1);
-        await expect(item.locator("svg")).toHaveCount(1);
+        await expect(item.locator("svg")).toHaveCount(0);
+        // `rounded-full`, a radius far past the pill's own height.
+        const radius = await item.evaluate((element) =>
+          Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
+        );
+        expect(radius).toBeGreaterThan(1000);
       }
     }
     await expect(band.locator("a, button, [tabindex]")).toHaveCount(0);
 
-    // No full width strip: the section shows the canvas, the cards are white.
+    // No full width strip: the section shows the canvas, and a `border` edge
+    // tells the white cards from it.
     const background = (locator: typeof band) =>
       locator.evaluate((element) => getComputedStyle(element).backgroundColor);
     expect(await background(band)).toBe("rgba(0, 0, 0, 0)");
-    expect(await background(finds)).not.toBe(await background(page.locator("body")));
-    const [bandBox, findsBox, stripsBox] = [
-      await band.boundingBox(),
-      await finds.boundingBox(),
-      await strips.boundingBox(),
-    ];
-    expect(bandBox?.width ?? 0).toBeLessThan(1280);
-
-    expect(findsBox?.y).toBe(stripsBox?.y);
-    expect(findsBox?.height).toBe(stripsBox?.height);
-    expect((findsBox?.x ?? 0) + (findsBox?.width ?? 0)).toBeLessThan(stripsBox?.x ?? 0);
-
-    // Feature 12: seven finds in two columns, so the cards stay close in
-    // height. Read down the first column, then the second: Email addresses to
-    // Card numbers, then the IBAN row to UK National Insurance numbers. The
-    // rows are soft tiles, so the columns sit 12 pixels apart with no rule
-    // between them (spec 0014, AC-12, the pin spec 0013's AC-11 owed).
-    // Feature 26: the strips sit on the same rows in the same columns. Six
-    // while XMP metadata waits on feature 32 (spec 0019, AC-12): Document info
-    // to Bookmarks, then JavaScript to Page thumbnails. The first column holds
-    // the larger half, so the split is read from each list's own count.
-    for (const card of [finds, strips]) {
-      expect(await columnsOf(card.getByRole("list"))).toEqual({
-        count: "2",
-        gap: "12px",
-        rule: "none",
-      });
-      const rows = card.getByRole("listitem");
-      const firstColumn = Math.ceil((await rows.count()) / 2);
-      const [firstRow, lastOfFirst, firstOfSecond] = [
-        await rows.nth(0).boundingBox(),
-        await rows.nth(firstColumn - 1).boundingBox(),
-        await rows.nth(firstColumn).boundingBox(),
-      ];
-      expect(firstOfSecond?.y).toBe(firstRow?.y);
-      expect((lastOfFirst?.x ?? 0) + (lastOfFirst?.width ?? 0)).toBeLessThan(
-        firstOfSecond?.x ?? 0,
-      );
-    }
-    // A strip's row is a find's row: the same height, fill and type.
-    const look = (row: Locator) =>
-      row.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return {
-          height: element.getBoundingClientRect().height,
-          fill: style.backgroundColor,
-          size: style.fontSize,
-          weight: style.fontWeight,
-        };
-      });
-    expect(await look(strips.getByRole("listitem").first())).toEqual(
-      await look(finds.getByRole("listitem").first()),
-    );
+    expect(
+      await finds.evaluate((element) => getComputedStyle(element).borderTopColor),
+    ).toBe("rgb(228, 228, 231)");
+    const [findsBox, stripsBox] = [await rectOf(finds), await rectOf(strips)];
+    expectNear(findsBox.top, stripsBox.top);
+    expectNear(findsBox.bottom, stripsBox.bottom);
+    expect(findsBox.right).toBeLessThan(stripsBox.left);
   });
 
-  /**
-   * The card's own width decides the columns (AC-11), so the list folds as
-   * the cards meet: two while they are stacked, one once they sit side by
-   * side, then two again. Each probe sits at least 20 pixels from a threshold
-   * with or without a classic scrollbar, because headless Chromium hides the
-   * scrollbar a person's browser draws, and a scrollbar moves every threshold
-   * by its width (spec 0013, *The Strips columns*, task 43).
-   */
-  test("sets the Strips columns by the card's own width, probing clear of every threshold", async ({
-    page,
-  }) => {
-    const finds = page.getByTestId("home-finds");
-    const strips = page.getByTestId("home-strips");
-    const list = strips.getByRole("list");
-    // Both lists draw the same rows (feature 26) and fold at the same content
-    // width, and the cards are always the same width, so the two lists are
-    // always one column or two together, 12 pixels apart with no rule
-    // wherever they have two (spec 0014, AC-12).
-    const findsColumns = () => columnsOf(finds.getByRole("list"));
-    const findsCount = async () => (await findsColumns()).count;
-    const TWO = { count: "2", gap: "12px", rule: "none" };
-
-    // Side by side, with room for two columns.
-    await page.setViewportSize({ width: 1080, height: 800 });
+  /** At 200% text the chips wrap inside their cards, none past its edge. */
+  test("keeps every chip inside its card at 200% text", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/");
-    expect(await columnsOf(list)).toEqual(TWO);
-    expect(await findsColumns()).toEqual(TWO);
-    // No strip wraps past two lines in the narrower columns, so every row
-    // keeps the 68 pixels of a find whose label fits on two.
-    for (const item of await list.getByRole("listitem").all()) {
-      expect((await item.boundingBox())?.height).toBe(68);
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+
+    for (const id of ["home-finds", "home-strips"]) {
+      const card = await rectOf(page.getByTestId(id));
+      for (const item of await page.getByTestId(id).getByRole("listitem").all()) {
+        const chip = await rectOf(item);
+        expect(chip.left).toBeGreaterThanOrEqual(card.left);
+        expect(chip.right).toBeLessThanOrEqual(card.right);
+      }
     }
-
-    // Side by side and too narrow for two: one column, with no rule.
-    await page.setViewportSize({ width: 960, height: 800 });
-    expect(await columnsOf(list)).toMatchObject({ count: "auto", rule: "none" });
-    expect(await findsCount()).toBe("auto");
-    const [left, right] = [await finds.boundingBox(), await strips.boundingBox()];
-    expect(left?.y).toBe(right?.y);
-    expect(left?.height).toBe(right?.height);
-    expect((left?.x ?? 0) + (left?.width ?? 0)).toBeLessThan(right?.x ?? 0);
-
-    // Stacked, so the card is wide again: two columns.
-    await page.setViewportSize({ width: 600, height: 900 });
-    expect(await columnsOf(list)).toEqual(TWO);
-    expect(await findsColumns()).toEqual(TWO);
-    const [above, below] = [await finds.boundingBox(), await strips.boundingBox()];
-    expect((above?.y ?? 0) + (above?.height ?? 0)).toBeLessThanOrEqual(below?.y ?? 0);
-
-    // A phone: one column, and nothing scrolls sideways.
-    await page.setViewportSize({ width: 320, height: 640 });
-    expect((await columnsOf(list)).count).toBe("auto");
-    expect(await findsCount()).toBe("auto");
-    await expectNoHorizontalScroll(page);
   });
 
   test("stacks the two cards below md, Looks for first", async ({ page }) => {
@@ -1974,28 +2126,6 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     const finds = await page.getByTestId("home-finds").boundingBox();
     const strips = await page.getByTestId("home-strips").boundingBox();
     expect((finds?.y ?? 0) + (finds?.height ?? 0)).toBeLessThanOrEqual(strips?.y ?? 0);
-  });
-
-  /**
-   * AC-11: both thresholds are in rem, so doubled text needs a card twice as
-   * wide for two columns, and the list stays one column at every width,
-   * the two that show two columns at normal size included.
-   */
-  test("keeps the Strips and Finds lists one column at 200% text", async ({ page }) => {
-    const list = page.getByTestId("home-strips").getByRole("list");
-    const findsList = page.getByTestId("home-finds").getByRole("list");
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("/");
-    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
-
-    for (const width of [1280, 600]) {
-      await page.setViewportSize({ width, height: 900 });
-      expect(await columnsOf(list), `${width}px`).toMatchObject({
-        count: "auto",
-        rule: "none",
-      });
-      expect((await columnsOf(findsList)).count, `${width}px`).toBe("auto");
-    }
   });
 
   /**
@@ -2022,118 +2152,68 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
   });
 
   /**
-   * Spec 0013, AC-12. The real capture, through `next/image` from our own
-   * origin, sized before it loads so nothing shifts, and loaded first.
+   * Spec 0013, AC-12, as the owner's port of `Main.dc.html` amends it: the
+   * product window drawn in HTML, one picture named by its alt text, loading
+   * no image, with the card hanging off its lower left corner from `lg`.
    */
-  test("shows the product shot from our own origin, sized and loaded first", async ({
+  test("draws the product window in HTML, on the right from lg, its card on its corner", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    const images: string[] = [];
+    page.on("request", (request) => {
+      if (request.resourceType() === "image") images.push(request.url());
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/");
 
     const shot = page.getByRole("img", {
       name: "RedactNest reviewing a sample employment agreement: email addresses and phone numbers found and ticked, with a Redact button beside them.",
     });
-    await expect(shot).toHaveAttribute("width", "2560");
-    await expect(shot).toHaveAttribute("height", "1600");
-    await expect(shot).toHaveAttribute("loading", "eager");
-    await expect(shot).toHaveAttribute("fetchpriority", "high");
-    await expect(shot).toHaveAttribute(
-      "sizes",
-      "(min-width: 64rem) 40rem, calc(100vw - 2rem)",
-    );
-    const loaded = await shot.evaluate((image: HTMLImageElement) => ({
-      origin: new URL(image.currentSrc).origin,
-      complete: image.complete && image.naturalWidth > 0,
-    }));
-    expect(loaded).toEqual({ origin: new URL(page.url()).origin, complete: true });
+    await expect(shot).toHaveAttribute("data-testid", "home-window");
+    expect(await page.getByRole("main").locator("img").count()).toBe(0);
+    expect(images.filter((url) => url.includes("product-review"))).toEqual([]);
 
-    // From `lg`, text on the left and the shot on the right.
-    const text = await page.getByRole("heading", { level: 1 }).boundingBox();
-    const picture = await shot.boundingBox();
-    expect((text?.x ?? 0) + (text?.width ?? 0)).toBeLessThanOrEqual(picture?.x ?? 0);
+    // From `lg`, text on the left and the window on the right.
+    const text = await rectOf(page.getByRole("heading", { level: 1 }));
+    const picture = await rectOf(shot);
+    expect(text.right).toBeLessThanOrEqual(picture.left);
+    // The card, 36 pixels out from the window's left edge and 28 below it.
+    const card = await rectOf(page.getByTestId("home-shot-card"));
+    expectNear(card.left, picture.left - 36);
+    expectNear(card.bottom, picture.bottom + 28);
   });
 
   /**
-   * Spec 0013, AC-10, as feature 28 builds it. Each point's icon circle, and
-   * its title and line as the text itself (a range over the words, since the
-   * heading's own box is as wide as its column whatever the alignment).
-   */
-  const points = (page: Page) =>
-    page
-      .getByRole("main")
-      .getByRole("list")
-      .filter({ has: page.getByRole("heading", { name: "Stays on your device" }) })
-      .evaluate((list) => {
-        const box = (rect: DOMRect) => ({
-          left: rect.left,
-          right: rect.right,
-          top: rect.top,
-          bottom: rect.bottom,
-        });
-        const words = (element: Element | null) => {
-          if (element === null) throw new Error("a point has lost its words");
-          const range = document.createRange();
-          range.selectNodeContents(element);
-          return box(range.getBoundingClientRect());
-        };
-        return [...list.children].map((item) => ({
-          item: box(item.getBoundingClientRect()),
-          icon: box((item.firstElementChild as Element).getBoundingClientRect()),
-          title: words(item.querySelector("h2")),
-          line: words(item.querySelector("p")),
-        }));
-      });
-
-  /** Where they stack (below `md`), each point centred, its icon above its words. */
-  for (const width of [390, 700]) {
-    test(`centres each of the three points where they stack, at ${width} pixels`, async ({
-      page,
-    }) => {
-      await page.setViewportSize({ width, height: 900 });
-      await page.goto("/");
-
-      const trio = await points(page);
-      expect(trio).toHaveLength(3);
-      for (const [index, { item, icon, title, line }] of trio.entries()) {
-        if (index > 0)
-          expect(item.top).toBeGreaterThanOrEqual(trio[index - 1]?.item.bottom ?? 0);
-        expect(icon.bottom).toBeLessThanOrEqual(title.top);
-        expectNear(middle(icon).x, middle(item).x);
-        expectNear(middle(title).x, middle(item).x);
-        expectNear(middle(line).x, middle(item).x);
-      }
-    });
-  }
-
-  /**
-   * Side by side (from `md`) the three line up at the start again: the icon
-   * above the words until `lg`, and beside them from it.
+   * Spec 0026, AC-8: How it works, three cards one under another below `md`
+   * and side by side from it, in the tool's order.
    */
   for (const [width, beside] of [
-    [800, false],
+    [390, false],
     [1280, true],
   ] as const) {
-    test(`sets the three points side by side at the start, at ${width} pixels`, async ({
+    test(`sets the three How it works cards ${beside ? "side by side" : "one under another"} at ${width} pixels`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/");
 
-      const trio = await points(page);
-      expect(trio).toHaveLength(3);
-      for (const [index, { item, icon, title, line }] of trio.entries()) {
-        expectNear(item.top, trio[0]?.item.top ?? 0);
-        if (index > 0)
-          expect(item.left).toBeGreaterThanOrEqual(trio[index - 1]?.item.right ?? 0);
-        expectNear(icon.left, item.left);
-        expectNear(line.left, title.left);
+      const cards = page.getByTestId("home-steps").getByRole("listitem");
+      await expect(cards.getByRole("heading", { level: 3 })).toHaveText([
+        "Open a PDF",
+        "Tick what to remove",
+        "Download your new file",
+      ]);
+      const boxes = [];
+      for (const card of await cards.all()) boxes.push(await rectOf(card));
+      for (const [index, box] of boxes.entries()) {
+        if (index === 0) continue;
+        const before = boxes[index - 1] as (typeof boxes)[number];
         if (beside) {
-          expect(title.left).toBeGreaterThanOrEqual(icon.right);
-          expect(title.top).toBeLessThan(icon.bottom);
+          expectNear(box.top, before.top);
+          expect(box.left).toBeGreaterThanOrEqual(before.right);
         } else {
-          expect(icon.bottom).toBeLessThanOrEqual(title.top);
-          expectNear(title.left, item.left);
+          expectNear(box.left, before.left);
+          expect(box.top).toBeGreaterThanOrEqual(before.bottom);
         }
       }
     });
@@ -2150,7 +2230,11 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     expect((caps?.y ?? 0) + (caps?.height ?? 0)).toBeLessThanOrEqual(picture?.y ?? 0);
   });
 
-  test("steps the display headline up from 40px to 56px at md", async ({ page }) => {
+  // Spec 0026, AC-3: `title` below `sm`, 3.25rem from there, and the home
+  // page's own 3.75rem from `lg` (`text-hero`, `Main.dc.html`).
+  test("steps the headline up from 30px to 52px at sm and 60px at lg", async ({
+    page,
+  }) => {
     const size = () =>
       page
         .getByRole("heading", { level: 1 })
@@ -2158,10 +2242,13 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
 
     await page.setViewportSize({ width: 375, height: 800 });
     await page.goto("/");
-    expect(await size()).toBe("40px");
+    expect(await size()).toBe("30px");
+
+    await page.setViewportSize({ width: 800, height: 800 });
+    expect(await size()).toBe("52px");
 
     await page.setViewportSize({ width: 1280, height: 800 });
-    expect(await size()).toBe("56px");
+    expect(await size()).toBe("60px");
   });
 
   test("walks from the skip link to the wordmark, the header's links and both buttons", async ({
@@ -2173,15 +2260,13 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     await expect(page.getByRole("link", { name: "Skip to main content" })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "RedactNest" })).toBeFocused();
-    // Spec 0013, AC-7: Pricing and Account, before the header's button.
-    await page.keyboard.press("Tab");
-    await expect(
-      page.getByRole("banner").getByRole("link", { name: "Pricing" }),
-    ).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(
-      page.getByRole("banner").getByRole("link", { name: "Account" }),
-    ).toBeFocused();
+    // Spec 0026, AC-5: the nav, then Sign in, before the header's button.
+    for (const name of ["How it works", "Security", "Pricing", "Sign in"]) {
+      await page.keyboard.press("Tab");
+      await expect(
+        page.getByRole("banner").getByRole("link", { name, exact: true }),
+      ).toBeFocused();
+    }
     await page.keyboard.press("Tab");
     await expect(
       page.getByRole("banner").getByRole("link", { name: "Try it free" }),
@@ -2189,14 +2274,15 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     await page.keyboard.press("Tab");
     const main = page
       .getByRole("main")
-      .getByRole("link", { name: "Remove text from a PDF" });
+      .getByRole("link", { name: "Remove text from a PDF" })
+      .first();
     await expect(main).toBeFocused();
     await expectFocusRing(main);
-    // Spec 0013, AC-10: See pricing beside it, with billing on.
+    // Spec 0026, AC-8: See how it works beside it.
     await page.keyboard.press("Tab");
-    const pricing = page.getByRole("main").getByRole("link", { name: "See pricing" });
-    await expect(pricing).toBeFocused();
-    await expectFocusRing(pricing);
+    const how = page.getByRole("main").getByRole("link", { name: "See how it works" });
+    await expect(how).toBeFocused();
+    await expectFocusRing(how);
   });
 
   test("the skip link lands on main, so the next Tab is the main button", async ({
@@ -2210,11 +2296,15 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
 
     await page.keyboard.press("Tab");
     await expect(
-      page.getByRole("main").getByRole("link", { name: "Remove text from a PDF" }),
+      page
+        .getByRole("main")
+        .getByRole("link", { name: "Remove text from a PDF" })
+        .first(),
     ).toBeFocused();
   });
 
-  test("its button links are button sized: 40px in the header, 48px below", async ({
+  // The hero's are `xl`, the mockup's 50 pixels (`Main.dc.html`).
+  test("its button links are button sized: 40px in the header, 50px below", async ({
     page,
   }) => {
     await page.goto("/");
@@ -2226,12 +2316,14 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
     const main = await page
       .getByRole("main")
       .getByRole("link", { name: "Remove text from a PDF" })
+      .first()
       .boundingBox();
-    // Exact, not a floor: a minimum passed while `lg` padding pushed it to 50px.
+    // Exact, not a floor: a minimum once passed while padding pushed a button past its size.
     expect(header?.height).toBe(40);
-    expect(main?.height).toBe(48);
+    expect(main?.height).toBe(50);
 
-    await expectTargetSizes(page, ["#main", "Menu"]);
+    // The menu's copy of Try it free shows only on a row under 20.5rem.
+    await expectTargetSizes(page, ["#main", "Menu", "/sign-in", "/tool"]);
   });
 
   test("axe reports nothing", async ({ page }) => {
@@ -2301,11 +2393,12 @@ test.describe("the cursor (spec 0013, AC-33)", () => {
 
     for (const target of [
       header.getByRole("link", { name: "RedactNest" }),
+      header.getByRole("link", { name: "How it works" }),
       header.getByRole("link", { name: "Pricing" }),
-      header.getByRole("link", { name: "Account" }),
+      header.getByRole("link", { name: "Sign in" }),
       header.getByRole("link", { name: "Try it free" }),
-      main.getByRole("link", { name: "Remove text from a PDF" }),
-      main.getByRole("link", { name: "See pricing" }),
+      main.getByRole("link", { name: "Remove text from a PDF" }).first(),
+      main.getByRole("link", { name: "See how it works" }),
       page.getByRole("contentinfo").getByRole("link", { name: "Privacy policy" }),
     ]) {
       expect(await cursorOf(target)).toBe("pointer");
@@ -2401,7 +2494,9 @@ test.describe("the cursor (spec 0013, AC-33)", () => {
  * pixels and 200% text at once, which together are roughly 800% zoom. WCAG
  * does not ask for that, but a visitor who needs both meets it, and on `/` the
  * headline's longest word and the band cards' tiles were wider than the window.
- * `REFLOW_PAGES` holds `/` and each search page.
+ * `REFLOW_PAGES` holds `/` and each search page, and since spec 0026's
+ * accessibility sweep (AC-16, its Follow-up) `/pricing` and the three pages of
+ * prose, where a host name too long for a line now breaks.
  *
  * It runs at 305 pixels too, which is 320 less a 15 pixel classic scrollbar.
  * Headless Chromium draws no scrollbar, so at 320 it never sees the window a
@@ -2414,6 +2509,10 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
     "/redact-pdf",
     "/remove-text-from-pdf",
     "/black-box-redaction",
+    "/pricing",
+    "/privacy",
+    "/terms",
+    "/security",
   ] as const;
 
   /**
@@ -2427,8 +2526,13 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
    * link is `sr-only` until it takes focus, a 1 pixel clipped box that scrolls
    * nothing, but a range over its text reports the words unclipped, 309 pixels
    * at 200% text, past a 305 window. The scroll check and the box loop are the
-   * same at both widths, and at 320 the text loop keeps every node. Spec 0024,
-   * *The lockup at narrow widths*.
+   * same at both widths, and at 320 the text loop keeps the skip link's words.
+   * Spec 0024, *The lockup at narrow widths*.
+   *
+   * The text loop passes over every other visually hidden word for the same
+   * reason: the header's Menu button sits at the row's right edge, and its
+   * `sr-only` name reads 4 pixels past the window at 200% text, though it
+   * draws and scrolls nothing (`ROW_UNLESS_NARROW` put the button there).
    */
   async function expectNothingPastTheWindow(page: Page, width: 320 | 305): Promise<void> {
     await expectNoHorizontalScroll(page);
@@ -2443,6 +2547,9 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
         }
       }
       for (const element of document.querySelectorAll("main *")) {
+        // A visually hidden word (a callout's tone, spec 0003, INV-8) is a 1
+        // pixel clipped box that scrolls nothing and shows nothing.
+        if (element.closest(".sr-only") !== null) continue;
         // An inline box reports no width of its own to compare.
         if (element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1) {
           found.push(`content wider than its box: ${element.tagName}`);
@@ -2450,7 +2557,9 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
       }
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        if (passOverSkipLink && node.parentElement?.closest('a[href="#main"]')) continue;
+        const skipLink = node.parentElement?.closest('a[href="#main"]');
+        if (skipLink && passOverSkipLink) continue;
+        if (!skipLink && node.parentElement?.closest(".sr-only")) continue;
         const range = document.createRange();
         range.selectNodeContents(node);
         const box = range.getBoundingClientRect();
@@ -2485,8 +2594,14 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
 
   /**
    * The fix leaves wider screens as they were: `/`'s hero, trio and band at
-   * 1280 pixels, recorded from the build before it as x, y, width and height.
-   * Within a pixel, so a rounding difference between machines is not a change.
+   * 1280 pixels, recorded from the build before it as x, y and width. Within
+   * a pixel, so a rounding difference between machines is not a change.
+   *
+   * No height is recorded, because a box's height follows its wrapped text and
+   * Linux draws Inter a few pixels wider than Windows, where these were read:
+   * on CI the band's Looks for chips wrapped one more row (44 pixels, 36 and a
+   * gap of 8) with nothing moved (CI run 45842120945). The hero's height and
+   * the trio's are still held, by the y of the box below each.
    */
   test("/: keeps the hero, the trio and the band where they were at 1280 pixels", async ({
     page,
@@ -2494,20 +2609,20 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/");
 
-    const main = page.getByRole("main");
     for (const [box, recorded] of [
-      [page.getByTestId("home-hero"), [88, 145, 1104, 460.4]],
-      [main.getByRole("list").first(), [88, 669.4, 1104, 120]],
-      [page.getByTestId("home-band"), [88, 853.4, 1104, 603]],
+      // Recorded again for the owner's port of `Main.dc.html` (2026-11-25):
+      // the hero, the How it works cards and the band.
+      [page.getByTestId("home-hero"), [82, 153, 1116]],
+      [page.getByTestId("home-steps").getByRole("list"), [82, 1131.8, 1116]],
+      [page.getByTestId("home-band"), [82, 2213.1, 1116]],
     ] as const) {
       const measured = await box.boundingBox();
       if (measured === null) throw new Error("a recorded box is not drawn");
-      const [x, y, width, height] = recorded;
+      const [x, y, width] = recorded;
       for (const [value, was] of [
         [measured.x, x],
         [measured.y, y],
         [measured.width, width],
-        [measured.height, height],
       ] as const) {
         expect(Math.abs(value - was)).toBeLessThanOrEqual(1);
       }
@@ -2616,7 +2731,10 @@ test.describe("the footer from md (spec 0024, AC-17)", () => {
   }
 });
 
-test.describe("every page (spec 0013, AC-26; spec 0024, AC-13)", () => {
+test.describe("every page (spec 0013, AC-26; spec 0024, AC-13; spec 0026, AC-16)", () => {
+  // Spec 0026, AC-16 adds `/security` to spec 0013 AC-26's list. `/sign-out`
+  // needs a real Clerk session, which this build's fake keys cannot give, so
+  // it is walked on `pnpm dev` (verify.md, task 14).
   const PAGES = [
     "/",
     "/redact-pdf",
@@ -2625,6 +2743,7 @@ test.describe("every page (spec 0013, AC-26; spec 0024, AC-13)", () => {
     "/pricing",
     "/privacy",
     "/terms",
+    "/security",
     "/no-such-page",
   ] as const;
 
@@ -2697,6 +2816,241 @@ test.describe("every page (spec 0013, AC-26; spec 0024, AC-13)", () => {
       await expectContained(page.getByRole("main"));
     });
   }
+});
+
+/**
+ * Spec 0026, AC-16. Tab from the top of the page reaches every control the
+ * page draws, header and footer included, in page order, each with the ring
+ * a keyboard sees (`:focus-visible`). The controls are listed from the page
+ * itself (everything focusable, enabled and drawn), so a control added out
+ * of reach, or reached out of order, fails here without a list kept by hand.
+ *
+ * The walk starts from a mark put first in the body and focused, so it begins
+ * at the top wherever focus was (a run puts it on Cancel), and stops once
+ * focus leaves the page or comes round.
+ */
+async function expectWholePageWalk(page: Page): Promise<void> {
+  const stops = await page.evaluate(() => {
+    const reachable = [
+      ...document.querySelectorAll<HTMLElement>(
+        "a[href], button, input, select, textarea, summary, [tabindex]",
+      ),
+    ].filter(
+      (element) =>
+        element.tabIndex >= 0 &&
+        !(element as HTMLButtonElement).disabled &&
+        element.getClientRects().length > 0,
+    );
+    reachable.forEach((element, index) => {
+      element.dataset.sweep = String(index);
+    });
+    const start = document.createElement("span");
+    start.tabIndex = -1;
+    start.dataset.sweepStart = "";
+    document.body.prepend(start);
+    start.focus();
+    return reachable.length;
+  });
+  expect(stops).toBeGreaterThan(0);
+
+  const reached: number[] = [];
+  for (let step = 0; step <= stops; step += 1) {
+    await page.keyboard.press("Tab");
+    const index = await page.evaluate(() => {
+      const active = document.activeElement;
+      return active instanceof HTMLElement && active.dataset.sweep !== undefined
+        ? Number(active.dataset.sweep)
+        : null;
+    });
+    if (index === null || reached.includes(index)) break;
+    reached.push(index);
+    const stop = page.locator(`[data-sweep="${index}"]`);
+    expect(await stop.evaluate((element) => element.matches(":focus-visible"))).toBe(
+      true,
+    );
+    await expectFocusRing(stop);
+  }
+  await page.evaluate(() => document.querySelector("[data-sweep-start]")?.remove());
+
+  expect(reached).toEqual([...Array(stops).keys()]);
+}
+
+/**
+ * Spec 0026, AC-16: every control on every page keeps a visible ring as the
+ * keyboard reaches it, and every target is at least 24 by 24 pixels, at
+ * desktop width and at 320 with the header's menu open. The search pages'
+ * walk is their own (below), and `/tool`'s other states are walked in "the
+ * keyboard walk on the tool page" and "target sizes on the tool page".
+ */
+test.describe("every control on every page (spec 0026, AC-16)", () => {
+  const WALKED = [
+    "/",
+    "/pricing",
+    "/privacy",
+    "/terms",
+    "/security",
+    "/no-such-page",
+    "/tool",
+  ] as const;
+  const MEASURED = [
+    ...WALKED,
+    "/redact-pdf",
+    "/remove-text-from-pdf",
+    "/black-box-redaction",
+  ] as const;
+
+  /**
+   * The server draws the account slot empty and the page fills it once its
+   * script runs (child 0001, AC-25), so the controls are listed only after
+   * that, or the slot's Sign in would be met unlisted.
+   */
+  async function ready(page: Page, path: string): Promise<void> {
+    await expect(
+      page.getByRole("banner").getByRole("link", { name: "Sign in", exact: true }),
+    ).toBeVisible();
+    if (path === "/tool") await planAnswered(page);
+  }
+
+  for (const path of WALKED) {
+    test(`${path}: Tab reaches every control in page order, each with its ring`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(path);
+      await ready(page, path);
+
+      await expectWholePageWalk(page);
+    });
+  }
+
+  for (const path of MEASURED) {
+    test(`${path}: every target is at least 24 by 24 pixels, at 1280 and at 320 with the menu open`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(path);
+      await ready(page, path);
+      // From `sm` the account slot's row holds Sign in, so the menu's own
+      // Sign in has no box, and the Menu button shows only below `sm`
+      // (child 0001, AC-27). The tool page's file input is never a stop.
+      // A link inside a sentence takes WCAG 2.5.8's inline exception.
+      // Try it free has two copies off `/tool`, the row's and the menu's, and
+      // one is always hidden: the menu's from a 20.5rem row, the row's below
+      // it (`ROW_UNLESS_NARROW`). Both are a plain `a` to `/tool`.
+      const tool = path === "/tool" ? ["file-input"] : ["/tool"];
+      await expectTargetSizes(page, ["#main", "Menu", "/sign-in", ...tool], {
+        sentences: true,
+      });
+
+      // Below `sm` the menu takes Sign in, and at 320 Try it free too.
+      await page.setViewportSize({ width: 320, height: 640 });
+      await page
+        .getByRole("banner")
+        .getByRole("button", { name: "Menu", exact: true })
+        .click();
+      await expect(
+        page.getByRole("banner").getByRole("link", { name: "Sign in", exact: true }),
+      ).toBeVisible();
+      await expectTargetSizes(page, ["#main", "/sign-in", ...tool], { sentences: true });
+    });
+  }
+});
+
+/**
+ * Child 0003, AC-31, and spec 0026, AC-16: the progress steps walked by
+ * keyboard and read as a screen reader reads them. Each step is named by its
+ * words and its state in words, the bar is hidden, and nothing in the card is
+ * a stop, so Tab passes it by and the run keeps focus on Cancel.
+ */
+test.describe("the progress steps (child 0003, AC-31; spec 0026, AC-16)", () => {
+  const STOPS = "a[href], button, input, select, textarea, summary, [tabindex]";
+
+  /**
+   * A run held at its first step: once `holdRun` is set, every message from
+   * the worker is dropped but the `redacting` phase, so the card shows that
+   * step as current and the run never ends. Installed before the page's own
+   * script, so the client's listener is wrapped as it is added.
+   */
+  async function holdRunAtFirstStep(page: Page): Promise<void> {
+    await page.addInitScript(() => {
+      const add = Worker.prototype.addEventListener as (
+        this: Worker,
+        ...args: unknown[]
+      ) => void;
+      Worker.prototype.addEventListener = function (this: Worker, ...args: unknown[]) {
+        const [type, listener] = args;
+        if (type === "message" && typeof listener === "function") {
+          args[1] = (event: MessageEvent<{ kind?: string; phase?: string } | null>) => {
+            const held = (window as { holdRun?: boolean }).holdRun === true;
+            const first =
+              event.data?.kind === "progress" && event.data.phase === "redacting";
+            if (held && !first) return;
+            (listener as (event: MessageEvent) => void)(event);
+          };
+        }
+        add.apply(this, args);
+      } as Worker["addEventListener"];
+    });
+  }
+
+  // Playwright's snapshot joins the label and its hidden state words with a
+  // space; a screen reader reads them as one line, the comma a pause.
+  test("names each of the open's steps with its state, and Tab never stops in them", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/tool");
+    await planAnswered(page);
+    await openingHeld(page);
+
+    const card = page.getByTestId("progress-card");
+    await expect(card).toMatchAriaSnapshot(`
+      - paragraph: Opening…
+      - paragraph: Loading the PDF engine
+      - list:
+        - listitem: /^Loading the PDF engine ?, in progress$/
+        - listitem: /^Opening your document ?, not started$/
+        - listitem: /^Reading each page ?, not started$/
+        - listitem: /^Looking for .+ ?, not started$/
+    `);
+    await expect(card.locator(STOPS)).toHaveCount(0);
+    await expectWholePageWalk(page);
+  });
+
+  test("names each of the run's steps with its state, and keeps focus and its ring on Cancel", async ({
+    page,
+  }) => {
+    await holdRunAtFirstStep(page);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/tool");
+    await openDocument(page);
+    await page.evaluate(() => {
+      (window as { holdRun?: boolean }).holdRun = true;
+    });
+    // Pressed by keyboard, so the ring Cancel takes is the one a keyboard sees.
+    await page.getByTestId("redact").focus();
+    await page.keyboard.press("Enter");
+
+    const card = page.getByTestId("progress-card");
+    await expect(card).toMatchAriaSnapshot(`
+      - paragraph: Redacting…
+      - paragraph: Removing what you ticked
+      - list:
+        - listitem: /^Removing what you ticked ?, in progress$/
+        - listitem: /^Writing your new file ?, not started$/
+        - listitem: /^Checking every page ?, not started$/
+    `);
+    await expect(card.locator(STOPS)).toHaveCount(0);
+
+    const cancel = page.getByTestId("cancel");
+    await expect(cancel).toBeFocused();
+    await expect(cancel).toHaveAccessibleName("Cancel");
+    expect(await cancel.evaluate((element) => element.matches(":focus-visible"))).toBe(
+      true,
+    );
+    await expectFocusRing(cancel);
+    await expectWholePageWalk(page);
+  });
 });
 
 /**
@@ -2877,4 +3231,85 @@ test.describe("the sign in wait (spec 0013, AC-23, AC-26)", () => {
       await expectContained(placeholder(page));
     });
   }
+});
+
+/**
+ * Spec 0026 child 0002, AC-39, AC-41 and AC-44: the page preview drawn at
+ * 1280 pixels passes axe with the page's tags, in forced colours too, and the
+ * keyboard reaches it after the list: the rail (one tab stop, arrows move
+ * focus, Enter shows), Zoom out and Zoom in, then the page region, which the
+ * keyboard can scroll. Each stop shows the ring.
+ */
+test.describe("the page preview, drawn (child 0002)", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/tool");
+    await page
+      .getByTestId("file-input")
+      .setInputFiles(resolve("tests/fixtures/read-mixed.pdf"));
+    await expect(page.getByTestId("preview-canvas")).not.toHaveClass(/invisible/, {
+      timeout: ENGINE_TIMEOUT,
+    });
+    await expect(page.locator('[data-testid="preview-thumb"] .bg-surface')).toHaveCount(
+      3,
+    );
+  });
+
+  test("passes axe, and again in forced colours", async ({ page }) => {
+    await expectNoAxeViolations(page);
+    await page.emulateMedia({ forcedColors: "active" });
+    await expectNoAxeViolations(page);
+    // The boxes keep their edge and lose their fill in forced colours: the
+    // fill's alpha is 0, whatever colour the system gives it.
+    const box = page.locator("[data-box]").first();
+    const fill = await box.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    expect(fill).toMatch(/^rgba\(\d+, \d+, \d+, 0\)$/);
+    expect(await box.evaluate((element) => getComputedStyle(element).borderStyle)).toBe(
+      "solid",
+    );
+    await page.emulateMedia({ forcedColors: "none" });
+  });
+
+  test("walks from the list into the rail, the zoom and the page region", async ({
+    page,
+  }) => {
+    await page.locator('input[type="checkbox"][id^="match-"]').last().focus();
+
+    await page.keyboard.press("Tab");
+    const first = page.getByRole("button", { name: "Page 1, 1 found" });
+    await expect(first).toBeFocused();
+    await expectFocusRing(first);
+
+    await page.keyboard.press("ArrowDown");
+    const second = page.getByRole("button", { name: "Page 2 · scan" });
+    await expect(second).toBeFocused();
+    await expect(page.getByTestId("preview-page-of")).toHaveText("Page 1 of 3");
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("preview-page-of")).toHaveText("Page 2 of 3");
+    await expect(second).toHaveAttribute("aria-current", "page");
+    await expect(second).toBeFocused();
+
+    await page.keyboard.press("Tab");
+    const zoomOut = page.getByRole("button", { name: "Zoom out" });
+    await expect(zoomOut).toBeFocused();
+    await expectFocusRing(zoomOut);
+    await page.keyboard.press("Tab");
+    const zoomIn = page.getByRole("button", { name: "Zoom in" });
+    await expect(zoomIn).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("preview-zoom-level")).toHaveText("125%");
+    await expect(zoomIn).toBeFocused();
+
+    await page.keyboard.press("Tab");
+    const region = page.getByRole("region", { name: "Page 2" });
+    await expect(region).toBeFocused();
+    await expectFocusRing(region);
+    const before = await region.evaluate((element) => element.scrollTop);
+    await page.keyboard.press("PageDown");
+    await expect
+      .poll(() => region.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(before);
+  });
 });

@@ -24,7 +24,6 @@ import {
   type TermId,
 } from "@/worker/protocol";
 import { Button } from "@/ui/button";
-import { Callout } from "@/ui/callout";
 import { Card } from "@/ui/card";
 import { ChecklistGroup } from "@/ui/checklist-group";
 import { ChecklistItem } from "@/ui/checklist-item";
@@ -32,6 +31,8 @@ import { ChecklistSelectAll, type SelectAllState } from "@/ui/checklist-select-a
 import { CountBadge } from "@/ui/count-badge";
 import { EmptyState } from "@/ui/empty-state";
 import { Spinner } from "@/ui/spinner";
+
+import { NoteBox } from "./notice-box";
 
 /** One term this job knows, in the list's order, as its group shows it. */
 export interface TermGroupTerm {
@@ -67,6 +68,13 @@ interface ReviewChecklistProps {
   /** A group's select all, as one action (spec 0007, AC-7). Stable, likewise. */
   readonly onTicksSet: (ids: readonly MatchId[], on: boolean) => void;
   /**
+   * A row was picked for the page preview: its checkbox took focus or changed
+   * its tick (spec 0026 child 0002, AC-43). Stable, and the pick itself is
+   * never handed back to the rows, so a pick renders no row again. A group's
+   * select all never picks.
+   */
+  readonly onPick?: (id: MatchId) => void;
+  /**
    * The custom terms panel, after the coverage note and before the groups
    * (spec 0017, AC-1), or nothing with billing off.
    */
@@ -74,6 +82,12 @@ interface ReviewChecklistProps {
   /** Every term this job knows, in the list's order (spec 0017, AC-14). */
   readonly terms?: readonly TermGroupTerm[];
   readonly termActions?: TermGroupActions;
+  /**
+   * Drawn inside the right column beside the page preview, which is already
+   * one panel (`ToolReview.dc.html`): the card keeps its region and heading
+   * but drops its box.
+   */
+  readonly flat?: boolean;
 }
 
 interface Group {
@@ -128,8 +142,10 @@ const NO_TERMS: readonly TermGroupTerm[] = Object.freeze([]);
  * Rendered by `tool-client` outside the polite live region: a list this long
  * read out as it appeared would drown the phase line. One card, titled Found
  * items with a count of every row found, blocked ones included (spec 0013,
- * AC-19); the coverage note comes first inside it, always, so a short list, or
- * an empty one, never reads as a complete redaction.
+ * AC-19); the coverage note comes first inside it, always, with no control
+ * that hides it, so a short list, or an empty one, never reads as a complete
+ * redaction (spec 0005, AC-14; spec 0026, AC-12, the owner's call,
+ * 2026-11-26).
  */
 export function ReviewChecklist({
   matches,
@@ -138,9 +154,11 @@ export function ReviewChecklist({
   partly,
   onToggle,
   onTicksSet,
+  onPick,
   panel,
   terms = NO_TERMS,
   termActions,
+  flat = false,
 }: ReviewChecklistProps) {
   const groups = useMemo<readonly Group[]>(
     () =>
@@ -167,19 +185,32 @@ export function ReviewChecklist({
   return (
     <div data-testid="review">
       <Card
+        look={flat ? "flat" : "card"}
         title={FOUND_ITEMS_TITLE}
         badge={
-          <CountBadge count={matches.length} noun={FOUND_ITEMS_NOUN} tone="neutral" />
+          // The count beside the heading, its noun heard but not shown.
+          <span className="flex min-w-0 flex-1 items-center">
+            <CountBadge
+              count={matches.length}
+              noun={FOUND_ITEMS_NOUN}
+              tone="quiet"
+              compact
+            />
+          </span>
         }
         data-testid="checklist"
       >
-        <Callout tone="info" data-testid="coverage">
-          {searched > 0
-            ? coverageNoteWithTerms(searched, partly)
-            : partly
-              ? COVERAGE_NOTE_PARTLY
-              : COVERAGE_NOTE}
-        </Callout>
+        {/* The note in the page's compact form, as the warning at open is. */}
+        <NoteBox
+          data-testid="coverage"
+          lines={[
+            searched > 0
+              ? coverageNoteWithTerms(searched, partly)
+              : partly
+                ? COVERAGE_NOTE_PARTLY
+                : COVERAGE_NOTE,
+          ]}
+        />
 
         {panel}
 
@@ -210,6 +241,7 @@ export function ReviewChecklist({
                     checked={ticked.has(match.id)}
                     disabled={running}
                     onToggle={onToggle}
+                    onPick={onPick}
                   />
                 ))}
                 {rows.length === 0 && (
@@ -249,6 +281,7 @@ export function ReviewChecklist({
                       checked={ticked.has(match.id)}
                       disabled={running}
                       onToggle={onToggle}
+                      onPick={onPick}
                     />
                   ))}
                 </ChecklistGroup>
@@ -386,11 +419,13 @@ const ReviewRow = memo(function ReviewRow({
   checked,
   disabled,
   onToggle,
+  onPick,
 }: {
   readonly match: ReviewMatch;
   readonly checked: boolean;
   readonly disabled: boolean;
   readonly onToggle: (id: MatchId) => void;
+  readonly onPick?: (id: MatchId) => void;
 }) {
   return (
     <ChecklistItem
@@ -410,7 +445,13 @@ const ReviewRow = memo(function ReviewRow({
         match.concealed === null ? undefined : CONCEALED_TEXT[match.concealed]
       }
       notes={match.termNotes.map((note) => TERM_NOTE_TEXT[note])}
-      onCheckedChange={() => onToggle(match.id)}
+      onCheckedChange={() => {
+        onToggle(match.id);
+        // Spec 0026 child 0002, AC-43: a click does not focus a checkbox in
+        // Safari, or in Firefox on macOS, so a tick change picks too.
+        onPick?.(match.id);
+      }}
+      onFocus={onPick && (() => onPick(match.id))}
     />
   );
 });
