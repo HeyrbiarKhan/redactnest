@@ -2,7 +2,7 @@ import { cva } from "class-variance-authority";
 
 import { countText } from "@/lib/count-text";
 
-export type CountBadgeTone = "accent" | "neutral";
+export type CountBadgeTone = "accent" | "neutral" | "quiet";
 
 export interface CountNoun {
   readonly one: string;
@@ -18,18 +18,21 @@ interface CountBadgeProps {
   readonly compact?: boolean;
 }
 
-/** `accent-strong` on `accent-soft` is 6.73:1 and `ink-muted` on `muted` 7.03:1. */
-const badge = cva(
-  "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-small font-medium",
-  {
-    variants: {
-      tone: {
-        accent: "bg-accent-soft text-accent-strong",
-        neutral: "bg-muted text-ink-muted",
-      },
+/**
+ * `accent-strong` on `accent-soft` is 6.73:1 and `ink-muted` on `muted` 7.03:1.
+ * `quiet` is the bare number beside `/tool`'s Found items heading
+ * (`ToolReview.dc.html`): no pill, `ink-subtle` at the heading's size, so it
+ * sits on `surface` only, where it measures 4.83:1.
+ */
+const badge = cva("inline-flex shrink-0 items-center font-medium", {
+  variants: {
+    tone: {
+      accent: "rounded-full bg-accent-soft px-2 py-0.5 text-small text-accent-strong",
+      neutral: "rounded-full bg-muted px-2 py-0.5 text-small text-ink-muted",
+      quiet: "text-body text-ink-subtle",
     },
   },
-);
+});
 
 /**
  * A count in a pill. Always announced with its noun, "2 items", never as a bare

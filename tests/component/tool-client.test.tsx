@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToolClient } from "@/app/tool/tool-client";
 import { config } from "@/config";
-import { IDLE_STEPS, PHASE_TEXT } from "@/lib/flow-text";
+import { PHASE_TEXT } from "@/lib/flow-text";
 import {
   asMatchId,
   EngineError,
@@ -953,11 +953,10 @@ describe("the plan, said out loud (spec 0012, AC-5 and AC-6)", () => {
 
       expect(card).not.toHaveClass("sr-only");
       expect(card).toHaveClass(
-        "rounded-card",
+        "rounded-control",
         "border",
         "border-info-border",
         "bg-info-bg",
-        "p-5",
       );
       expect(card.querySelector("svg")).toBeNull();
       expect(card.querySelector(".sr-only:not(a .sr-only)")).toBeNull();
@@ -2629,7 +2628,7 @@ describe("the redact flow (spec 0007)", () => {
      * template travels as custom properties (`toolGridAreas`), which jsdom
      * keeps on the grid's style; `design-system.spec.ts` measures the boxes.
      */
-    it("lays A beside B while nothing is open, then one column of A, L and C with B as contents", async () => {
+    it("stacks A over B while nothing is open, then one column of A, L and C with B as contents", async () => {
       const run = controllable();
       mocks.openSession.mockResolvedValue(run.session);
       render(<ToolClient />);
@@ -2640,8 +2639,8 @@ describe("the redact flow (spec 0007)", () => {
         "@min-[61rem]:justify-center",
       );
       expect(templateOf(grid)).toEqual({
-        columns: "minmax(0, 1fr) minmax(20rem, 24rem)",
-        areas: "'a b'",
+        columns: "minmax(0, 44rem)",
+        areas: "'a' 'b'",
       });
       expect(screen.getByTestId("area-rail")).toHaveClass("@min-[61rem]:[grid-area:b]");
       expect(screen.getByTestId("area-rail")).not.toHaveClass("@min-[61rem]:contents");
@@ -2669,23 +2668,21 @@ describe("the redact flow (spec 0007)", () => {
       expect(grid.style.getPropertyValue("--tool-panel-room")).toBe("17rem");
     });
 
-    /** AC-15: the idle rail, in order. */
-    it("holds the plan card, the three steps and the lock line in the idle rail", () => {
+    /**
+     * AC-15, as the empty state's port has it (`ToolStates.dc.html`, the
+     * owner's call, 2026-11-26): the drop zone alone, then under it the plan
+     * card and the lock line, with no steps.
+     */
+    it("holds the plan card and the lock line in the idle rail, with no steps", () => {
       mocks.billingEnabled = true;
       render(<ToolClient />);
       answerWith(FREE);
 
       const rail = screen.getByTestId("area-rail");
-      const steps = within(rail).getByRole("list");
-      expect(
-        within(steps)
-          .getAllByRole("listitem")
-          .map((item) => item.textContent),
-      ).toEqual(["1Open a PDF", "2Tick what to remove", "3Download your new file"]);
+      expect(within(rail).queryByRole("list")).toBeNull();
       const order = [
         screen.getByTestId("area-live"),
         screen.getByTestId("plan-card"),
-        steps,
         screen.getByTestId("lock-line"),
       ];
       for (let at = 1; at < order.length; at += 1) {
@@ -2708,18 +2705,12 @@ describe("the redact flow (spec 0007)", () => {
      * jsdom lays nothing out, so this holds the classes and
      * `design-system.spec.ts` measures the boxes.
      */
-    it("centres the idle steps and the lock line until the grid is wide, after a failed open too", async () => {
+    it("centres the idle lock line at every width, after a failed open too", async () => {
       mocks.openSession.mockRejectedValue(new EngineError("corrupt"));
       render(<ToolClient />);
       const expectCentred = () => {
-        expect(within(screen.getByTestId("area-rail")).getByRole("list")).toHaveClass(
-          "mx-auto",
-          "w-fit",
-          "@min-[61rem]:mx-0",
-          "@min-[61rem]:w-auto",
-        );
-        expect(screen.getByTestId("lock-line")).toHaveClass(
-          "justify-center",
+        expect(screen.getByTestId("lock-line")).toHaveClass("justify-center");
+        expect(screen.getByTestId("lock-line")).not.toHaveClass(
           "@min-[61rem]:justify-start",
         );
       };
@@ -2789,14 +2780,14 @@ describe("the redact flow (spec 0007)", () => {
       const grid = screen.getByTestId("tool-grid");
       const polite = screen.getByTestId("area-live");
       expect(polite).toHaveClass("sr-only");
-      expect(templateOf(grid).areas).toBe("'a b'");
+      expect(templateOf(grid).areas).toBe("'a' 'b'");
 
       await chooseFile(pdfFile());
 
       expect(polite).toHaveTextContent("Checking your plan…");
       expect(polite).not.toHaveClass("sr-only");
-      expect(templateOf(grid).areas).toBe("'a l' 'a b'");
-      expect(grid.style.getPropertyValue("--tool-rows")).toBe("auto 1fr");
+      expect(templateOf(grid).areas).toBe("'a' 'l' 'b'");
+      expect(grid.style.getPropertyValue("--tool-rows")).toBe("none");
     });
 
     /**
@@ -2918,9 +2909,9 @@ describe("the redact flow (spec 0007)", () => {
     });
 
     /**
-     * AC-15: after a failed open the page is laid out as at idle, A beside B,
+     * AC-15: after a failed open the page is laid out as at idle, A over B,
      * the failure above the full drop zone in A, and the rail still showing
-     * the three steps and the lock line.
+     * the lock line, with no steps (the owner's call, 2026-11-26).
      */
     it("lays a failed open out as idle, the failure in the document area (AC-15)", async () => {
       mocks.openSession.mockRejectedValue(new EngineError("corrupt"));
@@ -2929,7 +2920,7 @@ describe("the redact flow (spec 0007)", () => {
 
       const error = await screen.findByTestId("error");
       const grid = screen.getByTestId("tool-grid");
-      expect(templateOf(grid).areas).toBe("'a b'");
+      expect(templateOf(grid).areas).toBe("'a' 'b'");
       expect([...grid.children].map((area) => area.getAttribute("data-testid"))).toEqual([
         "area-document",
         "area-live",
@@ -2937,7 +2928,7 @@ describe("the redact flow (spec 0007)", () => {
       ]);
       expect(screen.getByTestId("area-document")).toContainElement(error);
       const rail = screen.getByTestId("area-rail");
-      expect(within(rail).getAllByRole("listitem")).toHaveLength(IDLE_STEPS.length);
+      expect(within(rail).queryByRole("list")).toBeNull();
       expect(screen.getByTestId("area-rail-head").lastElementChild).toBe(
         screen.getByTestId("lock-line"),
       );
@@ -3091,7 +3082,7 @@ describe("the redact flow (spec 0007)", () => {
       await user.click(screen.getByTestId("download"));
       await user.click(screen.getByTestId("redact-another"));
 
-      expect(templateOf(grid).areas).toBe("'a b'");
+      expect(templateOf(grid).areas).toBe("'a' 'b'");
       expect(screen.getByTestId("area-live")).toBe(polite);
       expect(polite).toBeEmptyDOMElement();
       expect(polite).toHaveClass("sr-only");

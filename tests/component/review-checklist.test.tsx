@@ -260,13 +260,17 @@ describe("a blocked match", () => {
     expect(screen.getByRole("checkbox", { name: "jane@example.com" })).toBeEnabled();
   });
 
-  /** AC-13: Tab goes each group's summary, then each checkbox that is not blocked. */
+  /**
+   * AC-13: Tab goes to the coverage note's control at the card's head, then
+   * each group's summary, then each checkbox that is not blocked.
+   */
   it("is passed over by Tab, while every other row is reached in order", async () => {
     const user = userEvent.setup();
     const { container } = show();
     const [emails, phones] = container.querySelectorAll("summary");
 
     for (const stop of [
+      screen.getByTestId("coverage-toggle"),
       emails,
       screen.getByRole("checkbox", { name: "jane@example.com" }),
       phones,
@@ -303,13 +307,47 @@ describe("the coverage note and the empty state", () => {
     expect(container.querySelector("[role]")).toBeNull();
   });
 
-  /** Spec 0013, AC-19: titled Found items, with a neutral count of every row. */
+  /**
+   * Spec 0013, AC-19: titled Found items, with a count of every row, drawn
+   * as `ToolReview.dc.html` draws it: the bare number in `ink-subtle`, its
+   * noun heard but not shown, never a bare number to a screen reader.
+   */
   it("titles the card Found items, with a count of every row found", () => {
     show();
 
     const card = screen.getByRole("region", { name: "Found items" });
-    const badge = within(card).getByText(/found items?$/);
-    expect(badge).toHaveClass("bg-muted", "text-ink-muted");
+    const noun = within(card).getByText(/found items?$/);
+    expect(noun).toHaveClass("sr-only");
+    const badge = noun.parentElement as HTMLElement;
+    expect(badge).toHaveTextContent(/^\d[\d,]* found items?$/);
+    expect(badge).toHaveClass("text-ink-subtle");
+    expect(badge).not.toHaveClass("bg-muted");
+  });
+
+  /**
+   * The coverage note waits behind "What it looks for" beside the heading
+   * (`ToolReview.dc.html`, the owner's call, 2026-11-26): a disclosure that
+   * shows the same words and hides them again.
+   */
+  it("shows the coverage note from What it looks for, and hides it again", async () => {
+    const user = userEvent.setup();
+    show();
+
+    const toggle = screen.getByRole("button", { name: "What it looks for" });
+    const note = screen.getByTestId("coverage");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(note).not.toBeVisible();
+    expect(
+      document.getElementById(toggle.getAttribute("aria-controls") ?? ""),
+    ).toContainElement(note);
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(note).toBeVisible();
+    expect(note).toHaveTextContent(COVERAGE_NOTE);
+
+    await user.click(toggle);
+    expect(note).not.toBeVisible();
   });
 
   it("says nothing was found, and that a cleaned copy is still on offer, when there is nothing", () => {
@@ -779,9 +817,11 @@ describe("custom term groups (spec 0017)", () => {
     expect(screen.getByTestId("term-set-aside")).toHaveTextContent(
       "Set aside: not searched in this file because the search could not finish.",
     );
-    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "Remove Acme Ltd",
-    ]);
+    // Every button but the coverage note's control, which only shows words.
+    const buttons = screen
+      .getAllByRole("button")
+      .filter((button) => button !== screen.getByTestId("coverage-toggle"));
+    expect(buttons.map((button) => button.textContent)).toEqual(["Remove Acme Ltd"]);
   });
 
   it("disables every way on while a run is under way (AC-1)", () => {
@@ -802,7 +842,13 @@ describe("custom term groups (spec 0017)", () => {
       running: true,
     });
 
-    for (const button of screen.getAllByRole("button")) expect(button).toBeDisabled();
+    // Every way on waits; the coverage note's control only shows words, so it
+    // stays live.
+    const toggle = screen.getByTestId("coverage-toggle");
+    const buttons = screen.getAllByRole("button").filter((button) => button !== toggle);
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) expect(button).toBeDisabled();
+    expect(toggle).toBeEnabled();
   });
 
   it("shows Nothing found only when no row of any kind exists (AC-14)", () => {

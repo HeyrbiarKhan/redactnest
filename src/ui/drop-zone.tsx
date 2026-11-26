@@ -137,17 +137,21 @@ export function DropZone(props: DropZoneProps) {
         className={cx(
           // A row once the bar itself is 36rem wide, not the window: so it
           // stacks in the page preview's 26.25rem column (spec 0026 child
-          // 0002, AC-38), and a phone switches where it always did.
-          "@container/file-bar rounded-card border-2 px-4 py-3",
+          // 0002, AC-38), and a phone switches where it always did. Small
+          // and quiet beside the review (the owner's call, 2026-11-26): a
+          // 1 pixel edge, the control corner and the 40 pixel tile.
+          "@container/file-bar rounded-control border px-3 py-2",
           "transition-colors",
           COMPACT_STATE[state],
         )}
       >
         <div className="flex flex-col gap-3 @min-[36rem]/file-bar:flex-row @min-[36rem]/file-bar:items-center @min-[36rem]/file-bar:gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <IconCircle icon={FileText} tone="accent" shape="square" />
+            <IconCircle icon={FileText} tone="accent" shape="square" size="sm" />
             <div className="flex min-w-0 flex-col">
-              <p className="font-semibold text-ink wrap-anywhere">{props.fileName}</p>
+              <p className="text-small font-semibold text-ink wrap-anywhere">
+                {props.fileName}
+              </p>
               {props.pageCount !== null && (
                 <p data-testid="page-count" className="text-small text-ink-muted">
                   {props.pageCount} {props.pageCount === 1 ? "page" : "pages"}
@@ -181,16 +185,21 @@ export function DropZone(props: DropZoneProps) {
       {...zone}
       data-testid="drop-area"
       className={cx(
-        "flex flex-col items-center gap-4 rounded-card border-2 px-6 py-10 text-center sm:px-10 sm:py-12",
+        // The empty state's one card (`ToolStates.dc.html`): the panel
+        // corner, 36 pixels top and bottom. The edge stays a 2 pixel dashed
+        // `border-strong`, 3:1 on `surface`, which forced colours keep.
+        "flex flex-col items-center gap-4 rounded-panel border-2 px-6 py-9 text-center",
         "transition-colors",
         STATE[state],
       )}
     >
-      <IconCircle icon={FileUp} tone="accent" size="lg" shape="square" />
+      <IconCircle icon={FileUp} tone="accent" shape="square" />
 
       <div className="flex flex-col gap-2">
-        <p className="text-heading text-ink">{props.title}</p>
-        {props.or !== undefined && <p className="text-ink-muted">{props.or}</p>}
+        <p className="text-lead font-semibold text-ink">{props.title}</p>
+        {props.or !== undefined && (
+          <p className="text-small text-ink-muted">{props.or}</p>
+        )}
       </div>
 
       {input}
@@ -198,7 +207,6 @@ export function DropZone(props: DropZoneProps) {
       <Button
         ref={buttonRef}
         size="lg"
-        icon={Upload}
         data-testid="choose-file"
         onFocus={onWarm}
         onClick={() => inputRef.current?.click()}

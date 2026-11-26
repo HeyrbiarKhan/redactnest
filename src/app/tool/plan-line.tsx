@@ -53,6 +53,9 @@ interface PlanLineProps {
 /**
  * The plan card in the tool's rail: the account's next step, from the page's
  * answer rather than any job's snapshot (spec 0012, AC-5; spec 0013, AC-18).
+ * A small strip in `text-small` (the owner's call, 2026-11-26), so it sits
+ * under the drop zone and above the found items without competing with
+ * either.
  *
  * Its own markup in a box, never a `Callout`, so no icon and no hidden tone
  * word join what is announced: an `info-bg` fill, an `info-border` edge. Its
@@ -78,7 +81,7 @@ export function PlanLine({ answer, checking, onTryAgain, lineRef }: PlanLineProp
         "flex flex-wrap items-center gap-x-3 gap-y-1",
         line === null
           ? "sr-only"
-          : "rounded-card border border-info-border bg-info-bg p-5",
+          : "rounded-control border border-info-border bg-info-bg px-3 py-1",
       )}
     >
       <p
@@ -88,7 +91,7 @@ export function PlanLine({ answer, checking, onTryAgain, lineRef }: PlanLineProp
         tabIndex={line === null ? undefined : -1}
         role="status"
         data-testid="plan-line"
-        className="text-ink"
+        className="py-1 text-small text-ink"
       >
         {line !== null &&
           (checking

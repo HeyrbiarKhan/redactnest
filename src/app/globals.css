@@ -334,8 +334,10 @@
  * takes the slack and the action panel rests at the window's foot. It paints
  * the right column itself, as one `surface` panel with a `border` on its left
  * 26.25rem from the grid's right, because the column's blocks are separate
- * grid items (B is `display: contents`). Each block keeps its own look, set
- * in from the column's edges as the mockup's column is.
+ * grid items (B is `display: contents`). Each block is set in from the
+ * column's edges, 14 pixels apart, as the mockup's column is, but the action
+ * panel, the column's flat foot, which runs flush to both sides (the owner's
+ * call, 2026-11-26).
  */
 main[data-tool-main]:has([data-preview]) {
   padding-block: 0;
@@ -362,6 +364,7 @@ main[data-tool-main]:has([data-preview]) [data-tool-title] {
 [data-testid="tool-grid"][data-preview] {
   min-height: 100dvh;
   column-gap: 0;
+  row-gap: 0.875rem;
   background-image: linear-gradient(
     to right,
     transparent calc(100% - 26.25rem),
@@ -373,7 +376,9 @@ main[data-tool-main]:has([data-preview]) [data-tool-title] {
 
 [data-testid="tool-grid"][data-preview]
   > :not([data-testid="area-preview"], [data-testid="area-rail"]),
-[data-testid="tool-grid"][data-preview] > [data-testid="area-rail"] > * {
+[data-testid="tool-grid"][data-preview]
+  > [data-testid="area-rail"]
+  > :not([data-testid="action-panel"]) {
   margin-inline: 1.25rem;
 }
 

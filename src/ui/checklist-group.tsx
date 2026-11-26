@@ -33,13 +33,16 @@ export function ChecklistGroup({
 }: ChecklistGroupProps) {
   return (
     <details open className="group">
-      <summary className="flex min-h-12 list-none items-center gap-3 rounded-control px-3 py-2 transition-[background-color] hover:bg-subtle [&::-webkit-details-marker]:hidden">
+      {/* A 40 pixel row at the right column's size (`ToolReview.dc.html`). */}
+      <summary className="flex min-h-10 list-none items-center gap-2.5 rounded-control px-2.5 py-1.5 transition-[background-color] hover:bg-subtle [&::-webkit-details-marker]:hidden">
         <Icon
           aria-hidden="true"
           className="size-5 shrink-0 text-accent"
           strokeWidth={1.75}
         />
-        <span className="min-w-0 font-semibold text-ink wrap-break-word">{label}</span>
+        <span className="min-w-0 text-small font-semibold text-ink wrap-break-word">
+          {label}
+        </span>
         <CountBadge count={count} noun={noun} tone="neutral" compact />
         <ChevronDown
           aria-hidden="true"

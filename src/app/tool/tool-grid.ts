@@ -1,6 +1,8 @@
 /**
- * The tool grid's template from `lg` (spec 0026, AC-12, as spec 0013 AC-14
- * and AC-15 still have it while nothing is open).
+ * The tool grid's template from `lg` (spec 0026, AC-12). While nothing is
+ * open the areas stack in one centred column too, A, then L while it speaks,
+ * then B (`ToolStates.dc.html`'s empty state, the owner's call, 2026-11-26),
+ * where spec 0013 AC-15 set A beside the rail.
  *
  * Returned as values, not class names, because the rows depend on which areas
  * hold something and a class built at run time is one Tailwind never sees.
@@ -31,18 +33,15 @@ export interface ToolGridTemplate {
   readonly areas: string;
 }
 
-/** The two columns while nothing is open: A beside the rail (spec 0013, AC-15). */
-const IDLE_COLUMNS = "minmax(0, 1fr) minmax(20rem, 24rem)";
-
 /**
- * One column with a document on the page, at the `max-w-narrow` measure, so
- * no block needs its own width; the grid centres it (AC-12, *One column*).
+ * One column, at the `max-w-narrow` measure, so no block needs its own width;
+ * the grid centres it (AC-12, *One column*).
  */
 const COLUMN = "minmax(0, 44rem)";
 
 /**
- * While nothing is open, A sits beside B, with L over B only while it has
- * something to say; B's row takes the rest, so no space opens between them.
+ * While nothing is open, A, then L only while it has something to say, then
+ * B, which always holds the lock line.
  *
  * With a document on the page, the areas that hold something stack in page
  * order, A, L, B's head (`h`), then C, and nothing else: an empty area is
@@ -58,9 +57,11 @@ const FRAME_COLUMNS = "minmax(0, 1fr) 26.25rem";
 export function toolGridAreas(compact: boolean, holds: ToolAreas): ToolGridTemplate {
   if (compact && holds.preview === true) return frameTemplate(holds);
   if (!compact) {
-    return holds.live
-      ? { columns: IDLE_COLUMNS, rows: "auto 1fr", areas: "'a l' 'a b'" }
-      : { columns: IDLE_COLUMNS, rows: "none", areas: "'a b'" };
+    return {
+      columns: COLUMN,
+      rows: "none",
+      areas: holds.live ? "'a' 'l' 'b'" : "'a' 'b'",
+    };
   }
   const rows = [
     holds.document && "a",

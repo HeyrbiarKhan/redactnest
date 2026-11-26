@@ -339,6 +339,13 @@ export const OPEN_WARNING_TITLE = "Some pages can't be fully checked";
 export const ADVICE =
   "Run this file through text recognition (OCR) first, then open the result here. That may let RedactNest read those pages.";
 
+/**
+ * The control after the warning lines at open that shows the advice
+ * (`ToolReview.dc.html`, the owner's call, 2026-11-26), so each warning
+ * reads as one line until it is asked for.
+ */
+export const ADVICE_LINK = "What to do";
+
 /** The download warning's title (AC-22). */
 export const DOWNLOAD_WARNING_TITLE = "Not every page was checked";
 

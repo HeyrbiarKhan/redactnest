@@ -614,6 +614,12 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await expect(page.getByTestId("redact")).toBeFocused();
     await expectFocusRing(page.getByTestId("redact"));
 
+    // The Found items heading's "What it looks for", which opens the coverage
+    // note (the owner's call, 2026-11-26).
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("coverage-toggle")).toBeFocused();
+    await expectFocusRing(page.getByTestId("coverage-toggle"));
+
     // Spec 0017, AC-1 and AC-2: the custom terms panel sits in the found
     // items before the groups. This job is Free, so the panel is locked and
     // its one stop is the link to Pricing; the field and Add are disabled.
@@ -636,10 +642,11 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
   });
 
   /**
-   * Spec 0006, AC-27. The warnings add no tab stop: the walk over a flagged
-   * document is the walk over any other, and the warning is read in the card.
+   * Spec 0006, AC-27. The walk over a flagged document is the walk over any
+   * other but one stop: the warning's "What to do", which shows the advice
+   * (the owner's call, 2026-11-26), ringed like every other control.
    */
-  test("walks a flagged document the same way, past the warning to Redact", async ({
+  test("walks a flagged document the same way, through What to do to Redact", async ({
     page,
   }) => {
     await page.goto("/tool");
@@ -652,6 +659,12 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
 
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("start-over")).toBeFocused();
+    await page.keyboard.press("Tab");
+    const whatToDo = page
+      .getByTestId("page-warnings")
+      .getByRole("button", { name: "What to do" });
+    await expect(whatToDo).toBeFocused();
+    await expectFocusRing(whatToDo);
     await tabPastThePlanCard(page);
     // Spec 0026, AC-12: Untick all beside the count, then Redact.
     await page.keyboard.press("Tab");
@@ -660,6 +673,9 @@ test.describe("the keyboard walk on the tool page (AC-6, AC-14)", () => {
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("redact")).toBeFocused();
     await expectFocusRing(page.getByTestId("redact"));
+    // "What it looks for" at the Found items heading.
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("coverage-toggle")).toBeFocused();
     // The locked custom terms panel's link to Pricing (spec 0017, AC-2).
     await page.keyboard.press("Tab");
     await expect(
@@ -786,56 +802,10 @@ test.describe("the tool page's layout (spec 0013)", () => {
       .getByTestId(testId)
       .evaluate((element) => element.lastElementChild?.getBoundingClientRect().bottom);
 
-  /** Each idle step's circle and the line it draws to the next (AC-15). */
-  const stepLines = (page: Page) =>
-    page.evaluate(() =>
-      [...document.querySelectorAll('[data-testid="area-rail"] ol > li')].map((li) => {
-        const after = getComputedStyle(li, "::after");
-        const step = li.getBoundingClientRect();
-        const circle = (li.firstElementChild as Element).getBoundingClientRect();
-        const width = parseFloat(after.borderLeftWidth);
-        return {
-          drawn: after.content !== "none" && after.borderLeftStyle === "solid",
-          width: after.borderLeftWidth,
-          colour: after.borderLeftColor,
-          length: parseFloat(after.height),
-          height: step.height,
-          top: step.top + parseFloat(after.top),
-          bottom: step.bottom - parseFloat(after.bottom),
-          centre: step.left + parseFloat(after.left) + width / 2,
-          circle: {
-            left: circle.left,
-            top: circle.top,
-            bottom: circle.bottom,
-            centre: circle.left + circle.width / 2,
-          },
-          rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
-        };
-      }),
-    );
-
   /**
-   * AC-15: a 2 pixel line on every step but the last, at least 16 pixels
-   * long, centred under its circle and 0.25rem clear of it and of the next.
-   */
-  const expectStepsJoined = async (page: Page) => {
-    const steps = await stepLines(page);
-    expect(steps.map((step) => step.drawn)).toEqual([true, true, false]);
-    for (const [index, step] of steps.slice(0, -1).entries()) {
-      const next = steps[index + 1];
-      expect(step.width).toBe("2px");
-      expect(step.length).toBeGreaterThanOrEqual(16);
-      expect(step.top - step.circle.bottom).toBeCloseTo(step.rem * 0.25, 0);
-      expect((next?.circle.top ?? 0) - step.bottom).toBeCloseTo(step.rem * 0.25, 0);
-      expect(Math.abs(step.centre - step.circle.centre)).toBeLessThanOrEqual(0.5);
-    }
-    return steps;
-  };
-
-  /**
-   * The idle rail's column, its steps list, and the lock line's drawn content
-   * (the lock and the words), which `justify-center` moves while the line's
-   * own box keeps the column's width.
+   * The idle rail's column and the lock line's drawn content (the lock and the
+   * words), which `justify-center` moves while the line's own box keeps the
+   * column's width.
    */
   const idleRail = (page: Page) =>
     page.getByTestId("area-rail").evaluate((rail) => {
@@ -843,15 +813,13 @@ test.describe("the tool page's layout (spec 0013)", () => {
         const { left, right, top, bottom } = element.getBoundingClientRect();
         return { left, right, top, bottom };
       };
-      // The steps and the lock line live in B's head (spec 0026, AC-12).
+      // The lock line lives in B's head (spec 0026, AC-12).
       const head = rail.querySelector(':scope > [data-testid="area-rail-head"]');
-      const list = head?.querySelector(":scope > ol") ?? null;
       const lock = head?.querySelector(':scope > [data-testid="lock-line"]') ?? null;
-      if (list === null || lock === null) throw new Error("the rail is not idle");
+      if (lock === null) throw new Error("the rail is not idle");
       const drawn = [...lock.children].map(rect);
       return {
         rail: rect(rail),
-        list: rect(list),
         lock: rect(lock),
         lockContent: {
           left: Math.min(...drawn.map((part) => part.left)),
@@ -870,7 +838,13 @@ test.describe("the tool page's layout (spec 0013)", () => {
         line.getBoundingClientRect().left,
     );
 
-  test("sets the drop zone left of the rail while nothing is open, and first in the page", async ({
+  /**
+   * The empty state (`ToolStates.dc.html`, the owner's call, 2026-11-26): the
+   * drop zone alone, first in the page, in one column no wider than 44rem and
+   * centred, with the rail under it holding the plan card and the lock line,
+   * and no steps.
+   */
+  test("stacks the drop zone over the rail in one centred column while nothing is open", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -879,72 +853,33 @@ test.describe("the tool page's layout (spec 0013)", () => {
 
     const zone = await box(page, "area-document");
     const rail = await box(page, "area-rail");
-    expect(zone.right).toBeLessThanOrEqual(rail.left);
-    expect(zone.top).toBe(rail.top);
+    expect(zone.bottom).toBeLessThanOrEqual(rail.top);
+    expectNear(zone.left, rail.left);
+    expectNear(zone.right, rail.right);
+    expect(zone.right - zone.left).toBeLessThanOrEqual(704);
+    const grid = await box(page, "tool-grid");
+    expectNear(middle(zone).x, middle(grid).x);
 
     const railArea = page.getByTestId("area-rail");
     await expect(railArea.getByTestId("plan-card")).toBeVisible();
-    await expect(railArea.getByRole("list")).toHaveText(
-      /Open a PDF.*Tick what to remove.*Download your new file/,
-    );
+    await expect(railArea.getByRole("list")).toHaveCount(0);
     await expect(railArea.getByTestId("lock-line")).toHaveText(
       "Your file never leaves your browser.",
     );
   });
 
   /**
-   * Spec 0013, AC-15. The idle steps' line: 2 pixels of `border-strong`,
-   * centred under the circles, 0.25rem clear of each, none after the last;
-   * at least 16 pixels long, so it reads as a join rather than a tick (the
-   * pseudo element's computed `height`, which Chromium resolves to the drawn
-   * length); a border, so forced colours keep it; on the step's own box, so it
-   * grows when the words wrap at 200% text.
-   */
-  test("joins the idle steps with a line between each pair of circles", async ({
-    page,
-  }) => {
-    const expectJoined = () => expectStepsJoined(page);
-
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("/tool");
-    await planAnswered(page);
-    const [first] = await expectJoined();
-    // `border-strong`, #71717A (spec 0026, AC-1).
-    expect(first?.colour).toBe("rgb(113, 113, 122)");
-
-    await page.emulateMedia({ forcedColors: "active" });
-    await expectJoined();
-    await page.emulateMedia({ forcedColors: "none" });
-
-    // At 200% text on a phone a step's words wrap, so its box outgrows its
-    // circle, and the line still runs from that circle to the next.
-    await page.setViewportSize({ width: 320, height: 640 });
-    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
-    const wrapped = await expectJoined();
-    expect(
-      wrapped.some(
-        (step) =>
-          step.drawn && step.height > step.circle.bottom - step.circle.top + step.rem,
-      ),
-    ).toBe(true);
-  });
-
-  /**
-   * Spec 0013, AC-15, as feature 28 builds it. Where the areas stack (below
-   * the grid's own `lg`, a container query, so 200% text on a wide window
-   * counts too), the idle steps list sits centred in the column as a block,
-   * its steps still at the start inside it, so the circles keep one left edge
-   * and the joins still meet them; the lock line is centred under it. The
-   * widths are those verify walked, each well clear of the grid's switch.
+   * The empty state's lock line is centred under the drop zone's column at
+   * every width, the areas stacked or not (the owner's call, 2026-11-26).
+   * The widths are those verify walked, each well clear of the grid's switch.
    */
   for (const [label, width, doubled] of [
     ["at 390 pixels", 390, false],
     ["at 800 pixels", 800, false],
+    ["at 1280 pixels", 1280, false],
     ["at 1280 pixels with 200% text", 1280, true],
   ] as const) {
-    test(`centres the idle steps and the lock line where the areas stack, ${label}`, async ({
-      page,
-    }) => {
+    test(`centres the idle lock line under the drop zone, ${label}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 });
       await page.goto("/tool");
       if (doubled) {
@@ -952,36 +887,13 @@ test.describe("the tool page's layout (spec 0013)", () => {
       }
       await planAnswered(page);
 
-      // Stacked: the drop zone above the rail, not beside it.
       expect((await box(page, "area-document")).bottom).toBeLessThanOrEqual(
         (await box(page, "area-rail")).top,
       );
-      const { rail, list, lockContent } = await idleRail(page);
-      expectNear(middle(list).x, middle(rail).x);
-      // A block narrower than the column, not a full width list.
-      expect(list.right - list.left).toBeLessThan(rail.right - rail.left - 1);
-
-      const steps = await expectStepsJoined(page);
-      for (const step of steps) expectNear(step.circle.left, steps[0]?.circle.left ?? 0);
-
+      const { rail, lockContent } = await idleRail(page);
       expectNear(middle(lockContent).x, middle(rail).x);
-      expect(lockContent.top).toBeGreaterThanOrEqual(list.bottom);
     });
   }
-
-  test("keeps the idle steps and the lock line at the start of the rail beside the drop zone", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("/tool");
-    await planAnswered(page);
-
-    const { rail, list, lockContent } = await idleRail(page);
-    expectNear(list.left, rail.left);
-    expectNear(list.right, rail.right);
-    expectNear(lockContent.left, rail.left);
-    expect(await lockIndent(page.getByTestId("lock-line"))).toBeLessThanOrEqual(1);
-  });
 
   /**
    * AC-15 and AC-16: only the idle rail centres. With a document open where
@@ -1179,14 +1091,14 @@ test.describe("the tool page's layout (spec 0013)", () => {
   }
 
   /**
-   * AC-15 and AC-16, as feature 26 lays them out: while a chosen file waits
-   * for the plan, the page is still idle, so the full drop zone stays left and
-   * "Checking your plan" heads the right column, level with the zone. The
-   * region's row is its own height, so the rail starts one grid gap under it
-   * however tall the zone beside them is. The entitlement request is held, so
-   * the line stays up for the wait budget rather than flashing past.
+   * Spec 0013, AC-15, in the empty state's one column (the owner's call,
+   * 2026-11-26). While a chosen file waits for the plan, the page is still
+   * idle, so the full drop zone stays first and "Checking your plan" sits
+   * between it and the rail, one grid gap from each. The entitlement request
+   * is held, so the line stays up for the wait budget rather than flashing
+   * past.
    */
-  test("heads the rail with the plan check, beside the drop zone, while a chosen file waits", async ({
+  test("puts the plan check between the drop zone and the rail while a chosen file waits", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -1203,13 +1115,12 @@ test.describe("the tool page's layout (spec 0013)", () => {
       await box(page, "area-rail"),
     ];
     await expect(page.getByTestId("drop-area")).toBeVisible();
-    expect(document.right).toBeLessThanOrEqual(live.left);
+    const gap = await rowGap(page);
+    expect(live.left).toBe(document.left);
+    expect(live.right).toBe(document.right);
     expect(live.left).toBe(rail.left);
-    expect(live.right).toBe(rail.right);
-    expect(live.top).toBe(document.top);
-    expect(rail.top - ((await contentBottom(page, "area-live")) ?? 0)).toBe(
-      await rowGap(page),
-    );
+    expect(live.top - document.bottom).toBe(gap);
+    expect(rail.top - ((await contentBottom(page, "area-live")) ?? 0)).toBe(gap);
   });
 
   /**
@@ -1505,6 +1416,10 @@ test.describe("reflow and zoom on the tool page (AC-15)", () => {
     await openDocument(page);
     await expectNoHorizontalScroll(page);
     await expectContained(page.getByRole("region", { name: "Document opened" }));
+    // The coverage note waits behind "What it looks for" (the owner's call,
+    // 2026-11-26), so it is opened before it is measured.
+    await page.getByTestId("coverage-toggle").click();
+    await expectContained(page.getByTestId("coverage-toggle"));
     await expectContained(page.getByTestId("coverage"));
     for (const row of await page.getByTestId("checklist").locator("label").all()) {
       await expectContained(row);
@@ -1734,6 +1649,14 @@ test.describe("the checklist on the tool page (spec 0005, AC-13)", () => {
     await page.goto("/tool");
     await openDocument(page);
 
+    // Behind "What it looks for" beside the Found items heading (the owner's
+    // call, 2026-11-26), shown once it is asked for.
+    const toggle = page.getByTestId("coverage-toggle");
+    await expect(page.getByTestId("coverage")).toBeHidden();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByTestId("coverage")).toBeVisible();
     await expect(page.getByTestId("coverage")).toHaveText(
       /RedactNest looked for email addresses, phone numbers, dates, card numbers, IBANs, Social Security numbers and National Insurance numbers\. Anything else, such as names and addresses, stays in the file\./,
     );

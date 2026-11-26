@@ -53,7 +53,8 @@ export default function ToolPage() {
           the action panel, where the file is.
         */}
         <PageContainer width="wide" className="flex flex-col gap-8" data-tool-frame="">
-          <h1 data-tool-title="" className="text-title text-ink">
+          {/* Centred over the tool's one centred column (spec 0026, AC-12). */}
+          <h1 data-tool-title="" className="text-center text-title text-ink">
             Redact a PDF
           </h1>
 

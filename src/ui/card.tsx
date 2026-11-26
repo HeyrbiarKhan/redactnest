@@ -3,6 +3,15 @@ import { useId, type ComponentPropsWithoutRef, type ReactNode, type Ref } from "
 
 import { cx } from "@/lib/cx";
 
+/**
+ * `card` is the quiet panel every page uses. `state` is `/tool`'s state card
+ * (`ToolStates.dc.html`): 16 pixel corners, 22 pixels in from the edge and a
+ * 16 pixel title. `flat` drops the box for a card drawn inside a panel that
+ * already has one (`ToolReview.dc.html`'s right column): no edge, fill,
+ * shadow or padding, the parts 14 pixels apart, the title at 16 pixels.
+ */
+export type CardLook = "card" | "state" | "flat";
+
 interface CardProps extends Omit<ComponentPropsWithoutRef<"section">, "title"> {
   readonly title?: ReactNode;
   readonly headingLevel?: 2 | 3;
@@ -14,6 +23,8 @@ interface CardProps extends Omit<ComponentPropsWithoutRef<"section">, "title"> {
   readonly headingRef?: Ref<HTMLHeadingElement>;
   /** Sits at the end of the heading row, usually a `CountBadge`. */
   readonly badge?: ReactNode;
+  /** `card` by default. */
+  readonly look?: CardLook;
   /**
    * A 2 pixel `accent` edge in place of the quiet one, to mark the card a
    * page recommends (spec 0013, AC-22). Decoration only: whatever it marks is
@@ -24,7 +35,7 @@ interface CardProps extends Omit<ComponentPropsWithoutRef<"section">, "title"> {
    * 28 pixels in from the edge and 24 between its parts, in place of 20 and
    * 16: the home page's finds and strips cards, after your mockup (spec 0013,
    * AC-11). A prop rather than `className`, which is never size, so the two
-   * paddings never compete.
+   * paddings never compete. The `card` look only.
    */
   readonly spacious?: true;
   /** Layout only. */
@@ -32,10 +43,34 @@ interface CardProps extends Omit<ComponentPropsWithoutRef<"section">, "title"> {
   readonly children: ReactNode;
 }
 
-const panel = cva("flex flex-col rounded-card bg-surface shadow-card", {
+const panel = cva("flex flex-col", {
   variants: {
-    spacious: { true: "gap-6 p-7", false: "gap-4 p-5" },
-    accent: { true: "border-2 border-accent", false: "border border-border" },
+    look: {
+      card: "rounded-card bg-surface shadow-card",
+      state: "rounded-panel bg-surface shadow-card",
+      flat: "",
+    },
+    room: {
+      default: "gap-4 p-5",
+      spacious: "gap-6 p-7",
+      state: "gap-4 p-5.5",
+      flat: "gap-3.5",
+    },
+    edge: {
+      quiet: "border border-border",
+      accent: "border-2 border-accent",
+      none: "",
+    },
+  },
+});
+
+const heading = cva("text-ink", {
+  variants: {
+    look: {
+      card: "text-heading",
+      state: "text-body font-semibold",
+      flat: "text-body font-semibold",
+    },
   },
 });
 
@@ -48,6 +83,7 @@ export function Card({
   headingLevel = 2,
   headingRef,
   badge,
+  look = "card",
   accent,
   spacious,
   className,
@@ -58,19 +94,25 @@ export function Card({
   const Heading = headingLevel === 2 ? "h2" : "h3";
   const titled = title !== undefined && title !== null;
   const focusable = headingRef ? { ref: headingRef, tabIndex: -1 } : {};
+  const room =
+    look === "card"
+      ? spacious
+        ? "spacious"
+        : "default"
+      : look === "state"
+        ? "state"
+        : "flat";
+  const edge = look === "flat" ? "none" : accent ? "accent" : "quiet";
 
   return (
     <section
       {...section}
       aria-labelledby={titled ? headingId : undefined}
-      className={cx(
-        panel({ spacious: spacious ?? false, accent: accent ?? false }),
-        className,
-      )}
+      className={cx(panel({ look, room, edge }), className)}
     >
       {titled && (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Heading {...focusable} id={headingId} className="text-heading text-ink">
+          <Heading {...focusable} id={headingId} className={heading({ look })}>
             {title}
           </Heading>
           {badge}

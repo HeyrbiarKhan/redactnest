@@ -109,6 +109,9 @@ const CONTRACT: readonly Pairing[] = Object.freeze([
   ...pairings(["on-accent"], ["danger-ink", "danger-strong"], TEXT),
   { foreground: "focus", background: "surface", minimum: TEXT },
   { foreground: "warning-icon", background: "warning-bg", minimum: GRAPHIC },
+  // The ring around "What to do" inside `/tool`'s page warning, which its
+  // offset puts on the warning's `warning-bg` fill (spec 0026, AC-12).
+  { foreground: "focus", background: "warning-bg", minimum: GRAPHIC },
   { foreground: "info-icon", background: "info-bg", minimum: GRAPHIC },
   { foreground: "danger-icon", background: "danger-bg", minimum: GRAPHIC },
   // The redesign's pairings (spec 0026, AC-1). Chips, count badges and hover

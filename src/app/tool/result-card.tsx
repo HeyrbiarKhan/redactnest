@@ -29,6 +29,8 @@ import { Card } from "@/ui/card";
 import { IconCircle } from "@/ui/icon-circle";
 import { SummaryList } from "@/ui/summary-list";
 
+import { WarningBox } from "./notice-box";
+
 interface ResultCardProps {
   /** From `resultCounts`, the only source of Removed and Left in the file. */
   readonly counts: ResultCounts;
@@ -104,6 +106,7 @@ export function ResultCard({
 
   return (
     <Card
+      look="state"
       title={
         // The tile is decoration, hidden from assistive technology, so the
         // heading focus lands on reads as the title alone.
@@ -111,6 +114,7 @@ export function ResultCard({
           <IconCircle
             icon={removed ? Check : FileCheck}
             tone={removed ? "accent" : "neutral"}
+            size="sm"
           />
           <span>{resultTitle(counts)}</span>
         </span>
@@ -120,11 +124,15 @@ export function ResultCard({
     >
       {/*
         Spec 0026, AC-12: the three counts at a glance, each through
-        `countText`, a number over its label. A list of terms and values, so a
+        `countText`, a number over its label, in one box split three ways as
+        `ToolStates.dc.html` draws it. A list of terms and values, so a
         screen reader hears each label with its number; the lines under it say
         which items and which kinds.
       */}
-      <dl data-testid="result-stats" className="grid grid-cols-3 gap-3">
+      <dl
+        data-testid="result-stats"
+        className="grid grid-cols-3 divide-x divide-border overflow-hidden rounded-control border border-border"
+      >
         {(
           [
             [RESULT_STATS.removed, counts.removedTotal],
@@ -132,17 +140,17 @@ export function ResultCard({
             [RESULT_STATS.stripped, counts.sanitized.length],
           ] as const
         ).map(([label, count]) => (
-          <div
-            key={label}
-            className="flex min-w-0 flex-col rounded-control border border-border px-4 py-3"
-          >
+          <div key={label} className="flex min-w-0 flex-col p-3">
             <dt className="order-2 text-small text-ink-muted">{label}</dt>
-            <dd className="order-1 text-heading text-ink">{countText(count)}</dd>
+            <dd className="order-1 text-heading font-bold text-ink">
+              {countText(count)}
+            </dd>
           </div>
         ))}
       </dl>
 
       <SummaryList
+        compact
         data-testid="outcome"
         items={[
           { term: RESULT_TERMS.removed, description: removedLine(counts, terms) },
@@ -161,17 +169,13 @@ export function ResultCard({
       )}
 
       {partly && (
-        <Callout
-          tone="warning"
+        <WarningBox
           title={DOWNLOAD_WARNING_TITLE}
-          headingLevel={3}
+          lines={warningLines(summary)}
           data-testid="download-warning"
         >
-          {warningLines(summary).map((line) => (
-            <p key={line}>{line}</p>
-          ))}
           {partlyNamed && <p>{PARTLY_REASON}</p>}
-        </Callout>
+        </WarningBox>
       )}
 
       <div>
@@ -188,11 +192,13 @@ export function ResultCard({
           )}
         </div>
 
+        {/* Full width, as the done card draws Download (spec 0026, AC-12). */}
         {downloaded ? (
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-col gap-3">
             <Button
               ref={redactAnotherRef}
               size="lg"
+              fullWidth
               data-testid="redact-another"
               onClick={onRedactAnother}
             >
@@ -201,6 +207,7 @@ export function ResultCard({
             <Button
               variant="secondary"
               size="lg"
+              fullWidth
               data-testid="make-again"
               onClick={onMakeAgain}
             >
@@ -208,13 +215,19 @@ export function ResultCard({
             </Button>
           </div>
         ) : (
-          <Button size="lg" icon={Download} data-testid="download" onClick={onDownload}>
+          <Button
+            size="lg"
+            icon={Download}
+            fullWidth
+            data-testid="download"
+            onClick={onDownload}
+          >
             Download
           </Button>
         )}
         <p
           data-testid="output-name"
-          className="mt-3 text-small text-ink-muted wrap-anywhere"
+          className="mt-3 text-center text-small text-ink-muted wrap-anywhere"
         >
           {outputName}
         </p>

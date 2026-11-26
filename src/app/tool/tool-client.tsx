@@ -1,8 +1,10 @@
 "use client";
 
+import { CircleCheck } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useReducer,
@@ -31,7 +33,6 @@ import {
   DROP_TEXT,
   dropZoneHelper,
   failureText,
-  IDLE_STEPS,
   isTickCaused,
   LOST_TEXT,
   makeWaitsLine,
@@ -56,6 +57,7 @@ import {
 } from "@/lib/flow-text";
 import {
   ADVICE,
+  ADVICE_LINK,
   ALL_CLEAR,
   isPartly,
   noteLines,
@@ -106,11 +108,11 @@ import { Card } from "@/ui/card";
 import { DropZone } from "@/ui/drop-zone";
 import { ProgressSteps } from "@/ui/progress-steps";
 import { Spinner } from "@/ui/spinner";
-import { StepList } from "@/ui/step-list";
 
 import { ActionPanel } from "./action-panel";
 import { FailureCallout } from "./failure-callout";
 import { LockLine } from "./lock-line";
+import { NoteBox, WarningBox } from "./notice-box";
 import { PagePreview, type PreviewHandle } from "./page-preview";
 import { coversFocus, PANEL_ROOM } from "./panel-room";
 import { NewTabLink, PlanLine } from "./plan-line";
@@ -1505,7 +1507,7 @@ export function ToolClient() {
             visually hidden while it does.
           */}
           {progress !== null && phaseText !== null && (
-            <Card data-testid="progress-card" aria-live="off">
+            <Card look="state" data-testid="progress-card" aria-live="off">
               <ProgressSteps
                 data-testid="progress-steps"
                 title={progress.title}
@@ -1558,19 +1560,6 @@ export function ToolClient() {
               />
             )}
 
-            {/*
-          AC-15: while nothing is open, what happens next, in three steps.
-          Where the areas stack the list is centred as a block, so its circles
-          stay in one line with the joins between them; beside the drop zone
-          it fills the rail as before (feature 28).
-        */}
-            {!compact && (
-              <StepList
-                steps={IDLE_STEPS}
-                className="mx-auto w-fit @min-[61rem]:mx-0 @min-[61rem]:w-auto"
-              />
-            )}
-
             {session.state === "lost" && (
               <FailureCallout
                 data-testid="lost"
@@ -1580,6 +1569,7 @@ export function ToolClient() {
                   <Button
                     ref={retryRef}
                     variant="secondary"
+                    fullWidth
                     data-testid="retry"
                     onClick={handleRetry}
                   >
@@ -1608,6 +1598,7 @@ export function ToolClient() {
                   isTickCaused(session.runFailure) ? undefined : (
                     <Button
                       variant="secondary"
+                      fullWidth
                       data-testid="refusal-choose"
                       onClick={() => chooseRef.current?.click()}
                     >
@@ -1637,17 +1628,11 @@ export function ToolClient() {
 
             {/*
           Inside the action panel while it shows; at the rail's foot otherwise.
-          In the idle rail it is centred under the steps where the areas stack,
-          and only there: once a document is open it stays as it was (feature
-          28).
+          While nothing is open it is centred under the drop zone's column at
+          every width (`ToolStates.dc.html`, the owner's call, 2026-11-26);
+          once a document is open it stays as it was (feature 28).
         */}
-            {!acting && (
-              <LockLine
-                className={
-                  compact ? undefined : "justify-center @min-[61rem]:justify-start"
-                }
-              />
-            )}
+            {!acting && <LockLine className={compact ? undefined : "justify-center"} />}
           </div>
 
           {/*
@@ -1680,6 +1665,7 @@ export function ToolClient() {
               onUntickAll={handleUntickAll}
               redactRef={redactRef}
               cancelRef={cancelRef}
+              flat={preview !== null}
             />
           )}
         </div>
@@ -1708,6 +1694,7 @@ export function ToolClient() {
               onToggle={handleToggle}
               onTicksSet={handleTicksSet}
               onPick={handlePick}
+              flat={preview !== null}
               terms={termView?.groups}
               termActions={{
                 onSetAside: handleSetAside,
@@ -1846,15 +1833,21 @@ function StatusLine({
 
 /**
  * The opened document card. Spec 0006, AC-19 to AC-21: the all clear line
- * when no page carries a warning, otherwise the warning callout naming each
- * page RedactNest cannot fully check; then, after the warnings, an untitled
- * note callout for what is worth knowing but changes nothing. Inside the
- * polite live region, so all of it is heard once, with the open, and it stays
- * mounted through the run so it is not heard again. The page count is the file
- * bar's (spec 0007, AC-3). The words come from `src/lib/page-findings`, the
- * same helpers the name and the download warning read (INV-5).
+ * when no page carries a warning, otherwise the warning naming each page
+ * RedactNest cannot fully check; then, after the warnings, an untitled note
+ * for what is worth knowing but changes nothing. Inside the polite live
+ * region, so all of it is heard once, with the open, and it stays mounted
+ * through the run so it is not heard again. The page count is the file bar's
+ * (spec 0007, AC-3). The words come from `src/lib/page-findings`, the same
+ * helpers the name and the download warning read (INV-5).
+ *
+ * Drawn flat, as `ToolReview.dc.html` draws the warning at the column's head
+ * (the owner's call, 2026-11-26): the region keeps its name and its `h2`,
+ * visually hidden, and the warning's title stays its `h3`, visually hidden,
+ * so each warning reads as one line; the advice waits behind "What to do".
  */
 function OpenedDocument({ session }: { session: LiveSession }) {
+  const headingId = useId();
   const { summary } = session;
   if (!summary) return null;
 
@@ -1862,32 +1855,37 @@ function OpenedDocument({ session }: { session: LiveSession }) {
   const notes = noteLines(summary, session.matches);
 
   return (
-    <Card title="Document opened">
+    <section aria-labelledby={headingId} className="flex flex-col gap-2.5">
+      <h2 id={headingId} className="sr-only">
+        Document opened
+      </h2>
       {!partly && (
-        <p data-testid="all-clear" className="text-ink-muted">
-          {ALL_CLEAR}
+        <p
+          data-testid="all-clear"
+          className="flex items-start gap-2 text-small text-ink-muted"
+        >
+          <CircleCheck
+            aria-hidden="true"
+            className="mt-0.5 size-4 shrink-0 text-accent"
+            strokeWidth={2}
+          />
+          <span>{ALL_CLEAR}</span>
         </p>
       )}
       {partly && (
-        <Callout
-          tone="warning"
+        <WarningBox
           title={OPEN_WARNING_TITLE}
-          headingLevel={3}
+          titleHidden
+          lines={warningLines(summary)}
+          more={
+            showsAdvice(summary)
+              ? { label: ADVICE_LINK, text: ADVICE, "data-testid": "page-advice" }
+              : undefined
+          }
           data-testid="page-warnings"
-        >
-          {warningLines(summary).map((line) => (
-            <p key={line}>{line}</p>
-          ))}
-          {showsAdvice(summary) && <p data-testid="page-advice">{ADVICE}</p>}
-        </Callout>
+        />
       )}
-      {notes.length > 0 && (
-        <Callout tone="info" data-testid="page-notes">
-          {notes.map((line) => (
-            <p key={line}>{line}</p>
-          ))}
-        </Callout>
-      )}
-    </Card>
+      {notes.length > 0 && <NoteBox lines={notes} data-testid="page-notes" />}
+    </section>
   );
 }

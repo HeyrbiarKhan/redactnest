@@ -73,19 +73,20 @@ describe("toolGridAreas (spec 0026, AC-12, *Rows*)", () => {
     found: false,
     ...over,
   });
-  const IDLE = "minmax(0, 1fr) minmax(20rem, 24rem)";
   const COLUMN = "minmax(0, 44rem)";
 
-  it("keeps A beside B while nothing is open, with L over B only while it speaks", () => {
+  // The empty state's one column (`ToolStates.dc.html`, the owner's call,
+  // 2026-11-26): A, then L only while it speaks, then B.
+  it("stacks A over B in one column while nothing is open, with L between only while it speaks", () => {
     expect(toolGridAreas(false, holds({ live: false }))).toEqual({
-      columns: IDLE,
+      columns: COLUMN,
       rows: "none",
-      areas: "'a b'",
+      areas: "'a' 'b'",
     });
     expect(toolGridAreas(false, holds({}))).toEqual({
-      columns: IDLE,
-      rows: "auto 1fr",
-      areas: "'a l' 'a b'",
+      columns: COLUMN,
+      rows: "none",
+      areas: "'a' 'l' 'b'",
     });
   });
 
@@ -207,8 +208,6 @@ describe("toolGridAreas with the preview (child 0002, AC-38)", () => {
     expect(toolGridAreas(true, holds({ preview: false })).columns).toBe(
       "minmax(0, 44rem)",
     );
-    expect(toolGridAreas(false, holds({})).columns).toBe(
-      "minmax(0, 1fr) minmax(20rem, 24rem)",
-    );
+    expect(toolGridAreas(false, holds({})).columns).toBe("minmax(0, 44rem)");
   });
 });

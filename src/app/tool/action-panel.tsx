@@ -1,5 +1,6 @@
 import { useId, type Ref } from "react";
 
+import { cx } from "@/lib/cx";
 import { UNTICK_ALL } from "@/lib/flow-text";
 import { Button } from "@/ui/button";
 
@@ -25,6 +26,12 @@ interface ActionPanelProps {
   readonly onUntickAll: () => void;
   readonly redactRef?: Ref<HTMLButtonElement>;
   readonly cancelRef?: Ref<HTMLButtonElement>;
+  /**
+   * Drawn as the right column's foot beside the page preview
+   * (`ToolReview.dc.html`, the owner's call, 2026-11-26): flush to the
+   * column's sides and foot, a `border` edge on top and left, no corner.
+   */
+  readonly flat?: boolean;
 }
 
 /**
@@ -62,20 +69,24 @@ export function ActionPanel({
   onUntickAll,
   redactRef,
   cancelRef,
+  flat = false,
 }: ActionPanelProps) {
   const waitingId = useId();
   return (
     <div
       data-testid="action-panel"
-      className={
-        "flex min-w-0 flex-col gap-4 rounded-card border border-border bg-surface p-5 " +
-        "@min-[61rem]:z-10 @min-[61rem]:self-end @min-[61rem]:[grid-area:c] " +
-        "@min-[61rem]:tall:sticky @min-[61rem]:tall:bottom-0"
-      }
+      className={cx(
+        "flex min-w-0 flex-col border-border bg-surface",
+        flat
+          ? "gap-2.5 border-t border-l px-5 pt-4 pb-4.5"
+          : "gap-4 rounded-card border p-5",
+        "@min-[61rem]:z-10 @min-[61rem]:self-end @min-[61rem]:[grid-area:c]",
+        "@min-[61rem]:tall:sticky @min-[61rem]:tall:bottom-0",
+      )}
     >
       {line !== null && (
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <p data-testid="tick-count" className="text-ink">
+          <p data-testid="tick-count" className="text-small text-ink-muted">
             {line}
           </p>
           {/*

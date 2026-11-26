@@ -550,6 +550,14 @@ export const FOUND_ITEMS_NOUN = Object.freeze({
   other: "found items",
 });
 
+/**
+ * The control beside the Found items heading that opens the coverage note
+ * (`ToolReview.dc.html`, the owner's call, 2026-11-26). The note's own words
+ * are unchanged and still say what RedactNest looked for and that anything
+ * else stays in the file.
+ */
+export const COVERAGE_LINK = "What it looks for";
+
 /* The result card. */
 
 /** A run that removed nothing is never titled as a redaction (AC-12, INV-2). */

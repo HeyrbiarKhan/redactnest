@@ -9,6 +9,12 @@ export interface SummaryItem {
 interface SummaryListProps {
   readonly items: readonly SummaryItem[];
   readonly "data-testid"?: string;
+  /**
+   * Descriptions at `text-small` and the rows 8 pixels apart, under `/tool`'s
+   * three counts in the done card (`ToolStates.dc.html`), where they are the
+   * detail rather than the headline.
+   */
+  readonly compact?: true;
   /** Layout only. */
   readonly className?: string;
 }
@@ -26,6 +32,7 @@ interface SummaryListProps {
 export function SummaryList({
   items,
   "data-testid": testId,
+  compact,
   className,
 }: SummaryListProps) {
   return (
@@ -36,12 +43,17 @@ export function SummaryList({
       {items.map(({ term, description }) => (
         <div
           key={term}
-          className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0 sm:flex-row sm:gap-4"
+          className={cx(
+            "flex flex-col gap-1 first:pt-0 last:pb-0 sm:flex-row sm:gap-4",
+            compact ? "py-2" : "py-3",
+          )}
         >
           <dt className="shrink-0 text-small font-medium text-ink-muted sm:w-36 sm:pt-0.5">
             {term}
           </dt>
-          <dd className="min-w-0 text-ink wrap-break-word">{description}</dd>
+          <dd className={cx("min-w-0 text-ink wrap-break-word", compact && "text-small")}>
+            {description}
+          </dd>
         </div>
       ))}
     </dl>
