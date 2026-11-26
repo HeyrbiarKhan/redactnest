@@ -21,9 +21,14 @@ interface ProseProps {
  * colour alone (INV-8), and take the focus ring from the global
  * `:focus-visible` rule. Only `ink` and `ink-muted` on `canvas`, so no new
  * pairing joins the contrast contract.
+ *
+ * A word too long for a line alone, such as a host name (`clerk.redactnest.com`
+ * at 320 pixels with 200% text), breaks rather than pushing the page sideways
+ * (`wrap-break-word`, which leaves every word that fits a line whole; WCAG
+ * 1.4.10, spec 0026, AC-16).
  */
 const PROSE = cx(
-  "flex flex-col gap-10 text-body text-ink",
+  "flex flex-col gap-10 text-body text-ink wrap-break-word",
   "[&_section]:flex [&_section]:flex-col [&_section]:gap-4",
   "[&_h2]:text-heading [&_h2]:text-ink",
   "[&_h3]:pt-2 [&_h3]:text-body [&_h3]:font-semibold [&_h3]:text-ink",

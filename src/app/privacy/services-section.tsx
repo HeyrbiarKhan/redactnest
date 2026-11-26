@@ -36,8 +36,16 @@ export function ServicesSection({
             items={FACTS.map(([fact, term]) => ({ term, description: service[fact] }))}
           />
           {service.ownUse !== undefined && <p>{service.ownUse}</p>}
+          {/*
+            A link alone on its line, not inside a sentence, so it is held to
+            24 pixels tall as a footer link is (WCAG 2.5.8; spec 0003, AC-7;
+            spec 0026, AC-16).
+          */}
           <p>
-            <a href={service.policyUrl}>{`${service.name}’s privacy policy`}</a>
+            <a
+              href={service.policyUrl}
+              className="inline-flex min-h-6 items-center rounded-item"
+            >{`${service.name}’s privacy policy`}</a>
           </p>
         </div>
       ))}

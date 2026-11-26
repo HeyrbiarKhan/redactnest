@@ -81,9 +81,16 @@ export function LegalPage({
         className="flex-1 py-10 focus:outline-none sm:py-14"
       >
         <PageContainer width="wide" className="@container">
-          <div className="grid gap-10 @min-[61rem]:grid-cols-[minmax(0,14rem)_minmax(0,44rem)] @min-[61rem]:gap-x-16 @min-[61rem]:[grid-template-areas:'._head'_'nav_text']">
+          {/*
+            Below `lg` one column that never grows past the container
+            (`grid-cols-1`), and a title that breaks a word too long for a line
+            alone, as the home page's headline does: "Security" at 200% text is
+            wider than a 305 pixel window's line (spec 0024, AC-14; spec 0026,
+            AC-16).
+          */}
+          <div className="grid grid-cols-1 gap-10 @min-[61rem]:grid-cols-[minmax(0,14rem)_minmax(0,44rem)] @min-[61rem]:gap-x-16 @min-[61rem]:[grid-template-areas:'._head'_'nav_text']">
             <div className="flex max-w-narrow flex-col gap-2 border-b border-border pb-8 @min-[61rem]:[grid-area:head]">
-              <h1 className="text-title text-ink">{title}</h1>
+              <h1 className="text-title text-ink wrap-break-word">{title}</h1>
               <p data-testid="last-updated" className="text-ink-muted">
                 Last updated <PolicyDate date={lastUpdated(changes)} />
               </p>

@@ -329,6 +329,8 @@ interface TargetBox {
   readonly tag: string;
   readonly width: number;
   readonly height: number;
+  /** A link drawn inline inside a sentence, with other words on its line. */
+  readonly inSentence: boolean;
 }
 
 /** Every element a visitor can reach or press, with the box it occupies. */
@@ -342,6 +344,8 @@ async function targetBoxes(page: Page): Promise<TargetBox[]> {
       .filter((element) => element.tagName !== "MAIN")
       .map((element) => {
         const rect = element.getBoundingClientRect();
+        const own = element.textContent?.trim() ?? "";
+        const around = element.parentElement?.textContent?.trim() ?? "";
         return {
           name:
             element.dataset.testid ??
@@ -351,6 +355,10 @@ async function targetBoxes(page: Page): Promise<TargetBox[]> {
           tag: element.tagName.toLowerCase(),
           width: rect.width,
           height: rect.height,
+          inSentence:
+            element.tagName === "A" &&
+            getComputedStyle(element).display === "inline" &&
+            around.length > own.length,
         };
       }),
   );
@@ -366,14 +374,24 @@ async function targetBoxes(page: Page): Promise<TargetBox[]> {
  * (feature 28), with the account slot's own Sign in for that menu, since from
  * `sm` the slot's row shows it (spec 0026 child 0001, AC-27). Anything else
  * hidden that way is a control nobody can see.
+ *
+ * `sentences` applies WCAG 2.5.8's inline exception, which spec 0003 AC-7
+ * cites and axe's own `target-size` rule applies: a link drawn inline inside
+ * a sentence is sized by the text's line, so it is passed over here. It is for
+ * pages of prose (the legal pages, `/security`, the guides' answers); the
+ * tool's and the home page's own checks leave it off, so every control there
+ * still measures 24 by 24.
  */
 async function expectTargetSizes(
   page: Page,
   hiddenOnPurpose: readonly string[] = ["#main", "file-input", "Menu", "/sign-in"],
+  { sentences = false }: { readonly sentences?: boolean } = {},
 ): Promise<void> {
   const boxes = await targetBoxes(page);
   const hidden = boxes.filter((box) => box.width <= 1 || box.height <= 1);
-  const shown = boxes.filter((box) => box.width > 1 && box.height > 1);
+  const shown = boxes.filter(
+    (box) => box.width > 1 && box.height > 1 && !(sentences && box.inSentence),
+  );
 
   expect(hidden.map((box) => box.name).sort()).toEqual([...hiddenOnPurpose].sort());
 
@@ -1406,9 +1424,11 @@ test.describe("reflow and zoom on the tool page (AC-15)", () => {
     await expectNoHorizontalScroll(page);
   });
 
-  // Spec 0007, AC-21 and AC-22: every step state reflows at 320px.
+  // Spec 0007, AC-21 and AC-22: every step state reflows at 320px. Spec 0026,
+  // AC-16: and passes axe there, as it does at desktop width and in forced
+  // colours.
   for (const [state, reach] of TOOL_STATES) {
-    test(`needs no sideways scroll at 320 CSS pixels in the ${state} state`, async ({
+    test(`needs no sideways scroll at 320 CSS pixels in the ${state} state, and axe reports nothing`, async ({
       page,
     }) => {
       await page.setViewportSize({ width: 320, height: 640 });
@@ -1416,6 +1436,7 @@ test.describe("reflow and zoom on the tool page (AC-15)", () => {
       await reach(page);
 
       await expectNoHorizontalScroll(page);
+      await expectNoAxeViolations(page);
     });
   }
 
@@ -2472,7 +2493,9 @@ test.describe("the cursor (spec 0013, AC-33)", () => {
  * pixels and 200% text at once, which together are roughly 800% zoom. WCAG
  * does not ask for that, but a visitor who needs both meets it, and on `/` the
  * headline's longest word and the band cards' tiles were wider than the window.
- * `REFLOW_PAGES` holds `/` and each search page.
+ * `REFLOW_PAGES` holds `/` and each search page, and since spec 0026's
+ * accessibility sweep (AC-16, its Follow-up) `/pricing` and the three pages of
+ * prose, where a host name too long for a line now breaks.
  *
  * It runs at 305 pixels too, which is 320 less a 15 pixel classic scrollbar.
  * Headless Chromium draws no scrollbar, so at 320 it never sees the window a
@@ -2485,6 +2508,10 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
     "/redact-pdf",
     "/remove-text-from-pdf",
     "/black-box-redaction",
+    "/pricing",
+    "/privacy",
+    "/terms",
+    "/security",
   ] as const;
 
   /**
@@ -2691,7 +2718,10 @@ test.describe("the footer from md (spec 0024, AC-17)", () => {
   }
 });
 
-test.describe("every page (spec 0013, AC-26; spec 0024, AC-13)", () => {
+test.describe("every page (spec 0013, AC-26; spec 0024, AC-13; spec 0026, AC-16)", () => {
+  // Spec 0026, AC-16 adds `/security` to spec 0013 AC-26's list. `/sign-out`
+  // needs a real Clerk session, which this build's fake keys cannot give, so
+  // it is walked on `pnpm dev` (verify.md, task 14).
   const PAGES = [
     "/",
     "/redact-pdf",
@@ -2700,6 +2730,7 @@ test.describe("every page (spec 0013, AC-26; spec 0024, AC-13)", () => {
     "/pricing",
     "/privacy",
     "/terms",
+    "/security",
     "/no-such-page",
   ] as const;
 
@@ -2772,6 +2803,238 @@ test.describe("every page (spec 0013, AC-26; spec 0024, AC-13)", () => {
       await expectContained(page.getByRole("main"));
     });
   }
+});
+
+/**
+ * Spec 0026, AC-16. Tab from the top of the page reaches every control the
+ * page draws, header and footer included, in page order, each with the ring
+ * a keyboard sees (`:focus-visible`). The controls are listed from the page
+ * itself (everything focusable, enabled and drawn), so a control added out
+ * of reach, or reached out of order, fails here without a list kept by hand.
+ *
+ * The walk starts from a mark put first in the body and focused, so it begins
+ * at the top wherever focus was (a run puts it on Cancel), and stops once
+ * focus leaves the page or comes round.
+ */
+async function expectWholePageWalk(page: Page): Promise<void> {
+  const stops = await page.evaluate(() => {
+    const reachable = [
+      ...document.querySelectorAll<HTMLElement>(
+        "a[href], button, input, select, textarea, summary, [tabindex]",
+      ),
+    ].filter(
+      (element) =>
+        element.tabIndex >= 0 &&
+        !(element as HTMLButtonElement).disabled &&
+        element.getClientRects().length > 0,
+    );
+    reachable.forEach((element, index) => {
+      element.dataset.sweep = String(index);
+    });
+    const start = document.createElement("span");
+    start.tabIndex = -1;
+    start.dataset.sweepStart = "";
+    document.body.prepend(start);
+    start.focus();
+    return reachable.length;
+  });
+  expect(stops).toBeGreaterThan(0);
+
+  const reached: number[] = [];
+  for (let step = 0; step <= stops; step += 1) {
+    await page.keyboard.press("Tab");
+    const index = await page.evaluate(() => {
+      const active = document.activeElement;
+      return active instanceof HTMLElement && active.dataset.sweep !== undefined
+        ? Number(active.dataset.sweep)
+        : null;
+    });
+    if (index === null || reached.includes(index)) break;
+    reached.push(index);
+    const stop = page.locator(`[data-sweep="${index}"]`);
+    expect(await stop.evaluate((element) => element.matches(":focus-visible"))).toBe(
+      true,
+    );
+    await expectFocusRing(stop);
+  }
+  await page.evaluate(() => document.querySelector("[data-sweep-start]")?.remove());
+
+  expect(reached).toEqual([...Array(stops).keys()]);
+}
+
+/**
+ * Spec 0026, AC-16: every control on every page keeps a visible ring as the
+ * keyboard reaches it, and every target is at least 24 by 24 pixels, at
+ * desktop width and at 320 with the header's menu open. The search pages'
+ * walk is their own (below), and `/tool`'s other states are walked in "the
+ * keyboard walk on the tool page" and "target sizes on the tool page".
+ */
+test.describe("every control on every page (spec 0026, AC-16)", () => {
+  const WALKED = [
+    "/",
+    "/pricing",
+    "/privacy",
+    "/terms",
+    "/security",
+    "/no-such-page",
+    "/tool",
+  ] as const;
+  const MEASURED = [
+    ...WALKED,
+    "/redact-pdf",
+    "/remove-text-from-pdf",
+    "/black-box-redaction",
+  ] as const;
+
+  /**
+   * The server draws the account slot empty and the page fills it once its
+   * script runs (child 0001, AC-25), so the controls are listed only after
+   * that, or the slot's Sign in would be met unlisted.
+   */
+  async function ready(page: Page, path: string): Promise<void> {
+    await expect(
+      page.getByRole("banner").getByRole("link", { name: "Sign in", exact: true }),
+    ).toBeVisible();
+    if (path === "/tool") await planAnswered(page);
+  }
+
+  for (const path of WALKED) {
+    test(`${path}: Tab reaches every control in page order, each with its ring`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(path);
+      await ready(page, path);
+
+      await expectWholePageWalk(page);
+    });
+  }
+
+  for (const path of MEASURED) {
+    test(`${path}: every target is at least 24 by 24 pixels, at 1280 and at 320 with the menu open`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(path);
+      await ready(page, path);
+      // From `sm` the account slot's row holds Sign in, so the menu's own
+      // Sign in has no box, and the Menu button shows only below `sm`
+      // (child 0001, AC-27). The tool page's file input is never a stop.
+      // A link inside a sentence takes WCAG 2.5.8's inline exception.
+      const tool = path === "/tool" ? ["file-input"] : [];
+      await expectTargetSizes(page, ["#main", "Menu", "/sign-in", ...tool], {
+        sentences: true,
+      });
+
+      // Below `sm` the row keeps Try it free and the menu takes Sign in.
+      await page.setViewportSize({ width: 320, height: 640 });
+      await page
+        .getByRole("banner")
+        .getByRole("button", { name: "Menu", exact: true })
+        .click();
+      await expect(
+        page.getByRole("banner").getByRole("link", { name: "Sign in", exact: true }),
+      ).toBeVisible();
+      await expectTargetSizes(page, ["#main", "/sign-in", ...tool], { sentences: true });
+    });
+  }
+});
+
+/**
+ * Child 0003, AC-31, and spec 0026, AC-16: the progress steps walked by
+ * keyboard and read as a screen reader reads them. Each step is named by its
+ * words and its state in words, the bar is hidden, and nothing in the card is
+ * a stop, so Tab passes it by and the run keeps focus on Cancel.
+ */
+test.describe("the progress steps (child 0003, AC-31; spec 0026, AC-16)", () => {
+  const STOPS = "a[href], button, input, select, textarea, summary, [tabindex]";
+
+  /**
+   * A run held at its first step: once `holdRun` is set, every message from
+   * the worker is dropped but the `redacting` phase, so the card shows that
+   * step as current and the run never ends. Installed before the page's own
+   * script, so the client's listener is wrapped as it is added.
+   */
+  async function holdRunAtFirstStep(page: Page): Promise<void> {
+    await page.addInitScript(() => {
+      const add = Worker.prototype.addEventListener as (
+        this: Worker,
+        ...args: unknown[]
+      ) => void;
+      Worker.prototype.addEventListener = function (this: Worker, ...args: unknown[]) {
+        const [type, listener] = args;
+        if (type === "message" && typeof listener === "function") {
+          args[1] = (event: MessageEvent<{ kind?: string; phase?: string } | null>) => {
+            const held = (window as { holdRun?: boolean }).holdRun === true;
+            const first =
+              event.data?.kind === "progress" && event.data.phase === "redacting";
+            if (held && !first) return;
+            (listener as (event: MessageEvent) => void)(event);
+          };
+        }
+        add.apply(this, args);
+      } as Worker["addEventListener"];
+    });
+  }
+
+  // Playwright's snapshot joins the label and its hidden state words with a
+  // space; a screen reader reads them as one line, the comma a pause.
+  test("names each of the open's steps with its state, and Tab never stops in them", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/tool");
+    await planAnswered(page);
+    await openingHeld(page);
+
+    const card = page.getByTestId("progress-card");
+    await expect(card).toMatchAriaSnapshot(`
+      - paragraph: Opening…
+      - paragraph: Loading the PDF engine
+      - list:
+        - listitem: /^Loading the PDF engine ?, in progress$/
+        - listitem: /^Opening your document ?, not started$/
+        - listitem: /^Reading each page ?, not started$/
+        - listitem: /^Looking for .+ ?, not started$/
+    `);
+    await expect(card.locator(STOPS)).toHaveCount(0);
+    await expectWholePageWalk(page);
+  });
+
+  test("names each of the run's steps with its state, and keeps focus and its ring on Cancel", async ({
+    page,
+  }) => {
+    await holdRunAtFirstStep(page);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/tool");
+    await openDocument(page);
+    await page.evaluate(() => {
+      (window as { holdRun?: boolean }).holdRun = true;
+    });
+    // Pressed by keyboard, so the ring Cancel takes is the one a keyboard sees.
+    await page.getByTestId("redact").focus();
+    await page.keyboard.press("Enter");
+
+    const card = page.getByTestId("progress-card");
+    await expect(card).toMatchAriaSnapshot(`
+      - paragraph: Redacting…
+      - paragraph: Removing what you ticked
+      - list:
+        - listitem: /^Removing what you ticked ?, in progress$/
+        - listitem: /^Writing your new file ?, not started$/
+        - listitem: /^Checking every page ?, not started$/
+    `);
+    await expect(card.locator(STOPS)).toHaveCount(0);
+
+    const cancel = page.getByTestId("cancel");
+    await expect(cancel).toBeFocused();
+    await expect(cancel).toHaveAccessibleName("Cancel");
+    expect(await cancel.evaluate((element) => element.matches(":focus-visible"))).toBe(
+      true,
+    );
+    await expectFocusRing(cancel);
+    await expectWholePageWalk(page);
+  });
 });
 
 /**

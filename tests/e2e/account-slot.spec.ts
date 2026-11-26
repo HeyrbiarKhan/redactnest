@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page, type Request } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Request } from "@playwright/test";
 
 /**
  * The signed in header (spec 0026, child 0001, AC-19 to AC-30), in a real
@@ -83,6 +83,31 @@ async function headerShift(page: Page): Promise<number> {
 async function expectNoAxeViolations(page: Page): Promise<void> {
   const { violations } = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
   expect(violations).toEqual([]);
+}
+
+/**
+ * The ring a keyboard sees, as the browser drew it: the global
+ * `:focus-visible` outline, which a menu item draws flush to its edge
+ * (`outline-offset-0`, so it stays inside the menu's padding).
+ */
+async function expectFocusRing(target: Locator, offset = "2px"): Promise<void> {
+  const ring = await target.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      ringed: element.matches(":focus-visible"),
+      style: style.outlineStyle,
+      width: style.outlineWidth,
+      offset: style.outlineOffset,
+    };
+  });
+  expect(ring).toEqual({ ringed: true, style: "solid", width: "2px", offset });
+}
+
+/** At least 24 by 24 pixels, and a menu item 40 tall (WCAG 2.5.8; spec 0026, AC-16). */
+async function expectTarget(target: Locator, height = 24): Promise<void> {
+  const box = await target.boundingBox();
+  expect(box?.width ?? 0).toBeGreaterThanOrEqual(24);
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(height);
 }
 
 test.describe("signed out (AC-19, AC-25)", () => {
@@ -208,6 +233,155 @@ test.describe("signed in on / (AC-19, AC-22, AC-23, AC-24, AC-25)", () => {
     // Signed in, the page loads at least one script an anonymous visit never did.
     expect(scripts.filter((url) => !anonymous.has(url)).length).toBeGreaterThan(0);
   });
+});
+
+/**
+ * AC-23, and spec 0026, AC-16: the account menu walked by keyboard, each item
+ * read by the name a screen reader hears and ringed as focus lands on it,
+ * then axe with the menu open at 320 pixels and in forced colours.
+ */
+test.describe("the account menu by keyboard (AC-23; spec 0026, AC-16)", () => {
+  test("walks every item with the arrow keys, Home, End and typeahead, each named and ringed", async ({
+    page,
+  }) => {
+    await signInCookie(page);
+    await answerPlan(page, { ...FREE, account: "signed-in", email: ADDRESS });
+    await page.goto("/");
+
+    // Reached by Tab, as a keyboard reaches it: Sign in is gone, so Open the
+    // tool comes just before the avatar. The menu's code arrives by `import()`
+    // once the sign in is confirmed, so the avatar is waited for first.
+    const avatar = page.getByRole("button", { name: "Your account", exact: true });
+    await expect(avatar).toBeVisible();
+    await page
+      .getByRole("banner")
+      .getByRole("link", { name: "Open the tool", exact: true })
+      .focus();
+    await page.keyboard.press("Tab");
+    await expect(avatar).toBeFocused();
+    await expectFocusRing(avatar);
+    await expectTarget(avatar, 40);
+    await expect(avatar).toHaveAttribute("aria-haspopup", "menu");
+    await expect(avatar).toHaveAttribute("aria-expanded", "false");
+
+    await page.keyboard.press("Enter");
+    const menu = page.getByRole("menu", { name: "Your account" });
+    await expect(menu).toBeVisible();
+    await expect(avatar).toHaveAttribute("aria-expanded", "true");
+    // What a screen reader hears: who and which plan, then the four items
+    // by name, the separator between them and Sign out. The letter is hidden.
+    await expect(menu).toMatchAriaSnapshot(`
+      - menu "Your account":
+        - paragraph: ${ADDRESS}
+        - paragraph: Free · 3 pages a document
+        - separator
+        - menuitem "Account"
+        - menuitem "Upgrade to Pro"
+        - menuitem "Redact a PDF"
+        - separator
+        - menuitem "Sign out"
+    `);
+
+    const names = ["Account", "Upgrade to Pro", "Redact a PDF", "Sign out"];
+    for (const [index, name] of names.entries()) {
+      if (index > 0) await page.keyboard.press("ArrowDown");
+      const item = menu.getByRole("menuitem", { name, exact: true });
+      await expect(item).toBeFocused();
+      await expectFocusRing(item, "0px");
+      await expectTarget(item, 40);
+    }
+    // The ends hold: Down at the last item stays there.
+    await page.keyboard.press("ArrowDown");
+    await expect(menu.getByRole("menuitem", { name: "Sign out" })).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(menu.getByRole("menuitem", { name: "Account" })).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(menu.getByRole("menuitem", { name: "Sign out" })).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(menu.getByRole("menuitem", { name: "Redact a PDF" })).toBeFocused();
+    await page.keyboard.press("u");
+    await expect(menu.getByRole("menuitem", { name: "Upgrade to Pro" })).toBeFocused();
+
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await expect(avatar).toBeFocused();
+    await expectFocusRing(avatar);
+    await expect(avatar).toHaveAttribute("aria-expanded", "false");
+
+    // Space opens it too, on the first item.
+    await page.keyboard.press(" ");
+    await expect(menu.getByRole("menuitem", { name: "Account" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(avatar).toBeFocused();
+  });
+
+  test("names the new tab items on /tool as a screen reader reads them", async ({
+    page,
+  }) => {
+    await signInCookie(page);
+    await answerPlan(page, { ...PAID, account: "signed-in", email: ADDRESS });
+    await page.goto("/tool");
+
+    await page.getByRole("button", { name: "Your account" }).focus();
+    await page.keyboard.press("Enter");
+    const menu = page.getByRole("menu", { name: "Your account" });
+    await expect(menu).toMatchAriaSnapshot(`
+      - menu "Your account":
+        - paragraph: ${ADDRESS}
+        - paragraph: Pro · 50 pages a document
+        - separator
+        - menuitem "Account (opens in a new tab)"
+        - menuitem "Billing (opens in a new tab)"
+        - separator
+        - menuitem "Sign out"
+    `);
+    for (const name of [
+      "Account (opens in a new tab)",
+      "Billing (opens in a new tab)",
+      "Sign out",
+    ]) {
+      await expect(menu.getByRole("menuitem", { name, exact: true })).toBeFocused();
+      await expectFocusRing(menu.getByRole("menuitem", { name, exact: true }), "0px");
+      await page.keyboard.press("ArrowDown");
+    }
+  });
+
+  for (const [what, width, forced] of [
+    ["at 320 pixels", 320, false],
+    ["in forced colours", 1280, true],
+  ] as const) {
+    test(`passes axe with the menu open ${what}, every item inside the window`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 640 });
+      if (forced) await page.emulateMedia({ forcedColors: "active" });
+      await signInCookie(page);
+      await answerPlan(page, { ...FREE, account: "signed-in", email: ADDRESS });
+      await page.goto("/");
+
+      await page.getByRole("button", { name: "Your account" }).focus();
+      await page.keyboard.press("Enter");
+      const menu = page.getByRole("menu", { name: "Your account" });
+      await expect(menu.getByRole("menuitem", { name: "Account" })).toBeFocused();
+      await expectNoAxeViolations(page);
+
+      const box = await menu.boundingBox();
+      expect(box?.x ?? -1).toBeGreaterThanOrEqual(0);
+      expect((box?.x ?? 0) + (box?.width ?? Infinity)).toBeLessThanOrEqual(width);
+      const scroll = await page.evaluate(() => ({
+        width: document.documentElement.scrollWidth,
+        viewport: document.documentElement.clientWidth,
+      }));
+      expect(scroll.width).toBeLessThanOrEqual(scroll.viewport);
+      // The menu keeps an edge of its own in forced colours, where its shadow goes.
+      if (forced) {
+        const edge = await menu.evaluate(
+          (element) => getComputedStyle(element).borderTopStyle,
+        );
+        expect(edge).toBe("solid");
+      }
+    });
+  }
 });
 
 test.describe("on /tool (AC-19, AC-22, AC-23, AC-30)", () => {
