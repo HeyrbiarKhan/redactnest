@@ -7,12 +7,13 @@
  * Writes the favicon and the Apple icon from `src/app/icon.svg`, then builds
  * and starts the production app and captures the social card and the Polar
  * product image from the built home page, each search page's own card and
- * its alt text from that page (spec 0024, AC-16), and the home page's product
- * shot from the built tool page. The outputs are committed, like the
- * fixtures, and nobody edits one by hand. PNG bytes differ a little between
- * machines, so rerun this only when the look changes: the mark, the home
- * page's eyebrow or headline, a search page's eyebrow or headline, or the
- * tool's look.
+ * its alt text from that page (spec 0024, AC-16). The home page's product
+ * shot is gone: `/` draws its product window in HTML since spec 0026 (its
+ * AC-8 and AC-17), so nothing captures `/tool` any more. The outputs are
+ * committed, like the fixtures, and nobody edits one by hand. PNG bytes
+ * differ a little between machines, so rerun this only when the look
+ * changes: the mark, a colour token, the home page's eyebrow or headline, or
+ * a search page's eyebrow or headline.
  *
  * The search pages are found in the running build, never listed here: every
  * address in its `/sitemap.xml` whose page carries `search-eyebrow`. Each
@@ -45,11 +46,7 @@ const OUT = Object.freeze({
   appleIcon: at("src", "app", "apple-icon.png"),
   social: at("src", "app", "opengraph-image.png"),
   polar: at("docs", "design", "brand", "polar-product.png"),
-  shot: at("src", "app", "product-review.png"),
 });
-
-/** The fictional document the product shot reviews (AC-12). */
-const SAMPLE = at("tests", "fixtures", "sample-agreement.pdf");
 
 /** The favicon's sizes (AC-3): what a tab and a bookmark ask for. */
 const FAVICON_SIZES = Object.freeze([16, 32]);
@@ -71,15 +68,6 @@ const HOME_CARD = Object.freeze({
 
 /** How a search page marks its eyebrow (spec 0024, AC-16). */
 const SEARCH_EYEBROW = '[data-testid="search-eyebrow"]';
-
-/**
- * The product shot (AC-12): a 1280 by 800 window at device scale 2, and what
- * the sample agreement must show before it is captured.
- */
-const SHOT = Object.freeze({ width: 1280, height: 800, scale: 2, ticked: 7 });
-
-/** The engine's first download and compile, which a cold build pays once. */
-const ENGINE_TIMEOUT_MS = 120_000;
 
 /** How long the build and the first answer from the server may take. */
 const SERVER_TIMEOUT_MS = 120_000;
@@ -495,48 +483,6 @@ async function makeCard(browser, base, tokens, card) {
   return written;
 }
 
-/* Step 5: the product shot. */
-
-/**
- * The real tool page from the production build, nothing stubbed and nothing
- * retouched (AC-12). Nobody is signed in, so the real `/api/entitlement`
- * answers free with `account: "none"` and the build's own caps. The sample
- * agreement goes in through the file input, and the capture waits for the
- * reviewing state: the all clear line, every row ticked, no phase line, fonts
- * loaded and the page quiet. Focus is taken off the file bar's button, so the
- * picture carries no focus ring.
- */
-async function makeShot(browser, base) {
-  const context = await browser.newContext({
-    viewport: { width: SHOT.width, height: SHOT.height },
-    deviceScaleFactor: SHOT.scale,
-    colorScheme: "light",
-  });
-  const tab = await context.newPage();
-  await tab.goto(`${base}/tool`);
-  await tab.getByTestId("plan-line").getByRole("link").first().waitFor();
-
-  await tab.getByTestId("file-input").setInputFiles(SAMPLE);
-  await tab.getByTestId("all-clear").waitFor({ timeout: ENGINE_TIMEOUT_MS });
-  await tab.waitForFunction(
-    (count) =>
-      document.querySelectorAll('input[type="checkbox"][id^="match-"]:checked').length ===
-        count &&
-      document.querySelectorAll('input[type="checkbox"][id^="match-"]:not(:checked)')
-        .length === 0 &&
-      document.querySelector('[data-testid="progress"]') === null,
-    SHOT.ticked,
-  );
-  await tab.evaluate(() => {
-    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-    window.scrollTo(0, 0);
-  });
-  await settle(tab);
-
-  await tab.screenshot({ path: OUT.shot });
-  await context.close();
-}
-
 /* The run. */
 
 const written = [];
@@ -561,8 +507,6 @@ try {
   for (const card of [HOME_CARD, ...(await searchCards(base))]) {
     written.push(...(await makeCard(browser, base, tokens, card)));
   }
-  await makeShot(browser, base);
-  written.push(OUT.shot);
 } finally {
   if (server !== null) await stopServer(server);
   await browser.close();
