@@ -122,6 +122,22 @@ You ported `/` and the guides to `Main.dc.html`, `Guide.dc.html`, `06-home.png` 
 
 **The network table's widest row.** From `xl` the page's files row wraps its name beside one line of paths; shortening the name was the other option.
 
+## Recorded after the review and states port (2026-11-26)
+
+You ported `/tool`'s review and its states to `ToolReview.dc.html` and `ToolStates.dc.html` (d67ff4d), keeping every test id, role, name, focus move and live region and the spec's order (AC-12). This section records your calls; the index records the result as built. No new design was made, apart from the one part not kept.
+
+**The empty state's one column.** The mockup draws the drop zone alone, centred, with the plan strip and the lock line under it and no steps. You took it whole, so spec 0013 AC-15's two columns and its three idle steps went. The drop zone's own words ("Drop a PDF to start", "Choose a PDF") carry what to do first, and the guides had already dropped their numbered list (AC-11).
+
+**The plan strip.** A full card for one line of plan words competed with the drop zone above it and the list below it. A small strip keeps the same words, region, links and Try again.
+
+**The advice behind "What to do".** The mockup draws each page warning as one line. The warning lines still name every page that cannot be fully checked, and the advice (run the file through text recognition first) is the next step, not the warning itself, so it can wait one press away. The cost is that a screen reader no longer hears the advice with the open (index, *Consequences*). Showing the advice under every warning was the other option.
+
+**The coverage note stays visible (not kept from d67ff4d).** d67ff4d also put the coverage note behind a "What it looks for" button, as the mockup draws it. You did not keep that. The note ("Anything else, such as names and addresses, stays in the file") is what stops a visitor believing names were removed, and a short or empty list without it reads as a complete redaction. A hidden note is a fail open (a gap that only shows when someone presses), which spec 0005 AC-14's "always" exists to prevent. So spec 0005 AC-14 and spec 0013 AC-19 stand, and the note returns as the same compact `info` line the open's notes use, with no link, before verify (task 18). No link, by your call: a control whose only job is to hide a safety line invites hiding it.
+
+**The flat foot and the row gap.** Beside the preview the right column is one panel, so the action panel drops its own box and runs flush as the column's foot, with a top edge to separate it from the rows passing under it; the column's blocks sit 14 pixels apart, the mockup's spacing (child 0002, AC-38).
+
+**The refusal card.** The mockup draws a refusal as a white card with a red tinted tile, not a red callout. Spec 0013 INV-12 is about red buttons (only the two delete buttons), and the tile keeps red as a tint for a failure, so INV-12's wording widens to name it, with no change to what it protects.
+
 ## Amended for the page preview (2026-11-26)
 
 You brought the preview back into this feature, so child 0002 became its design. It started from the leanings recorded on 2026-11-25 (pages, thumbnails and boxes; a transferred `ImageBitmap` on a canvas; look and jump only; nothing drawn below `lg`), and settled each open question below. You chose the recommendation every time.
