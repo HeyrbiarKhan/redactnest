@@ -44,7 +44,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 31 | Leaks through kept objects | Release 5 | done |
 | 32 | Details inside pictures | Release 5 | done |
 | 33 | UI redesign | Release 5 | done |
-| 34 | Small fixes after the redesign | Release 5 | planned |
+| 34 | Small fixes after the redesign | Release 5 | in-progress |
 | 35 | Read the first month of counts | Release 6 | planned |
 
 ## Foundations
@@ -536,14 +536,15 @@ spec [0026](../specs/0026-ui-redesign/index.md) (2026-11-25: every page in the m
 
 Merged 2026-11-26 (PR #39, 7104fe1, tag `prod-2026-11-26-7104fe1`), with the live check passed on 2026-11-26 and 2026-11-27: the `email` claim on Clerk's production instance before the merge, the signed out check, the signed in check with your Pro account (the avatar letter, the menu's Pro line, the Pro chip on `/tool`, Sign out back to signed out), and Go live step 10's new Polar image and description (spec 0026's `verify.md`, *Live check*). Only the live device scale switch on a real screen stays owed.
 
-### 34. Small fixes after the redesign · Alpha · from specs 0016 and 0024
+### 34. Small fixes after the redesign · in-progress · Alpha · from specs 0016 and 0024
 Three small fixes that waited in Deferred, built while the first month of counts gathers (your call, 2026-11-28). No decision is owed, so there is no spec. Spec 0026's two review minors (a pixel ceiling for the worker's draws, and the store emptied after every draw) stay in Deferred.
 **Done when:** the banned phrase gate matches again: `phrasePattern` in `tests/support/claim-phrases.ts` keeps its `\b` and `\s`, a case proves it catches a banned phrase and misses a near one, and `/security` and the three guides pass against the fixed pattern, with any sentence it now catches reworded and the list never loosened (spec 0018, AC-5; spec 0024, AC-5 and its Follow-up); `/security` is counted as its own page kind, with its path in `PAGE_PATHS` and the telemetry unit tests, never as `not-found` (spec 0016, AC-21); and `/` at 1024 pixels with 200% text has nothing past the window, measured on the new look first, with a browser case holding that width and text size on `/` and the guides that carry the same card.
 **Also owed here:** the gate has matched nothing since 9693896 (2026-11-23), because the pattern is built in a template literal, so `\b` and `\s` lose their backslash. With the pattern fixed, all 226 checks passed on 02fdedc (measured 2026-11-26), so nothing slipped through then; read the pages again on today's words, which feature 33 changed. `/security` predates spec 0024's page kinds (found 2026-11-23). The 1024 pixel overflow was the trio's "Checked before you download" card ending at 1027.2 pixels on `/`, `/redact-pdf` and `/remove-text-from-pdf` (measured by `/develop`, 2026-11-23), before the redesign changed that band; if the new look already fits, the browser case alone closes it.
-- [ ] Build it: `/develop small fixes after the redesign`
-  - [ ] The banned phrase gate first: the pattern fixed, its own case, and every page read against it
-  - [ ] `/security` as its own page kind, with the telemetry tests
-  - [ ] `/` at 1024 pixels with 200% text, measured, fixed if still wide, and held by a browser case
+no spec · code in `tests/support/claim-phrases.ts`, `tests/unit/claim-phrases.test.ts`, `src/telemetry/events.ts` (and the counts in `client.ts` and `server.ts`), `tests/unit/telemetry-events.test.ts`, `tests/unit/telemetry-server.test.ts`, `tests/e2e/privacy.spec.ts`, `tests/e2e/design-system.spec.ts`
+- [x] Build it: `/develop small fixes after the redesign`
+  - [x] The banned phrase gate first: the pattern fixed, its own case, and every page read against it
+  - [x] `/security` as its own page kind, with the telemetry tests
+  - [x] `/` at 1024 pixels with 200% text, measured, fixed if still wide, and held by a browser case
 - [ ] Verify it: `/check verify small fixes after the redesign`
 
 ### 23. Legal review · needs a decision · Alpha · from spec 0011
