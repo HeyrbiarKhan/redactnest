@@ -1057,4 +1057,26 @@ test.describe("the pricing page", () => {
     );
     expect(new URL(loadedAt).pathname).toBe("/tool");
   });
+
+  /**
+   * The marketing brief of 2026-11-28, item 6: the refund answer's link to
+   * the terms sits in a closed disclosure, so the whole page walk passes it
+   * by. Opened from the keyboard, the next Tab reaches it, with its ring.
+   */
+  test("reaches the refund answer's link to the terms once its question is open", async ({
+    page,
+  }) => {
+    await page.goto("/pricing");
+
+    const questions = page.getByTestId("pricing-questions");
+    const refunds = questions.locator("summary", { hasText: "Do you give refunds?" });
+    await refunds.focus();
+    await page.keyboard.press("Enter");
+    await expect(refunds.locator("xpath=..")).toHaveAttribute("open", "");
+    await page.keyboard.press("Tab");
+    const terms = questions.getByRole("link", { name: "Terms of service" });
+    await expect(terms).toBeFocused();
+    await expect(terms).toHaveAttribute("href", "/terms");
+    expect(await terms.evaluate((link) => link.matches(":focus-visible"))).toBe(true);
+  });
 });

@@ -2665,7 +2665,8 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
  * its own.
  */
 test.describe("1024 pixels with 200% text (feature 34)", () => {
-  for (const path of ["/", "/redact-pdf", "/remove-text-from-pdf"] as const) {
+  // `/pricing` for its questions (the marketing brief of 2026-11-28, item 6).
+  for (const path of ["/", "/redact-pdf", "/remove-text-from-pdf", "/pricing"] as const) {
     test(`${path} at 1024 pixels: nothing past the window`, async ({ page }) => {
       await page.setViewportSize({ width: 1024, height: 800 });
       await page.goto(path);
@@ -2888,12 +2889,22 @@ async function expectWholePageWalk(page: Page): Promise<void> {
       ...document.querySelectorAll<HTMLElement>(
         "a[href], button, input, select, textarea, summary, [tabindex]",
       ),
-    ].filter(
-      (element) =>
+    ].filter((element) => {
+      // A closed disclosure's content is not drawn, and Tab passes it by,
+      // though Chromium keeps its boxes; its own summary is the stop. The
+      // pricing questions' link to the terms sits in one, and "the pricing
+      // page" in `shell.spec.ts` reaches it once its question is open.
+      const shut = element.closest("details:not([open])");
+      const drawn =
+        shut === null ||
+        (element.tagName === "SUMMARY" && element.parentElement === shut);
+      return (
         element.tabIndex >= 0 &&
         !(element as HTMLButtonElement).disabled &&
-        element.getClientRects().length > 0,
-    );
+        element.getClientRects().length > 0 &&
+        drawn
+      );
+    });
     reachable.forEach((element, index) => {
       element.dataset.sweep = String(index);
     });

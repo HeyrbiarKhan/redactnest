@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { FREE_PLAN, PRO_PLAN, SIGN_IN_PANEL } from "@/lib/plans";
+import { FREE_PLAN, pricingQuestions, PRO_PLAN, SIGN_IN_PANEL } from "@/lib/plans";
+
+import {
+  CLAIM_BANNED_PHRASES,
+  MARKETING_BANNED_PHRASES,
+  phrasePattern,
+} from "../support/claim-phrases";
 
 /**
  * The two plans' names and Pro's price line. Spec 0012, AC-13, AC-15 and
@@ -78,6 +84,65 @@ describe("both plans", () => {
     expect(() => {
       (PRO_PLAN as { priceLine: string }).priceLine = "$0 a month";
     }).toThrow(TypeError);
+  });
+});
+
+/**
+ * The marketing brief of 2026-11-28, item 6: Pricing's questions. Cancelling
+ * and refunds in the terms' own words, the caps from the arguments, nothing
+ * that suggests splitting a file, and both banned phrase lists held, as on a
+ * page that describes RedactNest (spec 0018, AC-5; spec 0024, AC-5).
+ */
+describe("pricingQuestions", () => {
+  it("asks and answers the brief's four questions, word for word", () => {
+    expect(pricingQuestions(3, 50)).toEqual([
+      {
+        question: "Can I cancel any time?",
+        answer:
+          "Yes. Cancel in Manage billing, on your Account page. Pro then lasts to the end of the month you've paid for.",
+      },
+      {
+        question: "Do you give refunds?",
+        answer:
+          "We don't refund part months. Your legal rights stay, including any right to withdraw from the purchase.",
+        terms: { before: "The ", after: " have the details." },
+      },
+      {
+        question: "What if my PDF has more than 3 pages on Free?",
+        answer:
+          "RedactNest tells you when you open it, and makes no file. Pro handles up to 50 pages per document.",
+      },
+      {
+        question: "Do I need an account for Free?",
+        answer: "No. You need an account only for Pro.",
+      },
+    ]);
+    expect(Object.isFrozen(pricingQuestions(3, 50))).toBe(true);
+  });
+
+  it("takes both caps from its arguments, never a literal", () => {
+    const words = JSON.stringify(pricingQuestions(7, 90));
+    expect(words).toContain("more than 7 pages on Free");
+    expect(words).toContain("up to 90 pages per document");
+    expect(words).not.toMatch(/\b(3|50)\b/);
+  });
+
+  it("never suggests splitting a file", () => {
+    expect(JSON.stringify(pricingQuestions(3, 50))).not.toMatch(
+      /split|smaller|separate|break up/i,
+    );
+  });
+
+  it("holds neither banned phrase list", () => {
+    const words = pricingQuestions(3, 50)
+      .flatMap(({ question, answer, terms }) => [
+        question,
+        answer,
+        ...(terms === undefined ? [] : [terms.before, terms.after]),
+      ])
+      .join("\n");
+    const phrases = [...CLAIM_BANNED_PHRASES, ...MARKETING_BANNED_PHRASES];
+    expect(phrases.filter((phrase) => phrasePattern(phrase).test(words))).toEqual([]);
   });
 });
 

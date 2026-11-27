@@ -39,6 +39,50 @@ export const PRO_PLAN = Object.freeze({
 export const PLAN_BADGE = "Most useful";
 
 /**
+ * One of Pricing's questions (the marketing brief of 2026-11-28, item 6).
+ * `terms`, when set, closes the answer with a sentence that links to the
+ * Terms of service: its words before and after the link's label, which is
+ * `LEGAL.termsLabel`.
+ */
+export interface PricingQuestion {
+  readonly question: string;
+  readonly answer: string;
+  readonly terms?: { readonly before: string; readonly after: string };
+}
+
+/**
+ * Pricing's questions, below the billing notes. Cancelling and refunds say
+ * what the terms' Pro subscriptions section says. The caps arrive from
+ * `config` as arguments, never written here (spec 0012, INV-8 and INV-9).
+ * The over the cap answer never suggests splitting a file: the free cap's own
+ * message leaves that out on purpose, and the terms say not to get around
+ * the limits. "Makes no file": a document over the cap is refused when it
+ * opens, before any run.
+ */
+export function pricingQuestions(free: number, paid: number): readonly PricingQuestion[] {
+  return Object.freeze([
+    Object.freeze({
+      question: "Can I cancel any time?",
+      answer: `Yes. Cancel in Manage billing, on your Account page. ${PRO_PLAN.name} then lasts to the end of the month you've paid for.`,
+    }),
+    Object.freeze({
+      question: "Do you give refunds?",
+      answer:
+        "We don't refund part months. Your legal rights stay, including any right to withdraw from the purchase.",
+      terms: Object.freeze({ before: "The ", after: " have the details." }),
+    }),
+    Object.freeze({
+      question: `What if my PDF has more than ${free} pages on ${FREE_PLAN.name}?`,
+      answer: `RedactNest tells you when you open it, and makes no file. ${PRO_PLAN.name} handles up to ${paid} pages per document.`,
+    }),
+    Object.freeze({
+      question: `Do I need an account for ${FREE_PLAN.name}?`,
+      answer: `No. You need an account only for ${PRO_PLAN.name}.`,
+    }),
+  ]);
+}
+
+/**
  * The panel beside Clerk's card on sign in and sign up (spec 0013, AC-23).
  * Pro's cap arrives from `config` as an argument, never written here (INV-8).
  */

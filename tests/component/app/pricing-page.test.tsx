@@ -58,6 +58,8 @@ vi.mock("@/lib/plans", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/plans")>();
   return {
     PLAN_BADGE: actual.PLAN_BADGE,
+    // The questions' words, with the real plan names (`tests/unit/plans.test.ts`).
+    pricingQuestions: actual.pricingQuestions,
     FREE_PLAN: {
       get name() {
         return mocks.plans?.free ?? actual.FREE_PLAN.name;
@@ -105,13 +107,13 @@ const lines = (name: string) =>
     .map((item) => item.textContent);
 
 describe("the plans (AC-13)", () => {
-  it("has one h1, then Free and Pro as its two plans", () => {
+  it("has one h1, then Free and Pro as its two plans, then the questions", () => {
     render(<PricingPage />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Pricing");
     expect(
       screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent),
-    ).toEqual(["Free", "Pro"]);
+    ).toEqual(["Free", "Pro", "Questions"]);
   });
 
   it("shows Pro's price line, $19 a month, in Pro's card and nowhere else", () => {
@@ -150,7 +152,7 @@ describe("the plans (AC-13)", () => {
 
     expect(
       screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent),
-    ).toEqual(["Basic", "Pro Plus"]);
+    ).toEqual(["Basic", "Pro Plus", "Questions"]);
     expect(within(card("Pro Plus")).getByText("$23 a month")).toBeInTheDocument();
     expect(lines("Pro Plus")[2]).toBe("Everything in Basic");
     expect(screen.queryByText("$19 a month")).not.toBeInTheDocument();
@@ -226,6 +228,67 @@ describe("Subscribe and the lines under it (AC-13)", () => {
     render(<PricingPage />);
 
     expect(screen.getByRole("main")).not.toHaveTextContent(/statement|card/i);
+  });
+});
+
+/**
+ * The marketing brief of 2026-11-28, item 6: four questions below the billing
+ * notes, in the home page's pattern (disclosures, the first open), every cap
+ * from `config`, the refund answer linking to the terms, and nothing that
+ * suggests splitting a file.
+ */
+describe("the questions", () => {
+  const section = () => screen.getByTestId("pricing-questions");
+
+  it("follows the billing notes, as disclosures, the first open", () => {
+    render(<PricingPage />);
+
+    const notes = screen.getByText(LEGAL.merchantLine);
+    expect(notes.compareDocumentPosition(section())).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(section()).toBe(screen.getByRole("region", { name: "Questions" }));
+    const details = [...section().querySelectorAll("details")];
+    expect(details.map((item) => item.querySelector("summary")?.textContent)).toEqual([
+      "Can I cancel any time?",
+      "Do you give refunds?",
+      `What if my PDF has more than ${config.freePageCap} pages on Free?`,
+      "Do I need an account for Free?",
+    ]);
+    expect(details.map((item) => item.open)).toEqual([true, false, false, false]);
+  });
+
+  it("answers each in the brief's words, the refund answer linking to the terms", () => {
+    render(<PricingPage />);
+
+    const answers = [...section().querySelectorAll("details > p")].map(
+      (answer) => answer.textContent,
+    );
+    expect(answers).toEqual([
+      "Yes. Cancel in Manage billing, on your Account page. Pro then lasts to the end of the month you've paid for.",
+      "We don't refund part months. Your legal rights stay, including any right to withdraw from the purchase. The Terms of service have the details.",
+      `RedactNest tells you when you open it, and makes no file. Pro handles up to ${config.maxPages} pages per document.`,
+      "No. You need an account only for Pro.",
+    ]);
+    const terms = within(section()).getByRole("link", { name: LEGAL.termsLabel });
+    expect(terms).toHaveAttribute("href", TERMS_PATH);
+    expect(terms.tagName).toBe("A");
+  });
+
+  /** Spec 0012, INV-8 and INV-9: the caps come from config. */
+  it("takes both caps from config", () => {
+    mocks.caps = { free: 4, paid: 40 };
+    render(<PricingPage />);
+
+    expect(section()).toHaveTextContent("What if my PDF has more than 4 pages on Free?");
+    expect(section()).toHaveTextContent("Pro handles up to 40 pages per document.");
+  });
+
+  /** The free cap's message and the terms: never a way around the limits. */
+  it("never suggests splitting a file", () => {
+    render(<PricingPage />);
+
+    expect(section()).not.toHaveTextContent(/split|smaller|separate|break up/i);
   });
 });
 

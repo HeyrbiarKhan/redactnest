@@ -1,4 +1,4 @@
-import { ArrowRight, Check, ChevronRight, FileUp, ShieldCheck } from "lucide-react";
+import { ArrowRight, Check, FileUp, ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
 import { Fragment } from "react";
 
@@ -30,6 +30,7 @@ import { PageContainer } from "@/ui/page-container";
 
 import { HomeWindow } from "./home-window";
 import { PricingCards } from "./pricing-cards";
+import { QuestionList } from "./question-list";
 import { PageHeader } from "./site-nav";
 
 /**
@@ -619,11 +620,10 @@ export default function HomePage() {
         )}
 
         {/*
-          The questions (the owner's port of `Main.dc.html`, 2026-11-25): the
-          browser's own disclosures, no script, the first open, each answer in
-          today's words. 820 pixels across, as drawn. A small chevron that
-          turns down when open stands where the browser's marker was (hidden
-          as a list marker and, for Safari, as its own); CSS alone.
+          The questions (the owner's port of `Main.dc.html`, 2026-11-25), as
+          `QuestionList`'s disclosures, each answer in today's words, a
+          `withPro` sentence after it only with billing on. 820 pixels
+          across, as drawn.
         */}
         <div className="mx-auto w-full max-w-205 px-4 pt-16 pb-16 sm:px-6 sm:pt-20 lg:px-8 lg:pb-28">
           <section aria-labelledby="home-questions" data-testid="home-questions">
@@ -633,28 +633,15 @@ export default function HomePage() {
             >
               {HOME_TEXT.questions.title}
             </h2>
-            <div className="border-t border-border">
-              {HOME_TEXT.questions.items.map(({ question, answer, withPro }, index) => (
-                <details
-                  key={question}
-                  open={index === 0}
-                  className="group border-b border-border py-4.5 wrap-break-word"
-                >
-                  <summary className="flex list-none items-start gap-2.5 rounded-item text-body leading-6 font-semibold text-ink [&::-webkit-details-marker]:hidden">
-                    <ChevronRight
-                      aria-hidden="true"
-                      className="mt-1 size-4 shrink-0 text-ink-subtle transition-transform duration-fast group-open:rotate-90"
-                      strokeWidth={2.25}
-                    />
-                    <span className="min-w-0">{question}</span>
-                  </summary>
-                  <p className="mt-2.5 text-copy leading-[1.6] text-ink-muted">
-                    {answer}
-                    {withPro !== undefined && config.billingEnabled && ` ${withPro}`}
-                  </p>
-                </details>
-              ))}
-            </div>
+            <QuestionList
+              items={HOME_TEXT.questions.items.map(({ question, answer, withPro }) => ({
+                question,
+                answer:
+                  withPro !== undefined && config.billingEnabled
+                    ? `${answer} ${withPro}`
+                    : answer,
+              }))}
+            />
           </section>
         </div>
 
