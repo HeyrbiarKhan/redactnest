@@ -22,6 +22,11 @@ import { PRO_PLAN } from "@/lib/plans";
 import { PRICING_PATH, SIGN_IN_PATH, TERMS_PATH, TOOL_PATH } from "@/lib/routes";
 
 import { expectNoAxeViolations } from "../../setup/component";
+import {
+  CLAIM_BANNED_PHRASES,
+  MARKETING_BANNED_PHRASES,
+  phrasePattern,
+} from "../../support/claim-phrases";
 
 const mocks = vi.hoisted(() => ({
   billingEnabled: true,
@@ -131,10 +136,26 @@ describe("the plans (AC-13)", () => {
     expect(lines("Free")).toEqual([`Up to ${config.freePageCap} pages a document`]);
     expect(lines("Pro")).toEqual([
       `Up to ${config.maxPages} pages a document`,
-      // Spec 0017, AC-26: custom terms, the cap from config.
-      `Custom terms: up to ${config.maxCustomTerms} names, numbers or phrases, found wherever they appear`,
+      // Spec 0017, AC-26: custom terms, the cap from config, in words that
+      // promise no more than the matcher does (the marketing brief of
+      // 2026-11-28, item 7).
+      `Custom terms: up to ${config.maxCustomTerms} of your own names, numbers or phrases for RedactNest to look for`,
       "Everything in Free",
     ]);
+  });
+
+  /**
+   * The marketing brief of 2026-11-28, item 7: a term in a scan, or split
+   * across lines, can be missed, so Pro's lines claim no outcome (spec 0018,
+   * AC-5) and hold neither banned phrase list.
+   */
+  it("promises no more than the matcher does on custom terms", () => {
+    render(<PricingPage />);
+
+    const pro = lines("Pro").join("\n");
+    expect(pro).not.toMatch(/\b(found|wherever)\b/i);
+    const phrases = [...CLAIM_BANNED_PHRASES, ...MARKETING_BANNED_PHRASES];
+    expect(phrases.filter((phrase) => phrasePattern(phrase).test(pro))).toEqual([]);
   });
 
   /** covers: INV-8 */
