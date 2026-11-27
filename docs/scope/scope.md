@@ -545,7 +545,7 @@ no spec · code in `tests/support/claim-phrases.ts`, `tests/unit/claim-phrases.t
   - [x] The banned phrase gate first: the pattern fixed, its own case, and every page read against it
   - [x] `/security` as its own page kind, with the telemetry tests
   - [x] `/` at 1024 pixels with 200% text, measured, fixed if still wide, and held by a browser case
-- [ ] Verify it: `/check verify small fixes after the redesign`
+- [x] Verify it: `/check verify small fixes after the redesign`
 
 ### 23. Legal review · needs a decision · Alpha · from spec 0011
 The lawyer questions launch left open, asked once RedactNest has 100+ users, on a tech lawyer's advice (2026-10-03). PECA section 32, Pakistani law and courts, and a full review of both pages (spec 0011 steps 3 and 4), plus two from spec 0012: does Polar's own use of billing details as merchant of record (fraud, security, tax records) make it a controller for that part, and does every cookie claim C6 calls strictly necessary meet that exemption, given Clerk's `__refresh_<suffix>` stays after sign out on production. It sits before feature 17 because the Polar answer can change what the DPA says.
