@@ -25,7 +25,25 @@ describe("PRO_PLAN", () => {
 
   /** covers: INV-8. A cap here could drift from `config`, the one source. */
   it("holds a name and a price, and no cap", () => {
-    expect(Object.keys(PRO_PLAN)).toEqual(["name", "priceLine", "price", "per"]);
+    expect(Object.keys(PRO_PLAN)).toEqual([
+      "name",
+      "priceLine",
+      "price",
+      "per",
+      "amount",
+      "currency",
+    ]);
+  });
+
+  /**
+   * The marketing brief of 2026-11-28, item 3: the home page's structured
+   * data prices Pro from a number and a currency, never by parsing "$19", so
+   * the number and the figure a visitor reads are one change.
+   */
+  it("gives the same price as a number in US dollars", () => {
+    expect(PRO_PLAN.amount).toBe(19);
+    expect(PRO_PLAN.currency).toBe("USD");
+    expect(PRO_PLAN.price).toBe(`$${PRO_PLAN.amount}`);
   });
 
   /**

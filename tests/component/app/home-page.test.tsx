@@ -593,19 +593,91 @@ describe("the home page's metadata (AC-13; spec 0024, AC-11)", () => {
     });
   });
 
-  /** Spec 0024, AC-11: one data block, the trading name and the site's address. */
-  it("carries one WebSite block the browser never runs", () => {
+  /**
+   * Spec 0024, AC-11, as the marketing brief of 2026-11-28 (item 3) widens
+   * it: one data block, a `@graph` of the `WebSite` and the
+   * `SoftwareApplication`, every cap from `config` and Pro's price from
+   * `PRO_PLAN`'s amount and currency.
+   */
+  it("carries one @graph block the browser never runs, with both offers", () => {
     const { container } = render(<HomePage />);
 
     const scripts = container.querySelectorAll("script");
     expect(scripts).toHaveLength(1);
     expect(scripts[0]).toHaveAttribute("type", "application/ld+json");
+    const home = `${config.siteUrl}/`;
     expect(JSON.parse(scripts[0].textContent ?? "")).toEqual({
       "@context": "https://schema.org",
-      "@type": "WebSite",
-      name: "RedactNest",
-      url: config.siteUrl,
+      "@graph": [
+        { "@type": "WebSite", "@id": `${home}#website`, name: "RedactNest", url: home },
+        {
+          "@type": "SoftwareApplication",
+          "@id": `${home}#app`,
+          name: "RedactNest",
+          url: home,
+          applicationCategory: "BusinessApplication",
+          operatingSystem: "Web browser",
+          description: HOME_TEXT.siteLine,
+          license: "https://www.gnu.org/licenses/agpl-3.0.html",
+          offers: [
+            {
+              "@type": "Offer",
+              name: "Free",
+              price: "0",
+              priceCurrency: "USD",
+              description: `Up to ${config.freePageCap} pages per document`,
+              url: `${config.siteUrl}/tool`,
+            },
+            {
+              "@type": "Offer",
+              name: "Pro",
+              price: "19",
+              priceCurrency: "USD",
+              description: `Up to ${config.maxPages} pages per document, plus up to ${config.maxCustomTerms} custom terms`,
+              url: `${config.siteUrl}/pricing`,
+              priceSpecification: {
+                "@type": "UnitPriceSpecification",
+                price: "19",
+                priceCurrency: "USD",
+                billingDuration: "P1M",
+                unitCode: "MON",
+              },
+            },
+          ],
+        },
+      ],
     });
     expect(scripts[0].textContent).not.toContain("<");
+  });
+
+  it("takes each offer's caps from config", () => {
+    mocks.caps = { free: 7, paid: 90 };
+    const { container } = render(<HomePage />);
+
+    const text = container.querySelector("script")?.textContent ?? "";
+    expect(text).toContain('"description":"Up to 7 pages per document"');
+    expect(text).toContain('"description":"Up to 90 pages per document, plus up to');
+  });
+
+  /** Spec 0012, AC-23: with billing off there is no Pro to offer. */
+  it("offers Free alone with billing off", () => {
+    mocks.billingEnabled = false;
+    const { container } = render(<HomePage />);
+
+    const data = JSON.parse(container.querySelector("script")?.textContent ?? "") as {
+      "@graph": [unknown, { offers: { name: string }[] }];
+    };
+    expect(data["@graph"][1].offers.map(({ name }) => name)).toEqual(["Free"]);
+    expect(container.querySelector("script")?.textContent).not.toContain("Pro");
+  });
+
+  /** Spec 0013, INV-1: nothing implies a user base. */
+  it("carries no rating, review or count", () => {
+    const { container } = render(<HomePage />);
+
+    // Schema.org's own keys, so "operatingSystem" is not read as a rating.
+    expect(container.querySelector("script")?.textContent).not.toMatch(
+      /aggregateRating|ratingValue|ratingCount|"review"|reviewCount|interactionStatistic|userInteractionCount/,
+    );
   });
 });

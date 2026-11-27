@@ -772,7 +772,7 @@ test.describe("the head on / and the search pages", () => {
   const meta = (page: Page, selector: string) =>
     page.locator(selector).first().getAttribute("content");
 
-  test("/ carries the site line, a canonical to the root and the WebSite block", async ({
+  test("/ carries the site line, a canonical to the root and the @graph block", async ({
     page,
   }) => {
     await page.goto("/");
@@ -785,11 +785,28 @@ test.describe("the head on / and the search pages", () => {
     await expect(page.locator('link[rel="manifest"]')).toHaveCount(0);
     const blocks = page.locator('script[type="application/ld+json"]');
     await expect(blocks).toHaveCount(1);
-    expect(JSON.parse((await blocks.textContent()) ?? "")).toEqual({
+    // The marketing brief of 2026-11-28, item 3: the WebSite and the
+    // application with both offers, since this build sells Pro. The caps and
+    // every other field are the component test's.
+    expect(JSON.parse((await blocks.textContent()) ?? "")).toMatchObject({
       "@context": "https://schema.org",
-      "@type": "WebSite",
-      name: "RedactNest",
-      url: SITE,
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": `${SITE}/#website`,
+          name: "RedactNest",
+          url: `${SITE}/`,
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": `${SITE}/#app`,
+          description: SITE_LINE,
+          offers: [
+            { name: "Free", price: "0", priceCurrency: "USD", url: `${SITE}/tool` },
+            { name: "Pro", price: "19", priceCurrency: "USD", url: `${SITE}/pricing` },
+          ],
+        },
+      ],
     });
   });
 

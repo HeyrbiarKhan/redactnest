@@ -23,6 +23,13 @@ export const PRO_PLAN = Object.freeze({
   priceLine: "$19 a month",
   price: "$19",
   per: "/ month",
+  /**
+   * The same price as a number and an ISO 4217 code, for the home page's
+   * structured data (the marketing brief of 2026-11-28, item 3), so nothing
+   * parses "$19". `tests/unit/plans.test.ts` holds it to `price`.
+   */
+  amount: 19,
+  currency: "USD",
 });
 
 /**

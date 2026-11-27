@@ -15,8 +15,15 @@ import {
   strippedItems,
 } from "@/lib/home-text";
 import { LEGAL } from "@/lib/legal";
+import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
 import { sectionId } from "@/lib/policy-sections";
-import { HOME_PATH, HOW_IT_WORKS_ID, SECURITY_PATH, TOOL_PATH } from "@/lib/routes";
+import {
+  HOME_PATH,
+  HOW_IT_WORKS_ID,
+  PRICING_PATH,
+  SECURITY_PATH,
+  TOOL_PATH,
+} from "@/lib/routes";
 import { Button } from "@/ui/button";
 import { CoverFigure } from "@/ui/cover-figure";
 import { PageContainer } from "@/ui/page-container";
@@ -39,19 +46,76 @@ export const metadata: Metadata = {
   alternates: { canonical: HOME_PATH },
 };
 
+/** The AGPL's own page, which the structured data names as the licence (spec 0009). */
+const AGPL_URL = "https://www.gnu.org/licenses/agpl-3.0.html";
+
 /**
- * The `WebSite` block for search engines (AC-11): the trading name and the
- * site's address, through `JSON.stringify` with every `<` escaped, so no
- * value can close the element. A data block (`application/ld+json`), which
- * the browser never runs, so the standard policy needs no change; the one
- * script element any page in spec 0024 adds.
+ * The structured data for search engines: one `@graph` of the `WebSite` (spec
+ * 0024, AC-11) and the `SoftwareApplication` with its offers (the marketing
+ * brief of 2026-11-28, item 3), through `JSON.stringify` with every `<`
+ * escaped, so no value can close the element. A data block
+ * (`application/ld+json`), which the browser never runs, so the standard
+ * policy needs no change; still the one script element any page adds.
+ *
+ * The description is the site line, held to the claim register where it
+ * lives. Every cap comes from `config`, the plan names and Pro's price from
+ * `src/lib/plans.ts`, and the Pro offer shows only on a build that sells it
+ * (spec 0012, INV-8 and AC-23). No rating, review or count: the page implies
+ * no user base (spec 0013, INV-1). Built at render, because the billing state
+ * decides the offers.
  */
-const WEBSITE_JSON_LD = JSON.stringify({
-  "@context": "https://schema.org",
-  "@type": "WebSite",
-  name: LEGAL.tradingName,
-  url: config.siteUrl,
-}).replaceAll("<", "\\u003c");
+function homeJsonLd(): string {
+  const home = `${config.siteUrl}${HOME_PATH}`;
+  const free = {
+    "@type": "Offer",
+    name: FREE_PLAN.name,
+    // Free costs nothing, by its name; schema.org still asks a currency, so
+    // it takes the one Pro is sold in.
+    price: "0",
+    priceCurrency: PRO_PLAN.currency,
+    description: `Up to ${config.freePageCap} pages per document`,
+    url: `${config.siteUrl}${TOOL_PATH}`,
+  };
+  const price = String(PRO_PLAN.amount);
+  const pro = {
+    "@type": "Offer",
+    name: PRO_PLAN.name,
+    price,
+    priceCurrency: PRO_PLAN.currency,
+    description: `Up to ${config.maxPages} pages per document, plus up to ${config.maxCustomTerms} custom terms`,
+    url: `${config.siteUrl}${PRICING_PATH}`,
+    // Monthly, as `PRO_PLAN.priceLine` says: one month, priced per month.
+    priceSpecification: {
+      "@type": "UnitPriceSpecification",
+      price,
+      priceCurrency: PRO_PLAN.currency,
+      billingDuration: "P1M",
+      unitCode: "MON",
+    },
+  };
+  return JSON.stringify({
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": `${home}#website`,
+        name: LEGAL.tradingName,
+        url: home,
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": `${home}#app`,
+        name: LEGAL.tradingName,
+        url: home,
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Web browser",
+        description: HOME_TEXT.siteLine,
+        license: AGPL_URL,
+        offers: config.billingEnabled ? [free, pro] : [free],
+      },
+    ],
+  }).replaceAll("<", "\\u003c");
+}
 
 /** The security page's account of the check, which the black box section links to. */
 const CHECK_HREF = `${SECURITY_PATH}#${sectionId("theCheck")}`;
@@ -83,7 +147,7 @@ export default function HomePage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: WEBSITE_JSON_LD }}
+        dangerouslySetInnerHTML={{ __html: homeJsonLd() }}
       />
       <PageHeader sticky />
       {/* The skip link's target, allowed to drop its outline (spec 0003, AC-14). */}
