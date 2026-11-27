@@ -598,6 +598,15 @@ export const HOME_TEXT = Object.freeze({
   siteLine:
     "Redact PDFs in your browser, with nothing uploaded. The selectable text you tick is taken out of the page, then marked, and every new file is checked before you download it.",
 
+  /**
+   * `/`'s own title, before the trading name (the marketing brief of
+   * 2026-11-28, item 1). The page sets it absolute, so the root layout's
+   * default, "RedactNest", stays what every page without a title of its own
+   * falls back to. "Removes the text" says what the headline says; it names
+   * no place, so it claims nothing about the file (spec 0019, AC-12).
+   */
+  pageTitle: "PDF redaction that removes the text",
+
   /** The product shot's alt text (AC-12). */
   shotAlt:
     "RedactNest reviewing a sample employment agreement: email addresses and phone numbers found and ticked, with a Redact button beside them.",

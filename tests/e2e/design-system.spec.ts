@@ -1901,7 +1901,8 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
   }) => {
     await page.goto("/");
 
-    await expect(page).toHaveTitle("RedactNest");
+    // Its own title, absolute (the marketing brief of 2026-11-28, item 1).
+    await expect(page).toHaveTitle("PDF redaction that removes the text · RedactNest");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Redaction that actually removes the text",
     );

@@ -28,10 +28,13 @@ import { PageHeader } from "./site-nav";
 /**
  * `/`'s own head (spec 0024, AC-11): the site line as its description, the
  * same words as the root layout's fallback, and a canonical to the root of
- * `config.siteUrl` (through the layout's `metadataBase`). The title stays the
- * layout's default, "RedactNest".
+ * `config.siteUrl` (through the layout's `metadataBase`). Its own title, set
+ * absolute with the layout's separator (the marketing brief of 2026-11-28,
+ * item 1), so the layout's default, "RedactNest", stays every other page's
+ * fallback.
  */
 export const metadata: Metadata = {
+  title: { absolute: `${HOME_TEXT.pageTitle} · ${LEGAL.tradingName}` },
   description: HOME_TEXT.siteLine,
   alternates: { canonical: HOME_PATH },
 };

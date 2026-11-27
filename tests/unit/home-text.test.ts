@@ -243,6 +243,17 @@ describe("the finds and strips cards (AC-11)", () => {
   });
 });
 
+/**
+ * The marketing brief of 2026-11-28, item 1: `/`'s own title, which the page
+ * sets absolute with the trading name after it, 48 characters in all.
+ */
+describe("the home page's own title", () => {
+  it("says the brief's words, and fits 48 characters with the trading name", () => {
+    expect(HOME_TEXT.pageTitle).toBe("PDF redaction that removes the text");
+    expect(`${HOME_TEXT.pageTitle} · RedactNest`).toHaveLength(48);
+  });
+});
+
 describe("the pictures' words (AC-5, AC-12)", () => {
   it("describes the product shot", () => {
     expect(HOME_TEXT.shotAlt).toBe(

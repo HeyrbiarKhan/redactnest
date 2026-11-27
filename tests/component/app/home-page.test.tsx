@@ -579,13 +579,15 @@ describe("the main content's words (AC-13)", () => {
 });
 
 /**
- * AC-13, as spec 0024's AC-11 amends it: the page keeps the layout's title,
- * and exports the site line as its description and a canonical to the root.
+ * AC-13, as spec 0024's AC-11 amends it: the page exports the site line as
+ * its description and a canonical to the root. Its own title is absolute (the
+ * marketing brief of 2026-11-28, item 1), so the layout's default stays.
  */
 describe("the home page's metadata (AC-13; spec 0024, AC-11)", () => {
-  it("exports the site line and a canonical to the root, and no title", () => {
+  it("exports its own absolute title, the site line and a canonical to the root", () => {
     expect(Object.keys(homePage).sort()).toEqual(["default", "metadata"]);
     expect(homePage.metadata).toEqual({
+      title: { absolute: "PDF redaction that removes the text · RedactNest" },
       description: HOME_TEXT.siteLine,
       alternates: { canonical: "/" },
     });
