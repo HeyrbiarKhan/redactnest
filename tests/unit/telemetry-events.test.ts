@@ -104,6 +104,9 @@ describe("pageKindFor", () => {
     ["/pricing", "pricing"],
     ["/privacy", "privacy"],
     ["/terms", "terms"],
+    // Feature 34: the security page is its own kind, never not-found.
+    ["/security", "security"],
+    ["/security/extra", "not-found"],
     ["/sign-in", "sign-in"],
     ["/sign-in/factor-one", "sign-in"],
     ["/sign-up", "sign-up"],

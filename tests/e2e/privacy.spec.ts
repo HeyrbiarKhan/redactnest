@@ -611,12 +611,13 @@ test("a full run sends no document, text, match or name anywhere", async ({ page
  */
 /**
  * Spec 0024, AC-12: a view of a search page posts its own kind, never
- * `not-found`.
+ * `not-found`. The security page joined them in feature 34.
  */
 for (const [path, kind] of [
   ["/redact-pdf", "redact-pdf"],
   ["/remove-text-from-pdf", "remove-text"],
   ["/black-box-redaction", "black-box"],
+  ["/security", "security"],
 ] as const) {
   test(`a view of ${path} posts its own page kind`, async ({ page }) => {
     const requests = recordRequests(page);

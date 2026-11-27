@@ -24,6 +24,7 @@ import {
   PRIVACY_PATH,
   REDACT_PDF_PATH,
   REMOVE_TEXT_PATH,
+  SECURITY_PATH,
   SIGN_IN_PATH,
   SIGN_UP_PATH,
   TERMS_PATH,
@@ -109,6 +110,9 @@ export const PAGE_KINDS = Object.freeze([
   "pricing",
   "privacy",
   "terms",
+  // The security page (spec 0018) predates spec 0024's page kinds, and
+  // counted as `not-found` until feature 34 gave it its own (AC-21).
+  "security",
   "sign-in",
   "sign-up",
   "account",
@@ -136,6 +140,7 @@ export const PAGE_PATHS: Readonly<Record<PageKind, string>> = Object.freeze({
   pricing: PRICING_PATH,
   privacy: PRIVACY_PATH,
   terms: TERMS_PATH,
+  security: SECURITY_PATH,
   "sign-in": SIGN_IN_PATH,
   "sign-up": SIGN_UP_PATH,
   account: ACCOUNT_PATH,
@@ -168,6 +173,8 @@ export function pageKindFor(pathname: string): PageKind {
       return "privacy";
     case TERMS_PATH:
       return "terms";
+    case SECURITY_PATH:
+      return "security";
     case BILLING_PATH:
       return "billing";
     case WELCOME_PATH:

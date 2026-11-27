@@ -132,6 +132,15 @@ describe("the Umami request", () => {
     expect(JSON.parse(init.body)).toMatchObject({ payload: { url } });
   });
 
+  /** Feature 34: the security page's view arrives under its own path, never /404. */
+  it("sends a view of security under its own path, /security", () => {
+    const { init } = umamiRequest(
+      { name: "page-view", page: "security" },
+      SINKS.umamiWebsiteId,
+    );
+    expect(JSON.parse(init.body)).toMatchObject({ payload: { url: "/security" } });
+  });
+
   it("sends not-found as /404", () => {
     const { init } = umamiRequest(
       { name: "page-view", page: "not-found" },
@@ -408,7 +417,7 @@ function reportSeams(overrides: Partial<TelemetrySeams> = {}) {
   return { ...recording, clock, memory: freshMemory() };
 }
 
-/** Every page report shape that draws on the day's budget, 29 of them (AC-29). */
+/** Every page report shape that draws on the day's budget, 31 of them (AC-29). */
 const BUDGET_REPORTS: readonly ErrorReport[] = Object.freeze([
   ...PAGE_KINDS.flatMap((page) =>
     CRASH_SOURCES.map((kind): ErrorReport => ({ name: "browser-crash", page, kind })),
@@ -423,7 +432,7 @@ const STILL_WAITING: ErrorReport = {
   outcome: "still-waiting",
 };
 
-/** Every report shape a page can send, 30 of them (AC-28). */
+/** Every report shape a page can send, 32 of them (AC-28). */
 const PAGE_REPORTS: readonly ErrorReport[] = Object.freeze([
   ...BUDGET_REPORTS,
   STILL_WAITING,
@@ -454,8 +463,8 @@ const NO_HEADERS = new Headers();
 
 describe("the report shapes these cases use", () => {
   it("are every page report and twenty server reports, each with a key of its own", () => {
-    expect(PAGE_REPORTS).toHaveLength(30);
-    expect(BUDGET_REPORTS).toHaveLength(29);
+    expect(PAGE_REPORTS).toHaveLength(32);
+    expect(BUDGET_REPORTS).toHaveLength(31);
     expect(PAGE_REPORTS.every(isBrowserEvent)).toBe(true);
     expect(SERVER_REPORTS.some(isBrowserEvent)).toBe(false);
     expect(SERVER_REPORTS.length + SERVER_CRASHES.length).toBe(20);
