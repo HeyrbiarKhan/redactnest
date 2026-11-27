@@ -1940,8 +1940,9 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       "For small firms that share documents with personal details in them",
       "Three steps to a redacted PDF",
       "A black box is not redaction",
-      "What RedactNest looks for and strips",
+      // Item 5: the network band straight after the black box section.
       "Watch your network tab while you redact",
+      "What RedactNest looks for and strips",
       "Free to start, Pro for longer files",
       "Questions",
       "Redact your next PDF",
@@ -2027,7 +2028,12 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
 
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.getByRole("main").getByRole("link", { name: "See how it works" }).click();
-    const heading = page.getByRole("heading", { level: 2 }).first();
+    // By name: Who it's for's heading comes first since the marketing brief
+    // of 2026-11-28 (item 4), above the section the link scrolls to.
+    const heading = page.getByRole("heading", {
+      level: 2,
+      name: "Three steps to a redacted PDF",
+    });
     await expect
       .poll(() => heading.evaluate((el) => el.getBoundingClientRect().top))
       .toBeGreaterThanOrEqual(bar);
@@ -2623,10 +2629,13 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
 
     for (const [box, recorded] of [
       // Recorded again for the owner's port of `Main.dc.html` (2026-11-25):
-      // the hero, the How it works cards and the band.
+      // the hero, the How it works cards and the band. The two y figures
+      // again for the marketing brief of 2026-11-28 (items 4 and 5): Who it's
+      // for sits above How it works, and the network band above the band.
+      // Every x and width, and the hero, stayed as they were.
       [page.getByTestId("home-hero"), [82, 153, 1116]],
-      [page.getByTestId("home-steps").getByRole("list"), [82, 1131.8, 1116]],
-      [page.getByTestId("home-band"), [82, 2213.1, 1116]],
+      [page.getByTestId("home-steps").getByRole("list"), [82, 1719.8, 1116]],
+      [page.getByTestId("home-band"), [82, 3270.1, 1116]],
     ] as const) {
       const measured = await box.boundingBox();
       if (measured === null) throw new Error("a recorded box is not drawn");

@@ -29,12 +29,14 @@ import { Code, Monitor, Shield, Trash2, type LucideIcon } from "lucide-react";
 import { DETECTOR_LABELS, lookedFor } from "@/lib/detectors";
 import { SANITIZED_TEXT } from "@/lib/flow-text";
 import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
+import { sectionId } from "@/lib/policy-sections";
 import { removeTextTermsLine } from "@/lib/search-pages";
 import {
   ENGINE_PREFIX,
   ENTITLEMENT_PATH,
   ICON_PATHS,
   NEXT_FILES_PREFIX,
+  SECURITY_PATH,
   TELEMETRY_PATH,
   TOOL_PATH,
 } from "@/lib/routes";
@@ -69,6 +71,8 @@ const IBAN_WORDS =
 export interface HomeTrustItem {
   readonly icon: LucideIcon;
   readonly text: string;
+  /** Where the item links, when its words are a link. */
+  readonly href?: string;
 }
 
 /** One How it works card: its title and its line, under a small drawing. */
@@ -353,9 +357,15 @@ export const HOME_TEXT = Object.freeze({
     /**
      * The owner's line (2026-11-25). The AGPL is the licence every page's
      * footer states, with a link to the source of the exact commit built
-     * (spec 0009, AC-1 and AC-4), which is what lets anyone check it.
+     * (spec 0009, AC-1 and AC-4), which is what lets anyone check it. It
+     * links to the security page's Check it yourself (the marketing brief of
+     * 2026-11-28, item 5), as the network band does.
      */
-    Object.freeze({ icon: Code, text: "Open source (AGPL), so you can check it" }),
+    Object.freeze({
+      icon: Code,
+      text: "Open source (AGPL), so you can check it",
+      href: `${SECURITY_PATH}#${sectionId("checkIt")}`,
+    }),
   ]),
 
   /**

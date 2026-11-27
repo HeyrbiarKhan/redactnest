@@ -200,8 +200,9 @@ describe("the sections and the band (spec 0026, AC-8; spec 0013, AC-11)", () => 
       HOME_TEXT.whoFor.title,
       HOME_TEXT.steps.title,
       HOME_TEXT.blackBox.title,
-      HOME_TEXT.band.title,
+      // Item 5: the network band straight after the black box section.
       HOME_TEXT.network.title,
+      HOME_TEXT.band.title,
       HOME_TEXT.pricing.title,
       HOME_TEXT.questions.title,
       HOME_TEXT.closing,
@@ -265,6 +266,23 @@ describe("the sections and the band (spec 0026, AC-8; spec 0013, AC-11)", () => 
     for (const { body } of HOME_TEXT.whoFor.items) {
       expect(within(off).getByText(body)).toBeInTheDocument();
     }
+  });
+
+  /**
+   * The marketing brief of 2026-11-28, item 5: the trust strip keeps its four
+   * items, and the open source one is a link to the security page's Check it
+   * yourself, underlined and at least 24 pixels tall (WCAG 2.5.8).
+   */
+  it("keeps four trust items and links the open source one to the security page", () => {
+    render(<HomePage />);
+
+    const strip = within(screen.getByTestId("home-trust"));
+    expect(strip.getAllByRole("listitem")).toHaveLength(4);
+    const links = strip.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAccessibleName("Open source (AGPL), so you can check it");
+    expect(links[0]).toHaveAttribute("href", "/security#check-it");
+    expect(links[0]).toHaveClass("underline", "min-h-6");
   });
 
   /**

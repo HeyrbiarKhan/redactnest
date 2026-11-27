@@ -81,6 +81,20 @@ describe("the hero (AC-10)", () => {
   });
 
   /**
+   * The marketing brief of 2026-11-28, item 5: the open source item links to
+   * the security page's Check it yourself, as the network band does. The
+   * other three stay words.
+   */
+  it("links the open source item alone, to the security page's way to check", () => {
+    expect(HOME_TEXT.trust.map(({ href }) => href)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      "/security#check-it",
+    ]);
+  });
+
+  /**
    * Spec 0026, AC-8, row M2: "selectable" and "the page", never "the file",
    * and removed first, then marked.
    */
