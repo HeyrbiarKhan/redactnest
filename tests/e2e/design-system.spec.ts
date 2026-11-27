@@ -1934,8 +1934,10 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       "href",
       "#how-it-works",
     );
-    // Spec 0026, AC-8: the sections in order, the pricing cards with billing on.
+    // Spec 0026, AC-8: the sections in order, the pricing cards with billing
+    // on, and Who it's for first (the marketing brief of 2026-11-28, item 4).
     await expect(main.getByRole("heading", { level: 2 })).toHaveText([
+      "For small firms that share documents with personal details in them",
       "Three steps to a redacted PDF",
       "A black box is not redaction",
       "What RedactNest looks for and strips",
@@ -1945,6 +1947,10 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       "Redact your next PDF",
     ]);
     await expect(main.getByRole("heading", { level: 3 })).toHaveText([
+      "Recruitment agencies",
+      "HR departments",
+      "Law firms",
+      "Bookkeepers and brokers",
       "Open a PDF",
       "Tick what to remove",
       "Download your new file",

@@ -120,13 +120,27 @@ function homeJsonLd(): string {
 /** The security page's account of the check, which the black box section links to. */
 const CHECK_HREF = `${SECURITY_PATH}#${sectionId("theCheck")}`;
 
-/** The security page's way to check for yourself, which the network band links to. */
+/**
+ * The security page's way to check for yourself, which the network band and
+ * the trust strip's open source item link to.
+ */
 const CHECK_IT_HREF = `${SECURITY_PATH}#${sectionId("checkIt")}`;
 
+/** The security page's honest limits, which the line under Who it's for links to. */
+const CAN_MISS_HREF = `${SECURITY_PATH}#${sectionId("whatItCanMiss")}`;
+
 /**
- * The home page, in spec 0026 AC-8's order: the hero with a drawing of the
- * tool, How it works, the black box comparison, what RedactNest looks for
- * and strips, then a closing band.
+ * A link inside a line of text, as the guides draw one: underlined in the
+ * line's own colour, never told apart by colour alone (spec 0003, INV-8).
+ */
+const INLINE_LINK = "rounded-item font-medium underline decoration-1 underline-offset-4";
+
+/**
+ * The home page, in spec 0026 AC-8's order as the marketing brief of
+ * 2026-11-28 amends it (item 4): the hero with a drawing of the tool, the
+ * trust strip, Who it's for, How it works, the black box comparison, what
+ * RedactNest looks for and strips, the network band, the plans, the
+ * questions, then a closing band.
  *
  * Every word in the main content comes from `src/lib/home-text.ts`; the caps
  * and whether billing is on come from `config`, read here and passed in. A
@@ -279,6 +293,58 @@ export default function HomePage() {
             </ul>
           </PageContainer>
         </div>
+
+        {/*
+          Who it's for (the marketing brief of 2026-11-28, item 4): the head
+          centred, then four cards in How it works' card style without its
+          drawings, two to a row from `sm` and four from `xl` (at `lg` with
+          200% text a quarter of the row is narrower than "Recruitment"), and
+          the line under them with its link to what RedactNest can miss. A
+          card's `withPro` sentence follows its line only with billing on. No
+          padding below: How it works follows on the same white with its own.
+        */}
+        <section aria-labelledby="home-who-for-title" data-testid="home-who-for">
+          <PageContainer
+            width="wide"
+            className="flex flex-col gap-14 pt-16 sm:pt-20 lg:pt-28"
+          >
+            <SectionHead
+              id="home-who-for-title"
+              eyebrow={HOME_TEXT.whoFor.eyebrow}
+              title={HOME_TEXT.whoFor.title}
+              centred
+            />
+            <div className="flex flex-col gap-8">
+              <ul
+                role="list"
+                className="grid grid-cols-1 gap-6 wrap-break-word sm:grid-cols-2 xl:grid-cols-4"
+              >
+                {HOME_TEXT.whoFor.items.map(({ title, body, withPro }) => (
+                  <li
+                    key={title}
+                    className="flex flex-col gap-2 rounded-panel border border-border bg-surface p-6 shadow-card"
+                  >
+                    <h3 className="text-subhead text-ink">{title}</h3>
+                    <p className="text-copy text-ink-muted">
+                      {body}
+                      {withPro !== undefined && config.billingEnabled && ` ${withPro}`}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              <p
+                data-testid="home-who-for-limits"
+                className="mx-auto max-w-160 text-center text-copy text-ink-muted wrap-break-word"
+              >
+                {HOME_TEXT.whoFor.limits.before}
+                <a href={CAN_MISS_HREF} className={INLINE_LINK}>
+                  {HOME_TEXT.whoFor.limits.link}
+                </a>
+                {HOME_TEXT.whoFor.limits.after}
+              </p>
+            </div>
+          </PageContainer>
+        </section>
 
         {/*
           How it works (spec 0026, AC-8, as the owner's port of `Main.dc.html`

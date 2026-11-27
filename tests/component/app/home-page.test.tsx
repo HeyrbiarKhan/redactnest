@@ -196,6 +196,8 @@ describe("the sections and the band (spec 0026, AC-8; spec 0013, AC-11)", () => 
     expect(
       screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent),
     ).toEqual([
+      // The marketing brief of 2026-11-28, item 4: Who it's for, after the trust strip.
+      HOME_TEXT.whoFor.title,
       HOME_TEXT.steps.title,
       HOME_TEXT.blackBox.title,
       HOME_TEXT.band.title,
@@ -211,6 +213,57 @@ describe("the sections and the band (spec 0026, AC-8; spec 0013, AC-11)", () => 
         within(steps[index] as HTMLElement).getByRole("heading", { level: 3 }),
       ).toHaveTextContent(step.title);
       expect(main().getByText(step.body)).toBeInTheDocument();
+    }
+  });
+
+  /**
+   * The marketing brief of 2026-11-28, item 4: Who it's for, straight after
+   * the trust strip, its four cards in How it works' card style, each
+   * `withPro` sentence only with billing on, and the line under them linking
+   * to the security page's What it can miss.
+   */
+  it("shows Who it's for after the trust strip, its Pro sentences only with billing on", () => {
+    const { unmount } = render(<HomePage />);
+
+    const section = screen.getByTestId("home-who-for");
+    expect(section).toBe(screen.getByRole("region", { name: HOME_TEXT.whoFor.title }));
+    expect(
+      screen.getByTestId("home-trust").compareDocumentPosition(section) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      section.compareDocumentPosition(screen.getByTestId("home-steps")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(within(section).getByText(HOME_TEXT.whoFor.eyebrow)).toBeInTheDocument();
+    const cards = within(section).getAllByRole("listitem");
+    expect(cards).toHaveLength(4);
+    for (const [index, { title, body, withPro }] of HOME_TEXT.whoFor.items.entries()) {
+      const card = cards[index] as HTMLElement;
+      expect(card).toHaveClass(
+        "rounded-panel",
+        "border-border",
+        "bg-surface",
+        "shadow-card",
+      );
+      expect(within(card).getByRole("heading", { level: 3 })).toHaveTextContent(title);
+      expect(card).toHaveTextContent(withPro === undefined ? body : `${body} ${withPro}`);
+    }
+    const limits = screen.getByTestId("home-who-for-limits");
+    expect(limits).toHaveTextContent(
+      `${HOME_TEXT.whoFor.limits.before}${HOME_TEXT.whoFor.limits.link}${HOME_TEXT.whoFor.limits.after}`,
+    );
+    const link = within(limits).getByRole("link", { name: HOME_TEXT.whoFor.limits.link });
+    expect(link).toHaveAttribute("href", "/security#what-it-can-miss");
+    expect(link).toHaveClass("underline");
+    unmount();
+
+    mocks.billingEnabled = false;
+    render(<HomePage />);
+    const off = screen.getByTestId("home-who-for");
+    expect(off).not.toHaveTextContent(/\bPro\b/);
+    for (const { body } of HOME_TEXT.whoFor.items) {
+      expect(within(off).getByText(body)).toBeInTheDocument();
     }
   });
 
@@ -467,6 +520,16 @@ describe("the main content's words (AC-13)", () => {
       HOME_TEXT.shotCard.title,
       HOME_TEXT.shotCard.line,
       ...HOME_TEXT.trust.map(({ text }) => text),
+      // Who it's for (the marketing brief of 2026-11-28, item 4). The line
+      // under the cards is one run of text around its link.
+      HOME_TEXT.whoFor.eyebrow,
+      HOME_TEXT.whoFor.title,
+      ...HOME_TEXT.whoFor.items.flatMap(({ title, body, withPro }) => [
+        title,
+        body,
+        ...(withPro !== undefined && billingEnabled ? [withPro] : []),
+      ]),
+      `${HOME_TEXT.whoFor.limits.before}${HOME_TEXT.whoFor.limits.link}${HOME_TEXT.whoFor.limits.after}`,
       // The drawn window: its made up values, then the tool's own words.
       HOME_TEXT.window.file,
       HOME_TEXT.window.title,
