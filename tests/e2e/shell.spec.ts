@@ -928,6 +928,28 @@ test.describe("the sitemap and the robots file", () => {
     expect(text).toContain("Sitemap: https://redactnest.test/sitemap.xml");
     expect(text).not.toMatch(/account|sign-in|sign-up/);
   });
+
+  /**
+   * The marketing brief of 2026-11-28, item 2: `/llms.txt` as served, UTF-8
+   * plain text on the build's site, with Pro and Pricing because the build
+   * has billing on, and the source of the commit built. Its words are
+   * `tests/unit/llms-text.test.ts`'s.
+   */
+  test("/llms.txt is UTF-8 plain text built for this site", async ({ request }) => {
+    const response = await request.get("/llms.txt");
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toBe("text/plain; charset=utf-8");
+    const text = await response.text();
+
+    expect(text.startsWith("# RedactNest\n\n> PDF redaction in your browser.")).toBe(
+      true,
+    );
+    expect(text).toContain("https://redactnest.test/security#what-it-can-miss");
+    expect(text).toContain("- [Pricing](https://redactnest.test/pricing)");
+    expect(text).toContain(
+      `- [Source code](${SOURCE_URL}): the source of the version running`,
+    );
+  });
 });
 
 /** Spec 0013, AC-9. Every address that is not a page. */
