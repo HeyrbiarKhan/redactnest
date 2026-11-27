@@ -46,7 +46,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 33 | UI redesign | Release 5 | done |
 | 34 | Small fixes after the redesign | Release 5 | done |
 | 35 | Read the first month of counts | Release 6 | planned |
-| 36 | Marketing fixes | Release 5 | in-progress |
+| 36 | Marketing fixes | Release 5 | done |
 
 ## Foundations
 
@@ -548,7 +548,7 @@ no spec · code in `tests/support/claim-phrases.ts`, `tests/unit/claim-phrases.t
   - [x] `/` at 1024 pixels with 200% text, measured, fixed if still wide, and held by a browser case
 - [x] Verify it: `/check verify small fixes after the redesign`
 
-### 36. Marketing fixes · in-progress · Alpha
+### 36. Marketing fixes · done · Alpha
 The marketing chat's fixes, checked against `main` at 9f61229 and built before the counts arrive (your call, 2026-11-28): words, one static text route and one data block, with no change to `src/engine`, `src/worker`, the content security policies or `/tool`. No decision is owed, so there is no spec.
 **Done when:** `/` has its own absolute title, "PDF redaction that removes the text · RedactNest", while the root default stays "RedactNest"; `/llms.txt` is a static text route built from code (`text/plain; charset=utf-8`, not in the sitemap); `/`'s one JSON-LD element is a `@graph` of today's `WebSite` and a `SoftwareApplication` with its offers, priced from a numeric amount and currency added to `PRO_PLAN`, with no rating, review or count; `/` has the "Who it's for" section after the trust strip, the trust strip's AGPL item links to `/security#check-it`, and the network band sits straight after the black box section; `/pricing` has its four questions below the billing notes, in the home page's questions pattern; and the Pro card's custom terms line no longer says "found wherever they appear". Detector names, caps, the term count and the price come from `detectors.ts`, `config` and `plans.ts`, and anything about Pro shows only with billing on.
 **Also owed here:** these pages describe the engine, so every new line holds under spec 0018's AC-5 and spec 0024's claim register (the rule the brief calls "Writing pages that describe the engine"), and passes both lists in `tests/support/claim-phrases.ts`, `/llms.txt`'s text included, and the home page's tests (spec 0013's INV-1 and the AC-30 idea counts). A line a test catches goes back to you for a rewording; no list is loosened. The pricing questions say what the terms say on cancelling and refunds, take every cap from `config` (spec 0012, INV-8 and INV-9), and never suggest splitting a file. The home order in spec 0026's AC-8 and the `WebSite` block in spec 0024's AC-11 both change, so each gets an as built line. The reflow cases at 320 and 305 pixels and at 1024 pixels with 200% text cover the new section and the questions, and verify's page walk reads the changed lines only. After the deploy, you change the Polar product description, which carries the same "found wherever they appear" line.
