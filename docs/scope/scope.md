@@ -557,7 +557,7 @@ brief [marketing-fixes-2026-11-28](../briefs/marketing-fixes-2026-11-28.md) · n
   - [x] The home title, `/llms.txt` with its banned phrase test, and the JSON-LD `@graph` with `PRO_PLAN`'s amount and currency (brief items 1 to 3)
   - [x] The home page: "Who it's for", the trust strip's link and the network band's move, with the idea counts and reflow cases (items 4 and 5)
   - [x] `/pricing`'s questions and the Pro card's custom terms line (items 6 and 7)
-- [ ] Verify it: `/check verify marketing fixes`, walking the changed lines only
+- [x] Verify it: `/check verify marketing fixes`, walking the changed lines only
 
 ### 23. Legal review · needs a decision · Alpha · from spec 0011
 The lawyer questions launch left open, asked once RedactNest has 100+ users, on a tech lawyer's advice (2026-10-03). PECA section 32, Pakistani law and courts, and a full review of both pages (spec 0011 steps 3 and 4), plus two from spec 0012: does Polar's own use of billing details as merchant of record (fraud, security, tax records) make it a controller for that part, and does every cookie claim C6 calls strictly necessary meet that exemption, given Clerk's `__refresh_<suffix>` stays after sign out on production. It sits before feature 17 because the Polar answer can change what the DPA says.
