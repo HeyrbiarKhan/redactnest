@@ -78,11 +78,11 @@ _These are the steps the "Owed later" line above names for AC-19 to AC-30; the t
 - [x] Same page → the avatar shows the address's first letter, uppercased; open the menu by keyboard → the address, the plan line ("Free · 3 pages a document" or "Pro · 50 pages a document" with this build's caps), then Account, Upgrade to Pro (Free) or Billing (Pro), Redact a PDF, Sign out → AC-22, AC-23 (values: the email claim; tier and account from the same answer; caps from `config` through `countText`; names from `plans.ts`)
 - [x] Change the account's primary address in Clerk's dashboard, reload `/` without opening an account page → the header keeps the old letter; open Account, then `/` → the new one → AC-21 (value: the claim is frozen when Clerk issues the token) _(2026-11-26 second verify: the primary swapped through Clerk's Backend API, not the dashboard; "W" on reload and again 65 s later, past the token's 60 s life, each answer still the old address; "M" after `/account`; the primary swapped back after)_
 - [x] Sign out, then visit `/` → no request to `/api/entitlement`, Sign in and Try it free → AC-19, AC-29
-- [ ] Signed in with a Pro account on `/tool` → one `GET /api/entitlement`, the same count as signed out; the Pro chip before the avatar; no Open the tool; in the menu, Account and Billing open new tabs and there is no Redact a PDF → AC-19, AC-22, AC-23, AC-29 _(2026-11-26 verify: owed, walked on production after the deploy; the sandbox account is Free (the owner's call))_
+- [x] Signed in with a Pro account on `/tool` → one `GET /api/entitlement`, the same count as signed out; the Pro chip before the avatar; no Open the tool; in the menu, Account and Billing open new tabs and there is no Redact a PDF → AC-19, AC-22, AC-23, AC-29 _(2026-11-26 verify: owed, walked on production after the deploy; the sandbox account is Free (the owner's call). Walked by the owner on production with their Pro account, 2026-11-26 to 2026-11-27: see *Live check* below)_
 - [x] On `/tool`, open a PDF, change a tick, open the menu, Sign out → the leave warning first; leave → `/sign-out` shows the spinner and "Signing you out", then lands on `/` signed out, with Sign in in the header and no request → AC-26, AC-29 (value: the landing is `HOME_PATH`)
 - [x] `/sign-out` while signed in, axe through `.playwright-mcp/axe-run.js` → no violations, at desktop width, at 320 pixels and in forced colours → AC-16, AC-26 _(desktop and 320 on 2026-11-26's AC-29 walk; forced colours in task 14's walk below)_
 - [x] Block `*.clerk.accounts.dev` in DevTools, visit `/sign-out` signed in → "We couldn't sign you out. Check your connection, then reload this page." in `danger-ink`, and Go to the home page as a plain link → AC-26
-- [ ] Production, after the deploy: confirm the claim is on the production instance, then repeat the `/` signed in, `/` signed out and `/tool` steps → AC-29
+- [x] Production, after the deploy: confirm the claim is on the production instance, then repeat the `/` signed in, `/` signed out and `/tool` steps → AC-29 _(passed, 2026-11-26 to 2026-11-27: see *Live check* below)_
 
 **Walk results, 2026-11-26** (`pnpm dev` on d69903a, Clerk's development instance, new account `walk-2611+clerk_test@redactnest.com`, Free, signed up with code 424242; the only PDF opened was `tests/fixtures/sample-agreement.pdf`):
 - Passed: `__client_uat` and `__client_uat_<suffix>` readable, both 1795693677, and the session token carries `email`.
@@ -164,3 +164,11 @@ _`/check verify` on feat/ui-redesign at f4eaa34, only the open steps and what ch
 - Passed: the address change step (child 0001 AC-21), above. The walk account keeps a second address, `mwalk-2611+clerk_test`, no longer primary.
 - Passed: the three Narrator steps, walked by the owner (steps above).
 - Verdict: PASS for every step that can run before the deploy. Owed: the live device scale switch (the owner's call, still blocked in Chromium's emulation), the Pro chip on `/tool` and the production steps, after the deploy.
+
+## Live check · 2026-11-27
+_After the deploy of PR #39 (7104fe1, tag `prod-2026-11-26-7104fe1`), on production. As reported by the owner._
+- Passed: the session token claim `email` was added on Clerk's production instance before the merge (2026-11-26), as spec 0012's Go live step 10 asks.
+- Passed: the signed out live check (Claude).
+- Passed: the signed in check with the owner's Pro account: the avatar letter, the menu with the Pro plan line, the Pro chip on `/tool`, and Sign out landing back on the signed out header.
+- Passed: Go live step 10's last part: the new image uploaded to Polar, with the product description updated.
+- Owed: the live device scale switch (the 1x then 2x step above), which needs a person moving the window to a screen with another scale.

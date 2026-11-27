@@ -109,7 +109,7 @@ export interface ReportMemory {
 /**
  * This server instance's memory of its error reports. A deliberate cache, the
  * module level state `AGENTS.md` allows: `sent` holds at most one entry for
- * each report shape, 142 (16 route kinds by 5 route types, 14 page kinds by 2
+ * each report shape, 144 (16 route kinds by 5 route types, 15 page kinds by 2
  * crash sources, 4 billing actions by 8 outcomes, and the two reports with no
  * fields), and `pageDays` one day, so neither needs pruning. Each bundle holds
  * its own, the proxy's apart from the server's, and a cold start begins empty.

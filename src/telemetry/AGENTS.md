@@ -21,7 +21,7 @@ Counts and failure reports, never document content. Pages and server code build 
 - Telemetry never changes what a visitor sees or waits for (INV-3): `report` and `reportServer` return nothing and never throw, and `forward` swallows every failure and never retries. The one wait is `reportCrash`, on a server failure already under way: at most 3 seconds, and only the first in an hour for each report.
 - `onRequestError` and the proxy read nothing from the error or the request, only the route kind and route type, or the frozen `PROXY_CRASH`. A stack stays in Vercel's one day runtime logs.
 - `UMAMI_SEND_URL`, `TELEMETRY_USER_AGENT` and `UMAMI_MAX_PROPERTIES` are rules about a service. The first and last are commented with the docs page and the day it was read, and `TELEMETRY_USER_AGENT` with the isbot version that passed it and the day. `REPORT_WINDOW_MS`, `PAGE_REPORTS_PER_DAY` and `SINK_TIMEOUT_MS` are rules about reporting. None is a cap on the visitor, so all of them live here, not in `src/config`, as the engine's constants do.
-- Two pieces of module level state, both deliberate caches: `REPORT_MEMORY` in `server.ts` (at most 142 keys and one day) and `SENT` in `client.ts` (at most 30 keys, never browser storage). Each bundle holds its own memory (the proxy's, the hook's and the route's apart), and a cold start begins empty.
+- Two pieces of module level state, both deliberate caches: `REPORT_MEMORY` in `server.ts` (at most 144 keys and one day) and `SENT` in `client.ts` (at most 32 keys, never browser storage). Each bundle holds its own memory (the proxy's, the hook's and the route's apart), and a cold start begins empty.
 - No `console` here either: the log ban stays whole in every zone (AC-24, claim C8).
 
 ## Production setup (outside the repo)

@@ -2490,6 +2490,67 @@ test.describe("the cursor (spec 0013, AC-33)", () => {
 });
 
 /**
+ * Every box and every run of text in the page ends inside the window, and,
+ * with `contentInsideBoxes`, no box in `main` holds content wider than
+ * itself, so what was too wide wraps or shrinks rather than spilling past its
+ * card or being clipped.
+ * Text runs are read as well as boxes, because a word wider than its box
+ * spills without moving the box.
+ *
+ * At 305 pixels alone, the text loop passes over the skip link's words. The
+ * link is `sr-only` until it takes focus, a 1 pixel clipped box that scrolls
+ * nothing, but a range over its text reports the words unclipped, 309 pixels
+ * at 200% text, past a 305 window. The scroll check and the box loop are the
+ * same at both widths, and at 320 the text loop keeps the skip link's words.
+ * Spec 0024, *The lockup at narrow widths*.
+ *
+ * The text loop passes over every other visually hidden word for the same
+ * reason: the header's Menu button sits at the row's right edge, and its
+ * `sr-only` name reads 4 pixels past the window at 200% text, though it
+ * draws and scrolls nothing (`ROW_UNLESS_NARROW` put the button there).
+ */
+async function expectNothingPastTheWindow(
+  page: Page,
+  checks: { readonly passOverSkipLink: boolean; readonly contentInsideBoxes: boolean },
+): Promise<void> {
+  await expectNoHorizontalScroll(page);
+  // Passed in, because the callback runs in the browser and sees no test variable.
+  const spills = await page.evaluate(({ passOverSkipLink, contentInsideBoxes }) => {
+    const limit = document.documentElement.clientWidth;
+    const found: string[] = [];
+    for (const element of document.querySelectorAll("body *")) {
+      const box = element.getBoundingClientRect();
+      if (box.width > 0 && box.right > limit + 0.5) {
+        found.push(`box past the window: ${element.tagName}`);
+      }
+    }
+    for (const element of contentInsideBoxes ? document.querySelectorAll("main *") : []) {
+      // A visually hidden word (a callout's tone, spec 0003, INV-8) is a 1
+      // pixel clipped box that scrolls nothing and shows nothing.
+      if (element.closest(".sr-only") !== null) continue;
+      // An inline box reports no width of its own to compare.
+      if (element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1) {
+        found.push(`content wider than its box: ${element.tagName}`);
+      }
+    }
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const skipLink = node.parentElement?.closest('a[href="#main"]');
+      if (skipLink && passOverSkipLink) continue;
+      if (!skipLink && node.parentElement?.closest(".sr-only")) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const box = range.getBoundingClientRect();
+      if (box.width > 0 && box.right > limit + 0.5) {
+        found.push(`text past the window: ${node.textContent?.trim().slice(0, 30)}`);
+      }
+    }
+    return found;
+  }, checks);
+  expect(spills).toEqual([]);
+}
+
+/**
  * Spec 0024, AC-14 (feature 29), and spec 0013's AC-26 as it amends it: 320
  * pixels and 200% text at once, which together are roughly 800% zoom. WCAG
  * does not ask for that, but a visitor who needs both meets it, and on `/` the
@@ -2515,63 +2576,6 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
     "/security",
   ] as const;
 
-  /**
-   * Every box and every run of text in the page ends inside the window, and
-   * no box in `main` holds content wider than itself, so what was too wide
-   * wraps or shrinks rather than spilling past its card or being clipped.
-   * Text runs are read as well as boxes, because a word wider than its box
-   * spills without moving the box.
-   *
-   * At 305 pixels alone, the text loop passes over the skip link's words. The
-   * link is `sr-only` until it takes focus, a 1 pixel clipped box that scrolls
-   * nothing, but a range over its text reports the words unclipped, 309 pixels
-   * at 200% text, past a 305 window. The scroll check and the box loop are the
-   * same at both widths, and at 320 the text loop keeps the skip link's words.
-   * Spec 0024, *The lockup at narrow widths*.
-   *
-   * The text loop passes over every other visually hidden word for the same
-   * reason: the header's Menu button sits at the row's right edge, and its
-   * `sr-only` name reads 4 pixels past the window at 200% text, though it
-   * draws and scrolls nothing (`ROW_UNLESS_NARROW` put the button there).
-   */
-  async function expectNothingPastTheWindow(page: Page, width: 320 | 305): Promise<void> {
-    await expectNoHorizontalScroll(page);
-    // Passed in, because the callback runs in the browser and sees no test variable.
-    const spills = await page.evaluate((passOverSkipLink) => {
-      const limit = document.documentElement.clientWidth;
-      const found: string[] = [];
-      for (const element of document.querySelectorAll("body *")) {
-        const box = element.getBoundingClientRect();
-        if (box.width > 0 && box.right > limit + 0.5) {
-          found.push(`box past the window: ${element.tagName}`);
-        }
-      }
-      for (const element of document.querySelectorAll("main *")) {
-        // A visually hidden word (a callout's tone, spec 0003, INV-8) is a 1
-        // pixel clipped box that scrolls nothing and shows nothing.
-        if (element.closest(".sr-only") !== null) continue;
-        // An inline box reports no width of its own to compare.
-        if (element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1) {
-          found.push(`content wider than its box: ${element.tagName}`);
-        }
-      }
-      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        const skipLink = node.parentElement?.closest('a[href="#main"]');
-        if (skipLink && passOverSkipLink) continue;
-        if (!skipLink && node.parentElement?.closest(".sr-only")) continue;
-        const range = document.createRange();
-        range.selectNodeContents(node);
-        const box = range.getBoundingClientRect();
-        if (box.width > 0 && box.right > limit + 0.5) {
-          found.push(`text past the window: ${node.textContent?.trim().slice(0, 30)}`);
-        }
-      }
-      return found;
-    }, width === 305);
-    expect(spills).toEqual([]);
-  }
-
   // 305 is 320 less a classic scrollbar. Spec 0024, *The lockup at narrow widths*.
   for (const width of [320, 305] as const) {
     for (const path of REFLOW_PAGES) {
@@ -2582,12 +2586,13 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
         await page.goto(path);
         await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
 
-        await expectNothingPastTheWindow(page, width);
+        const checks = { passOverSkipLink: width === 305, contentInsideBoxes: true };
+        await expectNothingPastTheWindow(page, checks);
 
         const header = page.getByRole("banner");
         await header.getByRole("button", { name: "Menu", exact: true }).click();
         await expect(header.getByRole("link", { name: "Try it free" })).toBeVisible();
-        await expectNothingPastTheWindow(page, width);
+        await expectNothingPastTheWindow(page, checks);
       });
     }
   }
@@ -2631,6 +2636,38 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
 });
 
 /**
+ * Feature 34: `/` at 1024 pixels with 200% text, and the two guides that
+ * carry the same "Checked before you download" card. Before the redesign that
+ * card ended at 1027.2 pixels on all three (measured by `/develop`,
+ * 2026-11-23). On the new look every page's content ends at 960, 64 pixels
+ * inside the window on Windows (measured 2026-11-28), so nothing changed and
+ * this case holds it. Linux draws Inter a few pixels wider, well inside that.
+ *
+ * It holds what reaches past the window, not content wider than its box: at
+ * this width How it works keeps three columns, and its sample rows squeeze
+ * inside their card, a separate defect feature 34 found and left for a fix of
+ * its own.
+ */
+test.describe("1024 pixels with 200% text (feature 34)", () => {
+  for (const path of ["/", "/redact-pdf", "/remove-text-from-pdf"] as const) {
+    test(`${path} at 1024 pixels: nothing past the window`, async ({ page }) => {
+      await page.setViewportSize({ width: 1024, height: 800 });
+      await page.goto(path);
+      await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+      // Measure the words in Inter, never in the fallback face.
+      await page.evaluate(async () => {
+        await document.fonts.ready;
+      });
+
+      await expectNothingPastTheWindow(page, {
+        passOverSkipLink: false,
+        contentInsideBoxes: false,
+      });
+    });
+  }
+});
+
+/**
  * Spec 0024, AC-17, *The footer at 200% text*. From `md` the footer is two
  * columns, the brand and the link groups. The Guides group widened the groups'
  * line, and with the brand column free to shrink to nothing, "RedactNest" lay
@@ -2640,9 +2677,9 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
  * Every check compares a box with a box, never a pixel figure, because Linux
  * draws text about 3 pixels wider than Windows (CI run 45146529620), so both
  * sides move together. The footer is the root layout's, the same on every
- * page, so `/` stands for all of them. Nothing reads the page's `scrollWidth`:
- * `/` at 1024 pixels with 200% text is wider than the window from its main
- * content (the spec's Follow-up), not from the footer.
+ * page, so `/` stands for all of them. Nothing reads the page's `scrollWidth`
+ * here: the page's width at 1024 pixels with 200% text is feature 34's case,
+ * above.
  */
 test.describe("the footer from md (spec 0024, AC-17)", () => {
   for (const width of [1280, 1024, 768] as const) {

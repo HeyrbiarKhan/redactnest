@@ -39,7 +39,13 @@ export const MARKETING_BANNED_PHRASES: readonly string[] = Object.freeze([
   "is stripped",
 ]);
 
-/** A phrase as a whole word pattern in any case, its spaces any run of white space. */
+/**
+ * A phrase as a whole word pattern in any case, its spaces any run of white
+ * space. Built with `String.raw`, because a plain template literal reads `\b`
+ * as a backspace and `\s` as the letter s, and the pattern then matches no
+ * page at all (it did, from 9693896 until feature 34). Every phrase is plain
+ * words, so nothing in one needs escaping (`tests/unit/claim-phrases.test.ts`).
+ */
 export function phrasePattern(phrase: string): RegExp {
-  return new RegExp(`\b${phrase.split(" ").join("\s+")}\b`, "i");
+  return new RegExp(String.raw`\b${phrase.split(" ").join(String.raw`\s+`)}\b`, "i");
 }
