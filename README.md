@@ -4,8 +4,6 @@ A web tool that truly redacts PDFs. Text is removed from the content stream and
 metadata is stripped, never covered with a black box. The document is opened in
 the visitor's own browser and is never uploaded.
 
-Architecture and the reasoning behind it:
-[spec 0001](docs/specs/0001-browser-only-redaction-stack/index.md).
 
 ## Licence
 
