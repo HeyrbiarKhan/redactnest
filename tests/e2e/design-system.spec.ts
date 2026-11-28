@@ -2612,40 +2612,61 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
 
   /**
    * The fix leaves wider screens as they were: `/`'s hero, trio and band at
-   * 1280 pixels, recorded from the build before it as x, y and width. Within
-   * a pixel, so a rounding difference between machines is not a change.
+   * 1280 pixels keep their x, y and width. Within a pixel, for rounding.
    *
-   * No height is recorded, because a box's height follows its wrapped text and
-   * Linux draws Inter a few pixels wider than Windows, where these were read:
-   * on CI the band's Looks for chips wrapped one more row (44 pixels, 36 and a
-   * gap of 8) with nothing moved (CI run 45842120945). The hero's height and
-   * the trio's are still held, by the y of the box below each.
+   * Both sides are measured in this run, never recorded on one machine: Linux
+   * draws Inter a few pixels wider than Windows, so a card's words wrap
+   * differently and every section below it lands at another height (CI run
+   * 46076958264, How it works 28 pixels lower than the Windows figure). The
+   * page is measured as served, then again with the fix's narrow width rules
+   * turned off inside `main`: every word break (`wrap-break-word`,
+   * `wrap-anywhere`) and every zero floor on a flex or grid item (`min-w-0`).
+   * Those rules may only act where a word cannot fit a line alone, so at 1280
+   * pixels the two layouts are the same. The fix's other rule, a card that
+   * stacks its tile under 12rem, is a container query, and at 1280 every card
+   * is far wider than that. The hero's height and the trio's are held by the
+   * y of the box below each.
    */
   test("/: keeps the hero, the trio and the band where they were at 1280 pixels", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/");
+    // Measure the words in Inter, never in the fallback face.
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+    });
 
-    for (const [box, recorded] of [
-      // Recorded again for the owner's port of `Main.dc.html` (2026-11-25):
-      // the hero, the How it works cards and the band. The two y figures
-      // again for the marketing brief of 2026-11-28 (items 4 and 5): Who it's
-      // for sits above How it works, and the network band above the band.
-      // Every x and width, and the hero, stayed as they were.
-      [page.getByTestId("home-hero"), [82, 153, 1116]],
-      [page.getByTestId("home-steps").getByRole("list"), [82, 1719.8, 1116]],
-      [page.getByTestId("home-band"), [82, 3270.1, 1116]],
-    ] as const) {
-      const measured = await box.boundingBox();
-      if (measured === null) throw new Error("a recorded box is not drawn");
-      const [x, y, width] = recorded;
-      for (const [value, was] of [
-        [measured.x, x],
-        [measured.y, y],
-        [measured.width, width],
+    const boxes = [
+      page.getByTestId("home-hero"),
+      page.getByTestId("home-steps").getByRole("list"),
+      page.getByTestId("home-band"),
+    ] as const;
+    const measure = async () =>
+      Promise.all(
+        boxes.map(async (box) => {
+          const measured = await box.boundingBox();
+          if (measured === null) throw new Error("a measured box is not drawn");
+          return measured;
+        }),
+      );
+
+    const served = await measure();
+    await page.addStyleTag({
+      content:
+        "main, main * { overflow-wrap: normal !important; word-break: normal !important; min-width: auto !important; }",
+    });
+    const withoutFix = await measure();
+
+    for (const [index, was] of withoutFix.entries()) {
+      const measured = served[index];
+      if (measured === undefined) throw new Error("a measured box is missing");
+      for (const [value, before] of [
+        [measured.x, was.x],
+        [measured.y, was.y],
+        [measured.width, was.width],
       ] as const) {
-        expect(Math.abs(value - was)).toBeLessThanOrEqual(1);
+        expect(Math.abs(value - before)).toBeLessThanOrEqual(1);
       }
     }
   });
