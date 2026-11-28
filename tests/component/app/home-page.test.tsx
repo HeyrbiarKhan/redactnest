@@ -196,10 +196,13 @@ describe("the sections and the band (spec 0026, AC-8; spec 0013, AC-11)", () => 
     expect(
       screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent),
     ).toEqual([
+      // The marketing brief of 2026-11-28, item 4: Who it's for, after the trust strip.
+      HOME_TEXT.whoFor.title,
       HOME_TEXT.steps.title,
       HOME_TEXT.blackBox.title,
-      HOME_TEXT.band.title,
+      // Item 5: the network band straight after the black box section.
       HOME_TEXT.network.title,
+      HOME_TEXT.band.title,
       HOME_TEXT.pricing.title,
       HOME_TEXT.questions.title,
       HOME_TEXT.closing,
@@ -212,6 +215,74 @@ describe("the sections and the band (spec 0026, AC-8; spec 0013, AC-11)", () => 
       ).toHaveTextContent(step.title);
       expect(main().getByText(step.body)).toBeInTheDocument();
     }
+  });
+
+  /**
+   * The marketing brief of 2026-11-28, item 4: Who it's for, straight after
+   * the trust strip, its four cards in How it works' card style, each
+   * `withPro` sentence only with billing on, and the line under them linking
+   * to the security page's What it can miss.
+   */
+  it("shows Who it's for after the trust strip, its Pro sentences only with billing on", () => {
+    const { unmount } = render(<HomePage />);
+
+    const section = screen.getByTestId("home-who-for");
+    expect(section).toBe(screen.getByRole("region", { name: HOME_TEXT.whoFor.title }));
+    expect(
+      screen.getByTestId("home-trust").compareDocumentPosition(section) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      section.compareDocumentPosition(screen.getByTestId("home-steps")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(within(section).getByText(HOME_TEXT.whoFor.eyebrow)).toBeInTheDocument();
+    const cards = within(section).getAllByRole("listitem");
+    expect(cards).toHaveLength(4);
+    for (const [index, { title, body, withPro }] of HOME_TEXT.whoFor.items.entries()) {
+      const card = cards[index] as HTMLElement;
+      expect(card).toHaveClass(
+        "rounded-panel",
+        "border-border",
+        "bg-surface",
+        "shadow-card",
+      );
+      expect(within(card).getByRole("heading", { level: 3 })).toHaveTextContent(title);
+      expect(card).toHaveTextContent(withPro === undefined ? body : `${body} ${withPro}`);
+    }
+    const limits = screen.getByTestId("home-who-for-limits");
+    expect(limits).toHaveTextContent(
+      `${HOME_TEXT.whoFor.limits.before}${HOME_TEXT.whoFor.limits.link}${HOME_TEXT.whoFor.limits.after}`,
+    );
+    const link = within(limits).getByRole("link", { name: HOME_TEXT.whoFor.limits.link });
+    expect(link).toHaveAttribute("href", "/security#what-it-can-miss");
+    expect(link).toHaveClass("underline");
+    unmount();
+
+    mocks.billingEnabled = false;
+    render(<HomePage />);
+    const off = screen.getByTestId("home-who-for");
+    expect(off).not.toHaveTextContent(/\bPro\b/);
+    for (const { body } of HOME_TEXT.whoFor.items) {
+      expect(within(off).getByText(body)).toBeInTheDocument();
+    }
+  });
+
+  /**
+   * The marketing brief of 2026-11-28, item 5: the trust strip keeps its four
+   * items, and the open source one is a link to the security page's Check it
+   * yourself, underlined and at least 24 pixels tall (WCAG 2.5.8).
+   */
+  it("keeps four trust items and links the open source one to the security page", () => {
+    render(<HomePage />);
+
+    const strip = within(screen.getByTestId("home-trust"));
+    expect(strip.getAllByRole("listitem")).toHaveLength(4);
+    const links = strip.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAccessibleName("Open source (AGPL), so you can check it");
+    expect(links[0]).toHaveAttribute("href", "/security#check-it");
+    expect(links[0]).toHaveClass("underline", "min-h-6");
   });
 
   /**
@@ -467,6 +538,16 @@ describe("the main content's words (AC-13)", () => {
       HOME_TEXT.shotCard.title,
       HOME_TEXT.shotCard.line,
       ...HOME_TEXT.trust.map(({ text }) => text),
+      // Who it's for (the marketing brief of 2026-11-28, item 4). The line
+      // under the cards is one run of text around its link.
+      HOME_TEXT.whoFor.eyebrow,
+      HOME_TEXT.whoFor.title,
+      ...HOME_TEXT.whoFor.items.flatMap(({ title, body, withPro }) => [
+        title,
+        body,
+        ...(withPro !== undefined && billingEnabled ? [withPro] : []),
+      ]),
+      `${HOME_TEXT.whoFor.limits.before}${HOME_TEXT.whoFor.limits.link}${HOME_TEXT.whoFor.limits.after}`,
       // The drawn window: its made up values, then the tool's own words.
       HOME_TEXT.window.file,
       HOME_TEXT.window.title,
@@ -579,31 +660,105 @@ describe("the main content's words (AC-13)", () => {
 });
 
 /**
- * AC-13, as spec 0024's AC-11 amends it: the page keeps the layout's title,
- * and exports the site line as its description and a canonical to the root.
+ * AC-13, as spec 0024's AC-11 amends it: the page exports the site line as
+ * its description and a canonical to the root. Its own title is absolute (the
+ * marketing brief of 2026-11-28, item 1), so the layout's default stays.
  */
 describe("the home page's metadata (AC-13; spec 0024, AC-11)", () => {
-  it("exports the site line and a canonical to the root, and no title", () => {
+  it("exports its own absolute title, the site line and a canonical to the root", () => {
     expect(Object.keys(homePage).sort()).toEqual(["default", "metadata"]);
     expect(homePage.metadata).toEqual({
+      title: { absolute: "PDF redaction that removes the text · RedactNest" },
       description: HOME_TEXT.siteLine,
       alternates: { canonical: "/" },
     });
   });
 
-  /** Spec 0024, AC-11: one data block, the trading name and the site's address. */
-  it("carries one WebSite block the browser never runs", () => {
+  /**
+   * Spec 0024, AC-11, as the marketing brief of 2026-11-28 (item 3) widens
+   * it: one data block, a `@graph` of the `WebSite` and the
+   * `SoftwareApplication`, every cap from `config` and Pro's price from
+   * `PRO_PLAN`'s amount and currency.
+   */
+  it("carries one @graph block the browser never runs, with both offers", () => {
     const { container } = render(<HomePage />);
 
     const scripts = container.querySelectorAll("script");
     expect(scripts).toHaveLength(1);
     expect(scripts[0]).toHaveAttribute("type", "application/ld+json");
+    const home = `${config.siteUrl}/`;
     expect(JSON.parse(scripts[0].textContent ?? "")).toEqual({
       "@context": "https://schema.org",
-      "@type": "WebSite",
-      name: "RedactNest",
-      url: config.siteUrl,
+      "@graph": [
+        { "@type": "WebSite", "@id": `${home}#website`, name: "RedactNest", url: home },
+        {
+          "@type": "SoftwareApplication",
+          "@id": `${home}#app`,
+          name: "RedactNest",
+          url: home,
+          applicationCategory: "BusinessApplication",
+          operatingSystem: "Web browser",
+          description: HOME_TEXT.siteLine,
+          license: "https://www.gnu.org/licenses/agpl-3.0.html",
+          offers: [
+            {
+              "@type": "Offer",
+              name: "Free",
+              price: "0",
+              priceCurrency: "USD",
+              description: `Up to ${config.freePageCap} pages per document`,
+              url: `${config.siteUrl}/tool`,
+            },
+            {
+              "@type": "Offer",
+              name: "Pro",
+              price: "19",
+              priceCurrency: "USD",
+              description: `Up to ${config.maxPages} pages per document, plus up to ${config.maxCustomTerms} custom terms`,
+              url: `${config.siteUrl}/pricing`,
+              priceSpecification: {
+                "@type": "UnitPriceSpecification",
+                price: "19",
+                priceCurrency: "USD",
+                billingDuration: "P1M",
+                unitCode: "MON",
+              },
+            },
+          ],
+        },
+      ],
     });
     expect(scripts[0].textContent).not.toContain("<");
+  });
+
+  it("takes each offer's caps from config", () => {
+    mocks.caps = { free: 7, paid: 90 };
+    const { container } = render(<HomePage />);
+
+    const text = container.querySelector("script")?.textContent ?? "";
+    expect(text).toContain('"description":"Up to 7 pages per document"');
+    expect(text).toContain('"description":"Up to 90 pages per document, plus up to');
+  });
+
+  /** Spec 0012, AC-23: with billing off there is no Pro to offer. */
+  it("offers Free alone with billing off", () => {
+    mocks.billingEnabled = false;
+    const { container } = render(<HomePage />);
+
+    const data = JSON.parse(container.querySelector("script")?.textContent ?? "") as {
+      "@graph": [unknown, { offers: { name: string }[] }];
+    };
+    expect(data["@graph"][1].offers.map(({ name }) => name)).toEqual(["Free"]);
+    expect(container.querySelector("script")?.textContent).not.toContain("Pro");
+  });
+
+  /** Spec 0013, INV-1: nothing implies a user base. */
+  it("carries no rating, review or count", () => {
+    const { container } = render(<HomePage />);
+
+    // Schema.org's own keys, so "operatingSystem" is not read as a rating.
+    expect(container.querySelector("script")?.textContent).not.toMatch(
+      /aggregateRating|ratingValue|ratingCount|"review"|reviewCount|interactionStatistic|userInteractionCount/,
+    );
   });
 });

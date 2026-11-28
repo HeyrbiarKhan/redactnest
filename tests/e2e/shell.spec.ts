@@ -772,7 +772,7 @@ test.describe("the head on / and the search pages", () => {
   const meta = (page: Page, selector: string) =>
     page.locator(selector).first().getAttribute("content");
 
-  test("/ carries the site line, a canonical to the root and the WebSite block", async ({
+  test("/ carries the site line, a canonical to the root and the @graph block", async ({
     page,
   }) => {
     await page.goto("/");
@@ -785,11 +785,28 @@ test.describe("the head on / and the search pages", () => {
     await expect(page.locator('link[rel="manifest"]')).toHaveCount(0);
     const blocks = page.locator('script[type="application/ld+json"]');
     await expect(blocks).toHaveCount(1);
-    expect(JSON.parse((await blocks.textContent()) ?? "")).toEqual({
+    // The marketing brief of 2026-11-28, item 3: the WebSite and the
+    // application with both offers, since this build sells Pro. The caps and
+    // every other field are the component test's.
+    expect(JSON.parse((await blocks.textContent()) ?? "")).toMatchObject({
       "@context": "https://schema.org",
-      "@type": "WebSite",
-      name: "RedactNest",
-      url: SITE,
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": `${SITE}/#website`,
+          name: "RedactNest",
+          url: `${SITE}/`,
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": `${SITE}/#app`,
+          description: SITE_LINE,
+          offers: [
+            { name: "Free", price: "0", priceCurrency: "USD", url: `${SITE}/tool` },
+            { name: "Pro", price: "19", priceCurrency: "USD", url: `${SITE}/pricing` },
+          ],
+        },
+      ],
     });
   });
 
@@ -928,6 +945,28 @@ test.describe("the sitemap and the robots file", () => {
     expect(text).toContain("Sitemap: https://redactnest.test/sitemap.xml");
     expect(text).not.toMatch(/account|sign-in|sign-up/);
   });
+
+  /**
+   * The marketing brief of 2026-11-28, item 2: `/llms.txt` as served, UTF-8
+   * plain text on the build's site, with Pro and Pricing because the build
+   * has billing on, and the source of the commit built. Its words are
+   * `tests/unit/llms-text.test.ts`'s.
+   */
+  test("/llms.txt is UTF-8 plain text built for this site", async ({ request }) => {
+    const response = await request.get("/llms.txt");
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toBe("text/plain; charset=utf-8");
+    const text = await response.text();
+
+    expect(text.startsWith("# RedactNest\n\n> PDF redaction in your browser.")).toBe(
+      true,
+    );
+    expect(text).toContain("https://redactnest.test/security#what-it-can-miss");
+    expect(text).toContain("- [Pricing](https://redactnest.test/pricing)");
+    expect(text).toContain(
+      `- [Source code](${SOURCE_URL}): the source of the version running`,
+    );
+  });
 });
 
 /** Spec 0013, AC-9. Every address that is not a page. */
@@ -1017,5 +1056,27 @@ test.describe("the pricing page", () => {
       () => performance.getEntriesByType("navigation")[0]?.name ?? "",
     );
     expect(new URL(loadedAt).pathname).toBe("/tool");
+  });
+
+  /**
+   * The marketing brief of 2026-11-28, item 6: the refund answer's link to
+   * the terms sits in a closed disclosure, so the whole page walk passes it
+   * by. Opened from the keyboard, the next Tab reaches it, with its ring.
+   */
+  test("reaches the refund answer's link to the terms once its question is open", async ({
+    page,
+  }) => {
+    await page.goto("/pricing");
+
+    const questions = page.getByTestId("pricing-questions");
+    const refunds = questions.locator("summary", { hasText: "Do you give refunds?" });
+    await refunds.focus();
+    await page.keyboard.press("Enter");
+    await expect(refunds.locator("xpath=..")).toHaveAttribute("open", "");
+    await page.keyboard.press("Tab");
+    const terms = questions.getByRole("link", { name: "Terms of service" });
+    await expect(terms).toBeFocused();
+    await expect(terms).toHaveAttribute("href", "/terms");
+    expect(await terms.evaluate((link) => link.matches(":focus-visible"))).toBe(true);
   });
 });

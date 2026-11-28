@@ -29,12 +29,14 @@ import { Code, Monitor, Shield, Trash2, type LucideIcon } from "lucide-react";
 import { DETECTOR_LABELS, lookedFor } from "@/lib/detectors";
 import { SANITIZED_TEXT } from "@/lib/flow-text";
 import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
+import { sectionId } from "@/lib/policy-sections";
 import { removeTextTermsLine } from "@/lib/search-pages";
 import {
   ENGINE_PREFIX,
   ENTITLEMENT_PATH,
   ICON_PATHS,
   NEXT_FILES_PREFIX,
+  SECURITY_PATH,
   TELEMETRY_PATH,
   TOOL_PATH,
 } from "@/lib/routes";
@@ -43,16 +45,50 @@ import { DETECTOR_KINDS, SANITIZED_KINDS, type SanitizedKind } from "@/worker/pr
 
 const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
+/**
+ * The detectors' own nouns, which the Who it's for lines name in their
+ * sentences, so a renamed detector renames its line (the marketing brief of
+ * 2026-11-28: detector names come from `detectors.ts`).
+ */
+const NOUN = Object.freeze({
+  email: DETECTOR_LABELS.email.noun,
+  phone: DETECTOR_LABELS.phone.noun,
+  date: DETECTOR_LABELS.date.noun,
+  card: DETECTOR_LABELS.card.noun,
+  ssn: DETECTOR_LABELS["us-ssn"].noun,
+  nino: DETECTOR_LABELS["uk-nino"].noun,
+});
+
+/** "National Insurance or Social Security numbers": two nouns sharing their last word. */
+const ID_NUMBERS = `${NOUN.nino.other.replace(/ numbers$/, "")} or ${NOUN.ssn.other}`;
+
+/** The IBAN detector's group name in a sentence: "bank account numbers (IBAN)". */
+const IBAN_WORDS =
+  DETECTOR_LABELS.iban.label.charAt(0).toLowerCase() +
+  DETECTOR_LABELS.iban.label.slice(1);
+
 /** One item of the trust strip under the hero: a line icon and its words. */
 export interface HomeTrustItem {
   readonly icon: LucideIcon;
   readonly text: string;
+  /** Where the item links, when its words are a link. */
+  readonly href?: string;
 }
 
 /** One How it works card: its title and its line, under a small drawing. */
 export interface HomeStep {
   readonly title: string;
   readonly body: string;
+}
+
+/**
+ * One Who it's for card: who it is for, and what they can do with it. `withPro`,
+ * when set, follows the line only on a build that sells Pro.
+ */
+export interface HomeAudience {
+  readonly title: string;
+  readonly body: string;
+  readonly withPro?: string;
 }
 
 /** One line of the Looks for card: the detector's own icon and group name. */
@@ -321,10 +357,64 @@ export const HOME_TEXT = Object.freeze({
     /**
      * The owner's line (2026-11-25). The AGPL is the licence every page's
      * footer states, with a link to the source of the exact commit built
-     * (spec 0009, AC-1 and AC-4), which is what lets anyone check it.
+     * (spec 0009, AC-1 and AC-4), which is what lets anyone check it. It
+     * links to the security page's Check it yourself (the marketing brief of
+     * 2026-11-28, item 5), as the network band does.
      */
-    Object.freeze({ icon: Code, text: "Open source (AGPL), so you can check it" }),
+    Object.freeze({
+      icon: Code,
+      text: "Open source (AGPL), so you can check it",
+      href: `${SECURITY_PATH}#${sectionId("checkIt")}`,
+    }),
   ]),
+
+  /**
+   * Who it's for (the marketing brief of 2026-11-28, item 4): four cards
+   * after the trust strip, each a kind of small firm and what it can do.
+   * Each line says "can", because a value can be missed and a scanned CV or
+   * letter is not read (spec 0018, AC-5; spec 0004, AC-13), and names only
+   * detectors that exist, by their own nouns. A `withPro` sentence is row
+   * M6, the visitor's own terms (spec 0017, AC-1), shown only with billing
+   * on (spec 0012, INV-8). "Firms" and "departments", never a word for a
+   * group of users, so the page implies no user base (spec 0013, INV-1).
+   */
+  whoFor: Object.freeze({
+    eyebrow: "Who it's for",
+    title: "For small firms that share documents with personal details in them",
+    items: Object.freeze<readonly HomeAudience[]>([
+      Object.freeze({
+        title: "Recruitment agencies",
+        body: `You can take a candidate's ${NOUN.email.one} and ${NOUN.phone.one} off a CV before it goes to a client.`,
+        withPro: `With ${PRO_PLAN.name}, add their name as a custom term for a blind CV.`,
+      }),
+      Object.freeze({
+        title: "HR departments",
+        body: `You can clear ${NOUN.phone.other}, ${NOUN.date.other} and ${ID_NUMBERS} from letters and records before you share them.`,
+      }),
+      Object.freeze({
+        title: "Law firms",
+        body: `You can take ${NOUN.email.other}, ${NOUN.phone.other} and ${NOUN.date.other} out of copies you send on.`,
+        withPro: `With ${PRO_PLAN.name}, add the names and case numbers that matter.`,
+      }),
+      Object.freeze({
+        title: "Bookkeepers and brokers",
+        body: `You can clear ${NOUN.card.other} and ${IBAN_WORDS} from statements and claim papers.`,
+      }),
+    ]),
+    /**
+     * The line under the cards, around its link to the security page's What
+     * it can miss: the honest limits the brief's item 5 has it carry. No
+     * detector for names or postal addresses (spec 0005, AC-14), and a
+     * picture's words are not read (spec 0004, AC-13). It says the questions'
+     * two limits again, by the owner's read in the brief.
+     */
+    limits: Object.freeze({
+      before:
+        "It doesn't look for names or postal addresses by itself, and words in a scan or a picture are not read. See ",
+      link: "what it can miss",
+      after: ".",
+    }),
+  }),
 
   /**
    * How it works (spec 0026, AC-8): three cards, each a small drawing on
@@ -597,6 +687,15 @@ export const HOME_TEXT = Object.freeze({
    */
   siteLine:
     "Redact PDFs in your browser, with nothing uploaded. The selectable text you tick is taken out of the page, then marked, and every new file is checked before you download it.",
+
+  /**
+   * `/`'s own title, before the trading name (the marketing brief of
+   * 2026-11-28, item 1). The page sets it absolute, so the root layout's
+   * default, "RedactNest", stays what every page without a title of its own
+   * falls back to. "Removes the text" says what the headline says; it names
+   * no place, so it claims nothing about the file (spec 0019, AC-12).
+   */
+  pageTitle: "PDF redaction that removes the text",
 
   /** The product shot's alt text (AC-12). */
   shotAlt:

@@ -25,8 +25,11 @@ export function planLines(): {
     proSummary: `Up to ${config.maxPages} pages, plus up to ${config.maxCustomTerms} custom terms`,
     pro: [
       `Up to ${config.maxPages} pages a document`,
-      // Spec 0017, AC-26: Pro does this now, its cap from config.
-      `Custom terms: up to ${config.maxCustomTerms} names, numbers or phrases, found wherever they appear`,
+      // Spec 0017, AC-26: Pro does this now, its cap from config. "For
+      // RedactNest to look for", never "found wherever they appear": a term
+      // in a scan, or split across lines, can be missed (spec 0018, AC-5;
+      // the marketing brief of 2026-11-28, item 7).
+      `Custom terms: up to ${config.maxCustomTerms} of your own names, numbers or phrases for RedactNest to look for`,
       `Everything in ${FREE_PLAN.name}`,
     ],
   };

@@ -1,4 +1,4 @@
-import { ArrowRight, Check, ChevronRight, FileUp, ShieldCheck } from "lucide-react";
+import { ArrowRight, Check, FileUp, ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
 import { Fragment } from "react";
 
@@ -15,51 +15,133 @@ import {
   strippedItems,
 } from "@/lib/home-text";
 import { LEGAL } from "@/lib/legal";
+import { FREE_PLAN, PRO_PLAN } from "@/lib/plans";
 import { sectionId } from "@/lib/policy-sections";
-import { HOME_PATH, HOW_IT_WORKS_ID, SECURITY_PATH, TOOL_PATH } from "@/lib/routes";
+import {
+  HOME_PATH,
+  HOW_IT_WORKS_ID,
+  PRICING_PATH,
+  SECURITY_PATH,
+  TOOL_PATH,
+} from "@/lib/routes";
 import { Button } from "@/ui/button";
 import { CoverFigure } from "@/ui/cover-figure";
 import { PageContainer } from "@/ui/page-container";
 
 import { HomeWindow } from "./home-window";
 import { PricingCards } from "./pricing-cards";
+import { QuestionList } from "./question-list";
 import { PageHeader } from "./site-nav";
 
 /**
  * `/`'s own head (spec 0024, AC-11): the site line as its description, the
  * same words as the root layout's fallback, and a canonical to the root of
- * `config.siteUrl` (through the layout's `metadataBase`). The title stays the
- * layout's default, "RedactNest".
+ * `config.siteUrl` (through the layout's `metadataBase`). Its own title, set
+ * absolute with the layout's separator (the marketing brief of 2026-11-28,
+ * item 1), so the layout's default, "RedactNest", stays every other page's
+ * fallback.
  */
 export const metadata: Metadata = {
+  title: { absolute: `${HOME_TEXT.pageTitle} · ${LEGAL.tradingName}` },
   description: HOME_TEXT.siteLine,
   alternates: { canonical: HOME_PATH },
 };
 
+/** The AGPL's own page, which the structured data names as the licence (spec 0009). */
+const AGPL_URL = "https://www.gnu.org/licenses/agpl-3.0.html";
+
 /**
- * The `WebSite` block for search engines (AC-11): the trading name and the
- * site's address, through `JSON.stringify` with every `<` escaped, so no
- * value can close the element. A data block (`application/ld+json`), which
- * the browser never runs, so the standard policy needs no change; the one
- * script element any page in spec 0024 adds.
+ * The structured data for search engines: one `@graph` of the `WebSite` (spec
+ * 0024, AC-11) and the `SoftwareApplication` with its offers (the marketing
+ * brief of 2026-11-28, item 3), through `JSON.stringify` with every `<`
+ * escaped, so no value can close the element. A data block
+ * (`application/ld+json`), which the browser never runs, so the standard
+ * policy needs no change; still the one script element any page adds.
+ *
+ * The description is the site line, held to the claim register where it
+ * lives. Every cap comes from `config`, the plan names and Pro's price from
+ * `src/lib/plans.ts`, and the Pro offer shows only on a build that sells it
+ * (spec 0012, INV-8 and AC-23). No rating, review or count: the page implies
+ * no user base (spec 0013, INV-1). Built at render, because the billing state
+ * decides the offers.
  */
-const WEBSITE_JSON_LD = JSON.stringify({
-  "@context": "https://schema.org",
-  "@type": "WebSite",
-  name: LEGAL.tradingName,
-  url: config.siteUrl,
-}).replaceAll("<", "\\u003c");
+function homeJsonLd(): string {
+  const home = `${config.siteUrl}${HOME_PATH}`;
+  const free = {
+    "@type": "Offer",
+    name: FREE_PLAN.name,
+    // Free costs nothing, by its name; schema.org still asks a currency, so
+    // it takes the one Pro is sold in.
+    price: "0",
+    priceCurrency: PRO_PLAN.currency,
+    description: `Up to ${config.freePageCap} pages per document`,
+    url: `${config.siteUrl}${TOOL_PATH}`,
+  };
+  const price = String(PRO_PLAN.amount);
+  const pro = {
+    "@type": "Offer",
+    name: PRO_PLAN.name,
+    price,
+    priceCurrency: PRO_PLAN.currency,
+    description: `Up to ${config.maxPages} pages per document, plus up to ${config.maxCustomTerms} custom terms`,
+    url: `${config.siteUrl}${PRICING_PATH}`,
+    // Monthly, as `PRO_PLAN.priceLine` says: one month, priced per month.
+    priceSpecification: {
+      "@type": "UnitPriceSpecification",
+      price,
+      priceCurrency: PRO_PLAN.currency,
+      billingDuration: "P1M",
+      unitCode: "MON",
+    },
+  };
+  return JSON.stringify({
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": `${home}#website`,
+        name: LEGAL.tradingName,
+        url: home,
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": `${home}#app`,
+        name: LEGAL.tradingName,
+        url: home,
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Web browser",
+        description: HOME_TEXT.siteLine,
+        license: AGPL_URL,
+        offers: config.billingEnabled ? [free, pro] : [free],
+      },
+    ],
+  }).replaceAll("<", "\\u003c");
+}
 
 /** The security page's account of the check, which the black box section links to. */
 const CHECK_HREF = `${SECURITY_PATH}#${sectionId("theCheck")}`;
 
-/** The security page's way to check for yourself, which the network band links to. */
+/**
+ * The security page's way to check for yourself, which the network band and
+ * the trust strip's open source item link to.
+ */
 const CHECK_IT_HREF = `${SECURITY_PATH}#${sectionId("checkIt")}`;
 
+/** The security page's honest limits, which the line under Who it's for links to. */
+const CAN_MISS_HREF = `${SECURITY_PATH}#${sectionId("whatItCanMiss")}`;
+
 /**
- * The home page, in spec 0026 AC-8's order: the hero with a drawing of the
- * tool, How it works, the black box comparison, what RedactNest looks for
- * and strips, then a closing band.
+ * A link inside a line of text, as the guides draw one: underlined in the
+ * line's own colour, never told apart by colour alone (spec 0003, INV-8).
+ */
+const INLINE_LINK = "rounded-item font-medium underline decoration-1 underline-offset-4";
+
+/**
+ * The home page, in spec 0026 AC-8's order as the marketing brief of
+ * 2026-11-28 amends it (items 4 and 5): the hero with a drawing of the tool,
+ * the trust strip, Who it's for, How it works, the black box comparison, the
+ * network band, what RedactNest looks for and strips, the plans, the
+ * questions, then a closing band.
  *
  * Every word in the main content comes from `src/lib/home-text.ts`; the caps
  * and whether billing is on come from `config`, read here and passed in. A
@@ -80,7 +162,7 @@ export default function HomePage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: WEBSITE_JSON_LD }}
+        dangerouslySetInnerHTML={{ __html: homeJsonLd() }}
       />
       <PageHeader sticky />
       {/* The skip link's target, allowed to drop its outline (spec 0003, AC-14). */}
@@ -189,6 +271,10 @@ export default function HomePage() {
           four short claims across the page on `subtle`, between quiet rules,
           two to a row from `sm` and four from `lg`. Each is said elsewhere on
           the page too, by the owner's read, in the places AC-30's test names.
+          An item with an `href` is a link, underlined in the strip's own ink,
+          at least 24 pixels tall (WCAG 2.5.8): the open source item, to the
+          security page's way to check (the marketing brief of 2026-11-28,
+          item 5).
         */}
         <div data-testid="home-trust" className="border-y border-muted bg-subtle">
           <PageContainer width="wide" className="py-7">
@@ -196,7 +282,7 @@ export default function HomePage() {
               role="list"
               className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4"
             >
-              {HOME_TEXT.trust.map(({ icon: Icon, text }) => (
+              {HOME_TEXT.trust.map(({ icon: Icon, text, href }) => (
                 <li
                   key={text}
                   className="flex min-w-0 items-center gap-3 text-small leading-tight font-medium text-ink-soft"
@@ -206,12 +292,84 @@ export default function HomePage() {
                     className="size-5 shrink-0 text-accent"
                     strokeWidth={1.75}
                   />
-                  <span className="min-w-0 wrap-break-word">{text}</span>
+                  {href === undefined ? (
+                    <span className="min-w-0 wrap-break-word">{text}</span>
+                  ) : (
+                    <a
+                      href={href}
+                      className={cx(
+                        "inline-flex min-h-6 min-w-0 items-center wrap-break-word",
+                        INLINE_LINK,
+                      )}
+                    >
+                      {text}
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>
           </PageContainer>
         </div>
+
+        {/*
+          Who it's for (the marketing brief of 2026-11-28, item 4): the head
+          centred, then four cards in How it works' card style without its
+          drawings, two to a row from `sm` and four from `xl` (at `lg` with
+          200% text a quarter of the row is narrower than "Recruitment"), and
+          the line under them with its link to what RedactNest can miss. A
+          card's `withPro` sentence follows its line only with billing on. No
+          padding below: How it works follows on the same white with its own.
+        */}
+        <section aria-labelledby="home-who-for-title" data-testid="home-who-for">
+          <PageContainer
+            width="wide"
+            className="flex flex-col gap-14 pt-16 sm:pt-20 lg:pt-28"
+          >
+            <SectionHead
+              id="home-who-for-title"
+              eyebrow={HOME_TEXT.whoFor.eyebrow}
+              title={HOME_TEXT.whoFor.title}
+              centred
+            />
+            <div className="flex flex-col gap-8">
+              <ul
+                role="list"
+                className="grid grid-cols-1 gap-6 wrap-break-word sm:grid-cols-2 xl:grid-cols-4"
+              >
+                {HOME_TEXT.whoFor.items.map(({ title, body, withPro }) => (
+                  <li
+                    key={title}
+                    className="flex flex-col gap-2 rounded-panel border border-border bg-surface p-6 shadow-card"
+                  >
+                    <h3 className="text-subhead text-ink">{title}</h3>
+                    <p className="text-copy text-ink-muted">
+                      {body}
+                      {withPro !== undefined && config.billingEnabled && ` ${withPro}`}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              <p
+                data-testid="home-who-for-limits"
+                className="mx-auto max-w-160 text-center text-copy text-ink-muted wrap-break-word"
+              >
+                {HOME_TEXT.whoFor.limits.before}
+                {/*
+                  A box of its own at least 24 pixels tall, because the home
+                  page holds every target to 24 by 24, with no inline
+                  exception (WCAG 2.5.8; spec 0003, AC-7).
+                */}
+                <a
+                  href={CAN_MISS_HREF}
+                  className={cx("inline-block min-h-6", INLINE_LINK)}
+                >
+                  {HOME_TEXT.whoFor.limits.link}
+                </a>
+                {HOME_TEXT.whoFor.limits.after}
+              </p>
+            </div>
+          </PageContainer>
+        </section>
 
         {/*
           How it works (spec 0026, AC-8, as the owner's port of `Main.dc.html`
@@ -304,52 +462,11 @@ export default function HomePage() {
         </section>
 
         {/*
-          What RedactNest looks for and strips (spec 0013, AC-11, as the
-          owner's port of `Main.dc.html` amends it): the head, then two cards
-          side by side from `md`, each a title and subtitle over its items as
-          chips, closed by a note. The lists still come from `findsItems()` and
-          `strippedItems()`, so they name exactly what exists. With billing on,
-          the Looks for card ends with Pro's own terms, in the accent.
-        */}
-        <PageContainer width="wide" className="py-16 sm:py-20 lg:py-28">
-          <section
-            aria-labelledby={HOME_BAND_ID}
-            data-testid="home-band"
-            className="flex flex-col gap-12"
-          >
-            <div className="flex max-w-160 flex-col gap-3.5">
-              <p className="text-small leading-tight font-semibold tracking-[0.02em] text-accent">
-                {HOME_TEXT.band.eyebrow}
-              </p>
-              {/* "RedactNest" is wider than a phone at 200% text (spec 0024, AC-14). */}
-              <h2 id={HOME_BAND_ID} className="text-headline text-ink wrap-break-word">
-                {HOME_TEXT.band.title}
-              </h2>
-            </div>
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <BandCard
-                testId="home-finds"
-                title={HOME_TEXT.band.finds.title}
-                subtitle={HOME_TEXT.band.finds.subtitle}
-                items={findsItems().map(({ label }) => label)}
-                extra={config.billingEnabled ? HOME_TEXT.band.finds.termsChip : undefined}
-                note={HOME_TEXT.band.finds.line}
-              />
-              <BandCard
-                testId="home-strips"
-                title={HOME_TEXT.band.strips.title}
-                subtitle={HOME_TEXT.band.strips.subtitle}
-                items={strippedItems()}
-                note={HOME_TEXT.band.strips.note}
-              />
-            </div>
-          </section>
-        </PageContainer>
-
-        {/*
           The network band (spec 0026, AC-9, as the owner's port of
-          `Main.dc.html` amends it): a full width `night` section, the words on
-          the left and on the right a table of what `/tool` fetches, set in
+          `Main.dc.html` amends it), straight after the black box section
+          since the marketing brief of 2026-11-28 (item 5): a full width
+          `night` section, the words on the left and on the right a table of
+          what `/tool` fetches, set in
           the monospace stack the owner allowed here (`data-mono`), each row
           its name and the paths on our own origin it stands for. A path breaks
           only at a slash, never inside a word, unless one segment alone is
@@ -428,6 +545,52 @@ export default function HomePage() {
         </section>
 
         {/*
+          What RedactNest looks for and strips (spec 0013, AC-11, as the
+          owner's port of `Main.dc.html` amends it): the head, then two cards
+          side by side from `md`, each a title and subtitle over its items as
+          chips, closed by a note. The lists still come from `findsItems()` and
+          `strippedItems()`, so they name exactly what exists. With billing on,
+          the Looks for card ends with Pro's own terms, in the accent. After
+          the network band since the marketing brief of 2026-11-28 (item 5),
+          and so with no padding below: the plans or the questions follow on
+          the same white with their own.
+        */}
+        <PageContainer width="wide" className="pt-16 sm:pt-20 lg:pt-28">
+          <section
+            aria-labelledby={HOME_BAND_ID}
+            data-testid="home-band"
+            className="flex flex-col gap-12"
+          >
+            <div className="flex max-w-160 flex-col gap-3.5">
+              <p className="text-small leading-tight font-semibold tracking-[0.02em] text-accent">
+                {HOME_TEXT.band.eyebrow}
+              </p>
+              {/* "RedactNest" is wider than a phone at 200% text (spec 0024, AC-14). */}
+              <h2 id={HOME_BAND_ID} className="text-headline text-ink wrap-break-word">
+                {HOME_TEXT.band.title}
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <BandCard
+                testId="home-finds"
+                title={HOME_TEXT.band.finds.title}
+                subtitle={HOME_TEXT.band.finds.subtitle}
+                items={findsItems().map(({ label }) => label)}
+                extra={config.billingEnabled ? HOME_TEXT.band.finds.termsChip : undefined}
+                note={HOME_TEXT.band.finds.line}
+              />
+              <BandCard
+                testId="home-strips"
+                title={HOME_TEXT.band.strips.title}
+                subtitle={HOME_TEXT.band.strips.subtitle}
+                items={strippedItems()}
+                note={HOME_TEXT.band.strips.note}
+              />
+            </div>
+          </section>
+        </PageContainer>
+
+        {/*
           The two plans (spec 0026, AC-10, as the owner's port of
           `Main.dc.html` amends it): `PricingCards`' summary form, two equal
           cards, Pro's button to Pricing. Only on a build that sells Pro.
@@ -457,11 +620,10 @@ export default function HomePage() {
         )}
 
         {/*
-          The questions (the owner's port of `Main.dc.html`, 2026-11-25): the
-          browser's own disclosures, no script, the first open, each answer in
-          today's words. 820 pixels across, as drawn. A small chevron that
-          turns down when open stands where the browser's marker was (hidden
-          as a list marker and, for Safari, as its own); CSS alone.
+          The questions (the owner's port of `Main.dc.html`, 2026-11-25), as
+          `QuestionList`'s disclosures, each answer in today's words, a
+          `withPro` sentence after it only with billing on. 820 pixels
+          across, as drawn.
         */}
         <div className="mx-auto w-full max-w-205 px-4 pt-16 pb-16 sm:px-6 sm:pt-20 lg:px-8 lg:pb-28">
           <section aria-labelledby="home-questions" data-testid="home-questions">
@@ -471,28 +633,15 @@ export default function HomePage() {
             >
               {HOME_TEXT.questions.title}
             </h2>
-            <div className="border-t border-border">
-              {HOME_TEXT.questions.items.map(({ question, answer, withPro }, index) => (
-                <details
-                  key={question}
-                  open={index === 0}
-                  className="group border-b border-border py-4.5 wrap-break-word"
-                >
-                  <summary className="flex list-none items-start gap-2.5 rounded-item text-body leading-6 font-semibold text-ink [&::-webkit-details-marker]:hidden">
-                    <ChevronRight
-                      aria-hidden="true"
-                      className="mt-1 size-4 shrink-0 text-ink-subtle transition-transform duration-fast group-open:rotate-90"
-                      strokeWidth={2.25}
-                    />
-                    <span className="min-w-0">{question}</span>
-                  </summary>
-                  <p className="mt-2.5 text-copy leading-[1.6] text-ink-muted">
-                    {answer}
-                    {withPro !== undefined && config.billingEnabled && ` ${withPro}`}
-                  </p>
-                </details>
-              ))}
-            </div>
+            <QuestionList
+              items={HOME_TEXT.questions.items.map(({ question, answer, withPro }) => ({
+                question,
+                answer:
+                  withPro !== undefined && config.billingEnabled
+                    ? `${answer} ${withPro}`
+                    : answer,
+              }))}
+            />
           </section>
         </div>
 

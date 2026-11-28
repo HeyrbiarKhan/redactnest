@@ -81,6 +81,20 @@ describe("the hero (AC-10)", () => {
   });
 
   /**
+   * The marketing brief of 2026-11-28, item 5: the open source item links to
+   * the security page's Check it yourself, as the network band does. The
+   * other three stay words.
+   */
+  it("links the open source item alone, to the security page's way to check", () => {
+    expect(HOME_TEXT.trust.map(({ href }) => href)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      "/security#check-it",
+    ]);
+  });
+
+  /**
    * Spec 0026, AC-8, row M2: "selectable" and "the page", never "the file",
    * and removed first, then marked.
    */
@@ -240,6 +254,88 @@ describe("the finds and strips cards (AC-11)", () => {
     expect(words).not.toContain("No text on the page");
     expect(words).not.toContain("hidden data such as");
     expect(words).not.toContain("nothing hidden behind them");
+  });
+});
+
+/**
+ * The marketing brief of 2026-11-28, item 4: Who it's for, four cards whose
+ * lines say "can" and name detectors by their own nouns, each `withPro`
+ * sentence shown only with billing on, and the line under them that carries
+ * the honest limits.
+ */
+describe("Who it's for", () => {
+  it("says the brief's head and four cards, word for word", () => {
+    expect(HOME_TEXT.whoFor.eyebrow).toBe("Who it's for");
+    expect(HOME_TEXT.whoFor.title).toBe(
+      "For small firms that share documents with personal details in them",
+    );
+    expect(
+      HOME_TEXT.whoFor.items.map(({ title, body, withPro }) => [title, body, withPro]),
+    ).toEqual([
+      [
+        "Recruitment agencies",
+        "You can take a candidate's email address and phone number off a CV before it goes to a client.",
+        "With Pro, add their name as a custom term for a blind CV.",
+      ],
+      [
+        "HR departments",
+        "You can clear phone numbers, dates and National Insurance or Social Security numbers from letters and records before you share them.",
+        undefined,
+      ],
+      [
+        "Law firms",
+        "You can take email addresses, phone numbers and dates out of copies you send on.",
+        "With Pro, add the names and case numbers that matter.",
+      ],
+      [
+        "Bookkeepers and brokers",
+        "You can clear card numbers and bank account numbers (IBAN) from statements and claim papers.",
+        undefined,
+      ],
+    ]);
+  });
+
+  /** Spec 0018, AC-5: a value can be missed, and a scan is not read. */
+  it("says can on every card, and names Pro only in the sentences that follow with billing on", () => {
+    for (const { body, withPro } of HOME_TEXT.whoFor.items) {
+      expect(body).toMatch(/^You can /);
+      expect(body).not.toMatch(/\bPro\b/);
+      if (withPro !== undefined) expect(withPro).toMatch(/^With Pro, /);
+    }
+  });
+
+  /** The detectors' own nouns, so a renamed detector renames its card. */
+  it("names each detector by its own noun", () => {
+    const [recruitment, hr, law, books] = HOME_TEXT.whoFor.items;
+    expect(recruitment?.body).toContain(DETECTOR_LABELS.email.noun.one);
+    expect(recruitment?.body).toContain(DETECTOR_LABELS.phone.noun.one);
+    expect(hr?.body).toContain(DETECTOR_LABELS["us-ssn"].noun.other);
+    expect(law?.body).toContain(
+      `${DETECTOR_LABELS.email.noun.other}, ${DETECTOR_LABELS.phone.noun.other} and ${DETECTOR_LABELS.date.noun.other}`,
+    );
+    expect(books?.body).toContain(DETECTOR_LABELS.card.noun.other);
+    const iban = DETECTOR_LABELS.iban.label;
+    expect(books?.body).toContain(iban.charAt(0).toLowerCase() + iban.slice(1));
+  });
+
+  it("closes on the honest limits, around its link to what it can miss", () => {
+    expect(HOME_TEXT.whoFor.limits).toEqual({
+      before:
+        "It doesn't look for names or postal addresses by itself, and words in a scan or a picture are not read. See ",
+      link: "what it can miss",
+      after: ".",
+    });
+  });
+});
+
+/**
+ * The marketing brief of 2026-11-28, item 1: `/`'s own title, which the page
+ * sets absolute with the trading name after it, 48 characters in all.
+ */
+describe("the home page's own title", () => {
+  it("says the brief's words, and fits 48 characters with the trading name", () => {
+    expect(HOME_TEXT.pageTitle).toBe("PDF redaction that removes the text");
+    expect(`${HOME_TEXT.pageTitle} · RedactNest`).toHaveLength(48);
   });
 });
 

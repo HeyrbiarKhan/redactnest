@@ -1901,7 +1901,8 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
   }) => {
     await page.goto("/");
 
-    await expect(page).toHaveTitle("RedactNest");
+    // Its own title, absolute (the marketing brief of 2026-11-28, item 1).
+    await expect(page).toHaveTitle("PDF redaction that removes the text · RedactNest");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Redaction that actually removes the text",
     );
@@ -1933,17 +1934,24 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
       "href",
       "#how-it-works",
     );
-    // Spec 0026, AC-8: the sections in order, the pricing cards with billing on.
+    // Spec 0026, AC-8: the sections in order, the pricing cards with billing
+    // on, and Who it's for first (the marketing brief of 2026-11-28, item 4).
     await expect(main.getByRole("heading", { level: 2 })).toHaveText([
+      "For small firms that share documents with personal details in them",
       "Three steps to a redacted PDF",
       "A black box is not redaction",
-      "What RedactNest looks for and strips",
+      // Item 5: the network band straight after the black box section.
       "Watch your network tab while you redact",
+      "What RedactNest looks for and strips",
       "Free to start, Pro for longer files",
       "Questions",
       "Redact your next PDF",
     ]);
     await expect(main.getByRole("heading", { level: 3 })).toHaveText([
+      "Recruitment agencies",
+      "HR departments",
+      "Law firms",
+      "Bookkeepers and brokers",
       "Open a PDF",
       "Tick what to remove",
       "Download your new file",
@@ -2020,7 +2028,12 @@ test.describe("the home page (AC-13, AC-15, AC-17, AC-18; spec 0013, AC-10 to AC
 
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.getByRole("main").getByRole("link", { name: "See how it works" }).click();
-    const heading = page.getByRole("heading", { level: 2 }).first();
+    // By name: Who it's for's heading comes first since the marketing brief
+    // of 2026-11-28 (item 4), above the section the link scrolls to.
+    const heading = page.getByRole("heading", {
+      level: 2,
+      name: "Three steps to a redacted PDF",
+    });
     await expect
       .poll(() => heading.evaluate((el) => el.getBoundingClientRect().top))
       .toBeGreaterThanOrEqual(bar);
@@ -2599,37 +2612,61 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
 
   /**
    * The fix leaves wider screens as they were: `/`'s hero, trio and band at
-   * 1280 pixels, recorded from the build before it as x, y and width. Within
-   * a pixel, so a rounding difference between machines is not a change.
+   * 1280 pixels keep their x, y and width. Within a pixel, for rounding.
    *
-   * No height is recorded, because a box's height follows its wrapped text and
-   * Linux draws Inter a few pixels wider than Windows, where these were read:
-   * on CI the band's Looks for chips wrapped one more row (44 pixels, 36 and a
-   * gap of 8) with nothing moved (CI run 45842120945). The hero's height and
-   * the trio's are still held, by the y of the box below each.
+   * Both sides are measured in this run, never recorded on one machine: Linux
+   * draws Inter a few pixels wider than Windows, so a card's words wrap
+   * differently and every section below it lands at another height (CI run
+   * 46076958264, How it works 28 pixels lower than the Windows figure). The
+   * page is measured as served, then again with the fix's narrow width rules
+   * turned off inside `main`: every word break (`wrap-break-word`,
+   * `wrap-anywhere`) and every zero floor on a flex or grid item (`min-w-0`).
+   * Those rules may only act where a word cannot fit a line alone, so at 1280
+   * pixels the two layouts are the same. The fix's other rule, a card that
+   * stacks its tile under 12rem, is a container query, and at 1280 every card
+   * is far wider than that. The hero's height and the trio's are held by the
+   * y of the box below each.
    */
   test("/: keeps the hero, the trio and the band where they were at 1280 pixels", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/");
+    // Measure the words in Inter, never in the fallback face.
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+    });
 
-    for (const [box, recorded] of [
-      // Recorded again for the owner's port of `Main.dc.html` (2026-11-25):
-      // the hero, the How it works cards and the band.
-      [page.getByTestId("home-hero"), [82, 153, 1116]],
-      [page.getByTestId("home-steps").getByRole("list"), [82, 1131.8, 1116]],
-      [page.getByTestId("home-band"), [82, 2213.1, 1116]],
-    ] as const) {
-      const measured = await box.boundingBox();
-      if (measured === null) throw new Error("a recorded box is not drawn");
-      const [x, y, width] = recorded;
-      for (const [value, was] of [
-        [measured.x, x],
-        [measured.y, y],
-        [measured.width, width],
+    const boxes = [
+      page.getByTestId("home-hero"),
+      page.getByTestId("home-steps").getByRole("list"),
+      page.getByTestId("home-band"),
+    ] as const;
+    const measure = async () =>
+      Promise.all(
+        boxes.map(async (box) => {
+          const measured = await box.boundingBox();
+          if (measured === null) throw new Error("a measured box is not drawn");
+          return measured;
+        }),
+      );
+
+    const served = await measure();
+    await page.addStyleTag({
+      content:
+        "main, main * { overflow-wrap: normal !important; word-break: normal !important; min-width: auto !important; }",
+    });
+    const withoutFix = await measure();
+
+    for (const [index, was] of withoutFix.entries()) {
+      const measured = served[index];
+      if (measured === undefined) throw new Error("a measured box is missing");
+      for (const [value, before] of [
+        [measured.x, was.x],
+        [measured.y, was.y],
+        [measured.width, was.width],
       ] as const) {
-        expect(Math.abs(value - was)).toBeLessThanOrEqual(1);
+        expect(Math.abs(value - before)).toBeLessThanOrEqual(1);
       }
     }
   });
@@ -2649,7 +2686,8 @@ test.describe("320 pixels with 200% text (spec 0024, AC-14)", () => {
  * its own.
  */
 test.describe("1024 pixels with 200% text (feature 34)", () => {
-  for (const path of ["/", "/redact-pdf", "/remove-text-from-pdf"] as const) {
+  // `/pricing` for its questions (the marketing brief of 2026-11-28, item 6).
+  for (const path of ["/", "/redact-pdf", "/remove-text-from-pdf", "/pricing"] as const) {
     test(`${path} at 1024 pixels: nothing past the window`, async ({ page }) => {
       await page.setViewportSize({ width: 1024, height: 800 });
       await page.goto(path);
@@ -2872,12 +2910,22 @@ async function expectWholePageWalk(page: Page): Promise<void> {
       ...document.querySelectorAll<HTMLElement>(
         "a[href], button, input, select, textarea, summary, [tabindex]",
       ),
-    ].filter(
-      (element) =>
+    ].filter((element) => {
+      // A closed disclosure's content is not drawn, and Tab passes it by,
+      // though Chromium keeps its boxes; its own summary is the stop. The
+      // pricing questions' link to the terms sits in one, and "the pricing
+      // page" in `shell.spec.ts` reaches it once its question is open.
+      const shut = element.closest("details:not([open])");
+      const drawn =
+        shut === null ||
+        (element.tagName === "SUMMARY" && element.parentElement === shut);
+      return (
         element.tabIndex >= 0 &&
         !(element as HTMLButtonElement).disabled &&
-        element.getClientRects().length > 0,
-    );
+        element.getClientRects().length > 0 &&
+        drawn
+      );
+    });
     reachable.forEach((element, index) => {
       element.dataset.sweep = String(index);
     });
